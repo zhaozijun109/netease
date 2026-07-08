@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_video_icloud_download_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    userId, \
+    deviceUdid, \
+    appVersion, \
+    occurTime                                                      as event_time, \
+    cast(get_json_object(params['ext'], '$.type') as int)          as ext_type, \
+    case cast(get_json_object(params['ext'], '$.type') as int) \
+        when 1 then 'cancel' \
+        when 0 then 'fail' \
+        else null \
+    end                                                            as result_status \
+from lofter.ods_mda_app_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+  and eventId = 'm7-18' \
+  and deviceOs = 'iOS' \
+  and length(deviceUdid) > 0 \
+distribute by hash(deviceUdid) % 10
+dependencies=

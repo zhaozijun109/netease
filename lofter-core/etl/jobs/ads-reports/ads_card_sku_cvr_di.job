@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_card_sku_cvr_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, b.expose_uv, b.visit_uv, c.order_count, c.order_money, c.order_users, c.pay_money, c.pay_users \
+from ( \
+    select skuId,sku_name,concat_ws(',', ips) as ips,category1,category1_name,category2,category2_name,category3,category3_name, \
+        activitycode,supplierid,supplyname,onsaletime,sale_mode, \
+        datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(onsaletime/1000 as bigint))) as onsale_days \
+    from lofter.dim_benefit_sku \
+) a \
+left join ( \
+    select z.skuid, sum(expose_uv) as expose_uv, sum(x.visit_uv) as visit_uv \
+    from ( \
+        select nvl(y.activityCode, x.activityCode) as activityCode, sum(x.expose_uv) as expose_uv, sum(x.visit_uv) as visit_uv \
+        from ( \
+            select cast(activityid as bigint) as activityId, \
+                if(cast(activityid as bigint) > 0, null, activityId) as activityCode, \
+                0 as expose_uv, \
+                count(distinct userId) as visit_uv \
+            from lofter.dwd_act_card_action_di \
+            where dt = '${azkaban.flow.1.days.ago}' and eventId = 'card-0' \
+            group by 1, 2 \
+          union all \
+            select cast(activityCode as bigint) as activityId, \
+                if(cast(activityCode as bigint) > 0, null, activityCode) as activityCode, \
+                count(distinct userId) as expose_uv, \
+                0 as visit_uv \
+            from lofter.dwd_evt_benefit_page_view_di \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+            eventId in ('w1-18','w10-10', 'w3-15','w10-11','w3-21', 'w1-28','w2-13','w1-24') and \
+            activityCode is not null \
+            group by 1, 2 \
+        ) x \
+        left join ( \
+            select code as activityCode, id from lofter_db_dump.ods_db_benefit_card_activity_nd \
+        ) y on x.activityId = y.id \
+        group by 1 \
+    ) x \
+    join lofter_db_dump.ods_db_benefit_card_nd z on x.activityCode  = z.activityCode \
+    group by 1 \
+) b on a.skuId = b.skuId \
+left join ( \
+    select x.skuId, \
+        sum(if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as order_count, \
+        sum(if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', y.amount, 0)) as order_money, \
+        count(distinct if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', x.userId, null)) as order_users, \
+        sum(if(from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', y.amount, 0)) as pay_money, \
+        count(distinct if(from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', x.userId, null)) as pay_users \
+    from ( \
+        select activityCode, chancetradeid as tradeId, userId, attributeid as skuId \
+        from lofter_db_dump.ods_db_benefit_user_card_bag_nd \
+    ) x \
+    join lofter_db_dump.ods_db_benefit_trade_nd y on x.tradeId = y.id \
+    group by 1 \
+) c on a.skuId = c.skuId \

@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dws_vc_uc_daily_action_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x2.user_id, \
+                       x2.character_id, \
+                       nvl(x1.gmv, 0)            as gmv, \
+                       nvl(x1.order_cnt, 0)      as order_cnt, \
+                       nvl(x2.energy_consume, 0) as energy_consume, \
+                       nvl(x2.talk_cnt, 0)       as talk_cnt \
+                from (select user_id, character_id, count(distinct order_id) as order_cnt, sum(order_price) as gmv \
+                      from vc.dwd_vc_ucr_order_amount_i_d \
+                      where dt = '${azkaban.flow.1.days.ago}' \
+                        and character_id is not null \
+                      group by user_id, character_id) x1 \
+                         full join \
+                     (select user_id, character_id, sum(talk_cnt) as talk_cnt, sum(energy_consume) as energy_consume \
+                      from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                      where dt = '${azkaban.flow.1.days.ago}' \
+                      group by user_id, character_id) x2 on x1.user_id = x2.user_id and x1.character_id = x2.character_id
+
+dependencies=dws_vc_uc_talk_day_cnt_single_i_d

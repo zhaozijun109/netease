@@ -1,0 +1,111 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=200
+conf.spark.sql.adaptive.enabled=false
+conf.spark.sql.join.preferSortMergeJoin=true
+conf.spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold=0
+hive.query.01=INSERT OVERWRITE TABLE lofter.dwd_post_browse_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  a.userId, \
+                      a.action_type, \
+                      a.deviceUdid, \
+                      a.deviceOs, \
+                      a.postId, \
+                      b.userId                               AS post_userid, \
+                      b.contentType                          AS post_content_type, \
+                      b.publishDate                          AS post_publish_date, \
+                      IF(size(b.tags) > 0,b.tags,NULL)       AS post_tags, \
+                      IF(size(b.ips) > 0,b.ips,NULL)         AS post_ips, \
+                      IF(size(b.domains) > 0,b.domains,NULL) AS post_domains, \
+                      a.scene, \
+                      a.module, \
+                      a.source1_module, \
+                      a.occurTime, \
+                      a.costTime                             AS duration, \
+                      CASE WHEN b.contentType = '视频' THEN IF(a.costTime > 5000,1,0) \
+                           WHEN b.contentType IN ('图片','文字') THEN IF(a.costTime > 3000,1,0) \
+              			   ELSE 0 \
+              		  END AS is_real, \
+                      IF(c.userId IS NOT NULL,1,0)           AS is_fans, \
+                      IF(source1_module IN ('feed_rec','related_item','tag_rec','search','granary_rec','videodetail','feed_rec_domain','videotag','videolist','Related_Blog','videofeature','Feed_Blog','Guess_Like_Blog'),1,0) AS is_from_rec, \
+                      a.is_support_induced, \
+                      b.is_book_store, \
+                      IF(b.contentType IN ('视频') AND progress >= 0.9,1,0) AS is_video_finish, \
+                      IF(d.createDate = '${azkaban.flow.1.days.ago}',1,0) AS is_new_user, \
+                      source1_scene, \
+                      source2_scene, \
+                      source2_module, \
+                      IF(action_type = 'page_duration' AND (source1_scene IN ('collection','floatcollection','subscribe','mysubscription') OR scene = 'immerse_collection'),1,0) AS is_collection, \
+                      e.deviceId, \
+                      appVersion, \
+                      a.detail_source1_scene_level_1, \
+                      a.detail_source1_scene_level_2 \
+              FROM \
+              ( \
+              	    SELECT  userId, \
+              	            actionType                            AS action_type, \
+              	            deviceUdid, \
+              	            deviceOs, \
+              	            CAST(itemId AS bigint)                AS postId, \
+              	            occurTime, \
+              	            scene, \
+              	            GET_JSON_OBJECT(source,'$[1].scene')  AS source1_scene, \
+              	            GET_JSON_OBJECT(source,'$[2].scene')  AS source2_scene, \
+              	            params['module']                      AS module, \
+              	            GET_JSON_OBJECT(source,'$[1].module') AS source1_module, \
+              	            GET_JSON_OBJECT(source,'$[2].module') AS source2_module, \
+              	            CAST(NVL(costTime,params['costtime']) AS bigint) AS costTime, \
+              	            params['progress']                    AS progress, \
+              	            IF(GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].algInfo'),"$.upFlag") > 0,1,0) AS is_support_induced, \
+              	            appVersion, \
+              	            CASE WHEN GET_JSON_OBJECT(source,'$[1].module') = 'related_item' THEN 'related_article' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') IN ('floatcollection','immerse_collection') OR (GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'note_collection') \
+              			    	 	  OR (get_json_object(source,'$[1].scene') = 'note' AND (scene = 'immerse_collection' OR (scene = 'note' and params['module'] = 'note_collection'))) THEN 'collection' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') IN ('tag_rec','sim_article_left_rec','other') THEN 'note_left_right' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].itemType') IN ('QUESTION','COS_QUESTION','SCORE_QUESTION','NOMINATESIGN_QUESTION','JOIN_NOMINATESIGN_ANSWER','JOIN_SCORE_ANSWER','ANSWER','COS_ANSWER','NORMAL_COMMENT_ANSWER','LINE_COMMENT_ANSWER','PHOTO_COMMENT_ANSWER') \
+              	                      AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext]'),'$.itemType') IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') THEN 'talk' \
+              			    	 ELSE GET_JSON_OBJECT(source,'$[1].scene') \
+              			    END AS detail_source1_scene_level_1, \
+              	            CASE WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') = '发现' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tabSubName') IS NOT NULL AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tabSubName') <> '全部' THEN 'tag_sub_cate_rec' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') = '发现' THEN 'tag_discovery' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') IN ('最新发布','最新评论') THEN 'tag_new' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') IN ('最热全部','最热日榜','最热周榜','最热月榜','全部','日榜','周榜','月榜') THEN 'tag_hot' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tab') IN ('动态推荐','动态最新') THEN 'tag_talk' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'note_collection' THEN 'note_collection_up_down' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec' THEN 'tag_note_log_left_right' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'sim_article_left_rec' THEN 'rec_note_left_right' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'other' THEN 'other_note_log_left_right' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'floatcollection' THEN 'floatcollection' \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].module') = 'immerse_collection' THEN 'immerse_collection' \
+              	                 WHEN scene = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].itemId') = itemId AND GET_JSON_OBJECT(source,'$[1].itemType') = itemType THEN GET_JSON_OBJECT(source,'$[1].scene') \
+              	                 WHEN scene = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].itemId') != itemId AND GET_JSON_OBJECT(source,'$[1].itemType') != itemType THEN scene \
+              	                 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].module') = 'sim_collection_article' THEN 'related_collection' \
+              			    	 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND scene = 'immerse_collection' THEN 'immerse_collection' \
+              			    	 WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND scene = 'note' AND params['module'] = 'note_collection' THEN 'note_collection_up_down' \
+              			    	 ELSE NULL \
+              			    END AS detail_source1_scene_level_2 \
+              	    FROM lofter.ods_mda_app_partition_di \
+              	    WHERE dt = '${azkaban.flow.1.days.ago}' AND actionType IN ('page_view', 'page_duration') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+              ) a \
+              JOIN lofter.dim_post_article b \
+              ON a.postId = b.id \
+              LEFT JOIN \
+              ( \
+              	    SELECT  userId, \
+              	            blogId \
+              	    FROM lofter_db_dump.ods_db_user_following_nd \
+              	    WHERE FROM_UNIXTIME(CAST(followTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+              	    GROUP BY  userId, \
+              	              blogId \
+              ) c \
+              ON a.userId = c.userId AND b.blogId = c.blogId \
+              LEFT JOIN \
+              ( \
+              	    SELECT  deviceUdid, \
+              	            deviceId \
+              	    FROM lofter.dwd_par_device_all_dd \
+              	    WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) e \
+              ON a.deviceUdid = e.deviceUdid \
+              LEFT JOIN lofter.dim_user d \
+              ON a.userId = d.id
+dependencies=dwd_par_device_all_dd

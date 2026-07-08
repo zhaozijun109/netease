@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.02= \
+insert overwrite table lofter_dm.ads_ad_resource_content_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogId, groupId, max(group_rank) as group_rank \
+from ( \
+    select postId, blogId, groupId, group_rank \
+    from ( \
+        select a.postId, a.blogId, a.groupId, \
+               row_number() over (partition by a.groupId order by c.real_browse_uv desc) as group_rank \
+        from ( \
+            select x.postId, x.blogId, z.main_ip as groupId \
+            from ( \
+                select id as postId, blogId, ips \
+                from lofter.dim_post_article \
+                where is_book_store = 0 and \
+                      isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                      isMoved = 0 and isActivityAutoPost=0 and isImported=0 and \
+                      contentType in ('图片', '文字') and valid = 0 \
+            ) x \
+            left join ( \
+                select postId \
+                from lofter.dim_gift_post_return_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 and isPayNum > 0 and \
+                      contentType = '文字' and return_gift_plantype not in ('原图') \
+                group by 1 \
+            ) y on x.postId = y.postId \
+            join ( \
+                select userId, element_at(post_top_ips, 1) as main_ip \
+                from lofter.dws_par_creator_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and size(post_top_ips) > 0 \
+            ) z on x.blogId = z.userId \
+            where y.postId is null and \
+                  z.main_ip in ('崩坏星穹铁道','原神','第五人格','恋与深空','明日方舟','绝区零','重返未来1999','忘川风华录','燕云十六声','光遇','阴阳师','蛋仔派对','伊瑟','源序空间','灵魂潮汐','崩坏3','弹丸论破','头七怪谈','世界计划','我的世界','偶像梦幻祭','鸣潮','如鸢','未定事件簿','无期迷途','使命召唤','世界之外','时空中的绘旅人','破次元恋人','逆水寒') and \
+                  array_contains(x.ips, z.main_ip) \
+        ) a \
+        join lofter_db_dump.ods_db_rta_creator_ad_switch_nd b on a.blogId = b.userId \
+        join ( \
+            select postId, real_browse_uv \
+            from lofter.dws_post_traffic_di \
+            where dt = '${azkaban.flow.1.days.ago}' and real_browse_uv > 10 \
+        ) c on a.postId = c.postId \
+        where b.openAd = 1 \
+    ) t \
+    where group_rank <= 100000 \
+    union all \
+    select b.postId as postId, c.blogId as blogId, a.groupId as groupId, -1 as group_rank \
+    from ( \
+        select groupId, job_id \
+        from lofter_db_dump.ods_db_rta_group_post_pkg_nd \
+            lateral view explode(split(postPkgs, ',')) as job_id \
+    ) a \
+    join ( \
+        select job_id, postId \
+        from lofter.dwd_post_group_post_list_di \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) b on a.job_id = b.job_id \
+    join lofter.dim_post c on b.postId = c.id \
+) t \
+group by 1, 2, 3 \

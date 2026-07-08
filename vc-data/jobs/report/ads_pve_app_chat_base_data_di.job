@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_pve_app_chat_base_data_di partition(dt='${azkaban.flow.1.days.ago}') \
+select t1.new_chat_flag, \
+t1.chat_uv, \
+t1.chat_characters_drop_duplicate, \
+t1.total_chat_rounds, \
+t2.chat_characters \
+from \
+( \
+select a.dt, \
+COALESCE(CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END,2) AS new_chat_flag, \
+count(distinct a.user_id) as chat_uv,   \
+count(distinct a.character_id)  as chat_characters_drop_duplicate,  \
+count(distinct a.message_id) as total_chat_rounds \
+from \
+( \
+select distinct from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+user_id, \
+character_id, \
+message_id \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+)a \
+left join \
+( \
+select user_id, \
+min(from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as dt  \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+group by user_id \
+)b on a.user_id=b.user_id  \
+group by a.dt,CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END \
+grouping sets ((a.dt),(a.dt,CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END)) \
+) t1 \
+left join \
+( \
+select d.dt, \
+COALESCE(CASE WHEN d.dt>b.dt THEN 0 ELSE 1 END,2) AS new_chat_flag, \
+count(distinct d.user_id) as chat_uv, \
+sum(d.chat_characters)  as chat_characters \
+from \
+( \
+select from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+user_id,count(distinct character_id) as chat_characters \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')= '${azkaban.flow.1.days.ago}' \
+group by from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd'),user_id \
+)d \
+left join \
+( \
+select user_id, \
+min(from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as dt  \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+group by user_id \
+)b on d.user_id=b.user_id  \
+group by d.dt,CASE WHEN d.dt>b.dt THEN 0 ELSE 1 END \
+grouping sets ((d.dt),(d.dt,CASE WHEN d.dt>b.dt THEN 0 ELSE 1 END)) \
+) t2 on t1.dt=t2.dt and t1.new_chat_flag=t2.new_chat_flag \

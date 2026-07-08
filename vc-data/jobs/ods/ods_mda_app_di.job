@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.ods_mda_app_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select deviceUdid, \
+   case dataType when 's' then 'da_session_start' when 'c' then 'da_session_close' else eventId end as eventId, \
+   occurTime, \
+   nvl(cast(attributes['userid'] as bigint), b.user_id) as user_id, \
+   nvl(c.user_code, cast(a.userId as bigint)) as user_code, \
+   appKey, appVersion,appchannel,sessionuuid,deviceos,devicemodel,deviceadid, \
+   deviceidfv,deviceimei,deviceandroidid,oaid, \
+   customudid, costtime, \
+   attributes['recid'] as recId, \
+   attributes['itemId'] as itemId, \
+   attributes['itemType'] as itemType, \
+   attributes['algInfo'] as algInfo, \
+   attributes['scene'] as scene, \
+   attributes['source'] as source, \
+   ip, \
+   kafkaTime, \
+   attributes['action'], \
+   null as actionType, \
+   attributes as params, \
+   deviceosversion  \
+from vc.ods_mda_app_raw_di a \
+left join (select id as user_id, user_code from vc.ods_db_vc_user_account_nd) b on a.userId = b.user_code \
+left join (select id as user_id, user_code from vc.ods_db_vc_user_account_nd) c on cast(a.attributes['userid'] as bigint) = c.user_id \
+where dt = '${azkaban.flow.1.days.ago}' ;

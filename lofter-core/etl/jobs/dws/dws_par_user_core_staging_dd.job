@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_core_staging_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, a.valid_interaction, b.send_comment_interaction_cnt_30d as comment_interaction, \
+       rec_cnt, share_cnt, post_cnt, trade_cnt, grains as grain_cnt, valid_response, \
+       active_days_30d, send_comment_hot_30d, send_comment_reply_cnt_30d, \
+       blog_nickname, blog_url, trade_money \
+from ( \
+    select u.id as userId, u.blogNickname as blog_nickname, concat(blogName,'.lofter.com') as blog_url, \
+           nvl(rec_cnt,0) + nvl(share_cnt,0) + nvl(post_cnt,0) + nvl(trade_cnt, 0) + nvl(grains, 0) + nvl(valid_response, 0) as valid_interaction, \
+           rec_cnt, share_cnt, post_cnt, trade_cnt, trade_money, grains, valid_response \
+    from lofter.dim_blog u \
+    left join ( \
+        select userId, sum(send_recommend_cnt) as rec_cnt \
+        from lofter.dws_par_user_interaction_di \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) a on u.id  = a.userId \
+    left join ( \
+        select userId, sum(share_cnt) as share_cnt, sum(post_cnt) as post_cnt \
+        from lofter.dws_par_user_stratify_di \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) b on u.id = b.userId \
+    left join ( \
+        select userId, count(1) as trade_cnt, sum(money) as trade_money \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}'and money > 0 and \
+              pay_date <= '${azkaban.flow.1.days.ago}' and pay_date >= '${azkaban.flow.30.days.ago}' \
+        group by userid \
+    ) c on u.id = c.userId \
+    left join ( \
+        select userId, sum(grains) as grains \
+        from lofter.dws_par_user_misc_di \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userId \
+    ) d on u.id = d.userId \
+    left join ( \
+        select userId, sum(send_valid_comment_count) as valid_response \
+        from lofter.dws_par_user_interaction_di \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userId \
+    ) e on u.id = e.userId \
+    where (a.rec_cnt > 0 or b.share_cnt > 0 or b.post_cnt > 0 or c.trade_cnt > 0 or \
+           d.grains > 0 or e.valid_response > 0) \
+) a \
+left join ( \
+	select userId, send_comment_interaction_cnt_30d, send_comment_hot_30d, send_comment_reply_cnt_30d \
+	from lofter.dws_par_user_interaction_dd \
+	where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \
+left join ( \
+    select userId, count(distinct dt) as active_days_30d \
+    from lofter.dws_par_user_active_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) c on a.userId = c.userId \
+where a.valid_interaction > 5 and b.send_comment_interaction_cnt_30d > 3 \
+distribute by 1
+dependencies=dws_par_user_interaction_dd,dws_par_user_interaction_di,dws_par_user_stratify_di,dws_par_user_misc_di,dws_par_user_active_di

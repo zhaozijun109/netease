@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(blogId, '-', rk) as id, blogId, userId,nvl(support_score_7d,0) as support7d, nvl(support_score,0) as supportTotal from lofter_dm.ads_creator_gift_support_score_user_rank_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id id --dest lofter_pay_support --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 2

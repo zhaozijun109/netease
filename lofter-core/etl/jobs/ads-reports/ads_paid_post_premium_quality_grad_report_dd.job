@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_premium_quality_grad_report_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select publishdate, \
+case when quality_percent>=100 then '100~' \
+when quality_percent>=90 then '90~100' \
+when quality_percent>=80 then '80~90' \
+when quality_percent>=70 then '70~80' \
+when quality_percent>=60 then '60~70' \
+when quality_percent>=50 then '50~60' \
+when quality_percent>=40 then '40~50' \
+when quality_percent>=30 then '30~40' \
+when quality_percent>=20 then '20~30' \
+when quality_percent>=10 then '10~20' \
+else '~10' end as quality_grad, \
+count(distinct postid) as num, \
+count(distinct blogid) as uv, \
+blog_channel_flg, \
+ispay_returngift, \
+post_content_type \
+from \
+lofter_dm.ads_paid_post_premium_scoring_group_normalization_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+group by  publishdate, \
+case when quality_percent>=100 then '100~' \
+when quality_percent>=90 then '90~100' \
+when quality_percent>=80 then '80~90' \
+when quality_percent>=70 then '70~80' \
+when quality_percent>=60 then '60~70' \
+when quality_percent>=50 then '50~60' \
+when quality_percent>=40 then '40~50' \
+when quality_percent>=30 then '30~40' \
+when quality_percent>=20 then '20~30' \
+when quality_percent>=10 then '10~20' \
+else '~10' end , \
+blog_channel_flg, \
+ispay_returngift, \
+post_content_type \

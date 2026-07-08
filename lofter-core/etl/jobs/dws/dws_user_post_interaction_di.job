@@ -1,0 +1,130 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=\
+insert overwrite table lofter.dws_user_post_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select u.id as userId, \
+    f.text_send_like_cnt, f.photo_send_like_cnt, f.video_send_like_cnt, f.article_send_like_cnt, f.music_send_like_cnt, \
+    f.text_send_reproduce_cnt, f.photo_send_reproduce_cnt, f.video_send_reproduce_cnt, f.article_send_reproduce_cnt, f.music_send_reproduce_cnt, \
+    f.text_send_recommend_cnt, f.photo_send_recommend_cnt, f.video_send_recommend_cnt, f.article_send_recommend_cnt, f.music_send_recommend_cnt, \
+    f.text_send_collect_cnt, f.photo_send_collect_cnt, f.video_send_collect_cnt, f.article_send_collect_cnt, f.music_send_collect_cnt, \
+    g.text_send_comment_cnt, g.photo_send_comment_cnt, g.video_send_comment_cnt, g.article_send_comment_cnt, g.music_send_comment_cnt, \
+    f.send_hot, f.send_like_cnt, f.send_reproduce_cnt, f.send_recommend_cnt, f.send_collect_cnt, g.send_comment_cnt, g.send_valid_comment_count, g.send_novalid_comment_count, \
+    f.like_pv, reproduce_pv, recommend_pv, collect_pv, hot_pv, \
+    g.valid_comment_pv, novalid_comment_pv, comment_pv, reply_comment_pv, \
+    h.comment_like_pv, g.underscore_comment_pv, j.share_pv, k.follow_uv, m.tag_subscribe_pv, \
+    n.collection_subscribe_pv, p.free_gift_present_pv, g.underscore_reply_pv, q.sweet_marks, q.bitter_marks, \
+    g.circle_comment_pv, g.circle_comment_reply_pv, \
+    q.haha_marks \
+from lofter.dim_user u \
+left join ( \
+    select userId, \
+          count(distinct if(post_content_type = '文字' and opType = 'praise', postId, null)) as text_send_like_cnt, \
+          count(distinct if(post_content_type = '图片' and opType = 'praise', postId, null)) as photo_send_like_cnt, \
+          count(distinct if(post_content_type = '视频' and opType = 'praise', postId, null)) as video_send_like_cnt, \
+          count(distinct if(post_content_type = '长文章' and opType = 'praise', postId, null)) as article_send_like_cnt, \
+          count(distinct if(post_content_type = '音乐' and opType = 'praise', postId, null)) as music_send_like_cnt, \
+          count(distinct if(post_content_type = '文字' and opType = 'reproduce', postId, null)) as text_send_reproduce_cnt, \
+          count(distinct if(post_content_type = '图片' and opType = 'reproduce', postId, null)) as photo_send_reproduce_cnt, \
+          count(distinct if(post_content_type = '视频' and opType = 'reproduce', postId, null)) as video_send_reproduce_cnt, \
+          count(distinct if(post_content_type = '长文章' and opType = 'reproduce', postId, null)) as article_send_reproduce_cnt, \
+          count(distinct if(post_content_type = '音乐' and opType = 'reproduce', postId, null)) as music_send_reproduce_cnt, \
+          count(distinct if(post_content_type = '文字' and opType = 'recommend', postId, null)) as text_send_recommend_cnt, \
+          count(distinct if(post_content_type = '图片' and opType = 'recommend', postId, null)) as photo_send_recommend_cnt, \
+          count(distinct if(post_content_type = '视频' and opType = 'recommend', postId, null)) as video_send_recommend_cnt, \
+          count(distinct if(post_content_type = '长文章' and opType = 'recommend', postId, null)) as article_send_recommend_cnt, \
+          count(distinct if(post_content_type = '音乐' and opType = 'recommend', postId, null)) as music_send_recommend_cnt, \
+          count(distinct if(post_content_type = '文字' and opType = 'subscribe', postId, null)) as text_send_collect_cnt, \
+          count(distinct if(post_content_type = '图片' and opType = 'subscribe', postId, null)) as photo_send_collect_cnt, \
+          count(distinct if(post_content_type = '视频' and opType = 'subscribe', postId, null)) as video_send_collect_cnt, \
+          count(distinct if(post_content_type = '长文章' and opType = 'subscribe', postId, null)) as article_send_collect_cnt, \
+          count(distinct if(post_content_type = '音乐' and opType = 'subscribe', postId, null)) as music_send_collect_cnt, \
+          count(1) as send_hot, \
+          count(distinct if(opType = 'praise', postId, null)) as send_like_cnt, \
+          count(distinct if(opType = 'reproduce', postId, null)) as send_reproduce_cnt, \
+          count(distinct if(opType = 'recommend', postId, null)) as send_recommend_cnt, \
+          count(distinct if(opType = 'subscribe', postId, null))  as send_collect_cnt, \
+          sum(if(opType = 'praise', 1, 0)) as like_pv, \
+          sum(if(opType = 'reproduce', 1, 0)) as reproduce_pv, \
+          sum(if(opType = 'recommend', 1, 0)) as recommend_pv, \
+          sum(if(opType = 'subscribe', 1, 0)) as collect_pv, \
+          count(1) as hot_pv \
+    from lofter.dwd_post_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) f on u.id = f.userId \
+left join ( \
+    select userId, \
+          sum(if(post_content_type = '文字', 1, 0)) as text_send_comment_cnt, \
+          sum(if(post_content_type = '图片', 1, 0)) as photo_send_comment_cnt, \
+          sum(if(post_content_type = '视频', 1, 0)) as video_send_comment_cnt, \
+          sum(if(post_content_type = '长文章', 1, 0)) as article_send_comment_cnt, \
+          sum(if(post_content_type = '音乐', 1, 0)) as music_send_comment_cnt, \
+          count(1) as send_comment_cnt, \
+          sum(is_valid) as send_valid_comment_count, \
+          sum(1 - is_valid) as send_novalid_comment_count, \
+          count(1) as comment_pv,  \
+          sum(if(is_valid > 0, 1, 0)) as valid_comment_pv, \
+          sum(if(is_valid = 0, 1, 0)) as novalid_comment_pv, \
+          sum(if(replyl1_commentid <> 0 , 1, 0)) as reply_comment_pv, \
+          sum(is_underscore) as underscore_comment_pv, \
+          sum(is_underscore_reply) as underscore_reply_pv, \
+          sum(is_circle_comment) as circle_comment_pv, \
+          sum(is_circle_comment_reply) as circle_comment_reply_pv \
+    from lofter.dwd_post_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) g on u.id = g.userId \
+left join ( \
+    select t1.userId, count(1) as comment_like_pv \
+    from ( \
+        select userId,postId \
+        from lofter_db_dump.ods_db_comment_hot_nd \
+        where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    left join lofter_db_dump.ods_db_ask_answer_post_nd t2 on t1.postId = t2.id \
+    where t2.id is null \
+    group by t1.userId \
+) h on u.id = h.userId \
+left join ( \
+    select userId, count(1) share_pv \
+    from lofter.dwd_post_share_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) j on u.id = j.userId \
+left join ( \
+    select userId, count(distinct blogId) as follow_uv \
+    from lofter.dwd_blog_follow_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) k on u.id = k.userId \
+left join ( \
+    select userId, count(distinct tag) as tag_subscribe_pv \
+    from lofter.dwd_tag_subscribe_di \
+    where dt = '${azkaban.flow.1.days.ago}' and platform <> 'PC' \
+    group by 1 \
+) m on u.id = m.userId \
+left join ( \
+    select subscribe_userid as userId, count(1) as collection_subscribe_pv \
+    from  lofter.dwd_collection_user_subscribe_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) n on u.id = n.userId \
+left join ( \
+    select sender as userId, count(1) free_gift_present_pv \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+    where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and coin = 0 \
+    group by 1  \
+) p on u.id = p.userId \
+left join ( \
+    select userId, sum(if(opType = 1, 1, 0)) as sweet_marks, sum(if(opType = 2, 1, 0)) as bitter_marks, sum(if(opType = 3, 1, 0)) as haha_marks \
+    from lofter_db_dump.ods_db_p_comment_user_mark_nd \
+    where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+          opType in (1, 2, 3) \
+    group by 1 \
+) q on u.id = q.userId \
+where u.isAnonymous = 0 and \
+      coalesce(f.userId, g.userId, h.userId, j.userId, k.userId, m.userId, n.userId, p.userId, q.userId) is not null \
+distribute by 1
+dependencies=

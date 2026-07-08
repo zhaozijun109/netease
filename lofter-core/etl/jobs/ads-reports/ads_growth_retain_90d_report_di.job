@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=\
+WITH \
+active_period AS ( \
+SELECT  deviceUdid, \
+deviceModel, \
+deviceOs, \
+firstAccessTime, \
+userIds, \
+appChannels, \
+appVersions, \
+firstAccessIp, \
+returnOccurTime, \
+appVersionChannel, \
+dt \
+FROM    lofter.device_active \
+WHERE   dt ='${azkaban.flow.1.days.ago}' \
+), \
+new_pool AS ( \
+SELECT  deviceUdid, dt \
+FROM   lofter.device_new \
+WHERE  dt BETWEEN  date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+group by 1,2 \
+), \
+ret_pool AS ( \
+SELECT  deviceUdid, dt \
+FROM   lofter.device_return \
+WHERE  period = 30 \
+AND  dt BETWEEN  date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+group by 1,2 \
+) \
+insert overwrite table lofter_dm.ads_growth_retain_90d_report_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+SELECT   \
+CASE \
+            WHEN n.deviceUdid IS NOT NULL THEN '近90天新增蓄水设备' \
+WHEN r.deviceUdid IS NOT NULL THEN '近90天回流蓄水设备' \
+ELSE '持续活跃设备' \
+END  AS device_category, \
+count(distinct a.deviceUdid ) device_cnt \
+FROM    active_period a \
+LEFT JOIN new_pool n \
+ON  a.deviceUdid = n.deviceUdid \
+AND n.dt between  date_sub(a.dt, 89)  and a.dt \
+LEFT JOIN ret_pool r \
+ON  a.deviceUdid = r.deviceUdid \
+AND r.dt between  date_sub(a.dt, 89)  and a.dt \
+group by 1 

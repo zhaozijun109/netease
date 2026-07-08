@@ -1,0 +1,35 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_source_report_di  partition(dt ='${azkaban.flow.1.days.ago}')    \
+select    \
+case when b.import_flg is null then '其他' else   b.import_flg end as import_flg,   \
+count(distinct a.userid) as uv,   \
+count(distinct c.userid) as uv_order,   \
+sum(total_amount) as total_amount   \
+from    \
+(   \
+select   userid, dt   \
+from  lofter.dwd_pve_user_interview_active_di   \
+where  dt ='${azkaban.flow.1.days.ago}'   \
+group by 1,2    \
+) a    \
+left join    \
+(   \
+select  dt,   \
+      import_flg,   \
+      userid   \
+from  lofter_dm.ads_pve_user_interview_import_di   \
+where  dt ='${azkaban.flow.1.days.ago}'   \
+group by  dt,   \
+      import_flg,   \
+      userid   \
+) b on a.userid = b.userid and a.dt=b.dt   \
+left join    \
+(   \
+select dt, userid,sum(total_amount) as total_amount   \
+from lofter.dws_pve_user_role_amount_di   \
+where dt ='${azkaban.flow.1.days.ago}'   \
+group by dt, userid   \
+) c    \
+on a.userid = c.userid and a.dt=c.dt   \
+group by  a.dt,   \
+case when b.import_flg is null then '其他' else   b.import_flg end    \

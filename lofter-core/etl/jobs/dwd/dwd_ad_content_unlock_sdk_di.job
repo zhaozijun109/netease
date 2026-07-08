@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_content_unlock_sdk_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select case a.positionId when 279600 then '激励广告' \
+                       when 278625 then '广告文' \
+                       when 278626 then '广告文' \
+                       when 277629 then '视频合集' \
+                       end as module, \
+       a.userId, a.postId, b.blogId, a.bid_amount \
+from ( \
+    select positionId, postId, userId, max(bid_amount/1000) as bid_amount \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId in (279600, 278625, 278626, 277629) and is_bg > 0 \
+    group by 1, 2, 3 \
+) a \
+left join lofter.dim_post b on a.postId = b.id \

@@ -1,0 +1,77 @@
+type=sparksql
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dws_post_premium_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.userId, a.publishDate as publish_date, \
+       nvl(sum(realPv),0) real_pv, \
+       nvl(sum(exposurePv),0) exposure_pv, \
+       nvl(sum(sharePv),0) share_pv, \
+       nvl(sum(recPv),0) rec_pv, \
+       nvl(sum(support_exposure_pv),0) support_exposure_pv, \
+       nvl(sum(valid_response),0) valid_response, \
+       nvl(sum(clickPv),0) click_pv, \
+       nvl(sum(hotPv),0) hot_pv, \
+       nvl(sum(responsePv),0) response_pv, \
+       nvl(e.premium_date, '${azkaban.flow.1.days.ago}') as premium_date, \
+       contentType as content_type, title, tags, post_url, blog_url, post_valid, \
+       creator_level,nvl(sum(realPv_1d),0) realPv_1d \
+from ( \
+    select id postId, userId, publishDate, contentType, title, tags, \
+           url as post_url, concat(blogName,'.lofter.com') as blog_url, \
+           valid as post_valid, \
+           '${azkaban.flow.1.days.ago}' as dt \
+    from lofter.dim_post \
+    where  isPublished=true and isForbidden=false and isCitedPost=false and \
+           allowView=0 and isMoved = 0 and contentType in ("图片","文字","视频") and \
+           isActivityAutoPost=0 and isImported=0 and \
+           publishDate >= '${azkaban.flow.30.days.ago}' and publishDate <= '${azkaban.flow.1.days.ago}' \
+) a left join ( \
+    select postid, sum(realBrowsePv) as realPv, sum(exposurePv) as exposurePv, sum(sharePv) as sharePv, \
+           if(sum(posRecPv-negRecPv) <= 0, 0, sum(posRecPv-negRecPv)) recPv, \
+           sum(clickPv) as clickPv, \
+           if(sum(posCommentPv-negCommentPv) <= 0, 0, sum(posCommentPv-negCommentPv)) as responsePv, \
+           if(sum(posHotPv - negHotPv) <= 0, 0, sum(posHotPv - negHotPv)) as hotPv, \
+           sum(case when dt='${azkaban.flow.1.days.ago}' then realBrowsePv end) as realPv_1d \
+    from lofter.dws_post_base_stats_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) b on a.postid = b.postid \
+left join ( \
+    select postId, sum(support_exposure_pv) as support_exposure_pv \
+    from lofter.dws_post_support_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) c on a.postid = c.postid \
+left join ( \
+    select postId, sum(valid_response_pv) as valid_response \
+    from lofter.dws_post_interaction_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) d on a.postId = d.postId \
+left join ( \
+  select postId, min(dt) as premium_date \
+  from lofter.dws_post_premium_di \
+  where dt >= '${azkaban.flow.30.days.ago}' and dt < '${azkaban.flow.1.days.ago}' \
+  group by postId \
+) e on a.postId = e.postId \
+left join ( \
+  select userId, level as creator_level from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}' \
+) f on a.userId = f.userId \
+left join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, avg(dau) as dau \
+  from ( \
+     select dt, count(distinct deviceUdid) dau \
+     from lofter.device_active \
+     where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+     group by dt \
+  ) t \
+) g on a.dt = g.dt \
+group by a.postId, a.userId, a.publishDate, \
+         e.premium_date, contentType, title, tags, post_url, blog_url, post_valid, creator_level \
+having e.premium_date is not null or \
+       ( nvl(sum(realPv),0) > (first(dau)/3420) and nvl(sum(support_exposure_pv),0) / nvl(sum(exposurePv),0) < 0.5 and \
+         (nvl(sum(recPv),0) > (first(dau)/114000) or (nvl(sum(valid_response),0) + nvl(sum(recPv),0) + nvl(sum(sharePv),0)) / nvl(sum(realPv),0) > 0.05)) \
+distribute by 1
+dependencies=dws_post_base_stats_di,dws_post_support_di,dws_post_interaction_di,dws_par_creator_level_scoring_dd

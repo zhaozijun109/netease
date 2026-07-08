@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_ad_cvr_di partition (dt='${azkaban.flow.1.days.ago}') \
+select a.advertiserId, a.campaignId, a.baseDate as new_date, \
+    count(distinct a.deviceUdid) as new_device_count, \
+    count(distinct if(b.userId > 0, b.deviceUdid, null)) as pve_access_device_count, \
+    count(distinct if(b.amount > 0, b.deviceUdid, null)) as trade_user_count, \
+    sum(b.amount) as trade_amount, \
+    a.device_type, \
+    count(distinct b.deviceUdid) as pve_access_device_count_v2 \
+from ( \
+    select dt as baseDate, advertiserId, deviceUdid, campaignId, IF(device_type = 'return','return_30',device_type) as device_type \
+    from lofter.dwd_ad_growth_device_di \
+    where appid = 'virtualapp' AND \
+        dt <= '${azkaban.flow.1.days.ago}' and \
+        dt >= '${azkaban.flow.30.days.ago}' and \
+        length(advertiserId) > 0 \
+    GROUP BY dt, advertiserId, deviceUdid, campaignId, device_type \
+  union all \
+      select t1.dt as baseDate, t1.advertiserId, t1.deviceudid, t1.campaignId, 'active' as device_type \
+      from ( \
+          select dt, \
+                 case when advertiserId is null and channel='GDT' then adid \
+                      when advertiserId is null then subchannel else advertiserId end advertiserId, \
+                 campaignId, \
+                 deviceId customUdid, \
+                 daDeviceId deviceUdid, \
+                 row_number() over (partition by daDeviceId order by time) as rnk \
+          from lofter.ods_log_ad_new_linkup_di \
+          where dt <= '${azkaban.flow.1.days.ago}' and \
+                dt >= '${azkaban.flow.30.days.ago}' and \
+                appId = 'virtualapp' \
+      ) t1 \
+      left join ( \
+          select deviceUdid \
+          from lofter.dwd_ad_growth_device_di \
+          where appid = 'virtualapp' and \
+                dt <= '${azkaban.flow.1.days.ago}' and \
+                dt >= '${azkaban.flow.30.days.ago}' \
+      ) t2 on t1.deviceUdid = t2.deviceUdid \
+      where t1.rnk = 1 and t2.deviceUdid is null and \
+            length(t1.advertiserId) > 0 \
+      group by 1, 2, 3, 4 \
+) a \
+left join ( \
+    select x.deviceUdid, x.userId, sum(amount) as amount \
+    from ( \
+        select deviceUdid, userId, min(dt) as device_user_pve_attach_date \
+        from vc.dwd_device_active_di \
+             lateral view explode(userIds) as userId \
+        where dt <= '${azkaban.flow.1.days.ago}' and \
+              dt >= '${azkaban.flow.30.days.ago}' \
+        group by 1, 2 \
+    ) x \
+    left join ( \
+        select user_id as userId, from_unixtime(pay_time, 'yyyy-MM-dd') as pay_date, \
+               sum(order_price) as amount \
+        from vc.ods_db_vc_order_nd \
+        where order_status = 2 and \
+              from_unixtime(pay_time, 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(pay_time, 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        group by 1, 2 \
+    ) y on x.userId = y.userId and y.pay_date >= x.device_user_pve_attach_date \
+    group by 1, 2 \
+) b on a.deviceUdid = b.deviceUdid \
+group by a.advertiserId, a.campaignId, a.baseDate, a.device_type

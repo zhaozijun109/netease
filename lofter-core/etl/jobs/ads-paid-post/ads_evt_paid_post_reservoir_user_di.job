@@ -1,0 +1,97 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_evt_paid_post_reservoir_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+actiontype,publish_date_flg, \
+NVL(ip,'无ip归属') as ip , \
+is_new_user,post_content_type,source1_scene,is_from_rec, \
+case when a.dt>firstday and firstday is not null  then 1 else 0 end as charge_flg, \
+case when b.blog_channel is not null  then b.blog_channel else -1 end as blog_channel_flg, \
+ a.userid, \
+ a.postid \
+from (select  \
+    dt,userid,postid,post_content_type, \
+    case when post_publish_date=dt then '当日发文' \
+    when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+    when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+    when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+    else '181日~以上发文' end as  publish_date_flg, \
+    is_from_rec,is_new_user,source1_scene,ip,'browse' as actiontype \
+from lofter.dwd_post_browse_di \
+    LATERAL VIEW explode( case when size(post_ips)<1 then array('无ip归属') else post_ips end  ) t2 AS ip \
+where dt = '${azkaban.flow.1.days.ago}' \
+    and post_content_type in ('文字','图片') \
+    and action_type='page_duration' \
+    and is_real=1 \
+group by dt,userid,postid,post_content_type, \
+case when post_publish_date=dt then '当日发文' \
+when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+else '181日~以上发文' end , \
+is_from_rec,is_new_user,source1_scene,ip \
+ \
+union \
+ \
+select  \
+dt,userid,postid,post_content_type, \
+case when post_publish_date=dt then '当日发文' \
+when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+else '181日~以上发文' end as  publish_date_flg, \
+case when rec_alg is null then 0 else 1 end is_from_rec,is_new_user, \
+source1_scene,ip1 as ip,optype as actiontype \
+from  \
+lofter.dwd_post_hot_di \
+LATERAL VIEW explode( case when size(post_ips)<1 then array('无ip归属') else post_ips end  ) t2 AS ip1 \
+where dt ='${azkaban.flow.1.days.ago}' \
+and post_content_type in ('文字','图片') \
+group by dt,userid,postid,post_content_type, \
+case when post_publish_date=dt then '当日发文' \
+when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+else '181日~以上发文' end, \
+case when rec_alg is null then 0 else 1 end ,is_new_user,source1_scene,ip1,optype \
+ \
+union \
+ \
+select  \
+dt,userid,postid,post_content_type, \
+case when post_publish_date=dt then '当日发文' \
+when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+else '181日~以上发文' end as  publish_date_flg, \
+case when rec_alg is null then 0 else 1 end is_from_rec,is_new_user,source1_scene,ip1 as ip,'response' as actiontype \
+from  \
+lofter.dwd_post_response_di \
+LATERAL VIEW explode( case when size(post_ips)<1 then array('无ip归属') else post_ips end  )  t2 AS ip1 \
+where dt ='${azkaban.flow.1.days.ago}' \
+and post_content_type in ('文字','图片') \
+group by dt,userid,postid,post_content_type, \
+case when post_publish_date=dt then '当日发文' \
+when datediff(dt,post_publish_date) between 1 and 7 then '1~7日发文' \
+when datediff(dt,post_publish_date) between 8 and 30 then '8~30日发文' \
+when datediff(dt,post_publish_date) between 31 and 180 then '31~180日发文' \
+else '181日~以上发文' end, \
+case when rec_alg is null then 0 else 1 end ,is_new_user,source1_scene,ip1) a \
+ \
+left join \
+ \
+(select postid,blog_channel   \
+from lofter.dim_gift_post_return_dd  \
+where dt = '${azkaban.flow.1.days.ago}'  and status=1 and blog_channel in (0,1)  and ispay_returngift in (0,1)  \
+and contenttype in ('文字','图片') \
+group by postid,blog_channel) b \
+ \
+on a.postid=b.postid \
+ \
+left join \
+ \
+(select userid ,min(from_unixtime(cast(first_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as firstday \
+from lofter.dws_user_pay_type_info_dd \
+where dt='${azkaban.flow.1.days.ago}' and pay_type in  ('礼物付费' , '粉丝会员') \
+group by userid )c \
+on a.userid=c.userid \
+

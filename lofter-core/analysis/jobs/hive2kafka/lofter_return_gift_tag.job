@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select return_gift_id as returnGiftId, postId, blogId, \
+       tag_state as tag, \
+       1 as `type`, \
+       action \
+from lofter_dm.ads_gift_return_tag_change_di \
+where dt='${azkaban.flow.1.days.ago}' \
+"
+params= --topic LOFTER.ReturnGift.tag --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

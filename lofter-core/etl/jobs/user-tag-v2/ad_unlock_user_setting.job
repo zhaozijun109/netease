@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag ad_unlock_user_setting --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               tag as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (     select userId, 'ad_unlock_user_setting' as tag, \
+                                          case settingValue when 'on' then '开' else '关' end as grp \
+                                   from lofter_db_dump.ods_db_trade_ad_unlock_user_setting_nd \
+                                   where settingType = 'AUTHOR_AD_UNLOCK_SWITCH' ) "

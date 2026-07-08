@@ -1,0 +1,64 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool1_schedule_di partition(dt = '${azkaban.flow.current.date}') \
+select *, \
+       row_number() over (partition by userId order by priority, create_time) as rk \
+from ( \
+    select b.userId, b.push_topic, b.push_params, b.policy, \
+           case when a.active_type in (1,3,7) and b.policy = 'new_post_interact' then 110 \
+                when a.active_type in (1,3,7) and b.policy = 'creator_weekly_report' then 140 \
+                when a.active_type in (1,3,7) and b.policy = 'comment_interaction' then 120 \
+                when a.active_type in (1,3,7) and b.policy = 'follow_notice' then 130 \
+                when a.active_type in (1,3,7) and b.policy = 'collection_update' then 210 \
+                when a.active_type in (1,3,7) and b.policy = 'audio_collection_update' then 215 \
+                when a.active_type in (1,3,7) and b.policy = 'tag_hot_update' then 220 \
+                when a.active_type in (1,3,7) and b.policy = 'discuss_question_update' then 230 \
+                when a.active_type in (1,3,7) and b.policy = 'follow_notice_aggregate' then 310 \
+                when a.active_type in (1,3,7) and b.policy = 'search_tag_update' then 410 \
+                when a.active_type in (1,3,7) and b.policy = 'score_question_update' then 510 \
+                when a.active_type in (1,3,7) and b.policy = 'discuss_question_update' then 520 \
+                when a.active_type in (1,3,7) and b.policy = 'active_top1' then 710 \
+                when a.active_type in (15,30) and b.policy = 'creator_weekly_report' then 140 \
+                when a.active_type in (15,30) and b.policy = 'comment_interaction' then 120 \
+                when a.active_type in (15,30) and b.policy = 'follow_notice' then 130 \
+                when a.active_type in (15,30) and b.policy = 'collection_update' then 210 \
+                when a.active_type in (15,30) and b.policy = 'audio_collection_update' then 215 \
+                when a.active_type in (15,30) and b.policy = 'follow_notice_aggregate' then 310 \
+                when a.active_type = 15 and b.policy = 'active_hot15_grain' then 410 \
+                when a.active_type = 30 and b.policy = 'active_hot30_grain' then 410 \
+                else 1000 \
+                end as priority, \
+           b.create_time \
+    from ( \
+        select case when active_days_1d > 0 then 1 \
+                    when active_days_3d > 0 then 3 \
+                    when active_days_7d > 0 then 7 \
+                    when active_days_15d > 0 then 15 \
+                    else 30 end as active_type, \
+               userId \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and active_days_30d >= 0 \
+    ) a \
+    join ( \
+        select *, \
+               row_number() over (partition by userId, policy order by create_time desc) as policy_rk \
+        from ( \
+            select *, \
+                  cast(nvl(get_json_object(push_params, '$.postId'), nvl(get_json_object(push_params, '$.itemId'), get_json_object(push_params, '$.commentPostId'))) as bigint) as postId \
+            from lofter_dm.ads_push_task_pool_di \
+            where dt = '${azkaban.flow.current.date}' and \
+                  from_unixtime(cast(create_time/1000 as bigint),'yyyy-MM-dd HH:mm') < '${azkaban.flow.current.date} 10:00' \
+        ) tt \
+    ) b on a.userId = b.userId \
+    left join ( \
+        select distinct postId as ai_post_id \
+        from lofter.dws_ecology_ai_infringe_post_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        union \
+        select cast(itemid as bigint) as ai_post_id \
+        from lofter.dwd_rec_content_understand_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and type = 'AI文识别' and level1_tag = '1' \
+    ) ai_posts on b.postId = ai_posts.ai_post_id \
+    where (b.policy not in ('new_post_interact') or b.policy_rk = 1) \
+      and ai_posts.ai_post_id is null \
+) t \
+

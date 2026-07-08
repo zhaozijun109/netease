@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_gift_post_premium_scoring_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk,type \
+from ( \
+    select *, \
+           row_number() over (partition by postId order by dt desc) as update_rk \
+    from ( \
+        select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk,type,dt \
+        from lofter.dws_gift_post_premium_scoring_dd \
+        where dt = '${azkaban.flow.2.days.ago}' \
+      union all \
+        select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk,type,dt \
+        from lofter.dws_gift_post_premium_scoring_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+) tt \
+where update_rk = 1 \
+
+dependencies=dws_gift_post_premium_scoring_di

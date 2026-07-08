@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.02=\
+with dailyInterest as ( \
+    select if(d.userId is not null, 'new', 'return_30') as user_type, a.interest as Name, \
+        'interest' as statType, \
+        count(distinct a.userid) as bgUv,count(distinct c.blogid) as clickUv \
+    from ( \
+        select distinct userid, dt, params['text'] as interest \
+        from lofter.ods_mda_app_partition_di \
+        where dt ='${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId in('z6-1') and itemType='INTEREST' and \
+              version_compare(appversion, '7.9.4' ) >= 0 \
+    ) a \
+    left join ( \
+        select distinct blogid, interest \
+        from lofter_db_dump.ods_db_blog_settings_nd \
+             lateral view explode(split(get_json_object(interests, '$.interestNames'), ',')) myTable as interest \
+        where interests is not null \
+    ) c on a.userid=c.blogid and a.interest=c.interest \
+    left join ( \
+        select id as userId from lofter.dim_user where createDate >= '${azkaban.flow.2.days.ago}' \
+    ) d on a.userId = d.userId \
+    group by 1, 2 \
+), \
+dailyIp as ( \
+    select if(d.userId is not null, 'new', 'return_30') as user_type, \
+           a.ip as Name, \
+           'IP' as statType, \
+           count(distinct a.userid) as bgUv, \
+           count(distinct c.blogid) as clickUv \
+    from ( \
+        select distinct userid ,dt,params['text'] as ip \
+        from lofter.ods_mda_app_partition_di \
+        where dt ='${azkaban.flow.1.days.ago}' and actionType = 'other' and \
+              version_compare(appversion, '7.9.4' ) >= 0 and \
+              ((eventId = 'z6-4' and itemType='IP') OR \
+               (eventId = 'z6-1' and itemType='INTEREST')) \
+     ) a \
+    left join ( \
+        select distinct blogid, ip \
+        from lofter_db_dump.ods_db_blog_settings_nd \
+        lateral view explode(split(get_json_object(interests, '$.ipNames'), ',')) myTable as ip \
+        where interests is not null \
+    ) c on a.userid=c.blogid and a.ip=c.ip \
+    left join ( \
+        select id as userId from lofter.dim_user where createDate >= '${azkaban.flow.2.days.ago}' \
+    ) d on a.userId = d.userId \
+    group by 1, 2 \
+) \
+insert overwrite table lofter_dm.ads_act_new_user_guide_cvr_di partition (dt = '${azkaban.flow.1.days.ago}')  \
+select concat(replace('${azkaban.flow.1.days.ago}', '-', ''), '-',user_type, '-', statType, '-', Name) as id, \
+       Name, statType, bgUv, clickUv, user_type \
+from ( \
+    select * from dailyInterest \
+  union all \
+    select * from dailyIp \
+) a \

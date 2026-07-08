@@ -1,0 +1,114 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+active_base AS ( \
+        select  \
+         dt, deviceudid, userIds[0] as userId  \
+    from lofter.device_active  \
+    where dt ='${azkaban.flow.1.days.ago}' \
+    group by dt, deviceudid, userId \
+) \
+,type_data as ( \
+    select deviceudid \
+    ,device_type \
+    ,dt \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt ='${azkaban.flow.1.days.ago}' \
+) \
+,raw_events_14d AS ( \
+    SELECT \
+        date_add(t.dt, days_offset.pos) AS calc_dt, \
+        t.userid, \
+        t.post_ips, \
+        monotonically_increasing_id() AS event_id \
+    FROM lofter.dwd_post_browse_di t \
+    LATERAL VIEW posexplode(split(space(13), ' ')) days_offset AS pos, val \
+    WHERE \
+        t.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 13) AND '${azkaban.flow.1.days.ago}' \
+        AND t.is_real = 1 \
+        AND t.action_type = 'page_duration' \
+        AND t.userid IS NOT NULL \
+        AND size(t.post_ips) > 0 \
+) \
+,ip_mapping AS ( \
+    SELECT ip, category_res AS vertical_category \
+    FROM lofter.dim_seven_group_ip_category_res_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY ip, category_res \
+) \
+,user_category AS ( \
+    SELECT  \
+        a.userid, \
+        b.vertical_category, \
+        calc_dt \
+    FROM ( \
+        SELECT  \
+            userid,  \
+            ip_exploded.ip,  \
+            event_id, \
+            calc_dt \
+        FROM raw_events_14d \
+        LATERAL VIEW explode(post_ips) ip_exploded AS ip \
+        WHERE calc_dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    JOIN ip_mapping b ON a.ip = b.ip \
+    GROUP BY 1,2,3 \
+    HAVING count(DISTINCT a.event_id) >= 12 \
+) \
+,today_activity AS ( \
+    SELECT \
+        t.userid, \
+        m.vertical_category, \
+        t.postid, \
+        t.ip, \
+        dt \
+    FROM ( \
+        SELECT  \
+            userid, \
+            postid, \
+            dt, \
+            ip_exploded.ip \
+        FROM lofter.dwd_post_browse_di \
+        LATERAL VIEW explode(post_ips) ip_exploded AS ip \
+        WHERE dt = '${azkaban.flow.1.days.ago}'  \
+          AND is_real = 1 \
+          AND action_type = 'page_duration' \
+    ) t \
+    JOIN ip_mapping m ON t.ip = m.ip \
+) \
+,paid_posts AS ( \
+    SELECT postid ,dt \
+    FROM lofter.dwd_gift_return_post_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    AND ispay_returngift IN (0,1)  \
+    AND blog_channel IN (0,1) \
+    GROUP BY postid,dt \
+) \
+,retain_info AS ( \
+    SELECT deviceudid,base_date \
+    FROM lofter.device_retain \
+    WHERE dt = date_add('${azkaban.flow.1.days.ago}',1) \
+      AND period = 1  \
+      AND is_retain = 1 \
+    GROUP BY deviceudid,base_date \
+) \
+insert overwrite table lofter_dm.ads_user_vertical_category_ip_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    case when b.vertical_category is null then '泛用户'  \
+        when b.vertical_category in ('影视','娱乐','综艺') then 'RPS' else b.vertical_category end as category, \
+    b.vertical_category,     \
+    c.ip, \
+    case when device_type is null then '其他' else device_type end as device_type, \
+    COUNT(DISTINCT a.userid) AS uv, \
+    COUNT(c.postid) AS pv, \
+    COUNT(CASE WHEN d.postid IS NOT NULL THEN c.postid END) AS paid_pv, \
+    COALESCE(COUNT(c.postid),0) - COALESCE(COUNT(CASE WHEN d.postid IS NOT NULL THEN c.postid END),0) AS free_pv, \
+    COUNT(DISTINCT a.deviceudid) AS cnt_deviceudid, \
+    COUNT(DISTINCT CASE WHEN r.deviceudid IS NOT NULL THEN a.deviceudid END) AS cnt_retain \
+FROM active_base a \
+left join type_data t on a.deviceudid=t.deviceudid and a.dt=t.dt \
+left JOIN user_category b ON a.userid = b.userid and a.dt=b.calc_dt  \
+LEFT JOIN today_activity c ON a.userid = c.userid AND b.vertical_category = c.vertical_category and a.dt=c.dt \
+LEFT JOIN paid_posts d ON c.postid = d.postid and c.dt=d.dt \
+LEFT JOIN retain_info r ON a.deviceudid = r.deviceudid and a.dt=r.base_date \
+GROUP BY 1,2,3,4

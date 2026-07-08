@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Redis
+conf.spark.source.query="select concat('vc_om_3116_key:',ad_id) as key,value from vc.ads_vc_om_3116_i_d where dt = '${azkaban.flow.1.days.ago}'"
+params= --parallel 1 --interval 2d --cluster 10.104.121.17:6125,10.104.121.11:6101,10.104.121.16:6149,10.104.121.15:6173,10.104.121.18:6126,10.104.121.12:6174,10.104.121.13:6150,10.104.121.14:6102 --password 12617a5df2f0
+
+dependencies=ads_vc_om_3116_i_d

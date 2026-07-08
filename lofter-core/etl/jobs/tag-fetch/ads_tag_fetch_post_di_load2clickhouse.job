@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select postid,userid,commend_count,hot,praise_count,reproduce_count,recommend_count,subscribe_count,free_gift_sender_bitmap,free_gift_pv,pay_gift_sender_bitmap,pay_gift_money_amount,shua_hot,dt,exposed_count,click_count,rec_exposed_count,feed_rec_exposed_count,tag_rec_exposed_count,cold_start_rec_exposed_count from lofter_dm.ads_tag_fetch_post_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.tag_fetch_post_di --batch 102400 --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_tag_fetch_post_di

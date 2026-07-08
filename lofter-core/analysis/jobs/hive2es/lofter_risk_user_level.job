@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select blogId as id, dt, blogId, score, forbiddenType, grade, details from lofter_dm.ads_risk_user_level_di where dt='${azkaban.flow.1.days.ago}' "
+params= --dest lofter_risk_user_level --url lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F

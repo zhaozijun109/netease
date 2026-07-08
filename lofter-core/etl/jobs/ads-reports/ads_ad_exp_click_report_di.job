@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_exp_click_report_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select   \
+    a.adid   \
+    ,c.name as ad_name   \
+    ,b.name as ad_position_name   \
+    ,sum(exposurecount)   exposure_pv   \
+    ,sum(clickcount)      click_pv   \
+    ,sum(exposureuvcount) exposure_uv   \
+    ,sum(clickuvcount)    click_uv   \
+from   \
+    (select   \
+        adid   \
+        ,positionid   \
+        ,exposurecount   \
+        ,clickcount   \
+        ,exposureuvcount  \
+        ,clickuvcount  \
+    from lofter_db_dump.ods_db_ad_stat_detail_daily_nd   \
+    where from_unixtime(cast(substr(createtime,1,10) as bigint) ,'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  \
+    )a  \
+join (select id as positionid ,name from lofter_db_dump.ods_db_ad_position_nd group by id,name)  b   \
+on a.positionid=b.positionid   \
+join lofter_db_dump.ods_db_ad_form_nd c   \
+on a.adid=c.adid  \
+group by   \
+    a.adid    \
+    ,c.name  \
+    ,b.name  \

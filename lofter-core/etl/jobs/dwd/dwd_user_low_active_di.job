@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_user_low_active_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.userId \
+from ( \
+    select userId, \
+            count(if(dt = '${azkaban.flow.1.days.ago}', dt, null)) as active_days_1d, \
+            count(if(dt < '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 30), dt, null)) as prev_active_days_30d \
+    from lofter.dwd_user_active_di \
+    where dt <='${azkaban.flow.1.days.ago}' and \
+          dt >= date_sub('${azkaban.flow.1.days.ago}', 30) and \
+          is_anonymous = 0 \
+    group by 1 \
+    having active_days_1d > 0 and prev_active_days_30d <= 14 and prev_active_days_30d >= 1 \
+) a \
+left join ( \
+    select userId from lofter.dwd_user_new_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+  union all \
+    select userId from lofter.dwd_user_return_di  where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+) b on a.userId = b.userId \
+where b.userId is null \
+group by 1
+dependencies=dwd_user_return_di,dwd_user_new_di,dwd_user_active_di

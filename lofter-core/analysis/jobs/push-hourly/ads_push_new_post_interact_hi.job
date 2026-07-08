@@ -1,0 +1,139 @@
+type=sparksql
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=\
+with blog_login as ( \
+    select userId, max(update_time) as lastLoginTime \
+    from ( \
+            select userId, lastLoginTime as update_time \
+            from `lofter`.`ods_binlog_user_statistic_di` \
+            where dt <= '${azkaban.flow.current.date}' and \
+                dt >= '${azkaban.flow.30.days.ago}' and \
+                `_bin_op` in (0,2) \
+        union all \
+            select blogId as userId, update_time \
+            from lofter_dm.ads_push_new_post_interact_hi \
+            where (dt = '${azkaban.flow.current.date}' and hour < ${azkaban.flow.start.hour}) \
+                 or (dt < '${azkaban.flow.current.date}' and dt >= '${azkaban.flow.30.days.ago}') \
+    ) t \
+    group by 1 \
+), \
+blog_comment as ( \
+    select x.* \
+    from ( \
+        select * \
+        from lofter.ods_binlog_post_response_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+            dt >= '${azkaban.flow.30.days.ago}'and _bin_op = 0 \
+    ) x \
+    join blog_login y on x.blogId = y.userId and x.publishTime > y.lastLoginTime \
+), \
+blog_hot as ( \
+    select x.* \
+    from ( \
+        select * \
+        from lofter.ods_binlog_post_hot_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+            dt >= '${azkaban.flow.30.days.ago}' and _bin_op = 0 \
+    ) x \
+    join blog_login y on x.blogId = y.userId and x.opTime > y.lastLoginTime \
+), \
+user_comment_history ( \
+    select publisherUserId as userId, blogId \
+    from lofter_db_dump.ods_db_post_response_nd \
+    where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.30.days.ago}' \
+    group by 1, 2 \
+) \
+insert overwrite table lofter_dm.ads_push_new_post_interact_hi partition(dt = '${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select a.postId, a.blogId, \
+      if(b.blogId is not null, 1, 2) as interact_type, \
+      b.interaction_count, b.interaction_users, \
+      c.special_events, \
+      d.update_time, \
+      a1.offline_hours, \
+      b.likes, b.comments, b.recommends, b.reproduces \
+from ( \
+    select postId, blogId \
+    from ( \
+        select *, row_number() over (partition by postId order by _bin_op_time) as rk \
+        from lofter.ods_binlog_recommend_review_post_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+            dt >= '${azkaban.flow.30.days.ago}' and \
+            type in (1,2) \
+    ) t \
+    where rk = 1 and _bin_op in (0,2) \
+) a \
+join ( \
+    select userId, (unix_timestamp()*1000 - lastLoginTime) / 3600000L as offline_hours \
+    from blog_login \
+    where unix_timestamp()*1000 - lastLoginTime > 3600000L \
+) a1 on a.blogId = a1.userId \
+left join ( \
+    select x.blogId, x.postId, sum(interaction) as interaction_count, \
+        filter(transform(sort_array(collect_set(struct(-opTime, publisherUserId)), true), x -> x.publisherUserId), x -> x > 0)  as interaction_users, \
+        sum(likes) as likes, sum(comments) as comments, sum(recommends) as recommends, sum(reproduces) as reproduces \
+    from ( \
+        select blogid, postId, publisherUserId, sum(interaction) as interaction, max(opTime) as opTime, \
+               sum(likes) as likes, sum(comments) as comments, sum(recommends) as recommends, sum(reproduces) as reproduces \
+        from ( \
+            select blogid, postId, 1 as interaction, opTime, publisherUserId, \
+                   if(`type` = 1, 1, 0) as likes, \
+                   0 as comments, \
+                   if(`type` = 3, 1, 0) as recommends, \
+                   if(`type` = 2, 1, 0) as reproduces \
+            from blog_hot \
+          union all \
+            select blogId, postId, 1 as interaction, publishTime as opTime, publisherUserId, \
+                   0 as likes, 1 as comments, 0 as recommends, 0 as reproduces \
+            from blog_comment \
+        ) t \
+        group by 1,2,3 \
+    ) x \
+    group by 1, 2 \
+    having interaction_count >= 10 \
+) b on a.blogId = b.blogId and a.postId = b.postId \
+left join ( \
+    select blogId, postId, sort_array(collect_set(struct(special_type, special_count, users)), true) as special_events \
+    from ( \
+        select x.blogId, x.postId, 1 as special_type, count(distinct x.publisherUserId) as special_count, collect_set(x.publisherUserId) as users \
+        from blog_comment x \
+        left join (select userId from user_comment_history group by 1) y on x.publisherUserId = y.userId \
+        where y.userId is null \
+        group by 1, 2 \
+    union all \
+        select x.blogId, x.postId, 2 as special_type, count(distinct x.publisherUserId) as special_count, collect_set(x.publisherUserId) as users \
+        from blog_comment x \
+        left join user_comment_history y on x.publisherUserId = y.userId and x.blogId = y.blogId \
+        where y.userId is null \
+        group by 1, 2 \
+    union all \
+        select x.blogId, x.postId, 3 as special_type, count(distinct x.publisherUserId) as special_count, collect_set(x.publisherUserId) as users \
+        from blog_comment x \
+        join lofter_db_dump.ods_db_user_following_nd y on x.publisheruserid = y.userId and x.blogId = y.blogId \
+        group by 1, 2 \
+    union all \
+        select x.blogId, x.postId, 4 as special_type, count(distinct x.publisherUserId) as special_count, collect_set(x.publisherUserId) as users \
+        from blog_comment x \
+        join (select publisheruserid from blog_hot where type in (1,3) group by 1) y on x.publisheruserid = y.publisheruserid \
+        group by 1,2 \
+    ) t \
+    group by 1, 2 \
+) c on a.blogId = c.blogId and a.postId = c.postId \
+left join ( \
+    select postId, blogId, max(update_time) as update_time \
+    from ( \
+        select postId, blogId, publishTime as update_time \
+        from blog_comment \
+      union all \
+        select postId, blogId, opTime as update_Time \
+        from blog_hot \
+    ) t \
+    group by 1,2 \
+) d on a.blogId = d.blogId and a.postId = d.postId \
+left join ( \
+    select blogId \
+    from lofter_dm.ads_push_new_post_interact_hi \
+    where dt = '${azkaban.flow.current.date}' and hour < ${azkaban.flow.start.hour} \
+    group by 1 \
+) e on a.blogId = e.blogId \
+where nvl(b.postId, c.postId) is not null and e.blogId is null \

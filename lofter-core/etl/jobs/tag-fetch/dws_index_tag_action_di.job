@@ -1,0 +1,33 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_index_tag_action_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag, \
+       browse_pv, browse_user_bitmap, \
+       real_consume_pv,consume_user_bitmap, consume_post_bitmap, \
+       expose_pv \
+from ( \
+   select tag, to_bitmap(userId) as browse_user_bitmap, \
+          count(1) as browse_pv \
+   from lofter.dwd_tag_browse_di \
+   where dt = '${azkaban.flow.1.days.ago}' and \
+         userId > 0 and length(tag) > 0 \
+   group by tag \
+) a \
+left join ( \
+  select tag, \
+         sum(1) as real_consume_pv, \
+         to_bitmap(userId) as consume_user_bitmap, \
+         to_bitmap(postId) as consume_post_bitmap \
+  from lofter.dwd_post_browse_di \
+       lateral view explode(post_tags) tg as tag \
+  where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+  group by tag \
+) b on a.tag = b.tag \
+left join ( \
+  select tag, count(1) as expose_pv \
+  from lofter.dwd_post_expose_di \
+       lateral view explode(post_tags) tg as tag \
+  where dt = '${azkaban.flow.1.days.ago}' and length(tag) > 0 and reaction is null \
+  group by tag \
+) c on a.tag = c.tag

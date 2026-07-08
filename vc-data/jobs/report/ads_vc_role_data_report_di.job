@@ -1,0 +1,472 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_role_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select distinct  \
+'1' AS period, \
+a.character_id, \
+a.character_name, \
+d.expose_uv, \
+b.chat_uv, \
+b.total_chats, \
+b.energy_consume, \
+c.total_chats_10up, \
+c.total_chats_30up, \
+a.consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+a.type, \
+a.status, \
+a.audience_type, \
+c.total_chats_100up \
+from \
+ \
+(select type, \
+status, \
+audience_type, \
+character_id, \
+character_name, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by type, \
+status, \
+audience_type, \
+character_id, \
+character_name \
+) a \
+left join \
+(select character_id, \
+character_name, \
+count(distinct user_id) as chat_uv, \
+sum(talk_cnt) as total_chats, \
+sum(COALESCE(energy_consume,0)) as energy_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by character_id, \
+character_name \
+) b on a.character_id=b.character_id   \
+ \
+left join \
+(select t1.character_id, \
+t1.character_name, \
+count(distinct case when t1.total_chats>9 then t1.user_id else null end) as total_chats_10up, \
+count(distinct case when t1.total_chats>29 then t1.user_id else null end) as total_chats_30up, \
+count(distinct case when t1.total_chats>99 then t1.user_id else null end) as total_chats_100up \
+from \
+( \
+select user_id,character_id,character_name,sum(talk_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by user_id,character_id,character_name \
+) t1 \
+group by t1.character_id, \
+t1.character_name \
+) c on a.character_id=c.character_id  \
+ \
+left join \
+( \
+select t1.character_id, \
+t2.character_name, \
+t1.expose_uv \
+from  \
+( \
+select CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END AS character_id, \
+count(distinct user_id) as expose_uv \
+from vc.dwd_vc_app_event_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+AND (params['itemid'] LIKE 'character_online%' OR params['itemid'] REGEXP '^[0-9]+$') \
+AND event_id IN ('h1-1', 'native_chat_room_expose')  \
+group by CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END \
+) t1 \
+left join  \
+(select id,character_name  \
+from vc.ods_db_vc_character_nd \
+) t2 on t1.character_id=t2.id \
+ \
+) d on a.character_id=d.character_id  \
+ \
+union all \
+ \
+select distinct  \
+'7' AS period, \
+a.character_id, \
+a.character_name, \
+d.expose_uv, \
+b.chat_uv, \
+b.total_chats, \
+b.energy_consume, \
+c.total_chats_10up, \
+c.total_chats_30up, \
+a.consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+a.type, \
+a.status, \
+a.audience_type, \
+c.total_chats_100up \
+from \
+ \
+(select type, \
+status, \
+audience_type, \
+character_id, \
+character_name, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by type, \
+status, \
+audience_type, \
+character_id, \
+character_name \
+) a \
+left join \
+(select character_id, \
+character_name, \
+count(distinct user_id) as chat_uv, \
+sum(talk_cnt) as total_chats, \
+sum(COALESCE(energy_consume,0)) as energy_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by character_id, \
+character_name \
+) b on a.character_id=b.character_id   \
+ \
+left join \
+(select t1.character_id, \
+t1.character_name, \
+count(distinct case when t1.total_chats>9 then t1.user_id else null end) as total_chats_10up, \
+count(distinct case when t1.total_chats>29 then t1.user_id else null end) as total_chats_30up, \
+count(distinct case when t1.total_chats>99 then t1.user_id else null end) as total_chats_100up \
+from \
+( \
+select user_id,character_id,character_name,sum(talk_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by user_id,character_id,character_name \
+) t1 \
+group by t1.character_id, \
+t1.character_name \
+) c on a.character_id=c.character_id  \
+ \
+left join \
+( \
+select t1.character_id, \
+t2.character_name, \
+t1.expose_uv \
+from  \
+( \
+select CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END AS character_id, \
+count(distinct user_id) as expose_uv \
+from vc.dwd_vc_app_event_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+AND (params['itemid'] LIKE 'character_online%' OR params['itemid'] REGEXP '^[0-9]+$') \
+AND event_id IN ('h1-1', 'native_chat_room_expose')  \
+group by CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END \
+) t1 \
+left join  \
+(select id,character_name  \
+from vc.ods_db_vc_character_nd \
+) t2 on t1.character_id=t2.id \
+ \
+) d on a.character_id=d.character_id  \
+ \
+ \
+union all \
+ \
+select distinct  \
+'15' AS period, \
+a.character_id, \
+a.character_name, \
+d.expose_uv, \
+b.chat_uv, \
+b.total_chats, \
+b.energy_consume, \
+c.total_chats_10up, \
+c.total_chats_30up, \
+a.consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+a.type, \
+a.status, \
+a.audience_type, \
+c.total_chats_100up \
+from \
+ \
+(select type, \
+status, \
+audience_type, \
+character_id, \
+character_name, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+group by type, \
+status, \
+audience_type, \
+character_id, \
+character_name \
+) a \
+left join \
+(select character_id, \
+character_name, \
+count(distinct user_id) as chat_uv, \
+sum(talk_cnt) as total_chats, \
+sum(COALESCE(energy_consume,0)) as energy_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+group by character_id, \
+character_name \
+) b on a.character_id=b.character_id   \
+ \
+left join \
+(select t1.character_id, \
+t1.character_name, \
+count(distinct case when t1.total_chats>9 then t1.user_id else null end) as total_chats_10up, \
+count(distinct case when t1.total_chats>29 then t1.user_id else null end) as total_chats_30up, \
+count(distinct case when t1.total_chats>99 then t1.user_id else null end) as total_chats_100up \
+from \
+( \
+select user_id,character_id,character_name,sum(talk_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+group by user_id,character_id,character_name \
+) t1 \
+group by t1.character_id, \
+t1.character_name \
+) c on a.character_id=c.character_id  \
+ \
+left join \
+( \
+select t1.character_id, \
+t2.character_name, \
+t1.expose_uv \
+from  \
+( \
+select CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END AS character_id, \
+count(distinct user_id) as expose_uv \
+from vc.dwd_vc_app_event_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+AND (params['itemid'] LIKE 'character_online%' OR params['itemid'] REGEXP '^[0-9]+$') \
+AND event_id IN ('h1-1', 'native_chat_room_expose')  \
+group by CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END \
+) t1 \
+left join  \
+(select id,character_name  \
+from vc.ods_db_vc_character_nd \
+) t2 on t1.character_id=t2.id \
+ \
+) d on a.character_id=d.character_id  \
+ \
+union all \
+ \
+ \
+select distinct  \
+'30' AS period, \
+a.character_id, \
+a.character_name, \
+d.expose_uv, \
+b.chat_uv, \
+b.total_chats, \
+b.energy_consume, \
+c.total_chats_10up, \
+c.total_chats_30up, \
+a.consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+a.type, \
+a.status, \
+a.audience_type, \
+c.total_chats_100up \
+from \
+ \
+(select type, \
+status, \
+audience_type, \
+character_id, \
+character_name, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+group by type, \
+status, \
+audience_type, \
+character_id, \
+character_name \
+) a \
+left join \
+(select character_id, \
+character_name, \
+count(distinct user_id) as chat_uv, \
+sum(talk_cnt) as total_chats, \
+sum(COALESCE(energy_consume,0)) as energy_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+group by character_id, \
+character_name \
+) b on a.character_id=b.character_id   \
+ \
+left join \
+(select t1.character_id, \
+t1.character_name, \
+count(distinct case when t1.total_chats>9 then t1.user_id else null end) as total_chats_10up, \
+count(distinct case when t1.total_chats>29 then t1.user_id else null end) as total_chats_30up, \
+count(distinct case when t1.total_chats>99 then t1.user_id else null end) as total_chats_100up \
+from \
+( \
+select user_id,character_id,character_name,sum(talk_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+group by user_id,character_id,character_name \
+) t1 \
+group by t1.character_id, \
+t1.character_name \
+) c on a.character_id=c.character_id  \
+ \
+left join \
+( \
+select t1.character_id, \
+t2.character_name, \
+t1.expose_uv \
+from  \
+( \
+select CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END AS character_id, \
+count(distinct user_id) as expose_uv \
+from vc.dwd_vc_app_event_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+AND (params['itemid'] LIKE 'character_online%' OR params['itemid'] REGEXP '^[0-9]+$') \
+AND event_id IN ('h1-1', 'native_chat_room_expose')  \
+group by CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END \
+) t1 \
+left join  \
+(select id,character_name  \
+from vc.ods_db_vc_character_nd \
+) t2 on t1.character_id=t2.id \
+ \
+) d on a.character_id=d.character_id  \
+ \
+union all \
+ \
+select distinct \
+'all' AS period, \
+a.character_id, \
+a.character_name, \
+d.expose_uv, \
+b.chat_uv, \
+b.total_chats, \
+b.energy_consume, \
+c.total_chats_10up, \
+c.total_chats_30up, \
+a.consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+a.type, \
+a.status, \
+a.audience_type, \
+c.total_chats_100up \
+from \
+ \
+(select type, \
+status, \
+audience_type, \
+character_id, \
+character_name, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+group by type, \
+status, \
+audience_type, \
+character_id, \
+character_name \
+) a \
+left join \
+(select character_id, \
+character_name, \
+count(distinct user_id) as chat_uv, \
+sum(talk_cnt) as total_chats, \
+sum(COALESCE(energy_consume,0)) as energy_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+group by character_id, \
+character_name \
+) b on a.character_id=b.character_id   \
+ \
+left join \
+(select t1.character_id,t1.character_name, \
+count(distinct case when t1.total_chats>9 then t1.user_id else null end) as total_chats_10up, \
+count(distinct case when t1.total_chats>29 then t1.user_id else null end) as total_chats_30up, \
+count(distinct case when t1.total_chats>99 then t1.user_id else null end) as total_chats_100up \
+from \
+( \
+select user_id,character_id,character_name,sum(talk_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+group by user_id,character_id,character_name \
+) t1 \
+group by t1.character_id, \
+t1.character_name \
+) c on a.character_id=c.character_id  \
+ \
+left join \
+( \
+select t1.character_id, \
+t2.character_name, \
+t1.expose_uv \
+from  \
+( \
+select CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END AS character_id, \
+count(distinct user_id) as expose_uv \
+from vc.dwd_vc_app_event_i_d \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND (params['itemid'] LIKE 'character_online%' OR params['itemid'] REGEXP '^[0-9]+$') \
+AND event_id IN ('h1-1', 'native_chat_room_expose')  \
+group by CASE  \
+WHEN params['itemid'] LIKE 'character_online_%' THEN substring_index(params['itemid'], 'character_online_', -1) \
+ELSE params['itemid']  \
+END \
+) t1 \
+left join  \
+(select id,character_name  \
+from vc.ods_db_vc_character_nd \
+) t2 on t1.character_id=t2.id \
+ \
+) d on a.character_id=d.character_id  \

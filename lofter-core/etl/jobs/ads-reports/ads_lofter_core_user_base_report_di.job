@@ -1,0 +1,181 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter_dm.ads_lofter_core_user_base_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  calendar_date, \
+  '30' as period, \
+  count(distinct deviceudid) as all_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 12 \
+      or days >= 20 then deviceudid \
+      else null \
+    end \
+  ) as core_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 12 then deviceudid \
+      else null \
+    end \
+  ) as duration_uv, \
+  count( \
+    distinct case \
+      when days >= 20 then deviceudid \
+      else null \
+    end \
+  ) as days_uv \
+from \
+  ( \
+    select \
+      b.calendar_date, \
+      a.deviceudid, \
+      sum(sessiontime) as sessiontime, \
+      count(distinct dt) as days \
+    from \
+      ( \
+        SELECT \
+          dt, \
+          deviceudid, \
+          sessiontime \
+        FROM \
+          lofter.dws_par_device_session_v2_di \
+        where \
+          deviceudid is not null \
+          and dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+          and '${azkaban.flow.1.days.ago}' \
+      ) a \
+      join ( \
+        select \
+          relate_date, \
+          calendar_date \
+        from \
+          lofter.bridge_calendar_date \
+        where \
+          period = 30 \
+          and calendar_date = '${azkaban.flow.1.days.ago}' \
+      ) b on a.dt = b.relate_date \
+    group by \
+      b.calendar_date, \
+      a.deviceudid \
+  ) a \
+group by \
+  calendar_date \
+union \
+select \
+  calendar_date, \
+  '7' as period, \
+  count(distinct deviceudid) as all_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 3 \
+      or days >= 5 then deviceudid \
+      else null \
+    end \
+  ) as core_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 3 then deviceudid \
+      else null \
+    end \
+  ) as duration_uv, \
+  count( \
+    distinct case \
+      when days >= 5 then deviceudid \
+      else null \
+    end \
+  ) as days_uv \
+from \
+  ( \
+    select \
+      b.calendar_date, \
+      a.deviceudid, \
+      sum(sessiontime) as sessiontime, \
+      count(distinct dt) as days \
+    from \
+      ( \
+        SELECT \
+          dt, \
+          deviceudid, \
+          sessiontime \
+        FROM \
+          lofter.dws_par_device_session_v2_di \
+        where \
+          deviceudid is not null \
+          and dt between date_sub('${azkaban.flow.1.days.ago}', 6) \
+          and '${azkaban.flow.1.days.ago}' \
+      ) a \
+      join ( \
+        select \
+          relate_date, \
+          calendar_date \
+        from \
+          lofter.bridge_calendar_date \
+        where \
+          period = 7 \
+          and calendar_date = '${azkaban.flow.1.days.ago}' \
+      ) b on a.dt = b.relate_date \
+    group by \
+      b.calendar_date, \
+      a.deviceudid \
+  ) a \
+group by \
+  calendar_date \
+union \
+select \
+  calendar_date, \
+  'month' AS period, \
+  count(distinct deviceudid) as all_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 12 \
+      or days >= 20 then deviceudid \
+      else null \
+    end \
+  ) as core_uv, \
+  count( \
+    distinct case \
+      when sessiontime / 1000 / 3600 >= 12 then deviceudid \
+      else null \
+    end \
+  ) as duration_uv, \
+  count( \
+    distinct case \
+      when days >= 20 then deviceudid \
+      else null \
+    end \
+  ) as days_uv \
+from \
+  ( \
+    select \
+      b.calendar_date, \
+      a.deviceudid, \
+      sum(sessiontime) as sessiontime, \
+      count(distinct dt) as days \
+    from \
+      ( \
+        SELECT \
+          dt, \
+          deviceudid, \
+          sessiontime \
+        FROM \
+          lofter.dws_par_device_session_v2_di \
+        where \
+          deviceudid is not null \
+          and dt between date_sub('${azkaban.flow.1.days.ago}', 31) \
+          and '${azkaban.flow.1.days.ago}' \
+      ) a \
+      join ( \
+        select \
+          relate_date, \
+          calendar_date \
+        from \
+          lofter.bridge_calendar_date \
+        where \
+          period = 'month' \
+          and calendar_date = '${azkaban.flow.1.days.ago}' \
+      ) b on a.dt = b.relate_date \
+    group by \
+      b.calendar_date, \
+      a.deviceudid \
+  ) a \
+group by \
+  calendar_date \

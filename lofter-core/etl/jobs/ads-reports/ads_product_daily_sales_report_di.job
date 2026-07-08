@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01= \
+WITH \
+    valid_orders AS ( \
+        SELECT \
+            id, \
+            buyerid, \
+            payamount, \
+            paytime \
+        FROM lofter_db_dump.ods_db_c2_c_trade_order_nd \
+        WHERE status NOT IN ('0', '-1')  \
+    ), \
+    sales_metrics AS ( \
+        SELECT \
+            b.productid, \
+            SUM(CASE WHEN FROM_UNIXTIME(CAST(a.paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN a.payamount / 100  ELSE 0 END) AS payamount, \
+            COUNT(DISTINCT CASE WHEN FROM_UNIXTIME(CAST(a.paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN a.buyerid ELSE NULL END) AS cnt_buyer, \
+            COUNT(DISTINCT CASE WHEN FROM_UNIXTIME(CAST(a.paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN a.id ELSE NULL END) AS cnt_order, \
+            SUM(a.payamount / 100) AS ttl_amount \
+        FROM valid_orders AS a  \
+        JOIN lofter_db_dump.ods_db_c2_c_trade_order_product_nd AS b ON a.id = b.tradeid \
+        WHERE b.productid IS NOT NULL \
+        AND FROM_UNIXTIME(CAST(a.paytime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        GROUP BY b.productid \
+        HAVING SUM(CASE WHEN FROM_UNIXTIME(CAST(a.paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN 1 ELSE 0 END) > 0 \
+    ) \
+insert overwrite table lofter_dm.ads_product_daily_sales_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    p.id, \
+    p.blogid, \
+    p.title, \
+    p.type, \
+    CASE \
+        WHEN p.type = 0 THEN '约稿服务' \
+        WHEN p.type = 1 THEN '虚拟商品' \
+        WHEN p.type = 2 THEN '实体商品' \
+        ELSE '未知类型' END AS type_name, \
+    p.producttags, \
+    p.iptags, \
+    FROM_UNIXTIME(CAST(p.createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as createTime, \
+    '${azkaban.flow.1.days.ago}' AS order_date, \
+    CONCAT('https://www.lofter.com/front/yellow-car/product/detail?productId=', p.id, '&njb_navigator=false') AS product_url, \
+    p.price / 100 AS price, \
+    c.payamount, \
+    c.cnt_buyer, \
+    c.cnt_order, \
+    c.ttl_amount \
+FROM lofter_db_dump.ods_db_c2_c_product_info_nd AS p \
+JOIN sales_metrics AS c ON p.id = c.productid

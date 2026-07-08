@@ -1,0 +1,37 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.02=insert overwrite table lofter_dm.ads_user_group_retention_di partition(dt="${azkaban.flow.1.days.ago}", period=1) \
+    select '${azkaban.flow.2.days.ago}' as base_date, job_id, count(distinct a.userId) as user_count, count(distinct b.userId) as retention_user_count \
+    from ( \
+        select job_id, userId \
+        from lofter.dwd_user_group_user_list_di \
+        where dt='${azkaban.flow.2.days.ago}' \
+    ) a left join (select userId from lofter.dwd_user_retention_di where dt = '${azkaban.flow.1.days.ago}' and period = 1) b \
+             on a.userId = b.userId \
+    group by job_id \
+    distribute by 1
+hive.query.03=insert overwrite table lofter_dm.ads_user_group_retention_di partition(dt="${azkaban.flow.1.days.ago}", period=2) \
+    select '${azkaban.flow.3.days.ago}' as base_date, job_id, count(distinct a.userId) as user_count, count(distinct b.userId) as retention_user_count \
+    from ( \
+        select job_id, userId \
+        from lofter.dwd_user_group_user_list_di \
+        where dt='${azkaban.flow.3.days.ago}' \
+    ) a left join (select userId from lofter.dwd_user_retention_di where dt = '${azkaban.flow.1.days.ago}' and period = 2) b \
+             on a.userId = b.userId \
+    group by job_id \
+    distribute by 1
+hive.query.04=insert overwrite table lofter_dm.ads_user_group_retention_di partition(dt="${azkaban.flow.1.days.ago}", period=6) \
+    select '${azkaban.flow.7.days.ago}' as base_date, job_id, count(distinct a.userId) as user_count, count(distinct b.userId) as retention_user_count \
+    from ( \
+        select job_id, userId \
+        from lofter.dwd_user_group_user_list_di \
+        where dt='${azkaban.flow.7.days.ago}' \
+    ) a left join (select userId from lofter.dwd_user_retention_di where dt = '${azkaban.flow.1.days.ago}' and period = 6) b \
+             on a.userId = b.userId \
+    group by job_id \
+    distribute by 1

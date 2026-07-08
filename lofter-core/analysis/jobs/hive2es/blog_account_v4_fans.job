@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select a.blogId as blogId, b.fans7d as fans7d \
+from ( \
+    select userId as blogId, fans_cnt_7d as fans7d \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select userId as blogId, fans_cnt_7d as fans7d \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.2.days.ago}' \
+) b on a.blogId = b.blogId \
+where a.fans7d != nvl(b.fans7d, 0) \
+"
+params= --id blogId --dest blog_account_v4 --update --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 2

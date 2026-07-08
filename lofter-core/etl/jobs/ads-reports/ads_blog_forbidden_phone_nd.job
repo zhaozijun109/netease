@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_blog_forbidden_phone_nd \
+    select a.blogid,a.day,a.hint,a.forbidden_type,b.userid,b.phone \
+    from  \
+    (select blogid , day,hint,  \
+    	case when forbidtype in (100) and hint  like '%一键封禁所有博客%' then '色情垃圾'   \
+    		 when forbidtype in (7) then '政府指示' \
+    		 when forbidtype in (6) then '诈骗'   \
+    		 when forbidtype in (5) then '侵权'   \
+    		 when forbidtype in (4) then '违禁物'  \
+    		 when forbidtype in (3) then '推广'   \
+    		 when forbidtype in (2) then '政治'   \
+    		 when forbidtype in (1) then '色情'   \
+    		 else '其他' end  as forbidden_type    \
+    from lofter_dm.ads_anti_spam_idle_send_forbidden_blog_nd) a     \
+    join    \
+    (select userid, blogid1 as blogid,phone \
+    from lofter.dws_par_user_base_dd    \
+    LATERAL VIEW explode(blogs) t2 AS blogid1   \
+    LATERAL VIEW explode(phones) t3 AS phone    \
+    where dt='${azkaban.flow.1.days.ago}'   \
+    ) b     \
+    on a.blogid=b.blogid    \
+    group by a.blogid,a.day,a.hint,a.forbidden_type,b.userid,b.phone     \
+    distribute by 1
+dependencies=anti_spam_idle_send_monitor_stats

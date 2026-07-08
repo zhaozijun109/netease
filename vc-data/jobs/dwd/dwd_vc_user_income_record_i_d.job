@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01 = with income as (select id, \
+                                       user_id, \
+                                       reward_type, \
+                                       reward_id, \
+                                       case \
+                                           when reward_type = 1 and reward_id = 1 then '能量' \
+                                           when reward_type = 1 and reward_id = 2 then '琉光' \
+                                           when reward_type = 1 and reward_id = 3 then '次元碎片' \
+                                           else '' end                                                                    as asset_type_desc, \
+                                       scene, \
+                                       scene_uniq_id, \
+                                       FROM_UNIXTIME(income_time, 'yyyy-MM-dd HH:mm:ss')                                  as income_time, \
+                                       amount, \
+                                       valid_type, \
+                                       valid_start_time, \
+                                       valid_end_time, \
+                                       income_detail, \
+                                       case \
+                                           when scene_uniq_id like 'NEW_USER%' THEN 'new_user' \
+                                           when scene_uniq_id like 'ACTIVITY%' THEN 'activity' \
+                                           when scene_uniq_id like 'DAILY_REWARD%' THEN lower('DAILY_REWARD') \
+                                           when scene_uniq_id like 'EXCHANGE_INVITE_CODE%' THEN lower('EXCHANGE_INVITE_CODE') \
+                                           when scene_uniq_id like 'EXCHANGE_REDEEM_CODE%' THEN lower('EXCHANGE_REDEEM_CODE') \
+                                           when scene_uniq_id like 'PUSH_REWARD%' THEN lower('PUSH_REWARD') \
+                                           when scene_uniq_id like 'RECEIVE_INVITE_TARGET_REWARD%' \
+                                               THEN lower('RECEIVE_INVITE_TARGET_REWARD') \
+                                           when scene_uniq_id like 'RECEIVE_ONE_INVITE_REWARD%' THEN lower('RECEIVE_ONE_INVITE_REWARD') \
+                                           when scene_uniq_id like 'sendReward%' THEN lower('sendReward') \
+                                           when scene = 2 then 'order' \
+                                           end                                                                            as type, \
+                                       case \
+                                           when scene_uniq_id like 'ACTIVITY%' \
+                                               then REGEXP_EXTRACT(scene_uniq_id, '\\\\d{4}-\\\\d{2}-\\\\d{2}', 0) end       date, \
+                                       case \
+                                           when scene_uniq_id like 'ACTIVITY%' \
+                                               then split(REGEXP_EXTRACT(scene_uniq_id, '\\\\d*_\\\\d*$', 0), '_')[0] end as activity_id, \
+                                       case \
+                                           when scene_uniq_id like 'ACTIVITY%' \
+                                               then split(REGEXP_EXTRACT(scene_uniq_id, '\\\\d*_\\\\d*$', 0), '_')[1] end as module_id \
+                                from vc.ods_db_vc_user_income_record_nd \
+                                where FROM_UNIXTIME(income_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'), \
+                     activity as (select id, activity_name from vc.ods_db_vc_activity_nd), \
+                     module as (select id, title, sub_title from vc.ods_db_vc_activity_module_nd) \
+                insert overwrite table vc.dwd_vc_user_income_record_i_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.id, \
+                       x1.user_id, \
+                       x1.reward_type, \
+                       x1.reward_id, \
+                       x1.scene, \
+                       x1.scene_uniq_id, \
+                       x1.income_time, \
+                       x1.amount, \
+                       x1.valid_type, \
+                       x1.valid_start_time, \
+                       x1.valid_end_time, \
+                       x1.income_detail, \
+                       x1.type, \
+                       x1.date, \
+                       x1.activity_id, \
+                       x1.module_id, \
+                       x2.activity_name, \
+                       x3.title, \
+                       x3.sub_title, \
+                       x4.pay_item_code, \
+                       x1.asset_type_desc \
+                from income x1 \
+                         left join activity x2 on x1.activity_id = x2.id \
+                         left join module x3 on x1.module_id = x3.id \
+                         left join vc.dwd_vc_order_i_d x4 on scene_uniq_id = x4.order_id ;
+
+dependencies=dwd_vc_order_i_d

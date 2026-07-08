@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dim.PostJob
+params= --date ${azkaban.flow.1.days.ago}  --output /user/da_lofter/warehouse/dim_post
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=200
+conf.spark.driver.memory=4g
+conf.spark.executor.memory=15g
+conf.spark.sql.autoBroadcastJoinThreshold=10485760
+dependencies=dim_blog,dim_domain,dim_user

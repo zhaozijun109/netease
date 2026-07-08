@@ -1,0 +1,458 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_title_classify_blog_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select '60日' as  period, \
+  a.blogid, \
+  a.postnum, \
+  NVL(tongzhitaoluchangjing_postnum, 0) as tongzhitaoluchangjing_postnum, \
+  NVL(taoluchangjing_postnum, 0) as taoluchangjing_postnum, \
+  NVL(tongzhi_taoluchangjing_postnum, 0) as tongzhi_taoluchangjing_postnum, \
+  NVL(tongzhi_taoluchangjing_cabian_postnum, 0) as tongzhi_taoluchangjing_cabian_postnum, \
+  NVL(putongchangjing_postnum, 0) as putongchangjing_postnum, \
+  NVL(allchangjing_postnum, 0) as allchangjing_postnum, \
+  NVL(guanying_postnum, 0) as guanying_postnum, \
+  NVL(cabian_postnum, 0) as cabian_postnum, \
+  NVL(changlianzai_postnum, 0) as changlianzai_postnum, \
+  NVL(wenxue_postnum, 0) as wenxue_postnum, \
+  NVL(putong_postnum, 0) as putong_postnum, \
+  NVL(wenxue_putong_postnum, 0) as wenxue_putong_postnum, \
+  NVL(zhuiqi_postnum, 0) as zhuiqi_postnum, \
+  NVL(binruo_postnum, 0) as binruo_postnum, \
+  NVL(chuanzong_postnum, 0) as chuanzong_postnum, \
+  NVL(ifxian_postnum, 0) as ifxian_postnum, \
+  NVL(shenghuai_postnum, 0) as shenghuai_postnum, \
+  NVL(tianwen_postnum, 0) as tianwen_postnum, \
+  NVL(chicu_postnum, 0) as chicu_postnum, \
+  NVL(shiyi_postnum, 0) as shiyi_postnum, \
+  NVL(zhibocaifang_postnum, 0) as zhibocaifang_postnum, \
+  NVL(diaoma_postnum, 0) as diaoma_postnum, \
+  NVL(tuanchong_postnum, 0) as tuanchong_postnum, \
+  NVL(chanru_postnum, 0) as chanru_postnum \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      count(distinct post_id) as postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join lofter.dim_post b on a.post_id = b.id \
+    where \
+      publishdate between date_sub('${azkaban.flow.1.days.ago}' , 59) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) a \
+  left join ( \
+    select \
+      blog_id as blogid, \
+      count( \
+        distinct case \
+          when result = '同质化套路场景型' then post_id \
+          else null \
+        end \
+      ) as tongzhitaoluchangjing_postnum, \
+       count( \
+        distinct case \
+          when result in ( '套路场景型') then post_id \
+          else null \
+        end \
+      ) as taoluchangjing_postnum, \
+      count( \
+        distinct case \
+          when result in ('同质化套路场景型', '套路场景型') then post_id \
+          else null \
+        end \
+      ) as tongzhi_taoluchangjing_postnum, \
+      count( \
+        distinct case \
+          when result in ('同质化套路场景型', '套路场景型', '擦边型') then post_id \
+          else null \
+        end \
+      ) as tongzhi_taoluchangjing_cabian_postnum, \
+       count( \
+        distinct case \
+          when result in ('普通场景型') then post_id \
+          else null \
+        end \
+      ) as putongchangjing_postnum, \
+      count( \
+        distinct case \
+          when result like '%场景%' then post_id \
+          else null \
+        end \
+      ) as allchangjing_postnum, \
+      count( \
+        distinct case \
+          when result = '观影型' then post_id \
+          else null \
+        end \
+      ) as guanying_postnum, \
+      count( \
+        distinct case \
+          when result = '擦边型' then post_id \
+          else null \
+        end \
+      ) as cabian_postnum, \
+      count( \
+        distinct case \
+          when result = '长连载型' then post_id \
+          else null \
+        end \
+      ) as changlianzai_postnum, \
+      count( \
+        distinct case \
+          when result = '文学型' then post_id \
+          else null \
+        end \
+      ) as wenxue_postnum, \
+      count( \
+        distinct case \
+          when result = '普通型' then post_id \
+          else null \
+        end \
+      ) as putong_postnum, \
+      count( \
+        distinct case \
+          when result  in ('文学型', '普通型') then post_id \
+          else null \
+        end \
+      ) as wenxue_putong_postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join ( \
+        select \
+          id, \
+          publishdate \
+        from \
+          lofter.dim_post \
+      ) b on a.post_id = b.id \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and b.publishdate between date_sub('${azkaban.flow.1.days.ago}' , 59) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      blog_id as blogid, \
+      count( \
+        distinct case \
+          when result = '追妻' then post_id \
+          else null \
+        end \
+      ) as zhuiqi_postnum, \
+      count( \
+        distinct case \
+          when result = '病弱' then post_id \
+          else null \
+        end \
+      ) as binruo_postnum, \
+      count( \
+        distinct case \
+          when result = '穿综' then post_id \
+          else null \
+        end \
+      ) as chuanzong_postnum, \
+      count( \
+        distinct case \
+          when result = 'if线' then post_id \
+          else null \
+        end \
+      ) as ifxian_postnum, \
+      count( \
+        distinct case \
+          when result = '生怀' then post_id \
+          else null \
+        end \
+      ) as shenghuai_postnum, \
+      count( \
+        distinct case \
+          when result = '甜文' then post_id \
+          else null \
+        end \
+      ) as tianwen_postnum, \
+      count( \
+        distinct case \
+          when result = '吃醋' then post_id \
+          else null \
+        end \
+      ) as chicu_postnum, \
+      count( \
+        distinct case \
+          when result = '失忆' then post_id \
+          else null \
+        end \
+      ) as shiyi_postnum, \
+      count( \
+        distinct case \
+          when result = '直播采访' then post_id \
+          else null \
+        end \
+      ) as zhibocaifang_postnum, \
+      count( \
+        distinct case \
+          when result = '掉马' then post_id \
+          else null \
+        end \
+      ) as diaoma_postnum, \
+      count( \
+        distinct case \
+          when result = '团宠' then post_id \
+          else null \
+        end \
+      ) as tuanchong_postnum, \
+      count( \
+        distinct case \
+          when result = '产乳' then post_id \
+          else null \
+        end \
+      ) as chanru_postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join ( \
+        select \
+          id, \
+          publishdate \
+        from \
+          lofter.dim_post \
+      ) b on a.post_id = b.id \
+    where \
+      classify in (2) \
+      and probability > 0.6999 \
+      and result != '无题材' \
+      and b.publishdate between  date_sub('${azkaban.flow.1.days.ago}' , 59) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) c on a.blogid = c.blogid \
+   \
+  union \
+   \
+   \
+select '120日' as  period, \
+  a.blogid, \
+  a.postnum, \
+  NVL(tongzhitaoluchangjing_postnum, 0) as tongzhitaoluchangjing_postnum, \
+  NVL(taoluchangjing_postnum, 0) as taoluchangjing_postnum, \
+  NVL(tongzhi_taoluchangjing_postnum, 0) as tongzhi_taoluchangjing_postnum, \
+  NVL(tongzhi_taoluchangjing_cabian_postnum, 0) as tongzhi_taoluchangjing_cabian_postnum, \
+  NVL(putongchangjing_postnum, 0) as putongchangjing_postnum, \
+  NVL(allchangjing_postnum, 0) as allchangjing_postnum, \
+  NVL(guanying_postnum, 0) as guanying_postnum, \
+  NVL(cabian_postnum, 0) as cabian_postnum, \
+  NVL(changlianzai_postnum, 0) as changlianzai_postnum, \
+  NVL(wenxue_postnum, 0) as wenxue_postnum, \
+  NVL(putong_postnum, 0) as putong_postnum, \
+  NVL(wenxue_putong_postnum, 0) as wenxue_putong_postnum, \
+  NVL(zhuiqi_postnum, 0) as zhuiqi_postnum, \
+  NVL(binruo_postnum, 0) as binruo_postnum, \
+  NVL(chuanzong_postnum, 0) as chuanzong_postnum, \
+  NVL(ifxian_postnum, 0) as ifxian_postnum, \
+  NVL(shenghuai_postnum, 0) as shenghuai_postnum, \
+  NVL(tianwen_postnum, 0) as tianwen_postnum, \
+  NVL(chicu_postnum, 0) as chicu_postnum, \
+  NVL(shiyi_postnum, 0) as shiyi_postnum, \
+  NVL(zhibocaifang_postnum, 0) as zhibocaifang_postnum, \
+  NVL(diaoma_postnum, 0) as diaoma_postnum, \
+  NVL(tuanchong_postnum, 0) as tuanchong_postnum, \
+  NVL(chanru_postnum, 0) as chanru_postnum \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      count(distinct post_id) as postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join lofter.dim_post b on a.post_id = b.id \
+    where \
+      publishdate between date_sub('${azkaban.flow.1.days.ago}' , 119) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) a \
+  left join ( \
+    select \
+      blog_id as blogid, \
+      count( \
+        distinct case \
+          when result = '同质化套路场景型' then post_id \
+          else null \
+        end \
+      ) as tongzhitaoluchangjing_postnum, \
+       count( \
+        distinct case \
+          when result in ( '套路场景型') then post_id \
+          else null \
+        end \
+      ) as taoluchangjing_postnum, \
+      count( \
+        distinct case \
+          when result in ('同质化套路场景型', '套路场景型') then post_id \
+          else null \
+        end \
+      ) as tongzhi_taoluchangjing_postnum, \
+      count( \
+        distinct case \
+          when result in ('同质化套路场景型', '套路场景型', '擦边型') then post_id \
+          else null \
+        end \
+      ) as tongzhi_taoluchangjing_cabian_postnum, \
+       count( \
+        distinct case \
+          when result in ('普通场景型') then post_id \
+          else null \
+        end \
+      ) as putongchangjing_postnum, \
+      count( \
+        distinct case \
+          when result like '%场景%' then post_id \
+          else null \
+        end \
+      ) as allchangjing_postnum, \
+      count( \
+        distinct case \
+          when result = '观影型' then post_id \
+          else null \
+        end \
+      ) as guanying_postnum, \
+      count( \
+        distinct case \
+          when result = '擦边型' then post_id \
+          else null \
+        end \
+      ) as cabian_postnum, \
+      count( \
+        distinct case \
+          when result = '长连载型' then post_id \
+          else null \
+        end \
+      ) as changlianzai_postnum, \
+      count( \
+        distinct case \
+          when result = '文学型' then post_id \
+          else null \
+        end \
+      ) as wenxue_postnum, \
+      count( \
+        distinct case \
+          when result = '普通型' then post_id \
+          else null \
+        end \
+      ) as putong_postnum, \
+      count( \
+        distinct case \
+          when result  in ('文学型', '普通型') then post_id \
+          else null \
+        end \
+      ) as wenxue_putong_postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join ( \
+        select \
+          id, \
+          publishdate \
+        from \
+          lofter.dim_post \
+      ) b on a.post_id = b.id \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and b.publishdate between date_sub('${azkaban.flow.1.days.ago}' , 119) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      blog_id as blogid, \
+      count( \
+        distinct case \
+          when result = '追妻' then post_id \
+          else null \
+        end \
+      ) as zhuiqi_postnum, \
+      count( \
+        distinct case \
+          when result = '病弱' then post_id \
+          else null \
+        end \
+      ) as binruo_postnum, \
+      count( \
+        distinct case \
+          when result = '穿综' then post_id \
+          else null \
+        end \
+      ) as chuanzong_postnum, \
+      count( \
+        distinct case \
+          when result = 'if线' then post_id \
+          else null \
+        end \
+      ) as ifxian_postnum, \
+      count( \
+        distinct case \
+          when result = '生怀' then post_id \
+          else null \
+        end \
+      ) as shenghuai_postnum, \
+      count( \
+        distinct case \
+          when result = '甜文' then post_id \
+          else null \
+        end \
+      ) as tianwen_postnum, \
+      count( \
+        distinct case \
+          when result = '吃醋' then post_id \
+          else null \
+        end \
+      ) as chicu_postnum, \
+      count( \
+        distinct case \
+          when result = '失忆' then post_id \
+          else null \
+        end \
+      ) as shiyi_postnum, \
+      count( \
+        distinct case \
+          when result = '直播采访' then post_id \
+          else null \
+        end \
+      ) as zhibocaifang_postnum, \
+      count( \
+        distinct case \
+          when result = '掉马' then post_id \
+          else null \
+        end \
+      ) as diaoma_postnum, \
+      count( \
+        distinct case \
+          when result = '团宠' then post_id \
+          else null \
+        end \
+      ) as tuanchong_postnum, \
+      count( \
+        distinct case \
+          when result = '产乳' then post_id \
+          else null \
+        end \
+      ) as chanru_postnum \
+    from \
+      rec.content_reg_payed_title_classify_output2 a \
+      join ( \
+        select \
+          id, \
+          publishdate \
+        from \
+          lofter.dim_post \
+      ) b on a.post_id = b.id \
+    where \
+      classify in (2) \
+      and probability > 0.6999 \
+      and result != '无题材' \
+      and b.publishdate between date_sub('${azkaban.flow.1.days.ago}' , 119) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blog_id \
+  ) c on a.blogid = c.blogid \

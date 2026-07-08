@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_hot_comment_content_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.postId, t2.content,commentId, t1.blogId \
+from ( \
+    select postId, blogId, sum(underscore_comment_pv) as underscore_comment_pv from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' group by postId, blogId having sum(underscore_comment_pv) >= 10 \
+) t1 \
+join ( \
+    select commentId, \
+            postId, \
+            blogId, \
+            content, \
+            commentHot \
+    from ( \
+        select commentId, \
+                postId, \
+                blogId, \
+                content, \
+                commentHot, \
+                row_number() over(partition by postId, blogId order by commentHot desc) as rn \
+        from ( \
+            select id as commentId, \
+                    postId, \
+                    blogId, \
+                    regexp_replace(regexp_replace(regexp_replace(content, '^["“”]|["“”]$', ''),'\\\\[.*?\\\\]|哇|哈|啊|呦|哟|阿|h|w|手动狗头',''), '([！!？?，,。.；;：:“”"‘’\\\'])\\\\1+', '$1') as content, \
+                    commentHot \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where commentHot >= 10  \
+        ) a \
+        where length(content) >= 5 and length(content) <= 20 \
+    ) b \
+    where rn <= 2 \
+) t2 \
+on t1.postId = t2.postId and t1.blogId = t2.blogId

@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_market_product_dd partition (dt='${azkaban.flow.1.days.ago}') \
+select productId, count(distinct deviceUdid) as browse_uv_30d \
+from lofter.dwd_evt_benefit_page_view_di \
+where eventId = 'w3-2' and dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+group by productId \
+distribute by 1

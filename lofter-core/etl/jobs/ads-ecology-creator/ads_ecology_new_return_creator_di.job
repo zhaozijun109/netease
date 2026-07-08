@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01=\
+with t_publish_agg as ( \
+    select blogId, \
+           max(if(publishDate = '${azkaban.flow.1.days.ago}', 1, 0)) as has_t_day, \
+           max(if(publishDate < '${azkaban.flow.1.days.ago}', 1, 0)) as has_history, \
+           max(if(publishDate between date_sub('${azkaban.flow.1.days.ago}', 180) and date_sub('${azkaban.flow.1.days.ago}', 1), 1, 0)) as has_recent180 \
+    from lofter.dim_post \
+    where publishDate <= '${azkaban.flow.1.days.ago}' \
+      and isPublished = true \
+      and isCitedPost = false \
+      and isForbidden = false \
+      and allowView = 0 \
+      and valid = 0 \
+      and contentType in ('图片', '文字', '视频') \
+      and isActivityAutoPost = 0 \
+      and isImported = 0 \
+      and isMoved = 0 \
+      and is_book_store = 0 \
+    group by blogId \
+), \
+t_day_publish as ( \
+    select blogId, has_history, has_recent180 from t_publish_agg where has_t_day = 1 \
+), \
+t_history_publish as ( \
+    select blogId from t_publish_agg where has_history = 1 \
+), \
+t_recent180_publish as ( \
+    select blogId from t_publish_agg where has_recent180 = 1 \
+), \
+t_new_creator as ( \
+    select t1.blogId, 1 as type \
+    from t_day_publish t1 \
+    left join t_history_publish t2 on t1.blogId = t2.blogId \
+    where t2.blogId is null \
+), \
+t_return_creator as ( \
+    select t1.blogId, 2 as type \
+    from t_day_publish t1 \
+    left join t_history_publish t2 on t1.blogId = t2.blogId \
+    left join t_recent180_publish t3 on t1.blogId = t3.blogId \
+    where t2.blogId is not null and t3.blogId is null \
+) \
+insert overwrite table lofter_dm.ads_ecology_new_return_creator_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, type \
+from ( \
+    select blogId, type from t_new_creator \
+    union all \
+    select blogId, type from t_return_creator \
+) t
+dependencies=

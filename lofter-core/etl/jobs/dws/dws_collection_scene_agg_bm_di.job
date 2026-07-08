@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=insert overwrite table lofter.dws_collection_scene_agg_bm_di partition(dt='${azkaban.flow.1.days.ago}')    \
+         select nvl(blog_level,'') as blog_level,nvl(collection_post_type,'') as collection_post_type,  \
+            scene,source1_scene,source2_scene,is_collection_new_user,   \
+          	sum(expose_pv) expose_pv,   \
+          	sum(realbrowse_pv) realbrowse_pv,   \
+          	sum(praise_pv) praise_pv,   \
+          	sum(recommend_pv) recommend_pv,   \
+          	sum(reproduce_pv) reproduce_pv,   \
+          	sum(subscribe_pv) subscribe_pv,   \
+          	sum(comment_pv) comment_pv,   \
+          	sum(share_pv) share_pv,   \
+          	sum(e2b_pv) e2b_pv,   \
+            bitmap_union(expose_uv_bitmap) as expose_uv_bitmap,   \
+            bitmap_union(realbrowse_uv_bitmap) as realbrowse_uv_bitmap,   \
+            bitmap_union(praise_uv_bitmap) as praise_uv_bitmap,   \
+            bitmap_union(recommend_uv_bitmap) as recommend_uv_bitmap,   \
+            bitmap_union(reproduce_uv_bitmap) as reproduce_uv_bitmap,   \
+            bitmap_union(subscribe_uv_bitmap) as subscribe_uv_bitmap,   \
+            bitmap_union(comment_uv_bitmap) as comment_uv_bitmap,   \
+            bitmap_union(share_uv_bitmap) as share_uv_bitmap,   \
+            bitmap_union(e2b_uv_bitmap) as e2b_uv_bitmap,   \
+            to_bitmap(case when expose_pv>0 then a.collectionId end) expose_collection_bitmap,   \
+            to_bitmap(case when realbrowse_pv>0 then a.collectionId end) realbrowse_collection_bitmap,   \
+            to_bitmap(case when praise_pv>0 then a.collectionId end) praise_collection_bitmap,   \
+            to_bitmap(case when recommend_pv>0 then a.collectionId end) recommend_collection_bitmap,   \
+            to_bitmap(case when reproduce_pv>0 then a.collectionId end) reproduce_collection_bitmap,   \
+            to_bitmap(case when subscribe_pv>0 then a.collectionId end) subscribe_collection_bitmap,   \
+            to_bitmap(case when comment_pv>0 then a.collectionId end) comment_collection_bitmap,   \
+            to_bitmap(case when share_pv>0 then a.collectionId end) share_collection_bitmap,   \
+            to_bitmap(case when e2b_pv>0 then a.collectionId end) e2b_collection_bitmap,   \
+            is_collection_return_user \
+            from   \
+            (select *   \
+          	from lofter.dws_collection_scene_bm_di   \
+          	where dt='${azkaban.flow.1.days.ago}') a   \
+            join   \
+            (   \
+            select blog_level,collection_post_type,collectionId   \
+            from lofter.dws_collection_dd   \
+            where dt='${azkaban.flow.1.days.ago}'   \
+            ) b   \
+            on a.collectionId=b.collectionId   \
+            group by blog_level,collection_post_type,scene,source1_scene,source2_scene,is_collection_new_user,is_collection_return_user   \
+            distribute by 1
+dependencies=dws_collection_scene_bm_di,dws_collection_dd

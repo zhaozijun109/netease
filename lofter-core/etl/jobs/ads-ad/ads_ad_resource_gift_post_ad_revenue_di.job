@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_gift_post_ad_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogId, unlock_count, post_ad_revenue, \
+    sum(unlock_count) over () as total_unlock_count, \
+    sum(post_ad_revenue) over () as total_revenue, \
+    sum(post_ad_revenue) over () as total_real_income \
+from ( \
+    select postId, blogId, count(distinct userId) as unlock_count, sum(post_ad_revenue) * 0.5 as post_ad_revenue \
+    from ( \
+        select a.postId, c.blogId, a.userId, \
+               b.bid_amount as ad_revenue, \
+               case when b.bid_amount <= 0.01 then null \
+                    when b.bid_amount < 0.08 then 0.08 \
+                    when b.bid_amount < 0.5 then b.bid_amount \
+                    when b.bid_amount >= 0.5 then 0.5 \
+                    else null end as post_ad_revenue \
+        from ( \
+            select postId, userId \
+            from lofter_db_dump.ods_db_trade_ad_reward_complete_nd \
+            where from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            group by 1, 2 \
+        ) a \
+        join ( \
+            select postId, userId, max(bid_amount/1000) as bid_amount \
+            from lofter.dwd_ad_actions_v2_di \
+            where dt = '${azkaban.flow.1.days.ago}' and positionId = 279600 and is_bg > 0 \
+            group by 1, 2 \
+        ) b on a.userId = b.userId and a.postId = b.postId \
+        join lofter.dim_post c on a.postId = c.id \
+    ) t \
+    where post_ad_revenue is not null \
+    group by 1, 2 \
+) tt \

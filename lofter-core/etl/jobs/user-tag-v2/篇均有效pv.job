@@ -1,0 +1,54 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 篇均有效pv --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '篇均有效pv'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '篇均有效pv' as tag, 'DAY_7' as cat, \
+                                         case when avg_browse_pv < 50 then '1-50' \
+                                              when avg_browse_pv < 100 then '50-100' \
+                                              when avg_browse_pv < 150 then '100-150' \
+                                              when avg_browse_pv < 200 then '150-200' \
+                                              else '200及以上' end as grp \
+                                  from ( \
+                                    select *, new_post_browse_pv_7d/post_count_7d as avg_browse_pv \
+                                    from lofter.dws_par_creator_traffic_dd \
+                                    where dt = '${azkaban.flow.1.days.ago}' and post_count_7d > 0 \
+                                  ) t \
+                                  where avg_browse_pv > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '篇均有效pv' as tag, 'DAY_15' as cat, \
+                                         case when avg_browse_pv < 50 then '1-50' \
+                                              when avg_browse_pv < 100 then '50-100' \
+                                              when avg_browse_pv < 150 then '100-150' \
+                                              when avg_browse_pv < 200 then '150-200' \
+                                              else '200及以上' end as grp \
+                                  from ( \
+                                    select *, new_post_browse_pv_15d/post_count_15d as avg_browse_pv \
+                                    from lofter.dws_par_creator_traffic_dd \
+                                    where dt = '${azkaban.flow.1.days.ago}' and post_count_15d > 0 \
+                                  ) t \
+                                  where avg_browse_pv > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '篇均有效pv' as tag, 'DAY_30' as cat, \
+                                         case when avg_browse_pv < 50 then '1-50' \
+                                              when avg_browse_pv < 100 then '50-100' \
+                                              when avg_browse_pv < 150 then '100-150' \
+                                              when avg_browse_pv < 200 then '150-200' \
+                                              else '200及以上' end as grp \
+                                  from ( \
+                                    select *, new_post_browse_pv_30d/post_count_30d as avg_browse_pv \
+                                    from lofter.dws_par_creator_traffic_dd \
+                                    where dt = '${azkaban.flow.1.days.ago}' and post_count_30d > 0 \
+                                  ) t \
+                                  where avg_browse_pv > 0 ) "

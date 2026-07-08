@@ -1,0 +1,56 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_rec_audit_publish_monitor_di \
+select post_id as postid, \
+            case a.article_type when 1 then '文字' when 2 then '图片' when 4 then '视频' end as contentType, a.publish_day, a.publish_time,modify_time, \
+            case when d.postid is not null then 1 else 0 end as is_gift,e.level, \
+            b.review_time, b.pass_human, \
+            case when b.pass_human in (-1, 0, 1) then 1 when t_1.pass_rules = 0 then 0 else t_2.pass_rules end as pass_rules,  \
+            case when b.pass_human in (0, 1) then 1 when t_1.pass_low_quality_model = 0 then 0 else t_2.pass_low_quality_model end as pass_low_quality_model, \
+            case when trial_status in ('sucess','green') then 1 when trial_status in ('trying','fail') then 0 else null end trial_status, \
+            a.dt \
+    from (select day as dt,item_id,blog_id,article_type, string(publish_time) as publish_time, modify_time, \
+                from_unixtime(cast(publish_time / 1000 as int), 'yyyy-MM-dd') as publish_day, \
+                conv(split(item_id, '_')[1], 16, 10) as post_id  \
+            from rec.rec_lofter_features_article_meta_v2  \
+            where day >= '${azkaban.flow.2.days.ago}' and article_type in(1,2,4)  \
+            and  (from_unixtime(cast(publish_time / 1000 as int), 'yyyy-MM-dd') = day or from_unixtime(cast(modify_time / 1000 as int), 'yyyy-MM-dd') = day) \
+            ) a  \
+    left join (select item_id,day, int(recom_status) as pass_human, string(review_timestamp) as review_time  \
+                from rec.rec_recommend_review_post \
+                where day = '${azkaban.flow.1.days.ago}') b  \
+    on a.item_id = b.item_id  \
+    left join ( select postid, int(split(max(concat(dbupdatetime, '_', if(snippet rlike '^600.*', 0, 1))), '_')[1]) as pass_rules, \
+                            int(split(max(concat(dbupdatetime, '_', if(snippet rlike 'ai低质检测', 0, 1))), '_')[1]) as pass_low_quality_model  \
+                from lofter_db_dump.ods_db_recommend_post_trace_log_nd  \
+                where snippet rlike '^600.*' or snippet rlike 'ai低质检测'  \
+                group by postid ) t_1  \
+    on a.post_id = t_1.postid  \
+    left join (select item_id,pass_rules,pass_low_quality_model,day \
+                from rec.rec_lofter_review_status  \
+                where day in ('${azkaban.flow.2.days.ago}','${azkaban.flow.1.days.ago}')) t_2  \
+    on a.item_id = t_2.item_id and a.dt  = date_sub(t_2.day,1) \
+    left join \
+        (select item_id,case when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'green') then 'green'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'sucess') then 'sucess'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'fail') then 'fail'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'trying') then 'trying' else 'other' end as trial_status \
+                from (select item_id,trial_status  \
+                        from rec.rec_lofter_data_l2_rec_pool_daily_info \
+                        where day >= '${azkaban.flow.2.days.ago}'  \
+                        union all  \
+                        select item_id,trial_status  \
+                        from rec.rec_lofter_data_rec_pool_daily_info  \
+                        where day >= '${azkaban.flow.2.days.ago}' )t1  \
+        group by item_id \
+        ) as c \
+    on a.item_id = c.item_id \
+    left join (select dt,postid \
+                from lofter.dim_gift_post_return_dd  \
+                where dt >= '${azkaban.flow.2.days.ago}' and ispay_returngift in (0,1) \
+                group by dt,postid) as d \
+    on a.post_id = d.postid and a.dt = d.dt \
+    left join (select dt,userid,level \
+            from lofter.dws_par_creator_level_scoring_dd \
+            where  dt >= '${azkaban.flow.2.days.ago}'  \
+            group by dt,userid,level)e \
+    on a.blog_id = e.userid and a.dt = e.dt \

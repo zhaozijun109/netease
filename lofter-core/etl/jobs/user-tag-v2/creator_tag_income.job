@@ -1,0 +1,22 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag creator_tag_income --bitmap
+retries=0
+conf.spark.execute.sql = " select userid               as userId, \
+                                  'creator_tag_income' as tag_name, \
+                                  cat                  as dim1, \
+                                  grp               as dim2, \
+                                  ''                   as dim3, \
+                                  ''                   as dim4, \
+                                  subcat                  as grp, \
+                                  ''                   as value \
+                           from ( SELECT \
+                                           	   `blogid` AS `userId`, \
+                                                `count_period` AS `cat`, \
+                                                CASE WHEN `total_money` > 0 AND `total_money` < 10 THEN '1-10' \
+                                           	        WHEN `total_money` >= 10 AND `total_money` < 50 THEN '10-50' \
+                                           	        WHEN `total_money` >= 50 AND `total_money` < 100 THEN '50-100' \
+                                           	        WHEN `total_money` >= 100 THEN '100及以上' END AS `subcat`, \
+                                           	   `tag` AS `grp` \
+                                           FROM `lofter_dm`.`ads_creator_tag_income_dd` \
+                                           WHERE `dt` = '${azkaban.flow.1.days.ago}' and `total_money` > 0 and length(tag) > 0  ) "

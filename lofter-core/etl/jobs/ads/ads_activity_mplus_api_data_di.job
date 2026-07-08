@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=insert overwrite table lofter_dm.ads_activity_mplus_api_data_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select  get_json_object(json_info, '$.rid') as rid, \
+        get_json_object(json_info, '$.mplus_platform') as mlus_platform, \
+        get_json_object(data, '$.advertiser_id') as advertiser_id, \
+        cast(get_json_object(data, '$.cost') as double) as cost, \
+        cast(get_json_object(data, '$.show') as bigint) as show, \
+        cast(get_json_object(data, '$.click') as bigint) as click, \
+        get_json_object(data, '$.date_id') as date_id \
+    from lofter.dep175_drpf_mplus_api_data_day \
+        lateral view explode(parse_array(get_json_object(json_info, "$.data"))) as data \
+    where ds <= '${azkaban.flow.1.days.ago}' \
+) t \

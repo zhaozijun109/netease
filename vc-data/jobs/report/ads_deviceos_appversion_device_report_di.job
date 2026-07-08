@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_deviceos_appversion_device_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  appversion, \
+  deviceos, \
+  deviceosversion, \
+  count(distinct deviceudid) as device_uv, \
+  count(distinct user_id) as user_uv, \
+  appchannel \
+from \
+  ( \
+    select \
+      deviceos, \
+      appversion, \
+	  appchannel, \
+      deviceudid, \
+      user_id, \
+      occurtime, \
+      deviceosversion, \
+      row_number() over( \
+        partition by \
+        deviceudid \
+        order by \
+          occurtime desc \
+      ) as rk \
+    from \
+      vc.ods_mda_app_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+  ) a \
+where \
+  rk = 1 \
+group by \
+  appversion, \
+  deviceos, \
+  deviceosversion, \
+  appchannel \

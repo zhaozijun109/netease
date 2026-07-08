@@ -1,0 +1,18 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag deviceType --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               'deviceType' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (      select accountId as userId, 'deviceType' as tag, \
+                                           case app_client_type when 'IPHONE' then 'IOS' \
+                                                                when 'IPAD' then 'IOS' \
+                                                                else app_client_type end as grp \
+                                    from lofter.dws_evt_login_user_last_dd \
+                                    where dt = '${azkaban.flow.1.days.ago}' and length(app_client_type) > 0   ) "

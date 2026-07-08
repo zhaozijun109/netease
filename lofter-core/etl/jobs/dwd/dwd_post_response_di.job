@@ -1,0 +1,163 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_post_response_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.postId, \
+        tmp1.userId, \
+        tmp1.commentId, \
+        tmp1.replyl1commentid, \
+        tmp1.replyl2commentid, \
+        tmp1.content, \
+        tmp1.opTime, \
+        tmp1.ip, \
+        tmp2.blogId, \
+        tmp2.isBlogAuthenticated, \
+        tmp2.userId                               AS post_userId, \
+        IF(SIZE(tmp2.tags) > 0,tmp2.tags,NULL)       AS post_tags, \
+        IF(SIZE(tmp2.domains) > 0,tmp2.domains,NULL) AS post_domains, \
+        tmp2.publishDate                          AS post_publish_date, \
+        tmp2.contentType                          AS post_content_type, \
+        tmp3.clientType                           AS platform, \
+        tmp4.deviceUdid, \
+        tmp4.eventId, \
+        tmp4.scene, \
+        tmp4.source1_scene, \
+        tmp4.source2_scene, \
+        tmp4.module, \
+        tmp4.source1_module, \
+        tmp4.source2_module, \
+        tmp4.occurTime, \
+        tmp4.kafkaTime, \
+        tmp4.rec_alg, \
+        IF(tmp5.createDate = '${azkaban.flow.1.days.ago}',1,0) AS is_new_user, \
+        IF(tmp4.source1_scene IN ('collection','floatcollection','subscribe','mysubscription') OR tmp4.scene = 'immerse_collection',1,0) AS is_collection, \
+        tmp6.deviceId, \
+        tmp1.is_valid, \
+        IF(tmp7.userId IS NOT NULL,1,0)           AS is_fans, \
+        tmp1.is_underscore, \
+        IF(tmp8.is_underscore > 0, 1, 0)        AS is_underscore_reply, \
+        IF(SIZE(tmp2.ips) > 0,tmp2.ips,NULL)      AS post_ips, \
+		  tmp4.detail_source1_scene_level_1, \
+        tmp4.detail_source1_scene_level_2, \
+        tmp1.is_circle_comment, \
+        IF(tmp8.is_circle_comment > 0, 1, 0) as is_circle_comment_reply \
+FROM \
+( \
+	      SELECT  postId, \
+	              publisherUserid AS userId, \
+	              id              AS commentId, \
+	              replyl1commentid, \
+	              replyl2commentid, \
+	              publishTime     AS opTime, \
+	              content, \
+	              ip, \
+	              is_valid, \
+	              is_underscore, \
+	              is_circle_comment \
+	      FROM \
+	      ( \
+	      	      SELECT  *, \
+	      	              IF(LENGTH(regexp_replace(content,'\\\\[.*?\\\\]','')) > 5,1,0) AS is_valid, \
+	      	              if(LENGTH(pid) > 0 and imgId is null, 1, 0) AS is_underscore, \
+	      	              IF(LENGTH(imgId) > 0, 1, 0) AS is_circle_comment, \
+	      	              ROW_NUMBER() over(PARTITION BY publisherUserid,postId,id ORDER BY _bin_op_time DESC, _bin_op_seqno DESC) AS rk \
+	      	      FROM lofter.ods_binlog_post_response_di \
+	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND `_bin_op` < 2 \
+	      ) a \
+	      WHERE rk = 1 AND `_bin_op` = 0 \
+) tmp1 \
+JOIN lofter.dim_post_article tmp2 \
+ON tmp1.postId = tmp2.id \
+LEFT JOIN \
+( \
+	      SELECT  * \
+	      FROM \
+	      ( \
+	      	      SELECT  *, \
+	      	              ROW_NUMBER() over(PARTITION BY accountId,postId,commendId ORDER BY time DESC) AS rk \
+	      	      FROM lofter.ods_log_commend_di \
+	      	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+	      ) b \
+	      WHERE rk = 1 \
+) tmp3 \
+ON tmp1.userId = tmp3.accountId AND tmp1.postId = tmp3.postId AND tmp1.commentId = tmp3.commendId \
+LEFT JOIN \
+( \
+	      SELECT  * \
+	      FROM \
+	      ( \
+	      	      SELECT  deviceUdid, \
+	      	              userId, \
+	      	              deviceOs, \
+	      	              eventId, \
+	      	              CAST(NVL(itemid,params['tid']) AS BIGINT) AS commentId, \
+	      	              CAST(GET_JSON_OBJECT(params['ext'],'$.itemId') AS BIGINT) AS postId, \
+	      	              scene, \
+	      	              GET_JSON_OBJECT(source,'$[1].scene')      AS source1_scene, \
+	      	              GET_JSON_OBJECT(source,'$[2].scene')      AS source2_scene, \
+	      	              params['module']                          AS module, \
+	      	              GET_JSON_OBJECT(source,'$[1].module')     AS source1_module, \
+	      	              GET_JSON_OBJECT(source,'$[2].module')     AS source2_module, \
+	      	              occurTime, \
+	      	              kafkaTime, \
+	      	              GET_JSON_OBJECT(algInfo,"$.algName")      AS rec_alg, \
+	      	      		  CASE WHEN GET_JSON_OBJECT(source,'$[1].module') = 'related_item' THEN 'related_article' \
+	      	                     WHEN GET_JSON_OBJECT(source,'$[1].scene') IN ('floatcollection','immerse_collection') OR (GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'note_collection') OR (GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND (scene = 'immerse_collection' OR (scene = 'note' AND params['module'] = 'note_collection'))) THEN 'collection' \
+	      	                     WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') IN ('tag_rec','sim_article_left_rec','other') THEN 'note_left_right' \
+	      	                     WHEN GET_JSON_OBJECT(source,'$[1].itemType') IN ('QUESTION','COS_QUESTION','SCORE_QUESTION','NOMINATESIGN_QUESTION','JOIN_NOMINATESIGN_ANSWER','JOIN_SCORE_ANSWER','ANSWER','COS_ANSWER','NORMAL_COMMENT_ANSWER','LINE_COMMENT_ANSWER','PHOTO_COMMENT_ANSWER') THEN 'talk' \
+	      	                     ELSE GET_JSON_OBJECT(source,'$[1].scene') \
+	      	      		  END AS detail_source1_scene_level_1, \
+	      	              CASE WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') = '发现' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tabSubName') IS NOT NULL AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tabSubName') <> '全部' THEN 'tag_sub_cate_rec' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') = '发现' THEN 'tag_discovery' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') IN ('最新发布','最新评论') THEN 'tag_new' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(source,'$[1].tab') IN ('最热全部','最热日榜','最热周榜','最热月榜','全部','日榜','周榜','月榜') THEN 'tag_hot' \
+                               WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tab') IN ('动态推荐','动态最新') THEN 'tag_talk' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'note_collection' THEN 'note_collection_up_down' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec' THEN 'tag_note_log_left_right' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'sim_article_left_rec' THEN 'rec_note_left_right' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND GET_JSON_OBJECT(source,'$[1].module') = 'other' THEN 'other_note_log_left_right' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'floatcollection' THEN 'floatcollection' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].module') = 'immerse_collection' THEN 'immerse_collection' \
+	      	                   WHEN scene = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].itemId') = itemid AND GET_JSON_OBJECT(source,'$[1].itemType') = itemtype THEN GET_JSON_OBJECT(source,'$[1].scene') \
+	      	                   WHEN scene = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].itemId') != itemid AND GET_JSON_OBJECT(source,'$[1].itemType') != itemtype THEN scene \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'immerse_collection' AND GET_JSON_OBJECT(source,'$[1].module') = 'sim_collection_article' THEN 'related_collection' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND scene = 'immerse_collection' THEN 'immerse_collection' \
+	      	                   WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'note' AND scene = 'note' AND params['module'] = 'note_collection' THEN 'note_collection_up_down' \
+	      	                   ELSE NULL \
+	      	      		  END AS detail_source1_scene_level_2, \
+	      	              ROW_NUMBER() OVER (PARTITION BY userId,CAST(NVL(itemid,params['tid']) AS BIGINT),GET_JSON_OBJECT(params['ext'],'$.itemId') ORDER BY kafkaTime DESC,occurTime DESC) AS rk \
+	      	      FROM lofter.ods_mda_app_partition_di \
+	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND actionType ='comment' AND CAST(NVL(itemId, params['tid']) AS BIGINT) > 0 \
+	      ) c \
+	      WHERE rk = 1 \
+) tmp4 \
+ON tmp1.userId = tmp4.userId AND tmp1.postId = tmp4.postId AND tmp1.commentId = tmp4.commentId AND tmp4.kafkaTime BETWEEN tmp1.opTime-300000 AND tmp1.opTime+300000 \
+LEFT JOIN lofter.dim_user tmp5 \
+ON tmp1.userId = tmp5.id \
+LEFT JOIN \
+( \
+	      SELECT  deviceUdid, \
+	              deviceId \
+	      FROM lofter.dwd_par_device_all_dd \
+	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp6 \
+ON tmp4.deviceUdid = tmp6.deviceUdid \
+LEFT JOIN \
+( \
+	      SELECT  userId, \
+	              blogId \
+	      FROM lofter_db_dump.ods_db_user_following_nd \
+	      WHERE FROM_UNIXTIME(CAST(followTime/1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	      GROUP BY  userId, \
+	                blogId \
+) tmp7 \
+ON tmp1.userId = tmp7.userId AND tmp2.blogId = tmp7.blogId \
+LEFT JOIN \
+( \
+	      SELECT  id AS commentId, if(LENGTH(pid) > 0 and imgId is null, 1, 0) as is_underscore, if(LENGTH(imgId) > 0, 1, 0) as is_circle_comment \
+	      FROM lofter_db_dump.ods_db_post_response_nd \
+	      WHERE LENGTH(pid) > 0 or LENGTH(imgId) > 0 \
+) tmp8 \
+ON tmp1.replyl1commentid = tmp8.commentId
+dependencies=dwd_par_device_all_dd

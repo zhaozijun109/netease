@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_act_renjianbaitai_blog_tags_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+       transform(sort_array(collect_list(struct(rank, tag)), true), x -> x.tag) as 365d_post_top10_tags \
+from ( \
+    select blogId, tag, rank \
+    from ( \
+        select blogId, tag, row_number() over (partition by blogId order by postCount desc) as rank \
+        from ( \
+            select blogId, t1.tag, count(distinct id) as postCount \
+            from ( \
+                select id, blogId, tag \
+                from lofter.dim_post_article lateral view explode(tags) as tag \
+                where publishDate between date_sub('${azkaban.flow.1.days.ago}',364) and '${azkaban.flow.1.days.ago}' and is_book_store = 0 and \
+                isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ('图片','文字','视频') \
+            ) t1 \
+            left join ( \
+                select tag from lofter.dim_black_tag \
+            ) t2 \
+            on t1.tag = t2.tag \
+            where t2.tag is null \
+            group by blogId, t1.tag \
+        ) t1 \
+    ) t2 \
+    where rank <= 10 \
+) t3 \
+group by blogId

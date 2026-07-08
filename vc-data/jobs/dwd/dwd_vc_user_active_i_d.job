@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dwd_vc_user_active_i_d partition (dt = '${azkaban.flow.1.days.ago}')   \
+              with active as (select device_udid, user_id, max(occur_time) as last_active_time \
+                              from vc.dwd_vc_app_event_i_d \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                                and user_id is not null \
+                              group by device_udid, user_id), \
+                   users as (select * from vc.dim_vc_user_info_a_d where dt = (select max(dt) from vc.dim_vc_user_info_a_d)) \
+              select x1.device_udid, x1.user_id, x1.last_active_time, x2.is_anonymity \
+              from active x1 \
+                       left join users x2 on x1.user_id = x2.user_id;
+
+dependencies=dwd_vc_app_event_i_d

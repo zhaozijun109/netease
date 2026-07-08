@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_device_apk_install_dd partition (dt='${azkaban.flow.1.days.ago}') \
+select deviceUdid, apk_name, is_installed, occurTime \
+from ( \
+    select deviceUdid, apk_name, is_installed, occurTime, \
+           row_number() over(partition by deviceUdid, apk_name order by occurTime desc) as rk \
+    from ( \
+        select deviceUdid, apk_name, is_installed, occurTime \
+        from lofter.dwd_device_collect_apk_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select deviceUdid, apk_name, is_installed, occurTime \
+        from lofter.dwd_device_apk_install_dd \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) t \
+) tt \
+where rk = 1 \
+distribute by cast(rand() * 100 as bigint)
+dependencies=dwd_device_collect_apk_di
+

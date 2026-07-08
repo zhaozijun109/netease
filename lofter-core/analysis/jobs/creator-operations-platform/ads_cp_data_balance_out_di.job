@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_cp_data_balance_out_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userid                                                      as blogid, \
+       remainderamount, \
+       lastlogindate                                                 as last_login_date, \
+       REPLACE(REPLACE(blog_url, 'https://', ''), '.lofter.com', '') as blog_name, \
+       blog_nickname \
+FROM ( \
+     select t1.userid, remainderamount, lastlogindate \
+     from ( \
+          select userid, SUM(remainderamount) as remainderamount \
+          from ( \
+               select userid, remainderamount \
+               from lofter_db_dump.ods_db_trade_gift_wallet_nd \
+               where remainderamount > 0 \
+               UNION ALL \
+               select userid, remainderamount \
+               from lofter_db_dump.ods_db_trade_inspire_wallet_nd \
+               where remainderamount > 0 \
+               UNION ALL \
+               select userid, remainderamount \
+               from lofter_db_dump.ods_db_trade_wallet_nd \
+               where remainderamount > 0) \
+          GROUP BY userid) t1 \
+          join ( \
+               select accountid, FROM_UNIXTIME(time / 1000, 'yyyy-MM-dd') as lastlogindate \
+               from lofter.dws_evt_login_user_last_dd \
+               where dt = '${azkaban.flow.1.days.ago}' \
+                 and FROM_UNIXTIME(time / 1000, 'yyyy-MM-dd') < date_sub('${azkaban.flow.1.days.ago}', 1095)) t2 \
+               on t1.userid = t2.accountid \
+     ) a \
+     join ( \
+          select userid, level, blog_url, blog_nickname \
+          from lofter.dws_par_creator_dd \
+          where dt = '${azkaban.flow.1.days.ago}' \
+          ) b on a.userid = b.userid

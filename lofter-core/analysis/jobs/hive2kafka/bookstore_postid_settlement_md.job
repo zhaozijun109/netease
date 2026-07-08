@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select cast(postId as bigint) as postId, cast(ratio  as string) as ratio, cast(substr(replace(dt,'-',''),0,6) as int) as dt  from lofter_dm.ads_bookstore_settlement_md  where dt='${azkaban.flow.1.days.ago}'"
+params= --topic LOFTER.FINIANCE.STORE_READ_RATIO  --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

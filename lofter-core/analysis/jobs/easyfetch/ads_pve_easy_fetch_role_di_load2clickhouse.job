@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,base_dt,roleid,new_flg,cell_exposure_uv,cell_click_uv,chat_exposure_uv,chat_send_uv,interview_role_uv,chat_uv,total_chats,total_coststamina_uv,total_coststamina,amount_uv,amount,grass_coststamina_uv,grass_coststamina,props_coststamina_uv,props_coststamina,sweet_coststamina_uv,sweet_coststamina,coststamina_uv,coststamina,uv_1d,uv_2d,uv_3d,uv_5d,uv_7d,uv_15d,uv_30d,rolename,status,publicview,type from lofter_dm.ads_pve_easy_fetch_role_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_pve_easy_fetch_role_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_pve_easy_fetch_role_di

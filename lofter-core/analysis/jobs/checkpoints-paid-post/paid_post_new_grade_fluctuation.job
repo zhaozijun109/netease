@@ -1,0 +1,26 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.pre="select count(1) as cnt from lofter_dm.ads_paid_post_blog_level_detail_di where dt = '${azkaban.flow.1.days.ago}' having cnt > 0 "
+conf.spark.check.bad="\
+select a.new_grade, a.pv, a.uv, b.uv as prev_day_uv, c.uv as prev_week_uv \
+from ( \
+    select new_grade, count(1) pv, count(distinct userId) uv \
+    from lofter_dm.ads_paid_post_blog_level_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select new_grade, count(distinct userId) uv \
+    from lofter_dm.ads_paid_post_blog_level_detail_di \
+    where dt = '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) b on a.new_grade = b.new_grade \
+left join ( \
+    select new_grade, count(distinct userId) uv \
+    from lofter_dm.ads_paid_post_blog_level_detail_di \
+    where dt = date_sub('${azkaban.flow.7.days.ago}', 1) \
+    group by 1 \
+) c on a.new_grade = c.new_grade \
+where (a.pv <> a.uv) or (a.uv > 300 and ((a.uv > b.uv * 1.1 or a.uv < b.uv * 0.9) or (a.uv > c.uv * 1.1 or a.uv < c.uv * 0.9))) \
+"
+dependencies=

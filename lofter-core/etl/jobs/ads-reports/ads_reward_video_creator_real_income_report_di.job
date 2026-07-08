@@ -1,0 +1,34 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_reward_video_creator_real_income_report_di  partition(dt ='${azkaban.flow.1.days.ago}')   \
+ \
+select     \
+'ugc' flag, \
+concat(substr(intday,1,4),'-',substr(intday,5,2),'-',substr(intday,7,2)) revenue_dt, \
+a.blogid,	 \
+blog_url, \
+sum(a.revenueamount) revenueamount, \
+bizId \
+from lofter_db_dump.ods_db_trade_post_revenue_nd a  \
+left join lofter.dws_par_creator_dd b on a.blogid=b.userid  and b.dt='${azkaban.flow.1.days.ago}'  \
+where creatorType = 0  \
+and concat(substr(intday,1,4),'-',substr(intday,5,2),'-',substr(intday,7,2)) =date_sub('${azkaban.flow.1.days.ago}',2)  \
+group by 1,2,3,4, 6 \
+ \
+union all  \
+ \
+select     \
+'pgc' flag, \
+concat(substr(intday,1,4),'-',substr(intday,5,2),'-',substr(intday,7,2)) revenue_dt, \
+a.blogid,	 \
+blog_url, \
+sum(case when d.sharetype=1 then  sourcerevenueamount*0.7  \
+     when d.sharetype=3 then  sourcerevenueamount*0.5 \
+     end)   revenueamount, \
+bizId \
+from lofter_db_dump.ods_db_trade_post_revenue_nd a  \
+left join lofter.dws_par_creator_dd b on a.blogid=b.userid  and b.dt='${azkaban.flow.1.days.ago}'  \
+left join  lofter_db_dump.ods_db_pfb_content_related_post_nd c on a.postid=c.postid \
+left join lofter_db_dump.ods_db_pfb_content_nd d on c.contentid=d.id  \
+where creatorType = 1  \
+and concat(substr(intday,1,4),'-',substr(intday,5,2),'-',substr(intday,7,2)) =date_sub('${azkaban.flow.1.days.ago}',2)  \
+group by 1,2,3,4, 6 \

@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('-',flowTaskId,flowTaskType) as id,dt,flowTaskId,flowTaskType,exposurePv, exposureUv,clickPv, clickUv,realPlayPv, realPlayUv,hotPv, hotUv,browsePv,browseUv,pvClickRate,uvClickRate,realPlayRate,supportPostCount,supportUserCount,levelUser, darenUser, arpuAddFans, sensingUserCount as pushUserNumb, sensingItemCount as pushItemNumb from lofter_dm.ads_rec_dis_task_acc_di where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_rec_dis_task_acc_v2 --postfixsep --atom
+dependencies=flow_control_effect_by_task

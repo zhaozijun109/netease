@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01 = WITH login_data AS (select user_id, dt as login_date \
+                                    from vc.dwd_vc_user_active_i_d \
+                                    where is_anonymity != 'Y' \
+                                    group by user_id, dt), \
+                     rk_logins AS (SELECT user_id, \
+                                          login_date, \
+                                          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS rn, \
+                                          DATE_sub(login_date, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) - \
+                                                               1)                                      AS grp \
+                                   FROM login_data), \
+                     consecutive_groups as (SELECT user_id, \
+                                                   MIN(login_date) AS start_date, \
+                                                   MAX(login_date) AS end_date, \
+                                                   COUNT(*)        AS consecutive_days \
+                                            FROM rk_logins \
+                                            GROUP BY user_id, grp), \
+                     max_consecutive as (select user_id, start_date, end_date, consecutive_days \
+                                         from (select user_id, \
+                                                      start_date, \
+                                                      end_date, \
+                                                      consecutive_days, \
+                                                      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY consecutive_days desc) AS rn \
+                                               from consecutive_groups \
+                                               where consecutive_days > 1) \
+                                         where rn = 1), \
+                     last_consecutive as (select user_id, \
+                                                 start_date, \
+                                                 end_date, \
+                                                 consecutive_days, \
+                                                 if(end_date = '${azkaban.flow.1.days.ago}', 1, 0) as now_consecutive, \
+                                                 DATEDIFF(end_date, start_date) + 1                as last_consecutive \
+                                          from (select user_id, \
+                                                       start_date, \
+                                                       end_date, \
+                                                       consecutive_days, \
+                                                       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY end_date desc) AS rn \
+                                                from consecutive_groups \
+                                                where consecutive_days > 1) \
+                                          where rn = 1) \
+                insert overwrite table vc.dwd_vc_user_consecutive_active_a_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.user_id, \
+                       x1.start_date       as max_start_date, \
+                       x1.end_date         as max_end_date, \
+                       x1.consecutive_days as max_consecutive_days, \
+                       x2.start_date       as last_start_date, \
+                       x2.end_date         as last_end_date, \
+                       x2.last_consecutive, \
+                       x2.now_consecutive \
+                from max_consecutive x1 \
+                         left join last_consecutive x2 on x1.user_id = x2.user_id;
+
+dependencies=dwd_vc_user_active_i_d

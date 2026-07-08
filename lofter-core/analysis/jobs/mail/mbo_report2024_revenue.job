@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.mail.MboReport2024Revenue
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=mbo

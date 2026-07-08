@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_user_group_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, ad_group_type \
+from ( \
+    select u.id as userId, \
+           case when u.createDate > '${azkaban.flow.7.days.ago}' then 'new' \
+                when pay_amount_30d >= 10 then 'pay_user' \
+                when nvl(active_days_30d,0) <= 6 and browse_pv >= 200 then 'low_frequency' \
+                when ad_close_count_7d >= 2 then 'ad_sensitive' \
+           end as ad_group_type \
+    from lofter.dim_user u \
+    left join ( \
+        select userId, sum(money) as pay_amount_30d \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+             pay_date <= '${azkaban.flow.1.days.ago}' and \
+             pay_date >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+    ) a on u.id = a.userId \
+    left join ( \
+      select userId, sum(browse_pv) as browse_pv \
+      from lofter.dws_par_user_content_di \
+      where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+      group by userId \
+    ) b on u.id = b.userId \
+    left join ( \
+        select userId, count(distinct dt) as active_days_30d \
+        from lofter.dws_par_user_active_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+    ) c on u.id = c.userId \
+    left join ( \
+        select userId, sum(close_ad_count) as ad_close_count_7d \
+        from lofter.dws_par_user_ad_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+    ) d on u.id = d.userId \
+) t \
+where ad_group_type is not null \

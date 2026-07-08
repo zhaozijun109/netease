@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_cp_data_creator_follow_relation_bi_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+SELECT \
+    CASE \
+        WHEN GROUPING(a.creatorstatus) = 0 THEN 'creatorstatus' \
+        WHEN GROUPING(a.grade) = 0 THEN 'grade' \
+        WHEN GROUPING(a.level) = 0 THEN 'level' \
+        END AS dim_name, \
+    CASE \
+        WHEN GROUPING(a.creatorstatus) = 0 THEN CAST(a.creatorstatus AS STRING) \
+        WHEN GROUPING(a.grade) = 0 THEN a.grade \
+        WHEN GROUPING(a.level) = 0 THEN a.level \
+        END AS dim_value, \
+    COUNT(1) AS total_cnt, \
+    COUNT(b.userid) AS sub_cnt, \
+    COUNT(c.userid) AS connect_cnt, \
+    COUNT( \
+            CASE \
+                WHEN b.userid IS NOT NULL AND c.userid IS NOT NULL THEN a.blogid \
+                END \
+    ) AS connect_sub_cnt \
+FROM ( \
+     SELECT \
+         blogid, \
+         creatorstatus, \
+         grade, \
+         level \
+     FROM lofter_dm.ads_cp_data_creator_di \
+     WHERE dt = '${azkaban.flow.1.days.ago}' \
+     ) a \
+     LEFT JOIN ( \
+               SELECT \
+                   userid \
+               FROM lofter_db_dump.ods_db_cb_creator_follow_relation_nd \
+               WHERE isdeleted = 0 \
+               GROUP BY userid \
+) b \
+               ON a.blogid = b.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   userid \
+               FROM lofter_db_dump.ods_db_cb_creator_connection_nd \
+               GROUP BY userid \
+) c \
+               ON a.blogid = c.userid \
+GROUP BY GROUPING SETS ( \
+    (a.creatorstatus), \
+    (a.grade), \
+    (a.level) \
+    ) \
+ORDER BY dim_name, dim_value
+dependencies=ads_cp_data_creator_di

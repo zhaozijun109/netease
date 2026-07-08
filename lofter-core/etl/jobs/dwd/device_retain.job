@@ -1,0 +1,87 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.device_retain partition (dt='${azkaban.flow.1.days.ago}', period = 1) \
+select a.*, if(c.deviceUdid is null, 0, 1) as is_new, if(b.deviceUdid is null, 0, 1) as is_retain \
+from ( \
+  select deviceUdid, deviceOs, dt as base_date \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.2.days.ago}' \
+) a left join ( \
+  select deviceUdid \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+  select deviceUdid \
+  from lofter.device_new \
+  where dt = '${azkaban.flow.2.days.ago}' \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1
+hive.query.02=insert overwrite table lofter.device_retain partition (dt='${azkaban.flow.1.days.ago}', period = 2) \
+select a.*, if(c.deviceUdid is null, 0, 1) as is_new, if(b.deviceUdid is null, 0, 1) as is_retain \
+from ( \
+  select deviceUdid, deviceOs, dt as base_date \
+  from lofter.device_active \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 2) \
+) a left join ( \
+  select deviceUdid \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+  select deviceUdid \
+  from lofter.device_new \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 2) \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1
+hive.query.03=insert overwrite table lofter.device_retain partition (dt='${azkaban.flow.1.days.ago}', period = 6) \
+select a.*, if(c.deviceUdid is null, 0, 1) as is_new, if(b.deviceUdid is null, 0, 1) as is_retain \
+from ( \
+  select deviceUdid, deviceOs, dt as base_date \
+  from lofter.device_active \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 6) \
+) a left join ( \
+  select deviceUdid \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+  select deviceUdid \
+  from lofter.device_new \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 6) \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1
+hive.query.04=insert overwrite table lofter.device_retain partition (dt='${azkaban.flow.1.days.ago}', period = 14) \
+select a.*, if(c.deviceUdid is null, 0, 1) as is_new, if(b.deviceUdid is null, 0, 1) as is_retain \
+from ( \
+  select deviceUdid, deviceOs, dt as base_date \
+  from lofter.device_active \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 14) \
+) a left join ( \
+  select deviceUdid \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+  select deviceUdid \
+  from lofter.device_new \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 14) \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1
+hive.query.05=insert overwrite table lofter.device_retain partition (dt='${azkaban.flow.1.days.ago}', period = 29) \
+select a.*, if(c.deviceUdid is null, 0, 1) as is_new, if(b.deviceUdid is null, 0, 1) as is_retain \
+from ( \
+  select deviceUdid, deviceOs, dt as base_date \
+  from lofter.device_active \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 29) \
+) a left join ( \
+  select deviceUdid \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+  select deviceUdid \
+  from lofter.device_new \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 29) \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1
+dependencies=device_active,device_new

@@ -1,0 +1,105 @@
+type = sparksql
+hive.query.01=   \
+with revenue as (   \
+select    \
+a.dt,   \
+revenue_neirong_lofter ,   \
+revenue_dianshang_lofter ,   \
+coalesce(revenue_pcy_lofter,0)+coalesce(revenue_pcy)  revenue_pcy_total,   \
+revenue_guanggao_lofter ,   \
+revenue_others_lofter ,   \
+revenue_total_lofter ,   \
+revenue_pcy,   \
+revenue_pcy_lofter   \
+from(   \
+select   \
+dt,   \
+sum(case when pay_type1 in ('粉丝会员', '图片商城', '券包', '付费礼物','小程序会员', '官方账号', '书城会员') then trade_money else 0 end ) revenue_neirong_lofter ,   \
+sum(case when pay_type1 in ('抽赏', '市集', '一番赏') then trade_money else 0 end ) revenue_dianshang_lofter ,   \
+sum(case when pay_type1 in ('虚拟社交') then trade_money else 0 end ) revenue_pcy_lofter ,   \
+sum(case when pay_type1 in ('广告') then trade_money else 0 end ) revenue_guanggao_lofter ,   \
+sum(case when pay_type1 in ('其他') then trade_money else 0 end ) revenue_others_lofter ,   \
+sum(trade_money) revenue_total_lofter    \
+from (   \
+select dt,'广告' as pay_type1, sum(bid_amount) /1000  trade_money  \
+from lofter.dwd_ad_actions_di   \
+where dt ='${azkaban.flow.1.days.ago}'   \
+and bgPv > 0  \
+and appId = '6ED29071'    \
+group by 1 ,2  \
+ \
+union all \
+ \
+select  \
+day as dt ,'广告' as pay_type1,sum(trade_money) as trade_money  \
+from lofter_dm.ads_ad_revenue  \
+where day  >= trunc('${azkaban.flow.1.days.ago}', 'YY') AND day<'${azkaban.flow.1.days.ago}'  \
+and appid = '6ED29071'  \
+group by 1,2  \
+   \
+union all   \
+   \
+select dt,   \
+case    \
+when pay_type ='小程序会员' then '小程序会员'   \
+when pay_type ='券包' then '券包'   \
+when pay_type ='粉丝会员' then '粉丝会员'   \
+when pay_type ='官方账号' then '官方账号'   \
+when pay_type in('付费礼物','礼物付费') then '付费礼物'   \
+when pay_type='抽赏'  then '抽赏'   \
+when pay_type='市集'  then '市集'   \
+when pay_type='书城会员'  then '书城会员'   \
+when pay_type='一番赏'  then '一番赏'   \
+when pay_type like '%PVE%' then '虚拟社交'   \
+when pay_type='图片商城'  then '图片商城'   \
+else '其他' end  as pay_type1,sum(trade_money) as trade_money    \
+from lofter_dm.ads_revenue_monitor_v2_dd   \
+where stat_period='1' and pay_type!='all' and dt BETWEEN trunc('${azkaban.flow.1.days.ago}', 'YY') AND '${azkaban.flow.1.days.ago}'   \
+group by 1,2 ) r   \
+group by 1   \
+) a    \
+left join    \
+(   \
+select    \
+dt,   \
+sum(case when period = '1' then total_amount else 0 end) revenue_pcy    \
+from vc_dm.ads_vc_base_data_report_di   \
+WHERE dt BETWEEN trunc('${azkaban.flow.1.days.ago}', 'YY') AND '${azkaban.flow.1.days.ago}'   \
+and period in ('all','1')   \
+group by 1   \
+) b on a.dt=b.dt     \
+)    \
+   \
+   \
+insert overwrite table lofter_dm.ads_week_report_revenue_total_report_di partition(dt ='${azkaban.flow.1.days.ago}')     \
+select    \
+concat('${azkaban.flow.1.days.ago}','-','YTD') tag,   \
+count(distinct dt) cnt_days,   \
+sum(coalesce(revenue_neirong_lofter,0)) revenue_neirong_lofter ,   \
+sum(coalesce(revenue_guanggao_lofter ,0)) revenue_guanggao_lofter,   \
+sum(coalesce(revenue_pcy_total,0)) revenue_pcy_total  ,   \
+sum(coalesce(revenue_others_lofter ,0)) revenue_others_lofter,   \
+sum(coalesce(revenue_total_lofter,0)) revenue_total_lofter,   \
+sum(coalesce(revenue_dianshang_lofter,0))revenue_dianshang_lofter ,   \
+sum(coalesce(revenue_pcy,0)) revenue_pcy,   \
+sum(coalesce(revenue_pcy_lofter,0)) revenue_pcy_lofter    \
+from revenue    \
+where dt>=trunc('${azkaban.flow.1.days.ago}', 'YY')   \
+   \
+union all    \
+   \
+select    \
+concat(substr(dt,1,7),'-','MTD') tag,   \
+count(distinct dt) cnt_days,   \
+sum(coalesce(revenue_neirong_lofter,0)) revenue_neirong_lofter ,   \
+sum(coalesce(revenue_guanggao_lofter ,0)) revenue_guanggao_lofter,   \
+sum(coalesce(revenue_pcy_total,0)) revenue_pcy_total  ,   \
+sum(coalesce(revenue_others_lofter ,0)) revenue_others_lofter,   \
+sum(coalesce(revenue_total_lofter,0)) revenue_total_lofter,   \
+sum(coalesce(revenue_dianshang_lofter,0))revenue_dianshang_lofter  ,   \
+sum(coalesce(revenue_pcy,0)) revenue_pcy ,   \
+sum(coalesce(revenue_pcy_lofter,0)) revenue_pcy_lofter    \
+from revenue    \
+where (dt>= trunc('${azkaban.flow.1.days.ago}' , 'MM') and dt<='${azkaban.flow.1.days.ago}')   \
+or (dt>= trunc(add_months('${azkaban.flow.1.days.ago}' , -1), 'MM') and dt<=add_months('${azkaban.flow.1.days.ago}' , -1))   \
+group by 1

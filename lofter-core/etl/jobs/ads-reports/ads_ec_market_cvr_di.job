@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_market_cvr_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select appUserCount, marketUserCount, marketHeadPageUserCount, \
+       marketProductShelfUserCount, marketProductDetailUserCount, \
+       orderUserCount, payUserCount \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(distinct a.userId) appUserCount \
+    from ( \
+        select userId from lofter.ods_mda_app_partition_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) a join lofter.dim_user b on a.userId = b.id \
+    where b.isAnonymous = 0 \
+) a \
+left join ( \
+    select dt, \
+           count(distinct(userId)) as marketUserCount, \
+           count(distinct(if(eventId like 'w1-%', userId, null))) as marketHeadPageUserCount, \
+           count(distinct(if(eventId like 'w2-%', userId, null))) as marketProductShelfUserCount, \
+           count(distinct(if(eventId = 'w3-2', userId, null))) as marketProductDetailUserCount \
+    from ( \
+        select a.* \
+        from ( \
+            select * from lofter.dwd_evt_benefit_page_view_di where dt = '${azkaban.flow.1.days.ago}' \
+        ) a join lofter.dim_user b on a.userId = b.id \
+        where b.isAnonymous = 0 \
+    ) t \
+    group by 1 \
+) b on a.dt = b.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct(if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerId, null))) as orderUserCount, \
+           count(distinct(if(from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerId, null))) as payUserCount \
+    from lofter_db_dump.ods_db_benefit_order_nd \
+    where productType = 3 \
+) c on a.dt = c.dt \

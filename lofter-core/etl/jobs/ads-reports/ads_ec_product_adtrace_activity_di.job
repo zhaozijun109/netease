@@ -1,0 +1,111 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_adtrace_activity_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select '日' as period, \
+NVL(cardactivitycode,'无cardactivitycode') as cardactivitycode, \
+NVL(adtrace,'无adtrace') as adtrace, \
+NVL(c.name,'无name') as activityname, \
+ \
+count(distinct a.userid) as uv, \
+sum(amount) as amount, \
+sum(hongbaopreferential) as hongbaopreferential, \
+count(distinct a.orderid) as ordernum, \
+ \
+count(distinct case when b.firstday between startday and endday then    a.userid else null end ) as firstuv, \
+sum(case when b.firstday between startday and endday then amount else 0 end  ) as firstamount, \
+sum(case when b.firstday between startday and endday then  hongbaopreferential else 0 end  ) as firsthongbaopreferential, \
+count(distinct case when b.firstday between startday and endday then  a.orderid else null end ) as firstordernum \
+ \
+from  \
+ \
+(select buyerid as userid, \
+(storeprice*productnum-newcouponpreferential-bountypreferential-hongbaopreferential) as amount, \
+hongbaopreferential,orderid,adtrace,createtime,cardactivitycode \
+from lofter_db_dump.ods_db_benefit_order_product_nd \
+where  \
+status>0 \
+and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+) a \
+ \
+ \
+left join \
+ \
+(select userid,min(from_unixtime(cast(first_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as firstday \
+from  \
+lofter.dws_user_pay_type_info_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and pay_type in ('一番赏','市集','抽赏') \
+group by userid) b \
+ \
+on a.userid=b.userid \
+ \
+left  join \
+ \
+(select id,roleid,name,starttime,endtime,hotcount, \
+from_unixtime(cast(starttime / 1000 AS BIGINT), 'yyyy-MM-dd') as startday, \
+from_unixtime(cast(endtime / 1000 AS BIGINT), 'yyyy-MM-dd') as endday \
+from  \
+lofter_db_dump.ods_db_birthday_party_nd) c \
+ \
+  \
+on regexp_replace(a.adtrace, 'ad_trace_birthday_party_', '')=c.id \
+ \
+group by NVL(cardactivitycode,'无cardactivitycode') , \
+NVL(adtrace,'无adtrace') , \
+NVL(c.name,'无name')  \
+ \
+with cube \
+ \
+union \
+ \
+select '30日' as period, \
+NVL(cardactivitycode,'无cardactivitycode') as cardactivitycode, \
+NVL(adtrace,'无adtrace') as adtrace, \
+NVL(c.name,'无name') as activityname, \
+ \
+count(distinct a.userid) as uv, \
+sum(amount) as amount, \
+sum(hongbaopreferential) as hongbaopreferential, \
+count(distinct a.orderid) as ordernum, \
+ \
+count(distinct case when b.firstday between startday and endday then    a.userid else null end ) as firstuv, \
+sum(case when b.firstday between startday and endday then amount else 0 end  ) as firstamount, \
+sum(case when b.firstday between startday and endday then  hongbaopreferential else 0 end) as firsthongbaopreferential, \
+count(distinct case when b.firstday between startday and endday then  a.orderid else null end ) as firstordernum \
+ \
+from  \
+ \
+(select buyerid as userid, \
+(storeprice*productnum-newcouponpreferential-bountypreferential-hongbaopreferential) as amount, \
+hongbaopreferential,orderid,adtrace,createtime,cardactivitycode \
+from lofter_db_dump.ods_db_benefit_order_product_nd \
+where  \
+status>0 \
+and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}'  and '${azkaban.flow.1.days.ago}'  \
+) a \
+ \
+left join \
+ \
+(select userid,min(from_unixtime(cast(first_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as firstday \
+from  \
+lofter.dws_user_pay_type_info_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and pay_type in ('一番赏','市集','抽赏') \
+group by userid) b \
+ \
+on a.userid=b.userid \
+ \
+left join \
+ \
+(select id,roleid,name,starttime,endtime,hotcount, \
+from_unixtime(cast(starttime / 1000 AS BIGINT), 'yyyy-MM-dd') as startday, \
+from_unixtime(cast(endtime / 1000 AS BIGINT), 'yyyy-MM-dd') as endday \
+from  \
+lofter_db_dump.ods_db_birthday_party_nd) c \
+ \
+on regexp_replace(a.adtrace, 'ad_trace_birthday_party_', '')=c.id \
+ \
+group by NVL(cardactivitycode,'无cardactivitycode') , \
+NVL(adtrace,'无adtrace') , \
+NVL(c.name,'无name')  \
+ \
+with cube \

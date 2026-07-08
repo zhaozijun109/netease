@@ -1,0 +1,100 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_callback_push_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, praises, lastPraiseUserId, \
+       loyalistUserId, loyalistHot, firstFollowUserId, \
+       lastFollowWaiting, lastFollowWaitingDays, tags, \
+       hot_30d, subscribe_30d, like_30d, \
+       case when is_emotion_callback > 0 then 'emotion' \
+               when is_interaction_callback > 0 then 'interaction' \
+               when is_hot_callback > 0 then 'hot' \
+               end as callback_type \
+from ( \
+        select a.userId, \
+               b.praises, \
+               b.last_like_userid_180d as lastPraiseUserId, \
+               h.loyalistUserId, h.loyalistHot, \
+               f.firstFollowUserId, \
+               nvl( if(f.lastFollowTime1 > a.last_publish_time and f.lastFollowUserId1 != f.firstFollowUserId, f.lastFollowUserId1, null), \
+                    if(f.lastFollowTime2 > a.last_publish_time and f.lastFollowUserId2 != f.firstFollowUserId, f.lastFollowUserId2, null) ) \
+                 as lastFollowWaiting, \
+               nvl( if(f.lastFollowTime1 > a.last_publish_time and f.lastFollowUserId1 != f.firstFollowUserId, cast((unix_timestamp() - f.lastFollowTime1/1000) / (24 * 3600) as int), null), \
+                    if(f.lastFollowTime2 > a.last_publish_time and f.lastFollowUserId2 != f.firstFollowUserId, cast((unix_timestamp() - f.lastFollowTime1/1000) / (24 * 3600) as int), null)) \
+                  as lastFollowWaitingDays, \
+               concat_ws(',', k.tags) as tags, \
+               if( a.post_count_std >= 3 and b.praises >= 10 and \
+                   a.last_publish_time <= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 30 * 24 * 3600 * 1000L and \
+                   a.last_publish_time >= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 180 * 24 * 3600 * 1000L, 1, 0) as is_emotion_callback, \
+                if( j.level in ('D*', 'D', 'C', 'B', 'A', 'S') and b.hot_30d >= 10 and b.like_30d >= 5 and \
+                    a.last_publish_time <= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 30 * 24 * 3600 * 1000L and \
+                    a.last_publish_time >= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 180 * 24 * 3600 * 1000L, \
+                    1, 0) as is_hot_callback, \
+                 if( j.level in ('D*', 'D', 'C', 'B', 'A', 'S') and b.hot_30d >= 10 and b.subscribe_30d >= 3  and \
+                    a.last_publish_time <= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 30 * 24 * 3600 * 1000L and \
+                    a.last_publish_time >= to_unix_timestamp('${azkaban.flow.1.days.ago}','yyyy-MM-dd') * 1000 - 180 * 24 * 3600 * 1000L, \
+                    1, 0) as is_interaction_callback, \
+                nvl(b.hot_30d,0) as hot_30d, nvl(b.subscribe_30d,0) as subscribe_30d, nvl(b.like_30d,0) as like_30d \
+        from (select * from lofter.dws_par_user_post_dd where dt='${azkaban.flow.1.days.ago}') a \
+        join ( \
+           select userId, nvl(receive_like_uv_30d,0) + nvl(receive_recommend_uv_30d,0) as like_30d, receive_like_cnt as praises, \
+                  nvl(receive_like_cnt_30d,0) + nvl(receive_recommend_cnt_30d,0) + nvl(receive_reproduce_cnt_30d,0) + nvl(receive_collect_cnt_30d,0) as hot_30d, \
+                  receive_collect_cnt_30d as subscribe_30d, last_like_userid_180d \
+           from lofter.dws_par_creator_interaction_dd \
+           where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.userId = b.userId \
+          join (select userId, blogId, last_login_time from lofter.dws_par_user_base_dd where dt = '${azkaban.flow.1.days.ago}') u \
+               on a.userId = u.userId \
+          left join ( \
+            select blogId, \
+                   first_value(if(firstFollowRank = 1, userId, null), true) as firstFollowUserId, \
+                   first_value(if(lastFollowRank = 1, userId, null), true) as lastFollowUserId1, \
+                   first_value(if(lastFollowRank = 1, followTime, null), true) as lastFollowTime1, \
+                   first_value(if(lastFollowRank = 2, userId, null), true) as lastFollowUserId2, \
+                   first_value(if(lastFollowRank = 2, followTime, null), true) as lastFollowTime2 \
+            from ( \
+                select blogId, userId, followTime, \
+                       row_number() over (partition by blogId order by followTime asc) as firstFollowRank, \
+                       row_number() over (partition by blogId order by followTime desc) as lastFollowRank \
+                from lofter_db_dump.ods_db_user_following_nd \
+                where from_unixtime(cast(followTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            ) t where firstFollowRank = 1 or lastFollowRank <= 2 \
+            group by blogId \
+          ) f on u.blogId = f.blogId \
+          left join ( \
+            select postUserId, \
+                   userId as loyalistUserId, hot as loyalistHot \
+            from ( \
+                select postUserId, userId, hot, \
+                  row_number() over (partition by postUserId order by hot desc) as userByHotRank \
+                from ( \
+                    select blogId as postUserId, publisherUserId as userId, count(1) hot \
+                    from lofter_db_dump.ods_db_post_hot_nd \
+                    group by 1, 2 \
+                ) t1 \
+            ) t2 \
+            where userByHotRank = 1 and hot >= 3 \
+          ) h on a.userId = h.postUserId \
+           left join ( \
+                select userId, collect_list(tag) as tags \
+                from ( \
+                    select a.userId, a.tag, \
+                           row_number() over (partition by a.userId order by postCount desc) pk \
+                    from( \
+                        select userId, tag, postCount, \
+                               row_number() over (partition by userId order by postCount desc) tagRank \
+                        from ( \
+                            select userId, tag, count(1) postCount \
+                            from lofter.dwd_post_publish_di lateral view explode(post_tags) tgs as tag \
+                            where dt > date_sub('${azkaban.flow.1.days.ago}', 365) and \
+                                  dt <= '${azkaban.flow.1.days.ago}' \
+                            group by userId, tag \
+                            having postCount >= 2 \
+                        ) t \
+                    ) a \
+                ) t2 \
+                where pk <= 3 \
+                group by userId \
+          ) k on a.userId = k.userId \
+          left join (select userId, level from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}') j on a.userId = j.userId \
+        where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(u.last_login_time/1000 as bigint),'yyyy-MM-dd')) < 7 \
+) x \
+where is_emotion_callback > 0 or is_hot_callback > 0 or is_interaction_callback > 0

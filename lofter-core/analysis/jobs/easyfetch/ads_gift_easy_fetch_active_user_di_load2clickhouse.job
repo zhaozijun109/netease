@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query=" \
+SELECT \
+    dt, \
+    userid, \
+    active_type, \
+    total_pay_amount_1d, \
+    valid_pay_browse_pv_1d, \
+    coin_recharge_amount_1d, \
+    coupon_buy_amount_1d \
+FROM lofter_dm.ads_gift_easy_fetch_active_user_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+"
+params=--dest hive.ads_gift_easy_fetch_active_user_di --partition '${azkaban.flow.1.days.ago}' --batch 2000
+retries=0
+dependencies=ads_gift_easy_fetch_active_user_di

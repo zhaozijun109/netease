@@ -1,0 +1,20 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=5
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dwd_dstr_flow_task_action_di partition(dt='${azkaban.flow.1.days.ago}') \
+select cast(nvl(get_json_object(alg, '$.supportId'), get_json_object(alg, '$.taskId')) as bigint) as flowTaskId, \
+       if(get_json_object(alg, '$.supportId') is not null, 1, 0) as flowTaskType, \
+       cast(ac as bigint) as userId, \
+       conv(regexp_extract(if(r in ('200', '202', '-202') or ( r = '201' and nvl(get_json_object(ext, '$.relatedItemType'), 'tag') != 'tag') or (s = 'related_item' and r in ('107', '108', '109', '124', '-108', '-109', '-124')), tx, ii), '(\\\\w+)_(\\\\w+)', 2), 16, 10) as postId, \
+       conv(regexp_extract(if(r in ('200', '202', '-202') or ( r = '201' and nvl(get_json_object(ext, '$.relatedItemType'), 'tag') != 'tag') or (s = 'related_item' and r in ('107', '108', '109', '124', '-108', '-109', '-124')), tx, ii), '(\\\\w+)_(\\\\w+)', 1), 16, 10) as postBlogId, \
+       t as occurTime,  \
+       if(r in ('0', '200'), 1, 0) as is_exposure, \
+       if((r = '101' and tx is null) or r = '201', 1, 0) as is_click, \
+       case when r in ('107', '108', '109', '124', '202') then 1 when r in ('-108', '-109', '-124', '-202')  then -1 else 0 end as hot \
+from rec.ods_lofter_noblog_action_di \
+where day='${azkaban.flow.1.days.ago}' and nvl(get_json_object(alg, '$.supportId'), get_json_object(alg, '$.taskId')) is not null and nvl(get_json_object(ext, '$.repeat'), '0') != '1' \
+distribute by 1

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select dt, id, Name, statType, bgUv, clickUv, case when user_type = 'new' then 1 else 2 end as userType from lofter_dm.ads_act_new_user_guide_cvr_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --dest lofter_new_user_guide_v2

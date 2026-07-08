@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_ip_deep_creator_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select *, \
+        (row_number() over (partition by ip order by ip_hot_std desc)) / (count(1) over (partition by ip)) as ip_hot_percentile \
+    from ( \
+        select a.userId, a.ip, \
+            count(distinct a.postId) as ip_post_cnt_std, \
+            count(distinct if(a.publishDate >= date_sub('${azkaban.flow.1.days.ago}', 90), a.postId, null)) as ip_post_cnt_90d, \
+            sum(c.hot) as ip_hot_std, \
+            sum(c.hot_90d) ip_hot_90d \
+        from ( \
+            select id as postId, userId, ip, publishDate \
+            from lofter.dim_post \
+                lateral view explode(ips) as ip \
+            where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and \
+                allowView = 0 and contentType in ("图片","文字","视频") and \
+                isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+        ) a \
+        join ( \
+            select ip from lofter.dwd_cold_ip_dd where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.ip = b.ip \
+        left join ( \
+            select postId, hot, hot_90d \
+            from lofter.dws_post_interaction_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) c on a.postId = c.postId \
+        group by 1, 2 \
+    ) t \
+) tt \
+where (ip_post_cnt_std >= 50 or ip_post_cnt_90d >= 15) and (ip_hot_std >= 1000 or ip_hot_90d >= 30 * ip_post_cnt_90d) \

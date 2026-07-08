@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dim_user_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select id, create_time, \
+       from_unixtime(cast(create_time/1000 as bigint), 'yyyy-MM-dd') as create_date, \
+       phone, cast(user_code as bigint) as user_code, \
+       if(account_type == 2, 1, 0) as is_anonymous \
+from vc.ods_db_vc_user_account_nd \
+where from_unixtime(cast(create_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+
+hive.query.02=create or replace view vc.dim_user as select * from vc.dim_user_dd where dt = '${azkaban.flow.1.days.ago}';

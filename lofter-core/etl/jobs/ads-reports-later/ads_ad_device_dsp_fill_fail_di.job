@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_device_dsp_fill_fail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT deviceos \
+	,params ['adCategory'] AS adCategory \
+	,get_json_object(params ['ext'], '$.errorCode') AS errorCode \
+	,params ['ad_source'] AS ad_source \
+	,get_json_object(params ['ext'], '$.errorMsg') AS errorMsg \
+	,count(deviceudid,params['req_uid']) AS pv \
+	,count(DISTINCT deviceudid,params['req_uid']) AS num \
+	,count(DISTINCT deviceudid) AS uv \
+FROM lofter.ods_mda_app_partition_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+    AND actionType = 'advertisement' \
+	AND deviceos = 'Android' \
+	AND eventid = 'ad-77' \
+GROUP BY deviceos \
+	,params ['adCategory'] \
+	,get_json_object(params ['ext'], '$.errorCode') \
+	,params ['ad_source'] \
+	,get_json_object(params ['ext'], '$.errorMsg') \

@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_paid_subscribe_di partition(dt='${azkaban.flow.1.days.ago}') \
+select all_devices, actpwd_trade_devices, actpwd_trade_amount, new_devices, return_devices, \
+       first_pay_users, first_trade_money \
+from ( \
+    select dt, count(distinct deviceUdid) as all_devices \
+    from lofter.dwd_growth_actpwd_access_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe > 0 \
+    group by dt \
+) a \
+left join ( \
+    select dt, sum(amount) as actpwd_trade_amount, count(distinct deviceUdid) as actpwd_trade_devices \
+    from lofter.dwd_paid_subscribe_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_official > 0 \
+    group by dt \
+) b on a.dt = b.dt \
+left join ( \
+    select dt, \
+           count(distinct if(device_type = 'new', deviceUdid, null)) as new_devices, \
+           count(distinct if(device_type = 'return_30', deviceUdid, null)) as return_devices \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe > 0 \
+    group by dt \
+) c on a.dt = b.dt \
+left join ( \
+    select dt, count(a.userid) first_pay_users, sum(amount) first_trade_money \
+    from ( \
+        select dt, userid, actpwd, amount \
+        from ( \
+            select dt, userid, actpwd, amount, row_number() over (partition by userid order by pay_time asc) rk \
+            from lofter.dwd_paid_subscribe_order_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) a1 \
+        where rk = 1 and length(actpwd) > 0 \
+    ) a \
+    join ( \
+        select userid \
+        from ( \
+                select userid,pay_type, first_pay_time, \
+                       row_number() over (partition by userid order by first_pay_time asc) rk \
+                from lofter.dws_user_pay_type_info_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and pay_type not in ('免费礼物','直播-免费礼物','all') \
+        ) t \
+        where rk=1  and pay_type='博客订阅' and \
+              from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) b on a.userid = b.userid \
+    group by dt \
+) d on a.dt = d.dt \

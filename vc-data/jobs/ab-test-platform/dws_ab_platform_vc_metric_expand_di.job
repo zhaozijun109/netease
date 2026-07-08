@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01= \
+with metric_source as ( \
+    select * from vc.dws_ab_platform_vc_metric_di where dt = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table vc.dws_ab_platform_vc_metric_expand_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select base_date, type, period, user_id, metric, metric_value, exp_id, bucket_id \
+from( \
+    select base_date,user_id,period,'vc' as type,'chat_rounds' as metric,cast(chat_rounds as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'chat_30_uv' as metric,cast(chat_30_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'chat_uv' as metric,cast(chat_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'pay_uv' as metric,cast(pay_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'pay_money' as metric,cast(pay_money as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'gmv' as metric,cast(gmv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'roles_cnt' as metric,cast(roles_cnt as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'retain_uv' as metric,cast(retain_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'visit_chat_uv' as metric,cast(visit_chat_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'visit_uv' as metric,cast(visit_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'retain_visit_uv' as metric,cast(retain_visit_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'chat_10_uv' as metric,cast(chat_10_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'order_cnt' as metric,cast(order_cnt as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'new_gift_package_pay_uv' as metric,cast(new_gift_package_pay_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'new_gift_package_amount' as metric,cast(new_gift_package_amount as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'new_gift_package_order_cnt' as metric,cast(new_gift_package_order_cnt as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'old_gift_package_pay_uv' as metric,cast(old_gift_package_pay_uv as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'old_gift_package_amount' as metric,cast(old_gift_package_amount as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+    union all \
+    select base_date,user_id,period,'vc' as type,'old_gift_package_order_cnt' as metric,cast(old_gift_package_order_cnt as double) as metric_value, exp_id, bucket_id \
+    from metric_source \
+)
+dependencies=dws_ab_platform_vc_metric_di

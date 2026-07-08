@@ -1,0 +1,89 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag pve用户消耗体力 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               'pve用户消耗体力'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (select userId, \
+                                         'pve用户消耗体力' as tag, \
+                                         'DAY_7' as cat, \
+                                         case when total_costStamina = 0 then '0' \
+                                             when total_costStamina > 0 and total_costStamina <= 50 then '0-50' \
+                                             when total_costStamina > 50 and total_costStamina <= 100 then '50-100' \
+                                             when total_costStamina > 100 and total_costStamina <= 300 then '100-300' \
+                                             when total_costStamina > 300 and total_costStamina <= 500 then '300-500' \
+                                             else '500及以上' \
+                                         end as grp \
+                                  from ( \
+                                         select userId, \
+                                                sum(total_costStamina) as total_costStamina \
+                                         from lofter.dws_pve_user_coststamina_role_di \
+                                         where dt > date_sub('${azkaban.flow.1.days.ago}',7) and dt <= '${azkaban.flow.1.days.ago}' \
+                                         group by userId \
+                                  ) t1 \
+                               \
+                                  union all \
+                               \
+                                  select userId, \
+                                         'pve用户消耗体力' as tag, \
+                                         'DAY_15' as cat, \
+                                         case when total_costStamina = 0 then '0' \
+                                             when total_costStamina > 0 and total_costStamina <= 50 then '0-50' \
+                                             when total_costStamina > 50 and total_costStamina <= 100 then '50-100' \
+                                             when total_costStamina > 100 and total_costStamina <= 300 then '100-300' \
+                                             when total_costStamina > 300 and total_costStamina <= 500 then '300-500' \
+                                             else '500及以上' \
+                                         end as grp \
+                                  from ( \
+                                         select userId, \
+                                                sum(total_costStamina) as total_costStamina \
+                                         from lofter.dws_pve_user_coststamina_role_di \
+                                         where dt > date_sub('${azkaban.flow.1.days.ago}',15) and dt <= '${azkaban.flow.1.days.ago}' \
+                                         group by userId \
+                                  ) t1 \
+                               \
+                                  union all \
+                               \
+                                  select userId, \
+                                         'pve用户消耗体力' as tag, \
+                                         'DAY_30' as cat, \
+                                         case when total_costStamina = 0 then '0' \
+                                             when total_costStamina > 0 and total_costStamina <= 50 then '0-50' \
+                                             when total_costStamina > 50 and total_costStamina <= 100 then '50-100' \
+                                             when total_costStamina > 100 and total_costStamina <= 300 then '100-300' \
+                                             when total_costStamina > 300 and total_costStamina <= 500 then '300-500' \
+                                             else '500及以上' \
+                                         end as grp \
+                                  from ( \
+                                         select userId, \
+                                                sum(total_costStamina) as total_costStamina \
+                                         from lofter.dws_pve_user_coststamina_role_di \
+                                         where dt > date_sub('${azkaban.flow.1.days.ago}',30) and dt <= '${azkaban.flow.1.days.ago}' \
+                                         group by userId \
+                                  ) t1 \
+                               \
+                                  union all \
+                               \
+                                  select userId, \
+                                         'pve用户消耗体力' as tag, \
+                                         'DAY_90' as cat, \
+                                         case when total_costStamina = 0 then '0' \
+                                             when total_costStamina > 0 and total_costStamina <= 50 then '0-50' \
+                                             when total_costStamina > 50 and total_costStamina <= 100 then '50-100' \
+                                             when total_costStamina > 100 and total_costStamina <= 300 then '100-300' \
+                                             when total_costStamina > 300 and total_costStamina <= 500 then '300-500' \
+                                             else '500及以上' \
+                                         end as grp \
+                                  from ( \
+                                         select userId, \
+                                                sum(total_costStamina) as total_costStamina \
+                                         from lofter.dws_pve_user_coststamina_role_di \
+                                         where dt > date_sub('${azkaban.flow.1.days.ago}',90) and dt <= '${azkaban.flow.1.days.ago}' \
+                                         group by userId \
+                                  ) t1 ) "

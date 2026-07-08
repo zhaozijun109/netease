@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_challenge_day_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select count(distinct a.postid) as post_cnt,count(distinct a.userid) as user_cnt \
+,sum(c.current_browse_cnt) as browse_cnt \
+,sum(c.current_browse_dv) as browse_dv \
+,sum(c.current_browse_new_dv) as browse_dv_new_register \
+,count(distinct case when recomstatus = 1 then a.postid end) as recom_post_cnt \
+from(select id as postid,userid,title,url,publishdate,tag,recomstatus \
+from lofter.dim_post_article \
+lateral view explode(tags) t as tag \
+where publishdate = '${azkaban.flow.1.days.ago}') a  \
+join  \
+(select tag \
+from lofter_db_dump.ods_db_challenge_tag_nd \
+where type = 2 and status = 1 \
+) b  \
+on a.tag = b.tag \
+left join  \
+(select postid,count(deviceudid) as current_browse_cnt \
+,count(distinct deviceudid) as current_browse_dv \
+,count(distinct case when is_new_user = 1 then deviceudid end) as current_browse_new_dv \
+from lofter.dwd_post_browse_di  \
+where dt = '${azkaban.flow.1.days.ago}' and is_real > 0  \
+group by postid \
+) c  \
+on a.postid = c.postid \

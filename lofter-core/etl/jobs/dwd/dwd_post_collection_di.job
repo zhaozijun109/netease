@@ -1,0 +1,47 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=10
+hive.query.01=insert overwrite table lofter.dwd_post_collection_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.postid,a.userid,action_type,post_content_type,a.deviceudid,is_real,scene,source1_scene,source2_scene, \
+      module,source1_module,source2_module,commentid,costtime,occurtime, \
+      b.collectionId, \
+      if(c.deviceUdid is not null and c.device_type = 'new', 1, 0) as is_collection_new_user,a.post_userid,  \
+      if(c.deviceUdid is not null and c.device_type = 'return_30', 1, 0) as is_collection_return_user \
+from ( \
+    select postid,userid,optype as action_type,post_content_type,deviceUdid,0 as is_real, \
+           scene,source1_scene,source2_scene,module,source1_module,source2_module,0 as commentId,0 as costTime,occurTime,blogId as post_userid \
+    from lofter.dwd_post_hot_di \
+    where dt='${azkaban.flow.1.days.ago}' and is_collection=1 \
+    union all \
+    select postid,userid,'comment' as action_type,post_content_type,deviceUdid,0 as is_real, \
+           scene,source1_scene,source2_scene,module,source1_module,source2_module,commentId,0 as costTime,occurTime,blogId as post_userid \
+    from lofter.dwd_post_response_di \
+    where dt='${azkaban.flow.1.days.ago}' and is_collection=1 \
+    union all \
+    select postid,userid,'share' as action_type,post_content_type,deviceUdid,0 as is_real, \
+           scene,source1_scene,source2_scene,module,source1_module,source2_module, 0 as commentId,0 as costTime,occurTime,blogId as post_userid  \
+    from lofter.dwd_post_share_di \
+    where dt='${azkaban.flow.1.days.ago}' and is_collection=1 \
+    union all \
+    select postid,userid,'browse' as action_type,post_content_type,deviceUdid,is_real, \
+           scene,source1_scene,source2_scene,module,source_module,source2_module,0 as commentId,duration as costTime,occurTime,post_userid  \
+    from lofter.dwd_post_browse_di \
+    where dt='${azkaban.flow.1.days.ago}' and is_collection=1 \
+    union all \
+    select postid,userid,if(reaction is null, 'expose', 'click') as action_type,post_content_type,deviceUdid,0 as is_real, \
+           scene,source1_scene,source2_scene,module,source1_module,source2_module,0 as commentId,0 as costTime,occurTime,post_userid  \
+    from lofter.dwd_post_expose_di \
+    where dt='${azkaban.flow.1.days.ago}' and is_collection=1 and (reaction is null or reaction = 'click') \
+) a \
+join ( \
+    select postId,collectionId \
+    from lofter_db_dump.ods_db_post_collection_record_nd \
+    where status=0 \
+    group by postId,collectionId \
+) b on a.postId = b.postId \
+left join ( \
+    select deviceUdid, device_type, land_nonrec_itemId itemId \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt='${azkaban.flow.1.days.ago}' and land_nonrec_content_type = '合集' \
+) c on a.deviceUdid = c.deviceUdid and b.collectionId = c.itemId \
+distribute by postId % 5
+dependencies=dwd_post_hot_di,dwd_post_response_di,dwd_post_share_di,dwd_post_browse_di,dwd_post_expose_di,dwd_device_growth_attribution_di

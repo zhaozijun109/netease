@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ads.GrowthTraceSource
+params=--date ${azkaban.flow.1.days.ago} --output /user/da_lofter/warehouse/growth_trace_source --callback /user/da_lofter/warehouse/callback_trace_source

@@ -1,0 +1,177 @@
+type=sparksql
+hive.query.01=  \
+WITH author_groups AS ( \
+SELECT '大盘' AS group_name \
+UNION ALL SELECT '活人感作者整体' \
+UNION ALL SELECT '图作者' \
+UNION ALL SELECT '文作者' \
+UNION ALL SELECT 'ugc作者' \
+), \
+author_tags_1d AS ( \
+SELECT \
+a.userid, \
+MAX(CASE \
+WHEN a.author_type = '图片作者' AND c.post_main_content_type = '图片' THEN '图作者' \
+WHEN a.author_type = '图片作者' AND c.post_main_content_type = '文字' THEN '文作者' \
+WHEN a.author_type = 'ugc作者' THEN 'ugc作者' \
+END) AS author_group, \
+'活人感作者整体' AS human_sense_group \
+FROM lofter_dm.ads_human_sense_picture_author_result_di a \
+LEFT JOIN lofter.dws_par_creator_dd c \
+ON a.userid = c.userid AND a.dt = c.dt \
+WHERE a.dt = '${azkaban.flow.1.days.ago}' \
+AND a.is_finall_human_flag = 1 \
+GROUP BY a.userid \
+), \
+author_180d_pool AS ( \
+SELECT userid \
+FROM lofter.dwd_post_publish_di \
+WHERE dt BETWEEN DATE_SUB('${azkaban.flow.1.days.ago}', 180) AND '${azkaban.flow.1.days.ago}' \
+GROUP BY userid \
+), \
+user_group_mapping AS ( \
+SELECT userid, '大盘' AS group_name \
+FROM author_180d_pool \
+UNION ALL \
+SELECT userid, group_name \
+FROM ( \
+SELECT userid, STACK(2, human_sense_group, author_group) AS group_name \
+FROM author_tags_1d \
+) t \
+WHERE group_name IS NOT NULL \
+), \
+dau_fans_stat AS ( \
+SELECT \
+m.group_name, \
+COUNT(DISTINCT u.userid) AS dau_cnt, \
+SUM(f.fans_1d) AS fans_add_cnt \
+FROM user_group_mapping m \
+LEFT JOIN lofter.dws_par_user_active_dd u \
+ON m.userid = u.userid AND u.dt = '${azkaban.flow.1.days.ago}' AND u.active_days_1d = 1 \
+LEFT JOIN lofter.dws_par_user_fans_dd f \
+ON m.userid = f.userid AND f.dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY m.group_name \
+), \
+post_consume_base AS ( \
+SELECT \
+postid, \
+SUM(IF(reaction IS NULL, 1, 0)) AS exp_cnt, \
+SUM(IF(reaction = 'click', 1, 0)) AS click_cnt, \
+SUM(IF(reaction IS NULL AND is_rec = 1, 1, 0)) AS exp_rec_cnt, \
+SUM(IF(reaction = 'click' AND is_rec = 1, 1, 0)) AS click_rec_cnt, \
+SUM(IF(reaction IS NULL AND is_rec = 0, 1, 0)) AS exp_non_rec_cnt, \
+SUM(IF(reaction = 'click' AND is_rec = 0, 1, 0)) AS click_non_rec_cnt \
+FROM lofter.dwd_post_expose_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY postid \
+), \
+post_hot_base AS ( \
+SELECT postid, COUNT(*) AS hot_pv \
+FROM lofter.dwd_post_hot_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY postid \
+), \
+publish_13d_raw AS ( \
+SELECT userid, postid, dt \
+FROM lofter.dwd_post_publish_di \
+WHERE dt BETWEEN DATE_SUB('${azkaban.flow.1.days.ago}', 13) AND '${azkaban.flow.1.days.ago}' \
+), \
+publish_base AS ( \
+SELECT \
+p.userid, \
+p.postid, \
+t.author_group, \
+t.human_sense_group \
+FROM publish_13d_raw p \
+LEFT JOIN author_tags_1d t ON p.userid = t.userid \
+WHERE p.dt = '${azkaban.flow.1.days.ago}' \
+), \
+post_metrics_stat AS ( \
+SELECT \
+CASE \
+WHEN GROUPING(author_group) = 1 AND GROUPING(human_sense_group) = 1 THEN '大盘' \
+WHEN GROUPING(author_group) = 1 THEN human_sense_group \
+ELSE author_group \
+END AS group_name, \
+COUNT(DISTINCT p.userid) AS publish_user_cnt, \
+COUNT(p.postid) AS publish_post_cnt, \
+SUM(c.exp_cnt) AS exp_pv, \
+SUM(c.click_cnt) AS click_pv, \
+SUM(c.exp_rec_cnt) AS exp_pv_rec, \
+SUM(c.click_rec_cnt) AS click_pv_rec, \
+SUM(c.exp_non_rec_cnt) AS exp_pv_non_rec, \
+SUM(c.click_non_rec_cnt) AS click_pv_non_rec, \
+SUM(h.hot_pv) AS hot_pv \
+FROM publish_base p \
+LEFT JOIN post_consume_base c ON p.postid = c.postid \
+LEFT JOIN post_hot_base h ON p.postid = h.postid \
+GROUP BY GROUPING SETS ((), (human_sense_group), (author_group)) \
+HAVING group_name IS NOT NULL \
+), \
+weekly_publish_users AS ( \
+SELECT \
+userid, \
+MAX(IF(dt BETWEEN DATE_SUB('${azkaban.flow.1.days.ago}', 13) AND DATE_SUB('${azkaban.flow.1.days.ago}', 7), 1, 0)) AS is_last_week, \
+MAX(IF(dt BETWEEN DATE_SUB('${azkaban.flow.1.days.ago}', 6) AND '${azkaban.flow.1.days.ago}', 1, 0)) AS is_this_week \
+FROM publish_13d_raw \
+GROUP BY userid \
+), \
+retention_eval AS ( \
+SELECT \
+w.userid, \
+t.author_group, \
+t.human_sense_group, \
+w.is_this_week AS is_retained \
+FROM weekly_publish_users w \
+LEFT JOIN author_tags_1d t ON w.userid = t.userid \
+WHERE w.is_last_week = 1 \
+), \
+retention_stat AS ( \
+SELECT \
+CASE \
+WHEN GROUPING(author_group) = 1 AND GROUPING(human_sense_group) = 1 THEN '大盘' \
+WHEN GROUPING(author_group) = 1 THEN human_sense_group \
+ELSE author_group \
+END AS group_name, \
+COUNT(r.userid) AS last_week_publish_user_cnt, \
+SUM(r.is_retained) AS retained_publish_user_cnt \
+FROM retention_eval r \
+GROUP BY GROUPING SETS ((), (human_sense_group), (author_group)) \
+HAVING group_name IS NOT NULL \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_ecology_humansense_picture_author_report_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+g.group_name AS author_group_name, \
+COALESCE(df.dau_cnt, 0) AS dau_cnt, \
+COALESCE(p.publish_user_cnt, 0) AS publish_user_cnt, \
+COALESCE(p.publish_post_cnt, 0) AS publish_post_cnt, \
+COALESCE(df.fans_add_cnt, 0) AS fans_add_cnt, \
+CASE WHEN COALESCE(p.publish_user_cnt, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(df.fans_add_cnt, 0) / p.publish_user_cnt, 4) END AS fans_add_per_user, \
+COALESCE(r.last_week_publish_user_cnt, 0) AS last_week_publish_user_cnt, \
+COALESCE(r.retained_publish_user_cnt, 0) AS retained_publish_user_cnt, \
+CASE WHEN COALESCE(r.last_week_publish_user_cnt, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(r.retained_publish_user_cnt, 0) / r.last_week_publish_user_cnt, 4) END AS publish_retention_rate, \
+COALESCE(p.hot_pv, 0) AS hot_pv, \
+COALESCE(p.exp_pv, 0) AS exp_pv, \
+COALESCE(p.click_pv, 0) AS click_pv, \
+CASE WHEN COALESCE(p.publish_post_cnt, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(p.exp_pv, 0) / p.publish_post_cnt, 4) END AS exp_per_post, \
+CASE WHEN COALESCE(p.publish_post_cnt, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(p.click_pv, 0) / p.publish_post_cnt, 4) END AS click_per_post, \
+CASE WHEN COALESCE(p.exp_pv, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(p.click_pv, 0) / p.exp_pv, 4) END AS pv_ctr, \
+COALESCE(p.exp_pv_rec, 0) AS exp_pv_rec, \
+COALESCE(p.click_pv_rec, 0) AS click_pv_rec, \
+CASE WHEN COALESCE(p.exp_pv_rec, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(p.click_pv_rec, 0) / p.exp_pv_rec, 4) END AS pv_ctr_rec, \
+COALESCE(p.exp_pv_non_rec, 0) AS exp_pv_non_rec, \
+COALESCE(p.click_pv_non_rec, 0) AS click_pv_non_rec, \
+CASE WHEN COALESCE(p.exp_pv_non_rec, 0) = 0 THEN 0.0 \
+ELSE ROUND(COALESCE(p.click_pv_non_rec, 0) / p.exp_pv_non_rec, 4) END AS pv_ctr_non_rec \
+FROM author_groups g \
+LEFT JOIN dau_fans_stat df ON g.group_name = df.group_name \
+LEFT JOIN post_metrics_stat p ON g.group_name = p.group_name \
+LEFT JOIN retention_stat r ON g.group_name = r.group_name
+
+dependencies=ads_human_sense_picture_author_result_di

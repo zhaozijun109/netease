@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_ip_extend_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.ip, \
+       case when b.ip is not null then 1 else 0 end as is_core, \
+       case when c.ip is not null then 1 else 0 end as is_new, \
+       case when d.ip is not null then 1 else 0 end as is_film_tv_star, \
+       case when e.ip is not null then 1 else 0 end as is_game_cartoon \
+from ( \
+    select ip,categories,post_cnt_1d,valid_creator_cnt_30d,premium_post_cnt \
+    from lofter.dws_ip_supply_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select ip \
+    from ( \
+        select ip,row_number()over(order by post_cnt_1d desc) rk \
+        from lofter.dws_ip_supply_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+       and ip not in ('同人文','oc','双男主','病娇','绘画约稿','原创小说','甜文','绘画约稿','推文','黑化','绘画设定','漫画','乙女','手绘','摄影作品','gl','沉浸式短篇','板绘','指绘','古言','诗歌散文','插画','爽文','壁纸','设计','现言','头像','观影体','爱情','心情','体育运动','搞笑梗图','美食分享','舞蹈') \
+    ) \
+    where rk<=50 \
+) b on a.ip=b.ip \
+left join ( \
+    select a.ip \
+    from ( \
+        select dt,ip \
+        from lofter.dim_ip_dd \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by dt,ip \
+    ) a \
+    left join ( \
+        select dt,ip \
+        from lofter.dim_ip_dd \
+        where dt='${azkaban.flow.30.days.ago}' \
+        group by  dt,ip \
+    ) b on a.ip=b.ip \
+    where b.ip is null \
+) c on a.ip=c.ip \
+left join ( \
+    select ip \
+    from lofter.dim_ip_dd \
+        lateral view explode(categories) t1 as category \
+    where dt='${azkaban.flow.1.days.ago}' and split(category,'-')[0] in ('影视','娱乐') \
+    group by ip \
+) d on a.ip=d.ip \
+left join ( \
+    select ip \
+    from lofter.dim_ip_dd \
+        lateral view explode(categories) t1 as category \
+    where dt='${azkaban.flow.1.days.ago}' and split(category,'-')[0] in ('游戏','二次元') \
+    group by ip \
+) e on a.ip=e.ip \
+where coalesce(b.ip, c.ip, d.ip, e.ip) is not null
+hive.query.02=create or replace view lofter.dim_ip_extend as select * from lofter.dim_ip_extend_dd where dt = '${azkaban.flow.1.days.ago}';

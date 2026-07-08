@@ -1,0 +1,11 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "GenericPush",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "push_topic", "type": "string"},
+    {"name": "push_params", "type": "string"},
+    {"name": "priority", "type": "long"}
+  ]
+}

@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=\
+insert overwrite lofter.dwd_beginner_guide_page_events_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, customudid, appversion, deviceudid, \
+    count(if(eventId = 'z6-1' and itemtype = 'CATEGORY', eventId, null)) as category_expose_cnt, \
+    count(if(eventId = 'z6-1' and itemtype = 'IP', eventId, null)) as ip_expose_cnt, \
+    count(if(eventId = 'z6-1' and itemtype = 'TAG', eventId, null)) as tag_expose_cnt, \
+    count(if(eventId = 'z6-14' and itemtype = 'CATEGORY', eventId, null)) as click_cancel_category_cnt, \
+    count(if(eventId = 'z6-14' and itemtype = 'IP', eventId, null)) as click_cancel_ip_cnt, \
+    count(if(eventId = 'z6-14' and itemtype = 'TAG', eventId, null)) as click_cancel_tag_cnt, \
+    count(if(eventId = 'z6-13' and itemtype = 'CATEGORY', eventId, null)) as click_choose_category_cnt, \
+    count(if(eventId = 'z6-13' and itemtype = 'IP', eventId, null)) as click_choose_ip_cnt, \
+    count(if(eventId = 'z6-13' and itemtype = 'TAG', eventId, null)) as click_choose_tag_cnt, \
+    count(if(eventId = 'z6-3', eventId, null)) as click_skip_cnt, \
+    count(if(eventId = 'z6-17', eventId, null)) as click_rename_cnt, \
+    deviceos, \
+    count(if(eventId = 'z-6666', eventId, null)) as app_front2backend_cnts, \
+    count(if(eventId = 'z-8888', eventId, null)) as app_backend2front_cnts, \
+    COUNT(IF(eventId = 'g1-89'  \
+    	AND scene IN ('note', 'largepicture')  \
+    	AND ( \
+    		(lower(deviceos) = 'android' AND params['module'] NOT IN ('note_collection')) \
+    		OR \
+    		(lower(deviceos) = 'ios' AND ( \
+    			(cast(split(appversion,'\\\\.')[0] as int) < 8) \
+    			OR (cast(split(appversion,'\\\\.')[0] as int) = 8 AND cast(split(appversion,'\\\\.')[1] as int) < 2) \
+    			OR (cast(split(appversion,'\\\\.')[0] as int) = 8 AND cast(split(appversion,'\\\\.')[1] as int) = 2 AND cast(split(appversion,'\\\\.')[2] as int) < 38) \
+    			OR params['module'] NOT IN ('note_collection') \
+    		)) \
+    	),  \
+    	eventId, NULL)) as slide_right_cnts, \
+    COUNT(IF(eventId = 'g1-90'  \
+    	AND scene IN ('note', 'largepicture')  \
+    	AND ( \
+    		(lower(deviceos) = 'android' AND params['module'] NOT IN ('note_collection')) \
+    		OR \
+    		(lower(deviceos) = 'ios' AND ( \
+    			(cast(split(appversion,'\\\\.')[0] as int) < 8) \
+    			OR (cast(split(appversion,'\\\\.')[0] as int) = 8 AND cast(split(appversion,'\\\\.')[1] as int) < 2) \
+    			OR (cast(split(appversion,'\\\\.')[0] as int) = 8 AND cast(split(appversion,'\\\\.')[1] as int) = 2 AND cast(split(appversion,'\\\\.')[2] as int) < 38) \
+    			OR params['module'] NOT IN ('note_collection') \
+    		)) \
+    	),  \
+    	eventId, NULL)) as slide_left_cnts, \
+    count(distinct(case when eventId = 'g1-164' and itemtype = 'COMMENT' then itemid end)) as exposed_comment_cnts, \
+    count(if(eventId = 'g1-178', eventId, null)) as underscore_window_exposed_cnt, \
+	count(if(eventId = 'b1-45' and  get_json_object(params['ext'], '$.isCover') = '1', eventId, null)) as article_post_cover_exposed_cnt, \
+	count(if(eventId = 'b1-46' and  get_json_object(params['ext'], '$.isCover') = '1', eventId, null)) as article_post_cover_clicked_cnt, \
+	count(if(eventId = 'g1-181', eventId, null)) as watch_later_func_usage_cnt, \
+	count(if(eventId = 'b1-80', eventId, null)) as discover_refresh_tip_exposed_cnt, \
+	count(if(eventId = 'b1-81', eventId, null)) as discover_refresh_tip_click_cnt \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' and eventId in('z6-1','z6-14','z6-13','z6-3','z6-17','z-6666','z-8888', 'g1-89', 'g1-90', 'g1-164', 'g1-178', 'b1-46','b1-45','g1-181','b1-80','b1-81') \
+group by userId, customudid, appversion, deviceudid, deviceos

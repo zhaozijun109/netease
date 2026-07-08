@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.ProjectConfigDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.ProjectConfigDO">
+    <id column="id" jdbcType="BIGINT" property="id" />
+    <result column="config_key" jdbcType="VARCHAR" property="configKey" />
+    <result column="config_value" jdbcType="VARCHAR" property="configValue" />
+    <result column="namespace" jdbcType="VARCHAR" property="namespace" />
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime" />
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, config_key, config_value, namespace, create_time, modify_time
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from project_config
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from project_config
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.ProjectConfigDO">
+    insert into project_config (id, config_key, config_value, 
+      namespace, create_time, modify_time
+      )
+    values (#{id,jdbcType=BIGINT}, #{configKey,jdbcType=VARCHAR}, #{configValue,jdbcType=VARCHAR}, 
+      #{namespace,jdbcType=VARCHAR}, #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP}
+      )
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ProjectConfigDO">
+    insert into project_config
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="configKey != null">
+        config_key,
+      </if>
+      <if test="configValue != null">
+        config_value,
+      </if>
+      <if test="namespace != null">
+        namespace,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="configKey != null">
+        #{configKey,jdbcType=VARCHAR},
+      </if>
+      <if test="configValue != null">
+        #{configValue,jdbcType=VARCHAR},
+      </if>
+      <if test="namespace != null">
+        #{namespace,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ProjectConfigDO">
+    update project_config
+    <set>
+      <if test="configKey != null">
+        config_key = #{configKey,jdbcType=VARCHAR},
+      </if>
+      <if test="configValue != null">
+        config_value = #{configValue,jdbcType=VARCHAR},
+      </if>
+      <if test="namespace != null">
+        namespace = #{namespace,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.ProjectConfigDO">
+    update project_config
+    set config_key = #{configKey,jdbcType=VARCHAR},
+      config_value = #{configValue,jdbcType=VARCHAR},
+      namespace = #{namespace,jdbcType=VARCHAR},
+      create_time = #{createTime,jdbcType=TIMESTAMP},
+      modify_time = #{modifyTime,jdbcType=TIMESTAMP}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+
+  <select id="selectValueByKey" parameterType="string" resultType="string">
+    select `config_value`
+    from project_config
+    where config_key = #{key,jdbcType=VARCHAR}
+  </select>
+
+  <select id="selectValueByKeyAndNamespace" resultType="string">
+    select `config_value`
+    from project_config
+    where config_key = #{key,jdbcType=VARCHAR}
+    and namespace = #{namespace,jdbcType=VARCHAR}
+  </select>
+
+  <update id="updateValueByKeyAndNamespace">
+    update project_config
+    set config_value = #{value,jdbcType=VARCHAR}, modify_time = now()
+    where
+    config_key = #{key,jdbcType=VARCHAR}
+    and
+    namespace = #{namespace,jdbcType=VARCHAR}
+  </update>
+</mapper>

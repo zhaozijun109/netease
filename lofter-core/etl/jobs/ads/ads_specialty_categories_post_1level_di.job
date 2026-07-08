@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=with creator_double_perspective_post \
+as \
+(  \
+    select dt,postid,ips,level1,publish_date,is_premium,is_rec,exposure_pv,click_pv,real_pv,comment_pv,hot_pv,share_pv,supported_exposure_pv,supported_realbrowse_pv,gift_amount,sum_gift_amount,new_devices,prev_day_new_retain_devices,blogid,creator_level,is_valid_creator_30d  \
+    from   \
+    (  \
+        select dt,postid,ips,level3,publish_date,is_premium,is_rec,exposure_pv,click_pv,real_pv,comment_pv,hot_pv,share_pv,supported_exposure_pv,supported_realbrowse_pv,gift_amount,sum_gift_amount,new_devices,prev_day_new_retain_devices,blogid,level as creator_level,is_valid_creator_30d \
+        from lofter_dm.ads_creator_double_perspective_post_di  \
+        lateral view explode(split(double_perspective_type,'\\\\|')) t as level3  \
+        where dt='${azkaban.flow.1.days.ago}'  \
+    ) t1  \
+    join  \
+    (  \
+        select level1,level2,level3  \
+        from lofter_dm.ads_specialty_categories_level  \
+    ) t2  \
+    on t1.level3=t2.level3  \
+    group by dt,postid,ips,level1,publish_date,is_premium,is_rec,exposure_pv,click_pv,real_pv,comment_pv,hot_pv,share_pv,supported_exposure_pv,supported_realbrowse_pv,gift_amount,sum_gift_amount,new_devices,prev_day_new_retain_devices,blogid,creator_level,is_valid_creator_30d  \
+)  \
+insert overwrite table lofter_dm.ads_specialty_categories_post_1level_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.level1,exposure_pv,supported_exposure_pv,click_pv,real_pv,supported_realbrowse_pv,hot_pv,comment_pv,all_posts,posts_1d,premium_posts,rec_posts,gift_amount,sum_gift_amount,new_devices,prev_day_new_retain_devices,all_ips,creators_1d,creators_s_1d,creators_a_1d,creators_b_1d,creators_c_1d,creators_d_1d,creators_dstar_1d,valid_creator \
+from \
+( \
+	select level1,  \
+	sum(exposure_pv) exposure_pv,  \
+	sum(supported_exposure_pv) supported_exposure_pv,  \
+	sum(click_pv) click_pv,  \
+	sum(real_pv) real_pv,  \
+	sum(supported_realbrowse_pv) supported_realbrowse_pv,  \
+	sum(hot_pv) hot_pv,  \
+	sum(comment_pv) comment_pv,  \
+	count(distinct postid) all_posts,  \
+	count(distinct case when to_Date(publish_date)=dt then postid end) posts_1d,  \
+	count(distinct case when is_premium=1 then postid end) premium_posts,  \
+	count(distinct case when is_rec=1 then postid end) rec_posts,  \
+	sum(gift_amount) gift_amount,  \
+	sum(sum_gift_amount) sum_gift_amount,  \
+	sum(new_devices) new_devices,  \
+	sum(prev_day_new_retain_devices) prev_day_new_retain_devices,  \
+	count(distinct case when to_Date(publish_date)=dt then blogid end) creators_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='S' then blogid end) creators_s_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='A' then blogid end) creators_a_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='B' then blogid end) creators_b_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='C' then blogid end) creators_c_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='D' then blogid end) creators_d_1d,  \
+	count(distinct case when to_Date(publish_date)=dt and creator_level='D*' then blogid end) creators_dstar_1d,  \
+	count(distinct case when is_valid_creator_30d=1 then blogid end) valid_creator \
+	from   \
+	creator_double_perspective_post  \
+	group by level1 \
+) a \
+left join \
+( \
+	select level1,count(distinct ip) all_ips \
+	from creator_double_perspective_post \
+	lateral view explode(split(ips,'\\\\|')) t as ip  \
+	group by level1 \
+) b \
+on a.level1=b.level1
+dependencies=ads_creator_double_perspective_post_di

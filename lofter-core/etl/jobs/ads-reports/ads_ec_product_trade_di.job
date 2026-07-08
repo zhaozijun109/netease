@@ -1,0 +1,230 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='1') \
+select nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct a.orderId) as pv, \
+    count(distinct a.buyerId) as uv,sum(a.amount) as amount, \
+    count(distinct b.userid) as benefit_first_pay_uv, \
+    sum(case when b.userid is not null then a.amount else 0 end) as benefit_first_pay_amount, \
+    count(distinct c.userid) as all_first_pay_uv, \
+    sum(case when c.userid is not null then a.amount else 0 end) as all_first_pay_amount, \
+    count(distinct if(d.createDate = a.day, d.id, null)) as new_1_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 7 and d.createDate <= a.day, d.id, null)) as new_7_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 30 and d.createDate <= a.day, d.id, null))as new_30_create_uv \
+from ( \
+    select m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+    from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') =  '${azkaban.flow.1.days.ago}' and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+    ) m \
+    join ( \
+        select id as orderId,supplierId,amount from lofter_db_dump.ods_db_benefit_order_nd group by id ,supplierId,amount \
+    ) n on m.orderId = n.orderId \
+    group by m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+) a \
+left join ( \
+    select userid, \
+           from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+           first_pay_item_id \
+    from lofter.dws_user_pay_type_info_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and pay_type='市集' \
+    group by userid,from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd'),first_pay_item_id \
+) b on a.buyerId=b.userid and a.day=b.day  and a.productId=b.first_pay_item_id \
+left join ( \
+    select userid,day,first_pay_item_id \
+    from ( \
+        select userid, \
+               pay_type, \
+               first_pay_time, \
+               from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+               first_pay_item_id, \
+               rank() over (partition by userid order by  first_pay_time asc ) as rk \
+        from lofter.dws_user_pay_type_info_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    where rk=1 and pay_type='市集' \
+    group by userid,day,first_pay_item_id \
+) c on a.buyerId=c.userid and a.day=c.day and a.productId=c.first_pay_item_id \
+left join lofter.dim_user d on a.buyerId = d.id \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.02=insert overwrite table lofter_dm.ads_ec_product_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='7') \
+select nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct a.orderId) as pv, \
+    count(distinct a.buyerId) as uv,sum(a.amount) as amount, \
+    count(distinct b.userid) as benefit_first_pay_uv, \
+    sum(case when b.userid is not null then a.amount else 0 end) as benefit_first_pay_amount, \
+    count(distinct c.userid) as all_first_pay_uv, \
+    sum(case when c.userid is not null then a.amount else 0 end) as all_first_pay_amount, \
+    count(distinct if(d.createDate = a.day, d.id, null)) as new_1_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 7 and d.createDate <= a.day, d.id, null)) as new_7_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 30 and d.createDate <= a.day, d.id, null))as new_30_create_uv \
+from ( \
+    select m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+    from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.1.days.ago}' and \
+                  datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+    ) m \
+    join ( \
+        select id as orderId,supplierId,amount from lofter_db_dump.ods_db_benefit_order_nd group by id ,supplierId,amount \
+    ) n on m.orderId = n.orderId \
+    group by m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+) a \
+left join ( \
+    select userid, \
+           from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+           first_pay_item_id \
+    from lofter.dws_user_pay_type_info_dd where dt = '${azkaban.flow.1.days.ago}' and pay_type='市集' \
+    group by userid,from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd'),first_pay_item_id \
+) b on a.buyerId=b.userid and a.day=b.day and a.productId=b.first_pay_item_id \
+left join ( \
+    select userid,day,first_pay_item_id \
+    from ( \
+        select userid, \
+               pay_type, \
+               first_pay_time, \
+               from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+               first_pay_item_id, \
+               rank() over (partition by userid order by  first_pay_time asc ) as rk \
+        from lofter.dws_user_pay_type_info_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    where rk=1 and pay_type='市集' \
+    group by userid,day,first_pay_item_id \
+) c on a.buyerId=c.userid and a.day=c.day  and a.productId=c.first_pay_item_id \
+left join lofter.dim_user d on a.buyerId = d.id \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.03=insert overwrite table lofter_dm.ads_ec_product_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='30') \
+select nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct a.orderId) as pv, \
+    count(distinct a.buyerId) as uv,sum(a.amount) as amount, \
+    count(distinct b.userid) as benefit_first_pay_uv, \
+    sum(case when b.userid is not null then a.amount else 0 end) as benefit_first_pay_amount, \
+    count(distinct c.userid) as all_first_pay_uv, \
+    sum(case when c.userid is not null then a.amount else 0 end) as all_first_pay_amount, \
+    count(distinct if(d.createDate = a.day, d.id, null)) as new_1_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 7 and d.createDate <= a.day, d.id, null)) as new_7_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 30 and d.createDate <= a.day, d.id, null))as new_30_create_uv \
+from ( \
+    select m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+    from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.1.days.ago}' and \
+                  datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+    ) m \
+    join ( \
+        select id as orderId,supplierId,amount from lofter_db_dump.ods_db_benefit_order_nd group by id ,supplierId,amount \
+    ) n on m.orderId = n.orderId \
+    group by m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+) a \
+left join ( \
+    select userid, \
+           from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+           first_pay_item_id \
+    from lofter.dws_user_pay_type_info_dd where dt = '${azkaban.flow.1.days.ago}' and pay_type='市集' \
+    group by userid,from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd'),first_pay_item_id \
+) b on a.buyerId=b.userid and a.day=b.day  and a.productId=b.first_pay_item_id \
+left join ( \
+    select userid,day,first_pay_item_id \
+    from ( \
+        select userid, \
+               pay_type, \
+               first_pay_time, \
+               from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+               first_pay_item_id, \
+               rank() over (partition by userid order by  first_pay_time asc ) as rk \
+        from lofter.dws_user_pay_type_info_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    where rk=1 and pay_type='市集' \
+    group by userid,day,first_pay_item_id \
+) c on a.buyerId=c.userid and a.day=c.day  and a.productId=c.first_pay_item_id \
+left join lofter.dim_user d on a.buyerId = d.id \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.04=insert overwrite table lofter_dm.ads_ec_product_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='all') \
+select nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct a.orderId) as pv, \
+    count(distinct a.buyerId) as uv,sum(a.amount) as amount, \
+    count(distinct b.userid) as benefit_first_pay_uv, \
+    sum(case when b.userid is not null then a.amount else 0 end) as benefit_first_pay_amount, \
+    count(distinct c.userid) as all_first_pay_uv, \
+    sum(case when c.userid is not null then a.amount else 0 end) as all_first_pay_amount, \
+    count(distinct if(d.createDate = a.day, d.id, null)) as new_1_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 7 and d.createDate <= a.day, d.id, null)) as new_7_create_uv, \
+    count(distinct if(datediff(a.day, d.createDate) < 30 and d.createDate <= a.day, d.id, null))as new_30_create_uv \
+from ( \
+    select m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+    from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.1.days.ago}' and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+    ) m \
+    join ( \
+        select id as orderId,supplierId,amount from lofter_db_dump.ods_db_benefit_order_nd group by id ,supplierId,amount \
+    ) n on m.orderId = n.orderId \
+    group by m.orderId, m.productId, m.buyerId, m.day, n.supplierId, n.amount, m.ips, m.oneLevel \
+) a \
+left join ( \
+    select userid, \
+           from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+           first_pay_item_id \
+    from lofter.dws_user_pay_type_info_dd where dt = '${azkaban.flow.1.days.ago}' and pay_type='市集' \
+    group by userid,from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd'),first_pay_item_id \
+) b on a.buyerId=b.userid and a.day=b.day  and a.productId=b.first_pay_item_id \
+left join ( \
+    select userid,day,first_pay_item_id \
+    from ( \
+        select userid, \
+               pay_type, \
+               first_pay_time, \
+               from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') as day, \
+               first_pay_item_id, \
+               rank() over (partition by userid order by  first_pay_time asc ) as rk \
+        from lofter.dws_user_pay_type_info_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    where rk=1 and pay_type='市集' \
+    group by userid,day,first_pay_item_id \
+) c on a.buyerId=c.userid and a.day=c.day  and a.productId=c.first_pay_item_id \
+left join lofter.dim_user d on a.buyerId = d.id \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())

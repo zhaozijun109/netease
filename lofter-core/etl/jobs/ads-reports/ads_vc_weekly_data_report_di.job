@@ -1,0 +1,64 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_vc_weekly_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+ \
+WITH \
+daily_active_users AS ( \
+SELECT \
+dt, \
+COUNT(DISTINCT user_id) AS dau \
+FROM vc.dwd_vc_user_active_i_d \
+WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_anonymity != 'Y' \
+GROUP BY dt \
+), \
+daily_chat_base AS ( \
+SELECT \
+dt, \
+COUNT(DISTINCT user_id) AS chat_users, \
+SUM(message_cnt) AS message_cnt, \
+COUNT(DISTINCT user_id, character_id) AS total_character_engagements \
+FROM vc.dws_vc_uc_talk_day_cnt_single_i_d \
+WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_anonymity != 'Y' \
+GROUP BY dt \
+), \
+weekly_payment_summary AS ( \
+SELECT \
+'${azkaban.flow.1.days.ago}' as dt, \
+SUM(order_price) AS weekly_total_revenue, \
+COUNT(DISTINCT user_id) AS weekly_paying_users \
+FROM vc.dwd_vc_order_i_d \
+WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_test_user = 'N' \
+), \
+daily_summary AS ( \
+SELECT \
+dau.dt, \
+dau.dau, \
+COALESCE(chat.chat_users, 0) AS chat_users, \
+COALESCE(chat.message_cnt, 0) AS message_cnt, \
+COALESCE(chat.total_character_engagements, 0) AS total_character_engagements \
+FROM daily_active_users dau \
+LEFT JOIN daily_chat_base chat ON dau.dt = chat.dt \
+), \
+weekly_avg_summary AS ( \
+SELECT \
+'${azkaban.flow.1.days.ago}' as dt, \
+AVG(dau) AS avg_daily_active_users, \
+AVG(chat_users) AS avg_daily_chat_users, \
+AVG(message_cnt / NULLIF(chat_users, 0)) AS avg_daily_messages_per_user, \
+AVG(total_character_engagements / NULLIF(chat_users, 0)) AS avg_daily_characters_per_user \
+FROM daily_summary \
+) \
+ \
+SELECT \
+'app' as source, \
+ROUND(s.avg_daily_active_users, 2) AS  avg_dau, \
+ROUND(s.avg_daily_chat_users, 2) AS avg_daily_chat_users, \
+ROUND(p.weekly_total_revenue, 2) AS weekly_total_amount, \
+p.weekly_paying_users AS weekly_pay_uv, \
+ROUND(p.weekly_total_revenue / NULLIF(p.weekly_paying_users, 0), 2) AS weekly_ARPPU, \
+ROUND(s.avg_daily_messages_per_user, 2) AS avg_daily_messages_per_user, \
+ROUND(s.avg_daily_characters_per_user, 2) AS avg_daily_characters_per_user \
+FROM weekly_avg_summary s \
+left JOIN weekly_payment_summary p on s.dt=p.dt \

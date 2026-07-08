@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_tag_metric_level1_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select tag, postId, value \
+from ( \
+    select '创作者粉丝数量' as tag, a.id as postId, cast(b.fans_total as double) as value \
+    from lofter.dim_post_article a \
+    join ( \
+      select userId, fans_total from lofter.dws_par_user_fans_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.blogId = b.userId \
+    where b.fans_total > 0 \
+    union all \
+    select '付费点击转化率' as tag, a.postId as postId, nvl(b.pay_uv,0) * 1.0 / nvl(a.browse_uv,1) as value \
+    from ( \
+        select postId, realBrowseUv as browse_uv \
+        from lofter.dws_post_base_stats_dd \
+        where dt='${azkaban.flow.1.days.ago}' and realBrowseUv > 0 \
+    ) a \
+    join ( \
+        select postId, \
+               count(distinct sender) as pay_uv \
+        from lofter.dwd_paid_post_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.postId = b.postId \
+  union all \
+    select '千次曝光收益' as tag, a.postId as postId, nvl(b.pay_amount,0)/nvl(a.expose,1) as value \
+    from ( \
+        select postId, exposurePv as expose \
+        from lofter.dws_post_base_stats_dd \
+        where dt='${azkaban.flow.1.days.ago}' and exposurePv > 0 \
+    ) a \
+    join ( \
+        select postId, \
+               sum(coin) * 0.1 as pay_amount \
+        from lofter.dwd_paid_post_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.postId = b.postId \
+) t \
+where postId > 0 \
+distribute by 1

@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.04=insert overwrite table lofter.dws_page_source_scene_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.scene, expose_pv, expose_uv, click_pv, click_uv, \
+       praise_pv, praise_uv, recommend_pv, recommend_uv, subscribe_pv, subscribe_uv, reproduce_pv, reproduce_uv, \
+       response_pv, response_uv, share_pv, share_uv, follow_pv, follow_uv, \
+       bitmap_count(bitmap_or(bitmap_or(bitmap_or(hot_user_bitmap, response_user_bitmap), share_user_bitmap), follow_user_bitmap)) as interaction_uv \
+from ( \
+    select nvl(source1_scene, '') scene, \
+           sum(if(reaction is null, 1, 0)) as expose_pv, \
+           count(distinct if(reaction is null, deviceUdid, null)) as expose_uv, \
+           sum(if(reaction = 'click', 1, 0)) as click_pv, \
+           count(distinct if(reaction = 'click', deviceUdid, null)) as click_uv \
+    from lofter.dwd_post_expose_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select nvl(source1_scene, '') as scene, \
+           sum(if(opType = 'praise', 1, 0)) as praise_pv, \
+           count(distinct if(opType = 'praise', userId, null)) as praise_uv, \
+           sum(if(opType = 'recommend', 1, 0)) as recommend_pv, \
+           count(distinct if(opType = 'recommend', userId, null)) as recommend_uv, \
+           sum(if(opType = 'subscribe', 1, 0)) as subscribe_pv, \
+           count(distinct if(opType = 'subscribe', userId, null)) as subscribe_uv, \
+           sum(if(opType = 'reproduce', 1, 0)) as reproduce_pv, \
+           count(distinct if(opType = 'reproduce', userId, null)) as reproduce_uv, \
+           to_bitmap(userId) as hot_user_bitmap \
+    from lofter.dwd_post_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.scene = d.scene \
+left join ( \
+    select nvl(source1_scene, '') as scene, \
+           count(1) as response_pv, \
+           count(distinct userId) as response_uv, \
+           to_bitmap(userId) as response_user_bitmap \
+    from lofter.dwd_post_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.scene = e.scene \
+left join ( \
+    select nvl(source1_scene, '') as scene, \
+           count(1) as share_pv, count(distinct deviceUdid) as share_uv, \
+           to_bitmap(userId) as share_user_bitmap \
+    from lofter.dwd_post_share_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) f on a.scene = f.scene \
+left join ( \
+    select nvl(source1_scene, '') as scene, \
+           count(1) as follow_pv, count(distinct userId) as follow_uv, \
+           to_bitmap(userId) as follow_user_bitmap \
+    from lofter.dwd_blog_follow_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) g on a.scene = g.scene \

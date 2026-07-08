@@ -1,0 +1,132 @@
+type=sparksql
+hive.query.01=  \
+WITH date_list AS ( \
+SELECT '${azkaban.flow.1.days.ago}' AS stat_date \
+UNION ALL \
+SELECT '${azkaban.flow.2.days.ago}' AS stat_date \
+), \
+human_agg AS ( \
+SELECT \
+TO_DATE(FROM_UNIXTIME(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'))  AS stat_date, \
+COUNT(*)                                                                  AS manual_review_total, \
+COUNT(CASE WHEN reviewtype IN (0,2,3) THEN 1 END)                        AS manual_review_pass_cnt, \
+ROUND( \
+COUNT(CASE WHEN reviewtype IN (0,2,3) THEN 1 END) \
+/ NULLIF(COUNT(*), 0) \
+, 4)                                                                      AS manual_review_pass_rate \
+FROM lofter_db_dump.ods_db_recommend_post_review_log_nd \
+WHERE TO_DATE(FROM_UNIXTIME(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+>= '${azkaban.flow.2.days.ago}' \
+AND TO_DATE(FROM_UNIXTIME(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+<= '${azkaban.flow.1.days.ago}' \
+AND status = 0 \
+AND type != 5 \
+GROUP BY TO_DATE(FROM_UNIXTIME(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+), \
+ai_agg AS ( \
+SELECT \
+ai.day                                                                             AS stat_date, \
+COUNT(*)                                                                           AS ai_review_total, \
+COUNT(CASE WHEN ai.resultcode = 0 AND ai.review = true THEN 1 END)                AS ai_review_pass_cnt, \
+ROUND( \
+COUNT(CASE WHEN ai.resultcode = 0 AND ai.review = true THEN 1 END) \
+/ NULLIF(COUNT(*), 0) \
+, 4)                                                                               AS ai_review_pass_rate \
+FROM rec.rec_lofter_data_big_model_review_result_info ai \
+JOIN lofter_db_dump.ods_db_post_nd p \
+ON p.id = CONV(SPLIT(ai.itemid, '_')[1], 16, 10) \
+WHERE ai.day >= '${azkaban.flow.2.days.ago}' \
+AND ai.day <= '${azkaban.flow.1.days.ago}' \
+AND p.type != 5 \
+AND ai.resultcode = 0 \
+GROUP BY ai.day \
+), \
+base AS ( \
+SELECT \
+d.stat_date, \
+COUNT(DISTINCT CASE WHEN t.is_new = 1    THEN t.postid END)                                                    AS new_post_cnt, \
+COUNT(DISTINCT CASE WHEN t.is_update = 1 THEN t.postid END)                                                    AS update_post_cnt, \
+COUNT(DISTINCT t.postid)                                                                                        AS total_review_cnt, \
+COUNT(DISTINCT CASE WHEN a.rulepass != 1 THEN t.postid END)                                                    AS rule_block_cnt, \
+COUNT(DISTINCT CASE WHEN a.rulepass != 1 AND a.rulepasscode = 60008  THEN t.postid END)                        AS black_tag_block_cnt, \
+COUNT(DISTINCT CASE WHEN a.rulepass != 1 AND a.rulepasscode = 60018  THEN t.postid END)                        AS black_word_block_cnt, \
+COUNT(DISTINCT CASE WHEN a.rulepass != 1 AND a.rulepasscode NOT IN (60008,60018) THEN t.postid END)            AS other_block_cnt, \
+ROUND(COUNT(DISTINCT CASE WHEN a.rulepass != 1 THEN t.postid END) / COUNT(DISTINCT t.postid), 4)               AS rule_block_rate, \
+COUNT(DISTINCT CASE WHEN a.humanrw = 1 OR  a.recomstatus = 0 THEN t.postid END)                               AS human_review_cnt, \
+ROUND(COUNT(DISTINCT CASE WHEN a.recomstatus = 1 THEN t.postid END) / COUNT(DISTINCT t.postid), 4)             AS recom_pass_rate, \
+ROUND( \
+COUNT(DISTINCT CASE WHEN a.humanrw = 1 AND a.recomstatus = 1 THEN t.postid END) \
+/ NULLIF(COUNT(DISTINCT CASE WHEN a.humanrw = 1 THEN t.postid END), 0) \
+, 4)                                                                                                            AS human_pass_rate, \
+ROUND( \
+COUNT(DISTINCT CASE WHEN a.bigmodelstate NOT IN (0,5) AND a.bigmodelstate = 10 THEN t.postid END) \
+/ NULLIF(COUNT(DISTINCT CASE WHEN a.bigmodelstate NOT IN (0,5) THEN t.postid END), 0) \
+, 4)                                                                                                            AS bigmodel_pass_rate, \
+COUNT(DISTINCT CASE WHEN a.bigmodelstate NOT IN (0,5)                               THEN t.postid END)         AS bigmodel_total_cnt, \
+COUNT(DISTINCT CASE WHEN a.bigmodelstate NOT IN (0,5) AND a.bigmodelstate  = 10     THEN t.postid END)         AS bigmodel_pass_cnt, \
+COUNT(DISTINCT CASE WHEN a.bigmodelstate NOT IN (0,5) AND a.bigmodelstate != 10     THEN t.postid END)         AS bigmodel_fail_cnt, \
+COUNT(DISTINCT CASE WHEN a.trypushstate <= 2 \
+AND TO_DATE(FROM_UNIXTIME(CAST(a.createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) = d.stat_date \
+AND a.type != 4 AND a.rulepass=1 THEN t.postid END)                                                                         AS trial_push_cnt, \
+COUNT(DISTINCT CASE WHEN a.recomstatus = 0 THEN t.postid END)                                                  AS pending_review_cnt \
+FROM date_list d \
+LEFT JOIN ( \
+SELECT a.postid, 1 AS is_new, 0 AS is_update, \
+TO_DATE(FROM_UNIXTIME(CAST(a.createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS post_stat_date \
+FROM lofter_db_dump.ods_db_recommend_review_post_nd a \
+WHERE TO_DATE(FROM_UNIXTIME(CAST(a.createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+>= '${azkaban.flow.2.days.ago}' \
+AND TO_DATE(FROM_UNIXTIME(CAST(a.createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+<= '${azkaban.flow.1.days.ago}' \
+AND a.type != 5 \
+UNION ALL \
+SELECT a.postid, 0 AS is_new, 1 AS is_update, \
+TO_DATE(FROM_UNIXTIME(CAST(a.updatetime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS post_stat_date \
+FROM lofter_db_dump.ods_db_recommend_review_post_nd a \
+JOIN lofter_db_dump.ods_db_post_nd b ON a.postid = b.id \
+WHERE TO_DATE(FROM_UNIXTIME(CAST(a.updatetime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+>= '${azkaban.flow.2.days.ago}' \
+AND TO_DATE(FROM_UNIXTIME(CAST(a.updatetime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+<= '${azkaban.flow.1.days.ago}' \
+AND TO_DATE(FROM_UNIXTIME(CAST(a.createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+!= TO_DATE(FROM_UNIXTIME(CAST(a.updatetime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+AND a.type != 5 \
+AND b.valid = 0 \
+AND b.allowview = 0 \
+AND b.iplocation IS NOT NULL \
+AND TO_DATE(FROM_UNIXTIME(CAST(get_json_object(b.iplocation, '$.modifyTime')/1000 AS BIGINT), 'yyyy-MM-dd')) \
+= TO_DATE(FROM_UNIXTIME(CAST(a.updatetime / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+) t ON t.post_stat_date = d.stat_date \
+LEFT JOIN lofter_db_dump.ods_db_recommend_review_post_nd a ON t.postid = a.postid \
+WHERE a.type != 5 OR a.type IS NULL \
+GROUP BY d.stat_date \
+) \
+INSERT INTO TABLE lofter_dm.ads_recommend_review_daily_report_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+b.stat_date, \
+b.new_post_cnt, \
+b.update_post_cnt, \
+b.total_review_cnt, \
+b.rule_block_cnt, \
+b.black_tag_block_cnt, \
+b.black_word_block_cnt, \
+b.other_block_cnt, \
+b.rule_block_rate, \
+b.human_review_cnt, \
+b.recom_pass_rate, \
+b.human_pass_rate, \
+b.bigmodel_pass_rate, \
+b.bigmodel_total_cnt, \
+b.bigmodel_pass_cnt, \
+b.bigmodel_fail_cnt, \
+b.trial_push_cnt, \
+b.pending_review_cnt, \
+h.manual_review_total, \
+h.manual_review_pass_cnt, \
+h.manual_review_pass_rate, \
+ai.ai_review_total, \
+ai.ai_review_pass_cnt, \
+ai.ai_review_pass_rate \
+FROM base b \
+LEFT JOIN human_agg h  ON h.stat_date  = b.stat_date \
+LEFT JOIN ai_agg ai    ON ai.stat_date = b.stat_date

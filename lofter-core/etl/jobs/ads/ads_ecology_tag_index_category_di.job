@@ -1,0 +1,81 @@
+type=sparksql
+hive.query.01=\
+with recContentSource as ( \
+    select postId, \
+           category, \
+           sourceType, \
+           level1_tag, \
+           blogId \
+    from ( \
+        select itemId as postId, \
+               concat_ws(',', level1_tag, level2_tag, level3_tag) as category, \
+               case when type = '作品' then 0 \
+                    when type = '茶水间' then 1 \
+               end as sourceType, \
+               level1_tag \
+        from lofter.ods_rec_content_understand_log_di \
+        where dt = '${azkaban.flow.1.days.ago}' and type in ('作品', '茶水间') \
+    ) t1 \
+    left join ( \
+        select id, blogId from lofter.dim_post \
+    ) t2 \
+    on t1.postId = t2.id \
+) \
+insert overwrite table lofter_dm.ads_ecology_tag_index_category_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       blogId, \
+       category, \
+       sourceType \
+from recContentSource \
+where sourceType = 0 and level1_tag <> '短篇' \
+union all \
+select t1.postId, \
+       t1.blogId, \
+       t1.category, \
+       t1.sourceType \
+from ( \
+    select postId, \
+           blogId, \
+           category, \
+           sourceType \
+    from recContentSource \
+    where sourceType = 0 and level1_tag = '短篇' \
+) t1 \
+join ( \
+    select postId, \
+           words_count \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and words_count >= 5000 \
+) t2 \
+on t1.postId = t2.postId \
+left join ( \
+    select postId, \
+           sum(text_length) as text_length \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 \
+    group by postId \
+    having sum(text_length) < 1000 \
+) t3 \
+on t1.postId = t3.postId \
+where t3.postId is null \
+union all \
+select t1.postId, \
+       t1.blogId, \
+       t1.category, \
+       t1.sourceType \
+from ( \
+    select postId, \
+           blogId, \
+           category, \
+           sourceType \
+    from recContentSource \
+    where sourceType = 1 \
+) t1 \
+left join ( \
+    select postId \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 \
+    group by postId \
+) t2 \
+on t1.postId = t2.postId \
+where t2.postId is null

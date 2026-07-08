@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_support_score_rank_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId as userId, a.userId as rankUserId, a.score as attraction, `rank` \
+from ( \
+    select *, row_number() over (partition by blogId order by score desc) as `rank` \
+    from lofter.dws_par_creator_user_support_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and blogId != userId \
+) a \
+join (select userId from lofter_db_dump.ods_db_trade_fans_private_account_nd where status = 2) b on a.blogId = b.userId \
+where a.`rank` <= 200 \

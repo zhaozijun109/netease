@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_group_summary_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.packId, \
+       sum(b.hot) as hot, \
+       if(translate(max(growth_level), 'ABCDE', 'SABCD') = 'D', 'C', translate(max(growth_level), 'ABCDE', 'SABCD')) as growth_level_max, \
+       if(translate(max(growth_level), 'ABCDE', 'SABCD') = 'D', 'C', translate(max(growth_level), 'ABCDE', 'SABCD')) as explosive_level_max, \
+       count(distinct a.postId) as post_count, \
+       sum(new_users) as new_devices_std, sum(new_users_30d) new_devices_30d, \
+       sum(new_users_7d) as new_devices_7d, sum(new_users_1d) as new_devices_1d, \
+       sum(pay_users) as pay_users, \
+       sum(pay_users_gift) as pay_users_gift, \
+       sum(pay_users_fans) as pay_users_fans, \
+       sum(pay_users_vip) as pay_users_vip, \
+       sum(pay_amount) as pay_amount, \
+       sum(pay_amount_gift) as pay_amount_gift, \
+       sum(pay_amount_fans) as pay_amount_fans, \
+       sum(pay_amount_vip) as pay_amount_vip, \
+       avg(pay_users_cvr) as pay_users_cvr, \
+       avg(pay_users_cvr_gift) as pay_users_cvr_gift, \
+       sum(pay_users_fans) as pay_users_fans, \
+       sum(pay_users_vip) as pay_users_vip, \
+       sum(expose) as expose, \
+       sum(paid_post_expose) as paid_post_expose, \
+       sum(paid_post_click) as paid_post_click, \
+       sum(real_browse) as real_browse \
+from ( \
+    select job_id as packId, postId \
+    from lofter.dwd_post_group_post_list_di \
+    where dt = '${azkaban.flow.2.days.ago}' \
+) a \
+join ( \
+    select * \
+    from lofter_dm.ads_post_group_observe_base_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+group by 1
+dependencies=ads_post_group_observe_base_di

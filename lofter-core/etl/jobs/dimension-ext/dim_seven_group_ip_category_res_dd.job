@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dim_seven_group_ip_category_res_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select ip, \
+       category, \
+       category_res \
+from ( \
+    select ip, \
+           category, \
+           case when split(category, '-')[0] = '影视' then '影视' \
+                when split(category, '-')[0] = '娱乐' and split(category, '-')[1] = '综艺' then '综艺' \
+                when split(category, '-')[0] = '娱乐' and split(category, '-')[1] in ('娱乐其它', '明星') then '娱乐' \
+                when split(category, '-')[0] = '游戏' and split(category, '-')[1] = '游戏其他' and split(category, '-')[2] in ('乙游') then '乙游' \
+                when split(category, '-')[0] = '游戏' and split(category, '-')[1] = '游戏其他' and split(category, '-')[2] in ('二游') then '二游' \
+                when split(category, '-')[0] = '人文艺术' and split(category, '-')[1] = '文学' then '动漫小说' \
+                when split(category, '-')[0] = '二次元' and split(category, '-')[1] in ('其他国家/地区动漫', '国产动漫', '日本动漫', '欧美动漫') then '动漫小说' \
+                when split(category, '-')[0] in ('三坑','oc','谷圈') then split(category, '-')[0] \
+                else null \
+           end as category_res \
+    from ( \
+        select ip, \
+               case when ip in ('三坑','oc','谷圈') then array(ip) \
+                    else categories \
+               end as categories \
+        from lofter.dim_ip_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (derivedFlag = 1 or ip in ('三坑','oc','谷圈')) \
+    ) lateral view explode(categories) t1 as category \
+) t1 \
+where category_res is not null \
+group by ip, category, category_res
+dependencies=dim_ip_dd

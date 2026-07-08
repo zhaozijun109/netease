@@ -1,0 +1,135 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_gift_post_premium_scoring_detail_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postid,blogid, tags, ips, url, recomstatus,blogname, blognickname, \
+       styouzhiflg, yinliuflg, review_status, contenttype, \
+       exposureuv,qianbg_amount, liulan_fufei_rate, furate, zhenrate, \
+       publishdate, blog_channel, recommendflg, rec_reviewflg, unlocktype, \
+       collectionid, provider_type, \
+       case when exposureuv<500 then '0~0.5K' \
+            when exposureuv>=500 and exposureuv<1000  then '0.5~1K' \
+            when exposureuv>=1000 and exposureuv<5000 then '1K~5K' \
+            when exposureuv>=5000 and exposureuv<10000 then '5K~10K' \
+            when exposureuv>=10000 and exposureuv<50000 then '10K~50K' \
+            when exposureuv>=50000 and exposureuv<100000 then '50K~100K' \
+            when exposureuv>=100000 and exposureuv<1000000 then '100K~1000K' \
+            else    '1000K~' end as bg_flg,  \
+       LN(qianbg_amount*100+1) as qianbg_amount_ln, \
+       LN(liulan_fufei_rate*100+1)  as liulan_fufei_rate_ln, \
+       LN(furate*100+1)  as furate_ln, \
+       LN(zhenrate*100+1)  as zhenrate_ln, \
+       LN(realbrowse_rate*100+1)  as realbrowse_rate_ln, \
+       LN(hd_rate*100+1)  as hd_rate_ln, \
+       (LN(qianbg_amount*100+1)*0.38+ \
+        LN(liulan_fufei_rate*100+1)*0.22+ \
+        LN(zhenrate*100+1)*0.2- \
+        LN(furate*100+1)*0.2+ \
+        LN(realbrowse_rate*100+1)*0.08+ \
+        LN(hd_rate*100+1)*0.12) as zonghe_score, \
+        row_number() over ( \
+           partition by contenttype, case when exposureuv<500 then '0~0.5K' \
+            when exposureuv>=500 and exposureuv<1000  then '0.5~1K' \
+            when exposureuv>=1000 and exposureuv<5000 then '1K~5K' \
+            when exposureuv>=5000 and exposureuv<10000 then '5K~10K' \
+            when exposureuv>=10000 and exposureuv<50000 then '10K~50K' \
+            when exposureuv>=50000 and exposureuv<100000 then '50K~100K' \
+            when exposureuv>=100000 and exposureuv<1000000 then '100K~1000K' \
+            else '1000K~' end  \
+        order by (LN(qianbg_amount*100+1)*0.38+ \
+                  LN(liulan_fufei_rate*100+1)*0.22+ \
+                  LN(zhenrate*100+1)*0.2- \
+                  LN(furate*100+1)*0.2+ \
+                  LN(realbrowse_rate*100+1)*0.08+ \
+                  LN(hd_rate*100+1)*0.12) desc ) as rk, \
+        jiesuo_uv \
+from ( \
+    select a.*, b.exposureuv,b.browseuv,b.chargegiftuv,b.amount,b.negfeedbackuv,realbrowseuv,hduv, \
+        case when fufankui_uv is null then 0 else fufankui_uv end as fufankui_uv, \
+        case when zhengfankui_uv is null then 0 else zhengfankui_uv end as zhengfankui_uv, \
+        case when furate is null then 0 else furate end as furate, \
+        case when zhenrate is null then 0 else zhenrate end as zhenrate, \
+        b.negfeedbackuv/b.exposureuv as bg_fufei_rate, \
+        b.amount/b.exposureuv*1000 as qianbg_amount, \
+        b.chargegiftuv/b.browseuv as liulan_fufei_rate, \
+        b.realbrowseuv/b.exposureuv as realbrowse_rate, \
+        b.hduv/b.browseuv as hd_rate, \
+        c.jiesuo_uv \
+    from ( \
+        select postid,contenttype,blog_channel,yinliuflg,rec_reviewflg,styouzhiflg, \
+               publishdate,review_status,recommendflg,unlocktype,collectionid,provider_type \
+        from ( \
+            select a.postid,contenttype,blog_channel,publishdate,collectionid,provider_type, \
+                recommendflg, review_status, unlocktype, \
+                case when c.postid is not null then -1 else 0 end as yinliuflg, \
+                case when d.postid is not null then 1 else 0 end as rec_reviewflg, \
+                case when e.postid is not null then 1 else 0 end as styouzhiflg  \
+           from ( \
+               select a.postid,contenttype,blog_channel,publishdate,collectionid,provider_type, \
+                    max(unlocktype) as unlocktype, \
+                    max(review_status) as review_status, \
+                    max(if(b.returngiftid is not null, 1,0)) as recommendflg \
+               from ( \
+                   select id,postid,contenttype,return_gift_plantype, \
+                          ispay_returngift,blog_channel,review_status,publishdate, \
+                          unlocktype,collectionid,provider_type \
+                   from lofter.dim_gift_post_return_dd \
+                   where dt='${azkaban.flow.1.days.ago}' \
+                        and blog_channel in (0,1) \
+                        and ispay_returngift in (0,1) \
+                        and datediff('${azkaban.flow.1.days.ago}', publishdate) between 0 and 89 \
+                        and auditstatus=1 \
+                        and status=1 \
+               ) a \
+               left join ( \
+                   select returngiftid \
+                   from rec.return_gift_tag_boost_artilce_pool  \
+                   where day <= '${azkaban.flow.2.days.ago}' and day > date_sub('${azkaban.flow.1.days.ago}', 90)  \
+                   group by returngiftid \
+               ) b on a.id=b.returngiftid \
+               group by 1,2,3,4,5,6 \
+           ) a \
+           left join ( \
+               select postid,blogid \
+               from lofter.dwd_risk_offsite_induction_return_gift_di \
+               where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+               group by postid,blogid \
+           ) c on a.postid=c.postid \
+           left join ( \
+               select postid,blogid \
+               from lofter.dwd_rec_post_review_di   \
+               where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+                     and human_state=1 \
+               group by 1, 2 \
+           ) d on a.postid=d.postid \
+           left join ( \
+               select postid \
+               from lofter.dws_post_premium_di  \
+               where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+               group by postid \
+           ) e on a.postid=e.postid \
+        ) a \
+    ) a \
+    join ( \
+        select postid,exposureuv,browseuv,negfeedbackuv,chargegiftuv,(chargegiftamount/10) as amount,realbrowseuv,hduv \
+        from lofter.dws_post_base_stats_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and exposureuv>=50 and browseuv>0 \
+    ) b on a.postid=b.postid \
+    left join ( \
+        select postid,jiesuo_uv,fufankui_uv,zhengfankui_uv,furate,zhenrate \
+        from ( \
+            select postid, \
+                sum(jiesuo_uv) as jiesuo_uv, \
+                sum(fufankui_uv) as fufankui_uv, \
+                sum(zhengfankui_uv) as zhengfankui_uv, \
+                sum(fufankui_uv)/sum(jiesuo_uv) as furate, \
+                sum(zhengfankui_uv)/sum(jiesuo_uv) as zhenrate \
+            from lofter.dws_gift_post_return_dd \
+            where dt='${azkaban.flow.1.days.ago}' \
+            group by postid \
+        ) a \
+    ) c on a.postid=c.postid \
+) a \
+join ( \
+    select id,blogid,tags,ips,url,recomstatus,blogname,blognickname \
+    from lofter.dim_post \
+) b on a.postid=b.id
+dependencies=dws_post_premium_di,dws_post_base_stats_dd,dws_gift_post_return_dd

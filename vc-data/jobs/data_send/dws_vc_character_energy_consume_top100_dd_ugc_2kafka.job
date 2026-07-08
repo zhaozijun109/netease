@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select replace(dt, '-', '') as ts, 40 as msgType, data \
+                         from (select named_struct('targetId', character_id, 'targetName', character_name, 'targetType', 1, 'nums', \
+                                                   energy_consume, 'rk', rk, 'rankId', 2) as data, \
+                                      dt \
+                               from vc.dws_vc_character_energy_consume_top100_dd \
+                               where dt = '${azkaban.flow.1.days.ago}' \
+                                 and character_type = 'ugc') "
+params= --topic vc_data_push_msg --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092 --withCount
+

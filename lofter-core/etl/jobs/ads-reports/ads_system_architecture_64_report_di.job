@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_system_architecture_64_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  appversion, \
+  appchannel, \
+  deviceosversion, \
+  params ['if64'] as rom64, \
+  params ['so64'] as apk64, \
+  count(distinct deviceudid) as uv, \
+  count(deviceudid) as pv \
+from \
+  lofter.ods_mda_app_partition_di \
+where \
+  deviceos = 'Android' \
+  and eventid = 'a1-33' \
+  and dt = '${azkaban.flow.1.days.ago}' \
+  and actiontype='other' \
+group by \
+  appversion, \
+  appchannel, \
+  deviceosversion, \
+  rom64, \
+  apk64 \

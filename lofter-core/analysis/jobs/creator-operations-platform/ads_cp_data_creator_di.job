@@ -1,0 +1,477 @@
+type=sparksql
+hive.query.01=\
+WITH post50source AS ( \
+                     SELECT \
+                         * \
+                     FROM ( \
+                          SELECT \
+                              id, \
+                              blogid, \
+                              publishDate, \
+                              contentType, \
+                              recomStatus AS is_rec, \
+                              tags, \
+                              ips, \
+                              ROW_NUMBER() OVER ( \
+                PARTITION BY userid \
+                ORDER BY publishdate DESC \
+            ) AS rk \
+                          FROM lofter.dim_post \
+                          WHERE publishDate <= '${azkaban.flow.1.days.ago}' \
+                            AND is_book_store = 0 \
+                            AND isPublished = true \
+                            AND isForbidden = false \
+                            AND isCitedPost = false \
+                            AND allowView = 0 \
+                            AND isMoved = 0 \
+                            AND isActivityAutoPost = 0 \
+                            AND isImported = 0 \
+                            AND contentType IN ("图片", "文字", "视频") \
+                          ) \
+                     WHERE rk <= 50 \
+) \
+INSERT OVERWRITE table lofter_dm.ads_cp_data_creator_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    a.userid AS blogid, \
+    REPLACE(REPLACE(blog_url, 'https://', ''), '.lofter.com', '') AS blog_name, \
+    blog_nickname, \
+    level,  \
+    NVL(public_cnt_1d, 0) AS public_cnt_1d,  \
+    NVL(deleted_cnt_1d, 0) AS deleted_cnt_1d,  \
+    NVL(self_only_cnt_1d, 0) AS self_only_cnt_1d,  \
+    active_last_date,  \
+    CASE \
+        WHEN active_days_30d <> 0 AND (is_new = 1 OR is_return = 1) THEN '新回' \
+        WHEN active_days_30d = 0 THEN '流失' \
+        WHEN active_days_30d > 0 AND active_days_30d <= 7 THEN '低频持续活跃' \
+        WHEN active_days_30d > 7 AND active_days_30d <= 19 THEN '中频持续活跃' \
+        WHEN active_days_30d > 19 AND active_days_30d <= 25 THEN '高频持续活跃' \
+        WHEN active_days_30d > 25 AND active_days_30d <= 30 THEN '超高持续活跃' \
+        END AS active_health, \
+    CASE \
+        WHEN post_count_30d <> 0 AND (is_new = 1 OR is_return = 1) THEN '新回发文' \
+        WHEN post_count_30d = 0 THEN '流失' \
+        WHEN post_count_30d > 0 AND post_count_30d <= 4 THEN '低频持续发文' \
+        WHEN post_count_30d > 4 AND post_count_30d <= 9 THEN '中频持续发文' \
+        WHEN post_count_30d > 9 AND post_count_30d <= 29 THEN '高频持续发文' \
+        WHEN post_count_30d > 29 THEN '异常持续发文' \
+        END AS post_health, \
+    hd_uv_std, \
+    hd_uv_30d, \
+    NVL(receive_recommend_uv_30d, 0) AS receive_recommend_uv_30d,  \
+    NVL(receive_comment_cnt_30d, 0) AS receive_comment_cnt_30d,  \
+    NVL(receive_collect_uv_30d, 0) AS receive_collect_uv_30d,  \
+    NVL(receive_like_cnt_30d, 0) AS receive_like_cnt_30d,  \
+    NVL(receive_reproduce_uv_30d, 0) AS receive_reproduce_uv_30d,  \
+    NVL(receive_hot_std, 0) AS receive_hot_std,  \
+    NVL(receive_hot, 0) AS receive_hot_1d,  \
+    NVL(receive_recommend_cnt, 0) AS receive_recommend_cnt_1d,  \
+    NVL(receive_comment_cnt, 0) AS receive_comment_cnt_1d,  \
+    NVL(receive_collect_cnt, 0) AS receive_collect_cnt_1d,  \
+    NVL(receive_like_cnt, 0) AS receive_like_cnt_1d,  \
+    NVL(receive_reproduce_cnt, 0) AS receive_reproduce_cnt_1d,  \
+    NVL(expose_uv_1d, 0) AS traffic_cnt_1d, \
+    NVL(expose_uv_90d, 0) AS traffic_cnt_90d, \
+    NVL(gift_income_1d, 0) + NVL(ad_unlock_income_1d, 0) + NVL(grain_tickets_1d * 0.01, 0) + NVL(coupon_income_1d, 0) + NVL(fans_vip_income_1d, 0) AS income_1d,  \
+    NVL(gift_income_30d, 0) + NVL(ad_unlock_income_30d, 0) + NVL(grain_tickets_30d * 0.01, 0) + NVL(coupon_income_30d, 0) + NVL(fans_vip_income_30d, 0) AS income_30d,  \
+    NVL(gift_income_std, 0) + NVL(ad_unlock_income_std, 0) + NVL(grain_tickets_std * 0.01, 0) + NVL(coupon_income_std, 0) + NVL(fans_vip_income_std, 0) AS income_std,  \
+    NVL(fans_1d, 0) AS fans_1d, \
+    NVL(fans_std, 0) AS fans_std, \
+    gift_open_time,  \
+    NVL(is_superuser, 0) AS is_superuser,  \
+    NVL(is_lighthouse, 0) AS is_lighthouse,  \
+    NVL(is_ad_unlock, 0) AS is_ad_unlock,  \
+    NVL(fans_vip_open_time, 0) AS fans_vip_open_time,  \
+    prefer_ips,  \
+    l_p_tag_pos_30d AS prefer_tags,  \
+    CASE grade \
+        WHEN 1 THEN '青铜' \
+        WHEN 2 THEN '黄金' \
+        WHEN 3 THEN '铂金' \
+        WHEN 4 THEN '钻石' \
+        WHEN 5 THEN '殿堂' \
+        ELSE '未知' \
+        END AS grade, \
+    CASE trend_grade \
+        WHEN 1 THEN '青铜' \
+        WHEN 2 THEN '黄金' \
+        WHEN 3 THEN '铂金' \
+        WHEN 4 THEN '钻石' \
+        WHEN 5 THEN '殿堂' \
+        ELSE '未知' \
+        END AS trend_grade, \
+    NVL(gift_income_1d, 0) AS gift_income_1d,  \
+    NVL(ad_unlock_income_1d, 0) AS ad_unlock_income_1d,  \
+    NVL(coupon_income_1d, 0) AS coupon_income_1d,  \
+    NVL(fans_vip_income_1d, 0) AS fans_vip_income_1d,  \
+    NVL(grain_tickets_1d, 0) AS grain_tickets_1d,  \
+    NVL(gift_income_30d, 0) AS gift_income_30d,  \
+    NVL(ad_unlock_income_30d, 0) AS ad_unlock_income_30d,  \
+    NVL(coupon_income_30d, 0) AS coupon_income_30d, \
+    NVL(fans_vip_income_30d, 0) AS fans_vip_income_30d, \
+    NVL(grain_tickets_30d, 0) AS grain_tickets_30d, \
+    NVL(post_count_1d, 0) AS post_count_1d, \
+    NVL(post_cnt_std, 0) AS post_count_std, \
+    contenttype_kv AS post_main_content_type, \
+    post_50_contenttype_kv AS post_50_main_content_type,  \
+    post_top10_ips, \
+    post_50_top10_ips,  \
+    post_top10_tags, \
+    post_50_top10_tags, \
+    NVL(post_count_std, 0) - NVL(paid_all_cnt, 0) AS free_all_cnt, \
+    NVL(paid_all_cnt, 0) AS paid_all_cnt, \
+    NVL(free_50_cnt, 0) AS free_50_cnt, \
+    NVL(paid_50_cnt, 0) AS paid_50_cnt, \
+    IF(l.userid IS NOT NULL, NVL(gift_remainderamount, 0), 0) AS gift_remainderamount, \
+    IF(l.userid IS NOT NULL, NVL(gift_withdrawingamount, 0), 0) AS gift_withdrawingamount, \
+    IF(l.userid IS NOT NULL, NVL(gift_withdrewamount, 0), 0) AS gift_withdrewamount, \
+    IF(l.userid IS NOT NULL, NVL(inspire_remainderamount, 0), 0) AS inspire_remainderamount, \
+    IF(l.userid IS NOT NULL, NVL(inspire_withdrawingamount, 0), 0) AS inspire_withdrawingamount, \
+    IF(l.userid IS NOT NULL, NVL(inspire_withdrewamount, 0), 0) AS inspire_withdrewamount, \
+    NVL(creatorStatus, 0) as creator_status, \
+    scorefactor \
+FROM ( \
+     SELECT \
+         userid, \
+         level, \
+         blog_url, \
+         blog_nickname, \
+         gift_open_time, \
+         fans_vip_open_time, \
+         fans_std, \
+         receive_hot_std, \
+         post_count_1d, \
+         post_count_std, \
+         receive_comment_cnt_30d,  \
+         NVL(post_count_30d, 0) AS post_count_30d, \
+         NVL(active_days_30d, 0) AS active_days_30d, \
+         hd_uv_30d, \
+         active_last_date, \
+         post_top10_ips, \
+         post_top10_tags \
+     FROM lofter.dws_par_creator_dd \
+     WHERE post_count_365d IS NOT NULL \
+       AND post_count_365d > 0 \
+       AND dt = '${azkaban.flow.1.days.ago}' \
+     ) a \
+     LEFT JOIN ( \
+               SELECT userid, fans_1d \
+               FROM lofter.dws_par_user_fans_dd \
+               WHERE dt = '${azkaban.flow.1.days.ago}' \
+) b ON a.userid = b.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   hd_uv_std, \
+                   receive_recommend_uv_30d,  \
+                   receive_collect_uv_30d,  \
+                   receive_like_cnt_30d,  \
+                   receive_reproduce_uv_30d  \
+               FROM lofter.dws_par_creator_interaction_dd \
+               WHERE dt = '${azkaban.flow.1.days.ago}' \
+) c ON a.userid = c.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   receive_hot, \
+                   receive_recommend_cnt, \
+                   receive_collect_cnt, \
+                   receive_like_cnt, \
+                   receive_reproduce_cnt, \
+                   receive_comment_cnt \
+               FROM lofter.dws_par_creator_interaction_di \
+               WHERE dt = '${azkaban.flow.1.days.ago}' \
+) t ON a.userid = t.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   resource, \
+                   1 AS is_superuser  \
+               FROM lofter_db_dump.ods_db_recommend_review_config_nd \
+               WHERE type = 'superUser' \
+                 AND deleted = 0 \
+                 AND FROM_UNIXTIME(cast(endtime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' \
+) d ON a.userid = d.resource \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   1 AS is_ad_unlock  \
+               FROM lofter_db_dump.ods_db_trade_ad_unlock_user_setting_nd \
+               WHERE settingType = 'AUTHOR_AD_UNLOCK_SWITCH' \
+                 AND settingValue = 'ON' \
+) e ON a.userid = e.userid \
+     LEFT JOIN ( \
+               SELECT userId, 1 AS is_lighthouse  \
+               FROM lofter_db_dump.ods_db_act_lighthouse_user_nd \
+               WHERE status = 1 \
+               UNION \
+               SELECT userId, 1 AS is_lighthouse  \
+               FROM lofter_db_dump.ods_db_act_lighthouse_user_v2_nd \
+               WHERE status = 1 \
+) f ON a.userid = f.userId \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   grade, \
+                   grade + trend AS trend_grade, \
+                   scorefactor \
+               FROM lofter_db_dump.ods_db_trade_pay_grade_nd \
+) g ON a.userid = g.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   NVL(gift_income_1d, 0) AS gift_income_1d,  \
+                   NVL(ad_unlock_income_1d, 0) AS ad_unlock_income_1d,  \
+                   NVL(grain_tickets_1d, 0) AS grain_tickets_1d,  \
+                   NVL(coupon_income_1d, 0) AS coupon_income_1d,  \
+                   NVL(fans_vip_income_1d, 0) AS fans_vip_income_1d,  \
+                   NVL(gift_income_std, 0) AS gift_income_std, \
+                   NVL(ad_unlock_income_std, 0) AS ad_unlock_income_std, \
+                   NVL(grain_tickets_std, 0) AS grain_tickets_std, \
+                   NVL(coupon_income_std, 0) AS coupon_income_std, \
+                   NVL(fans_vip_income_std, 0) AS fans_vip_income_std, \
+                   NVL(gift_income_30d, 0) AS gift_income_30d,  \
+                   NVL(ad_unlock_income_30d, 0) AS ad_unlock_income_30d,  \
+                   NVL(grain_tickets_30d, 0) AS grain_tickets_30d, \
+                   NVL(coupon_income_30d, 0) AS coupon_income_30d, \
+                   NVL(fans_vip_income_30d, 0) AS fans_vip_income_30d \
+               FROM lofter.dws_par_creator_paid_post_income_dd \
+               WHERE dt = '${azkaban.flow.1.days.ago}' \
+) h ON a.userid = h.blogid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   SUM(is_deleted) AS deleted_cnt_1d, \
+                   SUM(id_self_only) AS self_only_cnt_1d,  \
+                   SUM(is_public) AS public_cnt_1d  \
+               FROM ( \
+                    SELECT \
+                        blogid, \
+                        postid, \
+                        IF(valid = 32, 1, 0) AS is_deleted, \
+                        IF(post_status = '仅自己可见', 1, 0) AS id_self_only, \
+                        IF(post_status = '公开', 1, 0) AS is_public \
+                    FROM lofter.dwd_post_status_dd \
+                    WHERE dt = '${azkaban.flow.1.days.ago}' \
+                      AND start_date = '${azkaban.flow.1.days.ago}' \
+                      AND (valid = 32 OR post_status IN ('仅自己可见', '公开')) \
+                    GROUP BY blogid, postid, valid, post_status \
+                    ) \
+               GROUP BY blogid \
+) i ON a.userid = i.blogid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   count(1) AS paid_all_cnt  \
+               FROM lofter.dim_gift_post_return_dd \
+               WHERE dt = '${azkaban.flow.1.days.ago}' \
+                 AND status = 1 \
+                 AND auditstatus = 1 \
+                 AND contenttype in ('图片', '文字') \
+               GROUP BY blogid \
+) j ON a.userid = j.blogid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   SUM(IF(postid IS NULL, 1, 0)) AS free_50_cnt, \
+                   SUM(IF(postid IS NOT NULL, 1, 0)) AS paid_50_cnt \
+               FROM ( \
+                    SELECT \
+                        t1.blogid, \
+                        t1.id, \
+                        t2.postid \
+                    FROM post50source t1 \
+                         LEFT JOIN ( \
+                                   SELECT blogid, postid \
+                                   FROM lofter.dim_gift_post_return_dd \
+                                   WHERE dt = '${azkaban.flow.1.days.ago}' \
+                                     AND status = 1 \
+                                     AND auditstatus = 1 \
+                                     AND contenttype in ('图片', '文字') \
+                                   GROUP BY blogid, postid \
+                    ) t2 ON t1.id = t2.postid \
+                    ) \
+               GROUP BY blogid \
+) k ON a.userid = k.blogid \
+     LEFT JOIN ( \
+               SELECT \
+                   COALESCE(i.userid, g.userid) AS userid, \
+                   COALESCE(i.remainderamount, 0) AS inspire_remainderamount, \
+                   COALESCE(i.withdrawingamount, 0) AS inspire_withdrawingamount, \
+                   COALESCE(i.withdrewamount, 0) AS inspire_withdrewamount, \
+                   COALESCE(g.remainderamount, 0) AS gift_remainderamount, \
+                   COALESCE(g.withdrawingamount, 0) AS gift_withdrawingamount, \
+                   COALESCE(g.withdrewamount, 0) AS gift_withdrewamount \
+               FROM lofter_db_dump.ods_db_trade_inspire_wallet_nd i \
+                    FULL OUTER JOIN lofter_db_dump.ods_db_trade_gift_wallet_nd g \
+                                    ON i.userid = g.userid \
+) l ON a.userid = l.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogId, \
+                   transform(sort_array(collect_list(struct(rank, ip)), true), x -> x.ip) AS post_50_top10_ips  \
+               FROM ( \
+                    SELECT \
+                        blogId, \
+                        ip, \
+                        rank \
+                    FROM ( \
+                         SELECT \
+                             blogId, \
+                             ip, \
+                             row_number() OVER (PARTITION BY blogId ORDER BY postCount DESC) rank \
+                         FROM ( \
+                              SELECT \
+                                  blogId, \
+                                  ip, \
+                                  count(1) AS postCount \
+                              FROM ( \
+                                   SELECT \
+                                       blogId, \
+                                       ip, \
+                                       id \
+                                   FROM post50source \
+                                            LATERAL VIEW explode(ips) t AS ip \
+                                   WHERE length(ip) > 0 \
+                                   GROUP BY blogId, ip, id \
+                                   ) dedup \
+                              GROUP BY blogId, ip \
+                              ) t \
+                         ) tt \
+                    WHERE rank <= 10 \
+                    ) \
+               GROUP BY blogId \
+) m ON a.userid = m.blogId \
+     LEFT JOIN ( \
+               SELECT \
+                   blogId, \
+                   transform(sort_array(collect_list(struct(rank, tag)), true), x -> x.tag) AS post_50_top10_tags  \
+               FROM ( \
+                    SELECT \
+                        blogId, \
+                        tag, \
+                        rank \
+                    FROM ( \
+                         SELECT \
+                             blogId, \
+                             tag, \
+                             row_number() OVER (PARTITION BY blogId ORDER BY postCount DESC) rank \
+                         FROM ( \
+                              SELECT \
+                                  blogId, \
+                                  tag, \
+                                  count(1) AS postCount \
+                              FROM ( \
+                                   SELECT \
+                                       blogId, \
+                                       tag, \
+                                       id \
+                                   FROM post50source \
+                                            LATERAL VIEW explode(tags) t AS tag \
+                                   WHERE length(tag) > 0 \
+                                   GROUP BY blogId, tag, id \
+                                   ) dedup \
+                              GROUP BY blogId, tag \
+                              ) t \
+                         ) tt \
+                    WHERE rank <= 10 \
+                    ) \
+               GROUP BY blogId \
+) n ON a.userid = n.blogId \
+     LEFT JOIN ( \
+               SELECT \
+                   user_id, \
+                   prefer_ips \
+               FROM rec.rec_lofter_user_profile_ips_kv \
+               WHERE day = '${azkaban.flow.1.days.ago}' \
+) o ON a.userid = o.user_id \
+     LEFT JOIN ( \
+               SELECT \
+                   user_id, \
+                   l_p_tag_pos_30d \
+               FROM rec.rec_fea_user_long_profile_tags_v3 \
+               WHERE day = '${azkaban.flow.1.days.ago}' \
+) p ON a.userid = p.user_id \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   1 AS is_new \
+               FROM lofter.dwd_user_new_di \
+               WHERE dt <= '${azkaban.flow.1.days.ago}' \
+                 AND dt >= '${azkaban.flow.30.days.ago}' \
+                 AND is_anonymous <> 1 \
+               GROUP BY userid \
+) r ON a.userid = r.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   userid, \
+                   1 AS is_return \
+               FROM lofter.dwd_user_return_di \
+               WHERE dt <= '${azkaban.flow.1.days.ago}' \
+                 AND dt >= '${azkaban.flow.30.days.ago}' \
+               GROUP BY userid \
+) s ON a.userid = s.userid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   concat_ws( \
+                           ',', \
+                           sort_array(collect_list(concat(contenttype, ':', cast(cnt AS string)))) \
+                   ) AS contenttype_kv \
+               FROM ( \
+                    SELECT \
+                        blogid, \
+                        contenttype, \
+                        COUNT(1) AS cnt \
+                    FROM lofter.dim_post \
+                    WHERE publishDate <= '${azkaban.flow.1.days.ago}' \
+                      AND is_book_store = 0 \
+                      AND isPublished = true \
+                      AND isForbidden = false \
+                      AND isCitedPost = false \
+                      AND allowView = 0 \
+                      AND isMoved = 0 \
+                      AND isActivityAutoPost = 0 \
+                      AND isImported = 0 \
+                      AND contentType IN ("图片", "文字", "视频") \
+                    GROUP BY blogid, contenttype \
+                    ) t1 \
+               GROUP BY blogid \
+) t ON a.userid = t.blogid \
+     LEFT JOIN ( \
+               SELECT \
+                   blogid, \
+                   concat_ws( \
+                           ',', \
+                           sort_array(collect_list(concat(contenttype, ':', cast(cnt AS string)))) \
+                   ) AS post_50_contenttype_kv \
+               FROM ( \
+                    SELECT \
+                        blogid, \
+                        contenttype, \
+                        COUNT(1) AS cnt \
+                    FROM post50source \
+                    GROUP BY blogid, contenttype \
+                    ) t1 \
+               GROUP BY blogid \
+) u ON a.userid = u.blogid \
+     left join ( \
+               select blogId,creatorStatus \
+               from lofter_dm.ads_creator_ecology_identity_dd \
+               where dt = '${azkaban.flow.1.days.ago}' \
+) v on a.userid = v.blogId \
+     left join ( \
+               select blogId,COUNT(1) as post_cnt_std \
+               from lofter.dim_post \
+               where publishDate <= '${azkaban.flow.1.days.ago}' and is_book_store = 0 and valid <> 32 and \
+                   isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                   isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") \
+               group by blogId \
+) w on a.userid = w.blogId \
+    left join ( \
+              select post_userId, \
+                     sum(if(dt = '${azkaban.flow.1.days.ago}', expose_uv, 0)) as expose_uv_1d, \
+                     sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, expose_uv, 0)) as expose_uv_90d \
+              from lofter.dws_post_traffic_di \
+              where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',90) \
+              group by post_userId \
+)x on a.userid = x.post_userId

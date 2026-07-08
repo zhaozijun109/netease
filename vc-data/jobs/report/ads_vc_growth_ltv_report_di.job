@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_growth_ltv_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.dt as base_date, \
+a.device_type, a.origin_type, a.origin_channel, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 0, a.deviceUdid, null)) as device_count, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 0    and datediff(c.register_date, a.dt) = 0 and c.userId>0, c.userId, null)) as user_count, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 6    and datediff(c.register_date, a.dt) between 0 and 6   and c.userId>0, c.userId, null)) as user_count_7d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 14   and datediff(c.register_date, a.dt) between 0 and 14  and c.userId>0, c.userId, null)) as user_count_15d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 29   and datediff(c.register_date, a.dt) between 0 and 29  and c.userId>0, c.userId, null)) as user_count_30d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 59   and datediff(c.register_date, a.dt) between 0 and 59  and c.userId>0, c.userId, null)) as user_count_60d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 89   and datediff(c.register_date, a.dt) between 0 and 89  and c.userId>0, c.userId, null)) as user_count_90d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 119  and datediff(c.register_date, a.dt) between 0 and 119 and c.userId>0, c.userId, null)) as user_count_120d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 179  and datediff(c.register_date, a.dt) between 0 and 179 and c.userId>0, c.userId, null)) as user_count_180d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 0   and datediff(c.trade_date, a.dt) = 0 and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 6   and datediff(c.trade_date, a.dt) between 0 and 6   and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_7d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 14  and datediff(c.trade_date, a.dt) between 0 and 14  and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_15d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 29  and datediff(c.trade_date, a.dt) between 0 and 29  and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_30d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 59  and datediff(c.trade_date, a.dt) between 0 and 59  and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_60d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 89  and datediff(c.trade_date, a.dt) between 0 and 89  and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_90d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 119 and datediff(c.trade_date, a.dt) between 0 and 119 and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_120d, \
+count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 179 and datediff(c.trade_date, a.dt) between 0 and 179 and c.trade_money > 0, a.deviceUdid, null)) as trade_device_count_180d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 0 and datediff(c.trade_date, a.dt) = 0, c.trade_money, 0)) as trade_money, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 6 and datediff(c.trade_date, a.dt) between 0 and 6, c.trade_money, 0)) as trade_money_7d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 14 and datediff(c.trade_date, a.dt) between 0 and 14, c.trade_money, 0)) as trade_money_15d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 29 and datediff(c.trade_date, a.dt) between 0 and 29, c.trade_money, 0)) as trade_money_30d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 59 and datediff(c.trade_date, a.dt) between 0 and 59, c.trade_money, 0)) as trade_money_60d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 89 and datediff(c.trade_date, a.dt) between 0 and 89, c.trade_money, 0)) as trade_money_90d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 119 and datediff(c.trade_date, a.dt) between 0 and 119, c.trade_money, 0)) as trade_money_120d, \
+sum(if(datediff('${azkaban.flow.1.days.ago}', a.dt) = 179 and datediff(c.trade_date, a.dt) between 0 and 179, c.trade_money, 0)) as trade_money_180d, \
+a.proxy \
+from ( \
+select dt,device_udid as deviceUdid, device_type, origin_type, origin_channel,  \
+proxy \
+from vc.dwd_vc_device_growth_attribution_i_d \
+where dt <='${azkaban.flow.1.days.ago}' and \
+dt >= date_sub('${azkaban.flow.1.days.ago}', 180) \
+group by dt,device_udid, device_type, origin_type, origin_channel,  \
+proxy \
+) a \
+left join ( \
+select x.register_date, \
+y.pay_date as trade_date, \
+x.deviceUdid,  \
+x.userId,  \
+sum(amount) as trade_money \
+from ( \
+select user_id                 as userId, \
+first_active_deviceudid as deviceUdid, \
+register_date \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt = (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and first_active_deviceudid is not null and is_anonymity = 'N' \
+) x \
+left join ( \
+select user_id          as userId, \
+order_date       as pay_date, \
+sum(order_price) as amount \
+from vc.dwd_vc_order_i_d \
+where order_status = 2 and dt between DATE_SUB('${azkaban.flow.1.days.ago}',180) and '${azkaban.flow.1.days.ago}' \
+group by 1, 2 \
+) y on x.userId = y.userId and y.pay_date >= x.register_date \
+group by 1, 2,3,4 \
+) c on a.deviceUdid = c.deviceUdid \
+where datediff('${azkaban.flow.1.days.ago}', a.dt) in (0,6,14,29,59,89,119,179) \
+group by a.dt, a.device_type, a.origin_type, a.origin_channel,  \
+a.proxy \

@@ -1,0 +1,270 @@
+type=sparksql
+hive.query.01=\
+WITH dialogue_ai_response_source AS ( \
+    SELECT requestId,aiSource \
+    FROM ( \
+        SELECT requestId, \
+               aiSource, \
+               ROW_NUMBER() OVER(PARTITION BY requestId ORDER BY createTime DESC) AS rn \
+        FROM lofter_db_dump.ods_db_pve_user_dialogue_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 0 \
+        AND aiSource >= 0 AND requestId IS NOT NULL \
+    ) t1 \
+    WHERE rn = 1 \
+), \
+duplicate_dialogue_ai_response_source AS ( \
+    SELECT requestId,aiSource \
+    FROM ( \
+        SELECT requestId, \
+               aiSource, \
+               ROW_NUMBER() OVER(PARTITION BY requestId ORDER BY createTime DESC) AS rn \
+        FROM lofter_db_dump.ods_db_pve_user_duplicate_dialogue_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 0 \
+        AND aiSource >= 0 AND requestId IS NOT NULL \
+    ) t1 \
+    WHERE rn = 1 \
+), \
+dialogue_group_ai_response_source AS ( \
+    SELECT dtId,aiSource \
+    FROM ( \
+        SELECT dtId, \
+               aiSource, \
+               ROW_NUMBER() OVER (PARTITION BY dtId ORDER BY createTime DESC) AS rn \
+        FROM lofter_db_dump.ods_db_pve_role_group_dialogue_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 0 \
+        AND aiSource >= 0 AND dtId IS NOT NULL \
+    ) t1 \
+    WHERE rn = 1 \
+) \
+INSERT OVERWRITE TABLE lofter.dwd_pve_user_chats_info_di PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT t1.id AS dialogueId, \
+       t1.userId, \
+       t1.content, \
+       t1.type, \
+       t1.audioFlag, \
+       t1.ext, \
+       t1.createTime, \
+       t1.requestId, \
+       t1.status, \
+       t3.aiSource, \
+       t1.sortNo, \
+       t2.id AS roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type AS roleType, \
+       t2.status AS roleStatus, \
+       t2.publicView AS rolePublicView, \
+       t2.creatorUid AS roleCreatorUid, \
+       t1.messageType, \
+       t1.dbUpdateTime, \
+       0 AS chatType \
+FROM ( \
+    SELECT  id, \
+            userid, \
+            content, \
+            type, \
+            audioFlag, \
+            ext, \
+            createTime, \
+            requestId, \
+            status, \
+            sortNo, \
+            roleId, \
+            messageType, \
+            dbUpdateTime \
+    FROM lofter_db_dump.ods_db_pve_user_dialogue_nd \
+    WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') >= '2024-05-20' AND roleId > 0 AND sender = 1 \
+    AND FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+LEFT JOIN ( \
+    SELECT  id, \
+            userid AS pveUserId, \
+            roleName, \
+            status, \
+            type, \
+            publicView, \
+            creatorUid \
+    FROM lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.roleId = t2.id \
+LEFT JOIN ( \
+    SELECT requestId,aiSource \
+    FROM dialogue_ai_response_source \
+) t3 \
+ON t1.requestId = t3.requestId \
+UNION ALL \
+SELECT t1.id AS dialogueId, \
+       t1.userId, \
+       t1.content, \
+       t1.type, \
+       t1.audioFlag, \
+       t1.ext, \
+       t1.createTime, \
+       t1.requestId, \
+       t1.status, \
+       t3.aiSource, \
+       t1.sortNo, \
+       t2.id AS roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type AS roleType, \
+       t2.status AS roleStatus, \
+       t2.publicView AS rolePublicView, \
+       t2.creatorUid AS roleCreatorUid, \
+       t1.messageType, \
+       t1.dbUpdateTime, \
+       0 AS chatType \
+FROM ( \
+    SELECT  id, \
+            userid, \
+            content, \
+            type, \
+            audioFlag, \
+            ext, \
+            createTime, \
+            requestId, \
+            status, \
+            sortNo, \
+            pveUserId, \
+            messageType, \
+            dbUpdateTime \
+    FROM lofter_db_dump.ods_db_pve_user_dialogue_nd \
+    WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') <= '2024-05-20' AND roleId = 0 and pveUserId > 0 AND sender = 1 \
+    AND FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+LEFT JOIN ( \
+    SELECT  id, \
+            userid AS pveUserId, \
+            roleName, \
+            status, \
+            type, \
+            publicView, \
+            creatorUid \
+    FROM lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.pveUserId = t2.pveUserId \
+LEFT JOIN ( \
+    SELECT requestId,aiSource \
+    FROM dialogue_ai_response_source \
+) t3 \
+ON t1.requestId = t3.requestId \
+UNION ALL \
+SELECT t1.id as dialogueId, \
+       t1.userId, \
+       t1.content, \
+       null AS type, \
+       t1.audioFlag, \
+       null AS ext, \
+       t1.createTime, \
+       t1.requestId, \
+       t1.status, \
+       t3.aiSource, \
+       t1.sortNo, \
+       t2.id AS roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type AS roleType, \
+       t2.status AS roleStatus, \
+       t2.publicView AS rolePublicView, \
+       t2.creatorUid AS roleCreatorUid, \
+       t1.messageType, \
+       t1.dbUpdateTime, \
+       0 AS chatType \
+FROM ( \
+    SELECT id, \
+           userid, \
+           userDupId, \
+           sender, \
+           content, \
+           audioFlag, \
+           createTime, \
+           requestId, \
+           status, \
+           sortNo, \
+           roleId, \
+           roleName, \
+           messageType, \
+           dbUpdateTime \
+    FROM lofter_db_dump.ods_db_pve_user_duplicate_dialogue_nd \
+    WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 1 \
+) t1 \
+LEFT JOIN ( \
+    SELECT  id, \
+            userid AS pveUserId, \
+            roleName, \
+            status, \
+            type, \
+            publicView, \
+            creatorUid \
+    FROM lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.roleId = t2.id \
+LEFT JOIN ( \
+    SELECT requestId,aiSource \
+    FROM duplicate_dialogue_ai_response_source \
+) t3 \
+ON t1.requestId = t3.requestId \
+UNION ALL \
+SELECT t1.id AS dialogueId, \
+       t1.userId, \
+       t1.content, \
+       t1.type, \
+       t1.audioFlag, \
+       t1.ext, \
+       t1.createTime, \
+       t1.requestId, \
+       t1.status, \
+       t3.aiSource, \
+       t1.sortNo, \
+       t1.targetRoleId as roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type AS roleType, \
+       t2.status AS roleStatus, \
+       t2.publicView AS rolePublicView, \
+       t2.creatorUid AS roleCreatorUid, \
+       t1.messageType, \
+       null as dbUpdateTime, \
+       1 AS chatType \
+FROM ( \
+    SELECT id, \
+           userId, \
+           groupId, \
+           pveUserId, \
+           roleId, \
+           roleType, \
+           content, \
+           type, \
+           audioFlag, \
+           sortNo, \
+           ext, \
+           createTime, \
+           requestId, \
+           sessionId, \
+           status, \
+           aiSource, \
+           messageType, \
+           dtId, \
+           groupType, \
+           sender, \
+           targetRoleIds, \
+           GET_JSON_OBJECT(targetRoleIds,'$[0].roleId') AS targetRoleId \
+    FROM lofter_db_dump.ods_db_pve_role_group_dialogue_nd \
+    WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 1 AND groupType = 0 \
+) t1 \
+LEFT JOIN ( \
+    SELECT  id, \
+            userid AS pveUserId, \
+            roleName, \
+            status, \
+            type, \
+            publicView, \
+            creatorUid \
+    FROM lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.targetRoleId = t2.id \
+LEFT JOIN ( \
+    SELECT dtId,aiSource \
+    FROM dialogue_group_ai_response_source \
+) t3 \
+ON t1.dtId = t3.dtId

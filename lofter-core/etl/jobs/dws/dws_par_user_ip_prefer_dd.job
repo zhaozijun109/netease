@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_ip_prefer_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+      transform(sort_array(collect_list(struct(rk, ip)), true), x -> x.ip) as post_top_ips \
+from ( \
+   select userId, ip, row_number() over (partition by userId order by post_count desc) as rk \
+   from ( \
+       select userId, ip, sum(post_count) as post_count \
+       from lofter.dws_ip_user_consume_di \
+       where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+       group by 1, 2 \
+       having post_count >= 5 \
+   ) tt \
+) t \
+where rk <= 5 \
+group by 1 \
+
+dependencies=dws_ip_user_consume_di

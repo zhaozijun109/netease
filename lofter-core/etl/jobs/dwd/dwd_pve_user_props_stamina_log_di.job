@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_pve_user_props_stamina_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.logId, \
+	   t1.userId, \
+	   t1.propsId, \
+	   t1.costStamina, \
+	   t1.dialogueNo, \
+	   t1.dialogueId, \
+	   t1.status, \
+	   t1.createTime, \
+	   t1.updateTime, \
+	   t1.dbUpdateTime, \
+	   t1.userDupId, \
+	   t1.propsDesc, \
+	   t1.propsType, \
+       t2.roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+	   t2.roleType, \
+	   t2.roleStatus, \
+	   t2.rolePublicView, \
+	   t2.roleCreatorUid \
+from ( \
+	select id as logId, \
+		   userId, \
+		   propsId, \
+		   roleId, \
+		   costStamina, \
+		   dialogueNo, \
+		   dialogueId, \
+		   status, \
+		   createTime, \
+		   updateTime, \
+		   dbUpdateTime, \
+		   userDupId, \
+		   propsDesc, \
+		   propsType \
+	from lofter_db_dump.ods_db_pve_user_props_log_nd \
+	where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+	select id as roleId, \
+		   userId as pveUserId, \
+		   roleName, \
+		   type as roleType, \
+		   status as roleStatus, \
+		   publicView as rolePublicView, \
+		   creatorUid as roleCreatorUid \
+	from lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+on t1.roleId = t2.roleId

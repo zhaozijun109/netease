@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+conf.spark.hadoop.hive.exec.max.dynamic.partitions=5000
+conf.spark.hadoop.hive.exec.max.dynamic.partitions.pernode=500
+class=com.netease.lofter.data.jobs.usergroup.UserGroupEffectBackFillJob
+params=--date ${azkaban.flow.2.days.ago}
+dependencies=user_group_effect

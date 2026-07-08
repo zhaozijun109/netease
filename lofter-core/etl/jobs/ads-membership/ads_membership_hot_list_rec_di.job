@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table `lofter_dm`.`ads_membership_hot_list_rec_di` partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.listName,a.targetword,a.postid,a.blogid,a.indexvalue,a.listrank,a.listuuid,a.listtitle,a.hot,b.rankid \
+from ( \
+    select *, if(targetWord = '全部', '', targetWord) as ipName \
+    from lofter_dm.ads_membership_hot_list_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+    select rankId, firstTitle as listTitle, secondTitle as ipName \
+    from lofter_db_dump.ods_db_membership_rank_directory_nd \
+) b on a.listTitle = b.listTitle and a.ipName = b.ipName \

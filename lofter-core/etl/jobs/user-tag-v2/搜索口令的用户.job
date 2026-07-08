@@ -1,0 +1,63 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 搜索口令的用户 --bitmap
+retries=0
+conf.spark.execute.sql="\
+                       with actpwd_users as ( \
+                            select a.*, b.userId as real_userId \
+                            from ( \
+                                select * \
+                                from `lofter`.`dwd_growth_actpwd_access_di` \
+                                where `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` > date_sub('${azkaban.flow.1.days.ago}',30) \
+                            ) a \
+                            join ( \
+                                select dt, deviceUdid, userId \
+                                from lofter.device_active \
+                                     lateral view explode(userIds) as userId \
+                                where `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` > date_sub('${azkaban.flow.1.days.ago}',30) \
+                            ) b on a.deviceUdid = b.deviceUdid and a.dt = b.dt \
+                       ) \
+                       select userid       as userId, \
+                               '搜索口令的用户'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    SELECT \
+                              	        `real_userId` AS `userId`, \
+                              	        '搜索口令的用户' AS `tag`, \
+                              	        'DAY_7' AS `cat`, \
+                                        IF(`is_paid_subscribe` = 1,'付费口令', '非付费口令') AS `grp` \
+                                  FROM \
+                              	        actpwd_users \
+                                  WHERE \
+                              	        `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` > date_sub('${azkaban.flow.1.days.ago}',7) AND (`actpwd_type` = 0 OR `actpwd_type` = 2) \
+                                  GROUP BY `real_userId`, `tag`, `cat`, `grp` \
+                               \
+                                  UNION ALL \
+                               \
+                                  SELECT \
+                              	        `real_userId` AS `userId`, \
+                              	        '搜索口令的用户' AS `tag`, \
+                              	        'DAY_15' AS `cat`, \
+                              	        IF(`is_paid_subscribe` = 1,'付费口令', '非付费口令') AS `grp` \
+                                  FROM \
+                              	        actpwd_users \
+                                  WHERE \
+                              	        `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` > date_sub('${azkaban.flow.1.days.ago}',15) AND (`actpwd_type` = 0 OR `actpwd_type` = 2) \
+                                  GROUP BY `real_userId`, `tag`, `cat`, `grp` \
+                               \
+                                  UNION ALL \
+                               \
+                                  SELECT \
+                              	        `real_userId` AS `userId`, \
+                              	        '搜索口令的用户' AS `tag`, \
+                              	        'DAY_30' AS `cat`, \
+                              	        IF(`is_paid_subscribe` = 1,'付费口令', '非付费口令') AS `grp` \
+                                  FROM \
+                              	        actpwd_users \
+                                  WHERE \
+                              	        `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` > date_sub('${azkaban.flow.1.days.ago}',30) AND (`actpwd_type` = 0 OR `actpwd_type` = 2) \
+                                  GROUP BY `real_userId`, `tag`, `cat`, `grp` ) "

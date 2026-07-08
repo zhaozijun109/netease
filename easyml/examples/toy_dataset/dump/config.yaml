@@ -1,0 +1,61 @@
+floatFeatures:
+  - isShared: false
+    name: artice_type_in_user_action_types
+  - isShared: false
+    name: i_rt_click_count
+  - isShared: false
+    name: i_rt_ctr
+  - isShared: true
+    name: u_rt_recent_pay_time
+  - isShared: true
+    name: u_rt_balance
+  - isShared: false
+    name: i_rt_exposed_count
+  - isShared: false
+    name: is_new_user_with_tag
+kvFeatures:
+  - isShared: true
+    name: u_rt_itags_kv
+listStringFeatures:
+  - isShared: true
+    name: u_rt_types
+  - isShared: true
+    name: u_recent_tags
+  - isShared: true
+    name: u_all_follow_blogs
+  - isShared: true
+    name: u_rt_tags
+  - isShared: true
+    name: u_light_items
+  - isShared: true
+    name: u_high_items
+  - isShared: true
+    name: u_rt_firsttags
+  - isShared: true
+    name: u_all_tags
+  - isShared: true
+    name: u_follow_blogs
+  - isShared: true
+    name: u_tags
+  - isShared: true
+    name: u_recent_blogs
+  - isShared: false
+    name: c_u_long_sim_items
+  - isShared: false
+    name: c_u_long_sim_ip_items
+nestedListStringFeatures:
+  - isShared: false
+    name: c_u_long_sim_items_tags
+  - isShared: true
+    name: u_high_items_tags
+  - isShared: true
+    name: u_light_items_tags
+stringFeatures:
+  - isShared: false
+    name: o_alg
+  - isShared: false
+    name: item_id
+  - isShared: false
+    name: itemKey
+  - isShared: true
+    name: user_id

@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_key_area_monitor_di partition (dt='${azkaban.flow.1.days.ago}') \
+select count(distinct if(a.publishDate = '${azkaban.flow.1.days.ago}', a.blogId, null)) as blogs, \
+       count(distinct if(a.publishDate = '${azkaban.flow.1.days.ago}', a.postId, null)) as posts, \
+       count(distinct c.postId) as posts_premium, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', a.publishDate) between 0 and 29, e.userId, null)) as blogs_premium, \
+       sum(d.real_pv) as real_pv \
+from ( \
+    select publishDate, id as postId, blogid, ips \
+    from lofter.dim_post \
+) a \
+left join ( \
+    select postId, category, category3, domain \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select postId \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId \
+left join ( \
+    select postid, nvl(realBrowsePv,0) + nvl(realPlayPv,0) as real_pv \
+    from lofter.dws_post_base_stats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.postId = d.postId \
+left join ( \
+    select userId \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+) e on a.blogId = e.userId \
+where b.category = '游戏' or b.category3 in ('单篇小说', '连载小说') or b.domain = '同人CP' or array_contains(a.ips, 'oc')

@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_lofter_customer_service_infringe_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day, \
+  status, \
+  reporttype, \
+  posttype, \
+  count(distinct postid) as postnum, \
+  count(distinct blogid) as blognum, \
+  count(distinct userid) as uv, \
+  count(1) as num, \
+  case when b.partneruserId is null then 0 else 1 end as partner_flg \
+from \
+  lofter_db_dump.ods_db_infringe_post_nd a \
+  left join \
+  (select blogId as partneruserId \
+      from lofter_db_dump.ods_db_partner_apply_job_nd \
+      where partnerType = 5 and status = 0 ) b \
+  on a.userid=b.partneruserId \
+where \
+  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) \
+  and '${azkaban.flow.1.days.ago}' \
+group by \
+  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'), \
+  status, \
+  reporttype, \
+  posttype, \
+  case when b.partneruserId is null then 0 else 1 end \
+with \
+  cube \
+

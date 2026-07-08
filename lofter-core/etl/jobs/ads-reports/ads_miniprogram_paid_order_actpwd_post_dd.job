@@ -1,0 +1,118 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_miniprogram_paid_order_actpwd_post_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postid \
+	,publishdate \
+	,c.blogid \
+	,actpwd \
+	,actpwd_channel \
+	,miniid \
+	,blogname \
+	,blognickname \
+	,url \
+	,contentid \
+	,contenttitle \
+	,copyrighttype \
+	,categorytags \
+	,styletags \
+	,period \
+	,count(DISTINCT order_id) AS num \
+	,count(DISTINCT a.userid) AS uv \
+	,sum(amount) AS amountd \
+	,d.title \
+ from ( \
+    select userid,blogid,postid,amount,pay_time,NVL(actpwd,'无') as actpwd ,NVL(actpwd_channel,'无') as  actpwd_channel,order_id,'日' As period \
+    from lofter.dwd_paid_subscribe_order_di \
+    where order_type=4 and dt = '${azkaban.flow.1.days.ago}' \
+    union \
+    select userid,blogid,postid,amount,pay_time,NVL(actpwd,'无') as actpwd ,NVL(actpwd_channel,'无') as  actpwd_channel,order_id,'7日' As period \
+    from lofter.dwd_paid_subscribe_order_di \
+    where order_type=4 and dt between date_sub('${azkaban.flow.1.days.ago}', 6)  and '${azkaban.flow.1.days.ago}' \
+    union \
+    select userid,blogid,postid,amount,pay_time,NVL(actpwd,'无') as actpwd ,NVL(actpwd_channel,'无') as  actpwd_channel,order_id,'30日' As period \
+    from lofter.dwd_paid_subscribe_order_di \
+    where order_type=4 and dt between date_sub('${azkaban.flow.1.days.ago}', 29)  and '${azkaban.flow.1.days.ago}' \
+    union \
+    select userid,blogid,postid,amount,pay_time,NVL(actpwd,'无') as actpwd ,NVL(actpwd_channel,'无') as  actpwd_channel,order_id,'累计' As period \
+    from lofter.dwd_paid_subscribe_order_di \
+    where order_type=4   \
+) a \
+left JOIN ( \
+	SELECT postid, miniid \
+	FROM lofter.dim_miniprogram_post_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid, miniid \
+) b ON a.postid = b.postid \
+left JOIN ( \
+	SELECT postid \
+		,publishdate \
+		,blogname \
+		,blogid \
+		,blognickname \
+		,url \
+		,contentid \
+		,contenttitle \
+		,copyrighttype \
+		,categorytags \
+		,styletags \
+	FROM lofter_dm.ads_evt_content_supply_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+) c ON a.postid = c.postid \
+left join (select id, title from lofter.dim_post) d on a.postId = d.id \
+GROUP BY a.postid \
+	,publishdate \
+	,c.blogid \
+	,actpwd \
+	,actpwd_channel \
+	,miniid \
+	,blogname \
+	,blognickname \
+	,url \
+	,contentid \
+	,contenttitle \
+	,copyrighttype \
+	,categorytags \
+	,styletags \
+	,period \
+	,d.title \
+grouping sets(( \
+			a.postid \
+			,publishdate \
+			,c.blogid \
+			,actpwd \
+			,actpwd_channel \
+			,miniid \
+			,blogname \
+			,blognickname \
+			,url \
+			,contentid \
+			,contenttitle \
+			,copyrighttype \
+			,categorytags \
+			,styletags \
+			,period \
+			,d.title \
+			), ( \
+			a.postid \
+			,publishdate \
+			,c.blogid \
+			,miniid \
+			,blogname \
+			,blognickname \
+			,url \
+			,contentid \
+			,contenttitle \
+			,copyrighttype \
+			,categorytags \
+			,styletags \
+			,period \
+			,d.title \
+			), ( \
+			miniid \
+			,contentid \
+			,contenttitle \
+			,copyrighttype \
+			,categorytags \
+			,styletags \
+			,period \
+			))
+dependencies=ads_evt_content_supply_dd

@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_external_link_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='day') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname, concat_ws(',', tags) as tags, publishdate, originUrl, \
+          split(originUrl,'/')[2] as sourceFrom, viewpv, viewuv, hotpv, praisepv, \
+          reproducepv, recommendpv, responsepv, subscribepv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType <> 3 and publishDate = '${azkaban.flow.1.days.ago}' \
+    order by hotpv desc \
+    limit 100
+hive.query.02=insert overwrite table lofter_dm.ads_video_external_link_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='week') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname, concat_ws(',', tags) as tags, publishdate, originUrl, \
+          split(originUrl,'/')[2] as sourceFrom, viewpv, viewuv, hotpv, praisepv, \
+          reproducepv, recommendpv, responsepv, subscribepv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType <> 3 and publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.7.days.ago}' \
+    order by hotpv desc \
+    limit 100
+hive.query.03=insert overwrite table lofter_dm.ads_video_external_link_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='month') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname, concat_ws(',', tags) as tags, publishdate, originUrl, \
+          split(originUrl,'/')[2] as sourceFrom, viewpv, viewuv, hotpv, praisepv, \
+          reproducepv, recommendpv, responsepv, subscribepv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType <> 3 and publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' \
+    order by hotpv desc \
+    limit 100

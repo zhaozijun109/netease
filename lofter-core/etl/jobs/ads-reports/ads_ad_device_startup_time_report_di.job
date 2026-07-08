@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_device_startup_time_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  appversion, \
+  a.deviceos, \
+  a.hotBoot, \
+  a.istimeout, \
+  percentile(reqTime, 0.1) as 1_fenwei, \
+  percentile(reqTime, 0.2) as 2_fenwei, \
+  percentile(reqTime, 0.3) as 3_fenwei, \
+  percentile(reqTime, 0.5) as 5_fenwei, \
+  percentile(reqTime, 0.7) as 7_fenwei, \
+  percentile(reqTime, 0.75) as 75_fenwei, \
+  percentile(reqTime, 0.8) as 8_fenwei, \
+  percentile(reqTime, 0.9) as 9_fenwei, \
+  count(1) as num, \
+  count(distinct deviceudid) as uv \
+from \
+  ( \
+    select \
+      deviceudid, \
+      occurtime, \
+      appversion, \
+      deviceos, \
+      case \
+        when get_json_object(params['ext'], '$.hotBoot') = true then 1 \
+        when get_json_object(params['ext'], '$.hotBoot') = false then 0 \
+        else -1 \
+      end as hotBoot, \
+      cast ( \
+        get_json_object(params['ext'], '$.reqTime') AS bigINT \
+      ) as reqTime, \
+      case \
+        when get_json_object(params['ext'], '$.isTimeout') = true then 1 \
+        when get_json_object(params['ext'], '$.isTimeout') = false then 0 \
+        else -1 \
+      end as istimeout \
+    from \
+      ( \
+        select \
+          deviceudid, \
+          occurtime, \
+          appversion, \
+          deviceos, \
+          params \
+        from \
+          lofter.ods_mda_app_partition_di \
+        where \
+          actiontype = 'advertisement' \
+          and eventid = 'ad-67' \
+          and dt = '${azkaban.flow.1.days.ago}' \
+      ) a \
+    where \
+      params['adCategory'] = 'STARTUP' \
+  ) a \
+group by \
+  a.deviceos, \
+  a.hotBoot, \
+  appversion, \
+  istimeout \

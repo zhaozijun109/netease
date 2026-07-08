@@ -1,0 +1,23 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "RecItemEvent",
+  "fields": [
+    {"name": "itemId", "type": "string"},
+    {"name": "itemType", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "time", "type": "long"},
+    {"name": "dt", "type": "int"},
+    {"name": "action", "type": "int", "doc": "1 曝光 2 点击 3 浏览 4 交易 5 互动 6 视频播放"},
+    {"name": "action_value", "type": "int", "doc": "1 正向 -1 负向 0 中性"},
+    {"name": "scene", "type": "string", "default": ""},
+    {"name": "interaction_type", "type": ["null", "int"], "default": null, "doc": "1红心 2转载 3蓝手 4收藏 5评论 6分享"},
+    {"name": "pay_amount", "type": ["null", "double"], "default": null, "doc": "交易金额"},
+    {"name": "repeat", "type": ["null", "int"], "default": null, "doc": "是否重复事件 0否 1是"},
+    {"name": "blogId", "type": ["null", "long"], "default": null, "doc": "行为关联博客Id"},
+    {"name": "attribute_rec_scene", "type": "string", "default": "", "doc": "归因推荐场景"},
+    {"name": "pay_business", "type": ["null", "int"], "default": null, "doc": "1 blog_vip 2 fans_vip 3 book store 4 gift present"},
+    {"name": "item_publish_time", "type": ["null", "long"], "default": null, "doc": "for item published in 7 days only"},
+    {"name": "source_scene", "type":  ["null", "string"], "default": null, "doc": "行为来源场景"}
+  ]
+}

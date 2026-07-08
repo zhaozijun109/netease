@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.02=insert overwrite table lofter.dws_collection_subscribe_user_browse_latest_di partition(dt = '${azkaban.flow.1.days.ago}') \
+              select a.userId,a.collectionId,a.postId,a.blogId,a.occurTime from  \
+              (select userId,collectionId,postId,blogId,occurTime,deviceudid from  \
+                  (select userId,collectionId,postId,post_userid as blogId,occurTime,deviceudid,row_number() over(partition by userId,collectionId order by occurTime desc) as rk \
+                  from lofter.dwd_post_collection_di  \
+                  where dt = '${azkaban.flow.1.days.ago}' and action_type='browse' and post_content_type in('图片','文字','长文章') \
+                        and source1_scene in('collection','floatcollection','subscribe','mysubscripition') and userId>0 \
+                  ) a \
+              where rk=1  \
+              ) a \
+              join \
+              lofter_db_dump.ods_db_subscribe_collection_nd b \
+              on a.userId =b.userId and a.collectionId = b.collectionId  \
+              join \
+              (select distinct deviceUdid from \
+                     (select deviceUdid,appVersion from lofter.device_active lateral view explode(appVersions) a as appVersion \
+                     where dt='${azkaban.flow.1.days.ago}' ) a \
+               where version_compare(appVersion ,'7.5.6') < 0  \
+              ) c  \
+              on a.deviceUdid = c.deviceUdid  \
+              distribute by userId % 5

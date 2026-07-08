@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ec_product_expose_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select eventId, deviceUdId, userId, occurTime, deviceOs, appKey, costTime, source, itemId, itemType, params['recid'] as recId, scene, params \
+from lofter.dwd_evt_benefit_page_view_di \
+where dt = '${azkaban.flow.1.days.ago}' and eventId in ('w1-18','w10-10', 'w3-15','w10-11','w3-21', 'w1-28','w2-13','w1-24', 'w1-77', 'w1-79', 'w1-76', 'WE1-6', 'WE1-8', 'WE1-18', 'WE1-21', 'WE1-29')
+dependencies=dwd_evt_benefit_page_view_di

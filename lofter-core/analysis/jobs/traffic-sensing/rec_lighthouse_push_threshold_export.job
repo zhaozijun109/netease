@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.backend.RecLightHousePushThresholdExport
+params=

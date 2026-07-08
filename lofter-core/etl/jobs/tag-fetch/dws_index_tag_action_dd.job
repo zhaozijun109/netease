@@ -1,0 +1,61 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=888
+conf.spark.task.maxFailures=10
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=insert overwrite table lofter.dws_index_tag_action_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select x.actionDate as action_date, x.tag, \
+       bitmap_union(x.hot_post_bitmap), bitmap_union(x.hot_blog_bitmap), bitmap_union(x.hot_bitmap), \
+       bitmap_union(y.publish_post_bitmap), bitmap_union(y.publish_blog_bitmap), bitmap_union(y.publish_post_ext_bitmap), \
+       bitmap_union(z.response_post_bitmap), bitmap_union(z.response_blog_bitmap), bitmap_union(z.response_bitmap) \
+from ( \
+   select actionDate, tag, to_bitmap(postId) as hot_post_bitmap, \
+          to_bitmap(blogId) as hot_blog_bitmap, \
+          to_bitmap(id) as hot_bitmap, \
+          to_bitmap(userId) as hot_user_bitmap \
+   from ( \
+      select from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') as actionDate, h.id, h.postId, h.blogId, h.publisherUserId as userId, p.tags \
+      from lofter_db_dump.ods_db_post_hot_nd h \
+           join lofter.dim_post p on h.postId = p.id \
+      where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 365 \
+   ) t lateral view explode(tags) as tag \
+   where length(tag) > 0 \
+   group by actionDate, tag \
+) x \
+left join ( \
+   select publishDate as actionDate, tag, to_bitmap(postId) as publish_post_bitmap, \
+          to_bitmap(blogId) as publish_blog_bitmap, \
+          to_bitmap(shiftleft(blogId,32) | rnk) as publish_post_ext_bitmap \
+   from ( \
+         select a.id as postId, blogId, tags, publishDate, \
+                userPostIndex + 1 as rnk \
+         from lofter.dim_post a \
+              join lofter.dim_blog b on a.blogId = b.id \
+         where publishDate <= '${azkaban.flow.1.days.ago}' and \
+               datediff('${azkaban.flow.1.days.ago}', publishDate) < 365 and \
+               a.isPublished = true and \
+               a.isCitedPost = false and \
+               a.isForbidden=false and \
+               a.allowView = 0 and \
+               a.valid in (0,12,15,16) and \
+               b.isValid = true \
+   ) t lateral view explode(tags) as tag \
+   where length(tag) > 0 \
+   group by publishDate, tag \
+) y on x.tag = y.tag and x.actionDate = y.actionDate \
+left join ( \
+  select from_unixtime(cast(c.publishTime/1000 as bigint), 'yyyy-MM-dd') as actionDate, tag, \
+         to_bitmap(c.postId) as response_post_bitmap, \
+         to_bitmap(c.blogId) as response_blog_bitmap, \
+         to_bitmap(c.id) as response_bitmap, \
+         to_bitmap(c.publisherUserId) as user_bitmap \
+    from lofter_db_dump.ods_db_post_response_nd c \
+         join lofter.dim_post p on c.postId = p.id \
+         lateral view explode(p.tags) as tag \
+    where from_unixtime(cast(c.publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(c.publishTime/1000 as bigint), 'yyyy-MM-dd')) < 365 and \
+          size(p.tags) > 0 \
+   group by 1, 2 \
+) z on x.tag = z.tag and x.actionDate = z.actionDate \
+group by 1, 2

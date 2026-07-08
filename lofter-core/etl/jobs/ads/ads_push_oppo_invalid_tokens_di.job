@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_oppo_invalid_tokens_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.result, a.pushChannel, a.messageId, a.pushGroupId, a.token \
+from ( \
+    select * \
+    from lofter.ods_log_push_after_accord_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+  select token \
+  from lofter.ods_log_push_callback_details_di \
+  where dt >= '${azkaban.flow.1.days.ago}' \
+) b on a.token = b.token \
+where b.token is null and a.pushChannel = 4 \

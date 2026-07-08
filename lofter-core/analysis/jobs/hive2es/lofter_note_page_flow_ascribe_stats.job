@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id,dt,postId,blogId,scene,explosureUv,clickUv from lofter_dm.ads_act_note_page_cvr_scene_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_note_page_flow_ascribe_stats --atom

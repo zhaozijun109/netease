@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_auto_generate_list_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select listSource, listType, listName, listRank, postId, blogId, nvl(indexValue,0) as indexValue, distinctId, uniqId, \
+           case when listSource = 5 then 30 \
+                when listSource = 6 then 60 \
+                when listSource = 7 and listType = 15 then 15 \
+                when listSource = 7 and listType = 16 then 30 \
+           else 7 end as periodType \
+    from lofter_dm.ads_grain_hot_list_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+  union all \
+    select listSource, listType, listName, listRank, postId, blogId, nvl(indexValue,0) as indexValue, distinctId, uniqId, 30 as periodType \
+    from lofter_dm.ads_grain_hot_list_monthly_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) ttt \
+
+dependencies=ads_grain_hot_list_di,ads_grain_ip_hot_list_monthly_di

@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01 = msck repair table vc.ods_db_lofter_connect_phone_account_nd;

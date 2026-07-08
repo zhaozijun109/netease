@@ -1,0 +1,58 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query=" \
+SELECT  tmp1.`blogId`, \
+        tmp1.`blogUrl`, \
+        tmp1.`blogNickName`, \
+        tmp1.`levelBefore`, \
+        tmp1.`levelNow`, \
+        tmp1.`type` \
+FROM \
+( \
+	SELECT  a.`blogid`        AS blogId, \
+	        a.`blog_url`      AS blogUrl, \
+	        a.`blog_nickname` AS blogNickName, \
+	        a.`level`         AS levelBefore, \
+	        b.`level`         AS levelNow, \
+	        1                 AS `type` \
+	FROM \
+	( \
+		SELECT  `blogid`, \
+		        `blog_url`, \
+		        `blog_nickname`, \
+		        `level` \
+		FROM `lofter_dm`.`ads_blog_score_di` \
+		WHERE `dt` = '${azkaban.flow.2.days.ago}' \
+		AND `level` IN ('S', 'A', 'B') \
+	) a \
+	JOIN \
+	( \
+		SELECT  `blogid`, \
+		        `level` \
+		FROM `lofter_dm`.`ads_blog_score_di` \
+		WHERE `dt` = '${azkaban.flow.1.days.ago}' \
+	) b \
+	ON a.`blogid` = b.`blogid` \
+	WHERE a.`level` <> b.`level` \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT  `id`, \
+                `isofficial` \
+	FROM `lofter`.`dim_blog` \
+	WHERE `isofficial` = 1 \
+) tmp2 \
+ON tmp1.`blogid` = tmp2.`id` \
+left join ( \
+    select cast(trim(blogId) as bigint) as blogId \
+    from lofter_db_dump.ods_db_admin_pub_data_nd \
+         lateral view explode(split(content, ',')) as blogId \
+    where name in ('blogvip_ids', 'book_store_blogIds') and cast(trim(blogId) as bigint) > 0 \
+    group by 1 \
+) tmp3 on tmp1.blogid = tmp3.blogId \
+left join ( \
+    select blogId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by blogId \
+) tmp4 on tmp1.blogid = tmp4.blogId \
+WHERE tmp2.id is null and tmp3.blogId is null and tmp4.blogId is null \
+"
+params= --messageType 86 --topic BI.DS.COMMON --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092,lofter-kafka-bi-risk4.gy.ntes:9092,lofter-kafka-bi-risk5.gy.ntes:9092,lofter-kafka-bi-risk6.gy.ntes:9092,lofter-kafka-bi-risk7.gy.ntes:9092,lofter-kafka-bi-risk8.gy.ntes:9092

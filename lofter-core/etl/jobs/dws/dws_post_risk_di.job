@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_post_risk_di partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(x.postId, y.postId) as postId, \
+       x.is_recommend, x.is_recommend_machine_audit, x.recommend_audit_duration, y.safety_audit_duration \
+from ( \
+  select a.postid, \
+         if(a.recomStatus = 1, 1, 0) is_recommend, \
+         if(c.reviewAccount is null, 1, 0) as is_recommend_machine_audit, \
+         b.reviewTime - a.lastPendingTime as recommend_audit_duration \
+  from ( \
+      select postid, recomStatus, reviewAccount, createTime lastPendingTime \
+      from lofter_db_dump.ods_db_recommend_review_post_nd \
+      where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.2.days.ago}' \
+  ) a \
+  join ( \
+      select postid, createTime as reviewTime \
+      from ( \
+        select postid, createTime, row_number() over (partition by postid order by createTime) rk \
+        from lofter_db_dump.ods_db_recommend_post_trace_log_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+              content='更新文章【推荐状态】' and operator is not null and operator <> 'N/A' \
+      ) t \
+      where rk = 1 \
+  ) b on a.postid = b.postid \
+  left join ( \
+      select reviewAccount \
+      from lofter.zq_lofter_recommendwork_name_zeppelin \
+      group by reviewAccount \
+  ) c on a.reviewAccount = c.reviewAccount \
+) x \
+full outer join ( \
+    select postId, safety_audit_duration \
+    from ( \
+        select dt, postid, \
+               case when machine_status in (0, 3) then machine_audit_time - copy_time \
+                    when person_status in (0, 3) then person_audit_time - copy_time \
+                    else 0 end as safety_audit_duration, \
+               row_number() over (partition by postId order by copy_time) as rnk \
+        from lofter.dwd_post_audit_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and (machine_status in (0, 3) or person_status in (0,3)) \
+    ) t \
+    where dt = '${azkaban.flow.1.days.ago}' and rnk = 1 and safety_audit_duration > 0 \
+) y on x.postId = y.postId \

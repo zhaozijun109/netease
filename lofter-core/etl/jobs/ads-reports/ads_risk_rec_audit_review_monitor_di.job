@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_rec_audit_review_monitor_di \
+    select postid, \
+        case type when 1 then '文字' when 2 then '图片' when 4 then '视频' end as contentType, \
+        level,is_gift,publishdate,reviewtype,reviewtime,duplicate_review, \
+            case when date_diff=0 then "当天发布" \
+                when date_diff=1 then "前一天发布" \
+                when date_diff>=2 and date_diff<=3 then "2-3天发布" \
+                when date_diff>=4 and date_diff<=7 then "4-7天发布" \
+                when date_diff>=7 then "7天前发布" end as auditDays, \
+            case when trial_status in ('sucess','green') then 1  \
+                 when trial_status in ('trying','fail') then 0 else null end trial_status, \
+            dt \
+    from ( \
+        select  a.dt, a.postid,type,level,reviewtype,reviewtime,publishdate,trial_status, \
+                datediff(from_unixtime(cast(reviewtime/1000 as bigint),'yyyy-MM-dd') ,publishdate) as date_diff,  \
+                case when c.postid is not null then 1 else 0 end as is_gift, \
+                case when duplicate_review_num > 1 then 1 else 0 end duplicate_review \
+        from      \
+            (select dt,postid,reviewaccount,reviewtime,reviewtype,status,type,duplicate_review_num  \
+            from (select postid,reviewaccount,reviewtime,reviewtype,status,type,from_unixtime(cast(reviewtime/1000 as bigint),'yyyy-MM-dd') as dt, \
+                    row_number()over(partition by postid order by reviewtime) as duplicate_review_num \
+                    from lofter_db_dump.ods_db_recommend_post_review_log_nd \
+                    where reviewtype in (0,1) and type in (1,2,4) and status=0) as dup_rev  \
+            where from_unixtime(cast(reviewtime/1000 as bigint),'yyyy-MM-dd') in ('${azkaban.flow.1.days.ago}','${azkaban.flow.2.days.ago}') \
+            ) as a  \
+        left join \
+            (select item_id,case when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'green') then 'green'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'sucess') then 'sucess'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'fail') then 'fail'  \
+                        when ARRAY_CONTAINS(COLLECT_SET(trial_status), 'trying') then 'trying' else 'other' end as trial_status \
+                from (select item_id,trial_status  \
+                        from rec.rec_lofter_data_l2_rec_pool_daily_info \
+                        where day >= '${azkaban.flow.2.days.ago}'  \
+                        union all  \
+                        select item_id,trial_status  \
+                        from rec.rec_lofter_data_rec_pool_daily_info  \
+                        where day >= '${azkaban.flow.2.days.ago}' )t1  \
+            group by item_id \
+            ) as b \
+        on a.postid = conv(split(b.item_id,'_')[1], 16, 10) \
+        left join (select dt,postid   \
+                    from lofter.dim_gift_post_return_dd  \
+                    where dt >= '${azkaban.flow.2.days.ago}' and ispay_returngift in (0,1) \
+                    group by dt,postid  ) as c \
+        on a.postid  = c.postid and a.dt = c.dt  \
+        left join (select dt,id as postid,level,publishdate \
+                    from (select id,userid,publishdate \
+                            from lofter.dim_post)as d \
+                    join (select dt,userid,level \
+                            from lofter.dws_par_creator_dd \
+                            where  dt >= '${azkaban.flow.2.days.ago}' )e \
+                    on d.userid = e.userid \
+                    group by dt,id,level,publishdate)d \
+        on a.postid = d.postid and a.dt = d.dt \
+        left join lofter.dim_miniprogram_post e on a.postId = e.postId \
+        where e.postId is null \
+    ) t \
+

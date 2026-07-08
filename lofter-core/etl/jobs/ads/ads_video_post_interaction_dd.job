@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_post_interaction_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postid,a.blogid,a.title,b.blogNickName,b.blogName,nvl(c.platformType,0) as platformType, \
+       calPlayPv play_pv_std, yesterdayPlayPv as play_pv_1d, weekPlayPv as play_pv_1w, monthPlayPv as play_pv_1m, \
+       calHotPv as hot_pv_std,yesterdayHotPv as hot_pv_1d, weekHotPv as hot_pv_1w, monthHotPv as hot_pv_1m \
+from ( \
+    select id as postid,blogid,substr(caption,4,10) as title \
+    from lofter_db_dump.ods_db_video_post_nd \
+) a join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select platformType,postid,blogid from lofter_db_dump.ods_db_media_post_import_nd \
+) c on a.postid=c.postid and a.blogid=c.blogid \
+left join( \
+    select postid,sum(realplaypv) as calPlayPv, \
+        sum(case when dt='${azkaban.flow.1.days.ago}' then realplaypv else 0 end) as yesterdayPlayPv, \
+        sum(case when dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then realplaypv else 0 end) as weekPlayPv, \
+        sum(case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then realplaypv else 0 end) as monthPlayPv \
+    from lofter.dws_video_post_general_di where dt between '2021-01-01' and '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) d on a.postid=d.postid \
+left join( \
+    select postid,sum(hot) as calHotPv, \
+        sum(case when dt='${azkaban.flow.1.days.ago}' then hot else 0 end) as yesterdayHotPv, \
+        sum(case when dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then hot else 0 end) as weekHotPv, \
+        sum(case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then hot else 0 end) as monthHotPv \
+    from lofter_dm.ads_post_general_di where dt between '2021-01-01' and '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) e on a.postid=e.postid
+dependencies=ads_post_general_di

@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_subscribe_top_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select collectionid,blogid,collectiontype,name,tags,url,blogname,blognickname,subscribes, \
+           row_number() over (partition by collectiontype,collection_post_type order by subscribes desc) rank, \
+           collection_post_type \
+    from ( \
+        select a.*,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',a.collectionid) url,c.blogName,c.blognickname, subscribes,collection_post_type \
+        from ( \
+            select id collectionid,blogid,collectiontype,name,tags \
+            from lofter_db_dump.ods_db_post_collection_nd \
+        ) a left join ( \
+            select collectionid,subscribe_uv_acc subscribes,collection_post_type \
+            from lofter.dws_collection_dd \
+            where dt = '${azkaban.flow.1.days.ago}'\
+        ) b on a.collectionid=b.collectionid \
+        left join ( \
+            select id,blogName,blognickname \
+            from lofter.dim_blog \
+        ) c on a.blogid=c.id \
+    ) t \
+) tt \
+where rank <= 500 \
+distribute by 1

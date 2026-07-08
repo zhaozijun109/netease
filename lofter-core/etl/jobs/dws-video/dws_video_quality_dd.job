@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_video_quality_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    deviceOs, \
+    case \
+        when deviceModel rlike '(?i)(iPhone15Pro|iPhone15Plus|iPhone14Pro|iPhone14ProMax|Mate60|MateX|find x|samsung.*S2[345]|Pixel [89])' then 'high' \
+        when deviceModel rlike '(?i)(iPhone1[1-3]|iPhone X|iPhone S[E]?|MiMix|Honor|samsung.*S[12]0|Pixel [4-7])' then 'mid' \
+        when deviceModel is null or deviceModel = '' then 'unknown' \
+        else 'low' \
+    end                                                            as device_tier, \
+    appVersion, \
+    nvl(dominant_quality, 'unknown')                               as dominant_quality, \
+    count(1)                                                       as play_session_count, \
+    count(distinct deviceUdid)                                     as play_session_uv, \
+    sum(case when buffer_session_count > 0 then 1 else 0 end)      as buffer_session_count, \
+    count(distinct case when buffer_session_count > 0 then deviceUdid end) as buffer_session_uv, \
+    sum(buffer_time_ms)                                            as buffer_time_ms, \
+    sum(played_time_ms)                                            as played_time_ms, \
+    sum(case when ttfp_ms > 0 and ttfp_ms < 30000 then ttfp_ms end) as ttfp_ms_sum, \
+    count(case when ttfp_ms > 0 and ttfp_ms < 30000 then 1 end)    as ttfp_ms_count, \
+    count(case when ttfp_ms > 0 and ttfp_ms < 30000 then 1 end)    as ttfp_ms_p50_input_count, \
+    sum(case when ttfr_ms > 0 and ttfr_ms < 30000 then ttfr_ms end) as ttfr_ms_sum, \
+    count(case when ttfr_ms > 0 and ttfr_ms < 30000 then 1 end)    as ttfr_ms_count, \
+    sum(case when is_play_started = 1 then 1 else 0 end)           as play_started_count, \
+    sum(case when is_play_failed = 1 then 1 else 0 end)            as play_failed_count, \
+    sum(play_heartbeat_count)                                      as play_heartbeat_count_sum, \
+    sum(case when start_event_time is not null then 1 else 0 end)  as play_attempt_count, \
+    sum(quality_switch_count)                                      as quality_switch_count_sum, \
+    count(distinct case when is_speedrate_used = 1 then deviceUdid end) as speedrate_uv \
+from lofter.dwd_video_play_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+  and is_real = 1 \
+group by deviceOs, \
+         case \
+             when deviceModel rlike '(?i)(iPhone15Pro|iPhone15Plus|iPhone14Pro|iPhone14ProMax|Mate60|MateX|find x|samsung.*S2[345]|Pixel [89])' then 'high' \
+             when deviceModel rlike '(?i)(iPhone1[1-3]|iPhone X|iPhone S[E]?|MiMix|Honor|samsung.*S[12]0|Pixel [4-7])' then 'mid' \
+             when deviceModel is null or deviceModel = '' then 'unknown' \
+             else 'low' \
+         end, \
+         appVersion, \
+         nvl(dominant_quality, 'unknown')
+dependencies=

@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ec_derivate_gmv_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.id AS orderId, \
+       a.tradeId, \
+       SUM(b.productNum) AS product_num, \
+       IF(c.orderfrom = 'legu_mini', '小程序', 'LOFTER') AS channel, \
+       IF(d.purchasesupplierid = 7639000, 'legu', 'nolegu') AS suppliertype, \
+       MAX(a.deliveryprice - a.deliverpreferential) AS postage, \
+       ROUND(MAX(a.amount),2) AS payamount \
+FROM lofter_db_dump.ods_db_benefit_order_nd a \
+JOIN lofter_db_dump.ods_db_benefit_order_product_nd b ON a.id = b.orderId \
+JOIN lofter_db_dump.ods_db_benefit_trade_nd c ON a.tradeId = c.id \
+JOIN lofter_db_dump.ods_db_benefit_product_info_nd d ON b.productid = d.id \
+WHERE c.status <> 3 AND a.payTime > 0 AND c.amount > 0 AND c.deletestatus = 0 AND from_unixtime(cast(a.payTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY a.id, a.tradeId, channel, suppliertype

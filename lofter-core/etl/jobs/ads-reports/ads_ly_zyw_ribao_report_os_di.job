@@ -1,0 +1,166 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ly_zyw_ribao_report_os_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select  a.os,a.tag,  \
+zyw_expose_uv,zyw_expose_pv,zyw_click_uv,zyw_click_pv,zyw_download_uv,zyw_download_pv,zyw_downfinish_uv,zyw_installfinish_uv,  \
+xqy_expose_uv,xqy_expose_pv,xqy_downclick_uv,xqy_downclick_pv,xqy_bindingexpose_uv,xqy_bindingexpose_pv,xqy_bindingclick_uv,xqy_bindingclick_pv , \
+xqy_installclick_uv,xqy_start_uv \
+from(  \
+select  \
+lower(os) os, \
+case when groupid in ('A','C')  then '绘旅人'  \
+            when groupid='B'  then '破次元恋人'  \
+            else GROUPID  \
+            end tag,  \
+      count( distinct case when optype='expose' then userid  end ) zyw_expose_uv,  \
+      count( case when optype='expose' then userid  end )zyw_expose_pv,  \
+       count( distinct case when optype='click' then userid  end )zyw_click_uv,  \
+      count( case when optype='click' then userid  end )zyw_click_pv,         \
+      count(distinct case when optype='downstart' then userid  end )zyw_download_uv ,  \
+      count( case when optype='downstart' then userid  end )zyw_download_pv,  \
+      count(distinct case when optype='downfinish' then userid  end )zyw_downfinish_uv ,       \
+      count(distinct case when optype='installfinish' then userid  end )zyw_installfinish_uv  \
+from lofter.dwd_ad_resource_action_di   \
+where dt='${azkaban.flow.1.days.ago}' \
+and groupid in ('A','C','B','阴阳师')   \
+group  by  lower(os), \
+ case when groupid in ('A','C')  then '绘旅人'  \
+            when groupid='B'  then '破次元恋人'  \
+            else GROUPID  \
+            end  \
+) a left join   \
+(  \
+select   \
+lower(deviceos) os, \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag,  \
+ count(distinct userid)xqy_expose_uv ,count(userid)xqy_expose_pv   \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and  params['gameName']  in ( 'hlr','virtualover','yys' )   \
+and eventid='game1-1'  \
+and scene='game-center'  \
+and actiontype='other'  \
+and action ='0'  \
+group by   \
+lower(deviceos) , \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end   \
+  ) b on a.tag=b.tag and a.os=b.os \
+left join   \
+(  \
+select   \
+    lower(deviceos) os, \
+    case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag  \
+     ,count(distinct userid) xqy_downclick_uv  ,count(userid) xqy_downclick_pv  \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and eventid='game1-9'  \
+and scene='game-center'  \
+and action ='101'  \
+and actiontype='other'  \
+and  params['gameName'] in ( 'hlr' ,'virtualover','yys')  \
+group by   \
+lower(deviceos) , \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end   \
+)c on a.tag=c.tag and a.os=c.os \
+left join  \
+(  \
+select     \
+lower(deviceos) os, \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag  \
+     ,count(distinct userid)  xqy_bindingexpose_uv  ,count(userid) xqy_bindingexpose_pv   \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and eventid='game1-7'  \
+and scene='game-center'  \
+and action ='0'  \
+and actiontype='other'  \
+and  params['gameName'] in ( 'hlr' ,'virtualover','yys')  \
+group by  \
+lower(deviceos) , \
+ case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end   \
+) f on a.tag=f.tag and a.os=f.os \
+left join   \
+(  \
+select     \
+lower(deviceos) os, \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag,count(distinct userid)  xqy_bindingclick_uv  ,count(userid) xqy_bindingclick_pv    \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and eventid='game1-8'  \
+and scene='game-center'  \
+and action ='101'  \
+and actiontype='other'  \
+and  params['gameName'] in ( 'hlr' ,'virtualover','yys')  \
+group by   \
+lower(deviceos) , \
+ case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end     \
+     ) g on a.tag=g.tag  and a.os=g.os \
+ left join   \
+(  \
+select   \
+lower(deviceos) os, \
+  case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag,count(distinct userid)  xqy_installclick_uv  ,count(userid) xqy_installclick_pv    \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and eventid='game1-10'  \
+and scene='game-center'  \
+and action ='101'  \
+and actiontype='other'  \
+and  params['gameName'] in ( 'hlr' ,'virtualover','yys')  \
+group by    \
+lower(deviceos) , \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end     \
+     ) h on a.tag=h.tag  and a.os=h.os \
+ left join   \
+(  \
+select     \
+lower(deviceos) os, \
+case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end tag,count(distinct userid)  xqy_start_uv  ,count(userid) xqy_start_pv    \
+from  lofter.ods_mda_app_partition_di   \
+where  dt='${azkaban.flow.1.days.ago}' \
+and eventid='game1-11'  \
+and scene='game-center'  \
+and action ='101'  \
+and actiontype='other'  \
+and  params['gameName'] in ( 'hlr' ,'virtualover','yys')  \
+group by   \
+lower(deviceos) , \
+ case when   params['gameName'] = 'hlr' then '绘旅人'   \
+     when params['gameName'] = 'virtualover' then '破次元恋人'  \
+     when params['gameName'] = 'yys' then '阴阳师'  \
+     end     \
+     ) i on a.tag=i.tag  and a.os=i.os \
+ \
+ \

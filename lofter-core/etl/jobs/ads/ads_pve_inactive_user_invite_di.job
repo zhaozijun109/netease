@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_pve_inactive_user_invite_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tmp1.userId \
+from ( \
+    select t1.userId \
+    from ( \
+        select userId \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and active_days_7d > 1 and is_anonymous = 0 \
+    ) t1 \
+    left join ( \
+        select userId \
+        from lofter.dws_pve_user_role_chats_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 179) and '${azkaban.flow.1.days.ago}' \
+        group by userId \
+    ) t2 \
+    on t1.userId = t2.userId \
+    where t2.userId is null \
+) tmp1 \
+left join ( \
+    select userId \
+    from lofter_dm.ads_pve_inactive_user_invite_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 29) and dt < '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) tmp2 \
+on tmp1.userId = tmp2.userId \
+where tmp2.userId is null \
+limit 100000

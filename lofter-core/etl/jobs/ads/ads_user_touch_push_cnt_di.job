@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_touch_push_cnt_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select \
+                  userid, \
+                  1 as day_interval, \
+                  COUNT(1) as push_cnt \
+              from \
+                  lofter.dwd_push_action_di \
+              where \
+                  action = 2 \
+                  and dt = '${azkaban.flow.1.days.ago}' \
+              GROUP by \
+                  userid \
+              union all \
+              select \
+                  userid, \
+                  7 as day_interval, \
+                  COUNT(1) as push_cnt \
+              from \
+                  lofter.dwd_push_action_di \
+              where \
+                  action = 2 \
+                  and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 7) \
+                  and dt <= '${azkaban.flow.1.days.ago}' \
+              GROUP by \
+                  userid \
+              union all \
+              select \
+                  userid, \
+                  15 as day_interval, \
+                  COUNT(1) as push_cnt \
+              from \
+                  lofter.dwd_push_action_di \
+              where \
+                  action = 2 \
+                  and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 15) \
+                  and dt <= '${azkaban.flow.1.days.ago}' \
+              GROUP by \
+                  userid \
+              union all \
+              select \
+                  userid, \
+                  30 as day_interval, \
+                  COUNT(1) as push_cnt \
+              from \
+                  lofter.dwd_push_action_di \
+              where \
+                  action = 2 \
+                  and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+                  and dt <= '${azkaban.flow.1.days.ago}' \
+              GROUP by \
+                  userid \

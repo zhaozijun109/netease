@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_core_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select core_users, active_users_30d \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(distinct userId) as core_users \
+    from lofter.dws_par_user_core_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, count(distinct deviceUdid) as active_users_30d \
+  from lofter.device_active \
+  where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) b on a.dt = b.dt

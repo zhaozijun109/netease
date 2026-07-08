@@ -1,0 +1,45 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select userId, 1 as messageType, null as postId \
+    from lofter_dm.ads_ip_yiyou_high_net_value_user_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 3 as messageType, null as postId \
+    from lofter_dm.ads_ip_yiyou_traffic_limit_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 4 as messageType, null as postId \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and level in ('S', 'A', 'B') \
+  union all \
+    select null as userId, 5 as messageType, postId \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' and premium_date >= '${azkaban.flow.30.days.ago}' \
+  union all \
+    select null as userId, 6 as messageType, postId \
+    from lofter_dm.ads_ip_yiyou_traffic_limit_truncate_post_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select null as userId, 7 as messageType, postId \
+    from lofter_dm.ads_ip_yiyou_traffic_limit_premium_post_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select null as userId, 8 as messageType, postId \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select null as userId, 10 as messageType, postId \
+    from lofter_dm.ads_paid_post_low_quality_post_limit_scene_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and scene = 1 \
+  union all \
+    select null as userId, 11 as messageType, postId \
+    from lofter_dm.ads_paid_post_low_quality_post_limit_scene_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and scene = 2 \
+  union all \
+    select blogId as userId, 12 as messageType, null as postId \
+    from lofter_dm.ads_paid_post_low_quality_blog_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+"
+params= --topic lofter.common.yiyou.user --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

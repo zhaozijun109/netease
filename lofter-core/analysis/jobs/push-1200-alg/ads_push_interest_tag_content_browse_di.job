@@ -1,0 +1,90 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=create temporary function resolve_mda_action_type as 'com.netease.wm.udf.ResolveMdaActionType'
+hive.query.02= \
+with interest_users as ( \
+    select a.userId, \
+        split(get_json_object(b.interests, '$.tags'), ',') as tags, \
+        split(get_json_object(b.interests, '$.ipNames'), ',') as ips, \
+        split(get_json_object(b.interests, '$.categorys'), ',') as categories, \
+        split(get_json_object(b.interests, '$.interests'), ',')  as interests \
+    from ( \
+        select userId \
+        from lofter.dwd_beginner_guide_page_events_di \
+        where dt ='${azkaban.flow.1.days.ago}' and (click_choose_category_cnt > 0 or click_choose_ip_cnt > 0 or click_choose_tag_cnt > 0) \
+        group by 1 \
+    ) a \
+    join lofter_db_dump.ods_db_blog_settings_nd b on a.userId = b.blogId \
+), \
+user_browses as ( \
+    select a.userId, b.tags, b.ips, a.postId \
+    from ( \
+        select userId, CAST(itemId AS bigint) as postId \
+        from lofter.ods_mda_app_raw_di \
+        where dt >= '${azkaban.flow.1.days.ago}' and dt <= '${azkaban.flow.current.date}' and \
+              userId > 0 and resolve_mda_action_type(eventId) IN ('page_view', 'page_duration') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') and CAST(itemId AS bigint) > 0 \
+        group by 1, 2 \
+    ) a join lofter.dim_post b on a.postId = b.id \
+    join (select userId from interest_users group by 1) c on a.userId = c.userId \
+) \
+insert overwrite table lofter_dm.ads_push_interest_tag_content_browse_di partition(dt = '${azkaban.flow.current.date}') \
+select x.userId, x.tag, x.hot_30d, x.postId, y.blogId \
+from ( \
+    select a.userId, a.tag, c.postId, c.hot_30d, row_number() over (partition by a.userId order by c.hot_30d desc) as hot_rk \
+    from ( \
+        select  userId, postId, max(tag) as tag \
+        from ( \
+            select a.userId as userId, b.postId as postId, a.tag \
+            from ( \
+                select  a.userId, a.tag as tag \
+                from ( \
+                    select userId, tag from interest_users lateral view explode(tags) as tag \
+                    where length(tag) > 0 \
+                ) a \
+                join ( \
+                    select userId, tag from user_browses lateral view explode(tags) as tag \
+                ) b on a.userId = b.userId and a.tag = b.tag \
+                group by 1, 2 \
+            ) a \
+            join ( \
+                select id as postId, tag \
+                from lofter.dim_post \
+                    lateral view explode(tags) as tag \
+                where publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' \
+            ) b on a.tag = b.tag \
+            union \
+                select a.userId as userId, b.postId as postId, a.ip as tag \
+            from ( \
+                select  a.userId, a.ip \
+                from ( \
+                    select userId, ip from interest_users lateral view explode(ips) as ip \
+                    where length(ip) > 0 \
+                ) a \
+                join ( \
+                    select userId, ip from user_browses lateral view explode(ips) as ip \
+                ) b on a.userId = b.userId and a.ip = b.ip \
+                group by 1, 2 \
+            ) a \
+            join ( \
+                select id as postId, ip \
+                from lofter.dim_post \
+                    lateral view explode(ips) as ip \
+                where publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' \
+            ) b on a.ip = b.ip \
+        ) t \
+        group by 1, 2 \
+    ) a \
+    join ( \
+        select postId, hot_30d from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot_30d > 0 \
+    ) c on a.postId = c.postId \
+    left join ( \
+        select userId, postId from lofter.dwd_post_expose_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    ) d on a.userId = d.userId and a.postId = d.postId \
+    left join ( \
+       select userId, postId from user_browses group by 1, 2 \
+    ) e on a.userId = e.userId and a.postId = e.postId \
+    left join lofter_db_dump.ods_db_user_forbid_tag_nd f on a.userId = f.userId and a.tag = f.tagName \
+    where d.postId is null and e.postId is null and f.tagName is null \
+) x \
+join lofter.dim_post y on x.postId = y.id \
+where x.hot_rk = 1 \

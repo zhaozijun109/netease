@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_post_audit_di partition(dt = '${azkaban.flow.1.days.ago}') \
+        select a.postid,a.blogid,a.version,a.uuid,a.level,a.posttype,b.operator as machine_operator,c.operator as person_operator,    \
+            b.status as machine_status, c.status as person_stauts,  b.forbidtype as machine_forbidtype, b.hint as machine_hint,    \
+            c.forbidtype as person_forbidtype,c.hint as person_hint,   \
+        	a.createtime as copy_time,b.createtime as machine_audit_time,c.createtime as person_audit_time       \
+        from         \
+        (select uuid, bussinessType as posttype,blogid,bussinessid  as postid,priority as level,createtime,version      \
+        from lofter.ods_log_anti_spam_copy_di        \
+        where  bizInfo='genPostLog'  and  dt = '${azkaban.flow.1.days.ago}' and            \
+            from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'      \
+        ) a       \
+        left join       \
+        (select b.postid,b.blogid,b.version,b.status,b.uuid,b.createtime,b.operator,forbidtype,hint    \
+        from       \
+        	(select postid,blogid,version,status, get_json_object(get_json_object(content,"$.callback"),"$.uuId") as uuid ,createtime ,operator,forbidtype,hint,    \
+        		rank()over(partition by get_json_object(get_json_object(content,"$.callback"),"$.uuId") order by createtime asc) as rk         \
+        	from lofter_db_dump.ods_db_risk_antispam_callback_record_nd        \
+        	where type=0 and   version>0 and status in (0,1,2,3) and machine=1 and    \
+        	    from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between  '${azkaban.flow.1.days.ago}'  and date_add('${azkaban.flow.1.days.ago}',1)) b        \
+        where b.rk=1       \
+        ) b       \
+        on a.uuid=b.uuid and a.blogid=b.blogid and a.postid=b.postid and a.version=b.version       \
+        left join       \
+        (select b.postid,b.blogid,b.version,b.status,b.uuid,b.createtime,b.operator,forbidtype,hint   \
+        from       \
+        	(select postid,blogid,version,status, get_json_object(get_json_object(content,"$.callback"),"$.uuId") as uuid ,createtime ,operator,forbidtype,hint,    \
+        		rank()over(partition by get_json_object(get_json_object(content,"$.callback"),"$.uuId") order by createtime asc) as rk         \
+        	from lofter_db_dump.ods_db_risk_antispam_callback_record_nd        \
+        	where type=0 and   version>0 and status in (0,2,3) and machine=0 and                                    \
+        	    from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between  '${azkaban.flow.1.days.ago}'  and date_add('${azkaban.flow.1.days.ago}',1)) b        \
+        where b.rk=1       \
+        ) c       \
+        on b.uuid=c.uuid and b.blogid=c.blogid and b.postid=c.postid and b.version=c.version   \
+        distribute by 1

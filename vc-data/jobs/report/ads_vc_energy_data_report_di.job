@@ -1,0 +1,140 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_energy_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+COALESCE(t1.get_free_energy           ,0) as get_free_energy, \
+COALESCE(t1.get_buy_energy            ,0) as get_buy_energy, \
+COALESCE(t1.get_reward_energy         ,0) as get_reward_energy, \
+COALESCE(t2.total_amount              ,0) as total_amount, \
+COALESCE(t3.chat_uv                   ,0) as chat_uv, \
+COALESCE(t3.total_chats               ,0) as total_chats, \
+COALESCE(t3.total_cost_energy         ,0) as total_cost_energy, \
+COALESCE(t3.cost_free_energy          ,0) as cost_free_energy, \
+COALESCE(t3.cost_buy_energy           ,0) as cost_buy_energy, \
+COALESCE(t3.cost_reward_energy        ,0) as cost_reward_energy, \
+COALESCE(t4.total_uv                  ,0) as total_uv, \
+COALESCE(t4.rest_free_energy          ,0) as rest_free_energy, \
+COALESCE(t4.rest_buy_energy           ,0) as rest_buy_energy, \
+COALESCE(t4.rest_reward_energy        ,0) as rest_reward_energy, \
+t1.new_register_flg, \
+t1.new_order_flg \
+from  \
+( \
+select t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end as new_register_flg, \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end as new_order_flg, \
+sum(case when t1.scene in (1,5) and reward_id=1 then t1.amount end) as get_free_energy,  \
+sum(case when t1.scene = 2 and reward_id=1 then t1.amount end) as get_buy_energy,  \
+sum(case when t1.scene = 3 and reward_id=1 then t1.amount end) as get_reward_energy,  \
+sum(case when reward_id=1 then t1.amount end) as get_total_energy \
+from vc.dwd_vc_user_income_record_i_d t1 \
+LEFT JOIN  \
+( \
+select \
+user_id, \
+origin_type, \
+device_os, \
+first_order_date, \
+register_date \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d)   \
+and is_anonymity='N'  \
+) t2 ON t1.user_id = t2.user_id  \
+where t1.reward_type=1 \
+and t1.dt='${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end , \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end \
+) t1 \
+left join  \
+( \
+select t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end as new_register_flg, \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end as new_order_flg, \
+sum(t1.order_price) as total_amount \
+from vc.dwd_vc_order_i_d t1 \
+LEFT JOIN  \
+( \
+select \
+user_id, \
+origin_type, \
+device_os, \
+first_order_date, \
+register_date \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d)   \
+and is_anonymity='N'  \
+) t2 ON t1.user_id = t2.user_id  \
+where t1.dt='${azkaban.flow.1.days.ago}' \
+and t1.pay_item_code in( \
+'energy_12', \
+'energy_188', \
+'energy_3', \
+'energy_36', \
+'energy_6', \
+'energy_88', \
+'energy_first_12', \
+'energy_first_188', \
+'energy_first_3', \
+'energy_first_36', \
+'energy_first_6', \
+'energy_first_88', \
+'month_limitgift', \
+'new_limitgift', \
+'week_limitgift', \
+'week_light_limitgift_29.9', \
+'month_light_limitgift_59.9', \
+'ad_29.9', \
+'ad_59.9' \
+) \
+group by t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end , \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end \
+) t2 on t1.dt=t2.dt and t1.new_register_flg=t2.new_register_flg and t1.new_order_flg=t2.new_order_flg \
+left join  \
+( \
+select t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end as new_register_flg, \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end as new_order_flg, \
+count(distinct t1.user_id) as chat_uv, \
+sum(t1.message_cnt) as total_chats, \
+sum(t1.energy_consume) as total_cost_energy, \
+sum(t1.free_energy) as cost_free_energy, \
+sum(t1.buy_energy) as cost_buy_energy, \
+sum(t1.reward_energy) as cost_reward_energy \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d t1 \
+LEFT JOIN  \
+( \
+select \
+user_id, \
+origin_type, \
+device_os, \
+first_order_date, \
+register_date \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d)   \
+and is_anonymity='N'  \
+) t2 ON t1.user_id = t2.user_id  \
+where t1.dt='${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+case when t2.user_id is not null and t1.dt=t2.register_date then 1 else 0 end , \
+case when t2.user_id is not null and t1.dt=t2.first_order_date then 1 else 0 end \
+) t3 on t1.dt=t3.dt and t1.new_register_flg=t3.new_register_flg and t1.new_order_flg=t3.new_order_flg \
+left join  \
+( \
+select t1.dt, \
+case when t1.dt=t1.register_date then 1 else 0 end as new_register_flg, \
+case when t1.dt=t1.first_order_date then 1 else 0 end as new_order_flg, \
+count(distinct t1.user_id) as total_uv, \
+sum(t1.free_rest_energy) as rest_free_energy, \
+sum(t1.buy_rest_energy) as rest_buy_energy, \
+sum(t1.reward_rest_energy) as rest_reward_energy \
+from vc.dws_vc_user_behavior_info_a_d t1 \
+where t1.dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and t1.is_anonymity = 'N' \
+group by t1.dt, \
+case when t1.dt=t1.register_date then 1 else 0 end , \
+case when t1.dt=t1.first_order_date then 1 else 0 end \
+) t4 on t1.dt=t4.dt and t1.new_register_flg=t4.new_register_flg and t1.new_order_flg=t4.new_order_flg \

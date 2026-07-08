@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_content_unlock_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select module, userId, postId, blogId, unlock_time \
+from ( \
+    select postId, userId, blogId, unlock_time, \
+          case giftId when 120001 then '广告文' \
+                      when 120003 then '广告文' \
+                      when 120000 then '视频合集' \
+                      else '激励广告' end as module \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+          unlock_method = '广告' \
+) t \
+
+dependencies=dwd_gift_post_unlock_dd

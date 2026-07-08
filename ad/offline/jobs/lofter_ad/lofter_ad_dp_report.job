@@ -1,0 +1,9 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.01=set hive.exec.dynamic.partition.mode=nonstrict;
+hive.query.02=insert overwrite table lofter_dm.dwb_ad_dp_report_di select deviceos,params['ad_source'] dspid, count(distinct case when eventid='ad-2' then deviceudid else null end) all_clickuv, sum(case when eventid='ad-2' then 1 else 0 end) all_clickpv, count(distinct case when eventid='ad-2' and params['deeplink'] is not null then deviceudid else null end)deeplink_clickuv, sum(case when eventid='ad-2' and params['deeplink'] is not null then 1 else 0 end) deeplink_clickpv, count(distinct case when eventid='ad-33' then deviceudid else null end) success_uv, sum(case when eventid='ad-33' then 1 else 0 end) success_pv, sum(case when eventid='ad-2' and params['deeplink'] is not null then 1 else 0 end)/sum(case when eventid='ad-2' then 1 else 0 end) deeplink_clickpv_rate, sum(case when eventid='ad-33' then 1 else 0 end)/sum(case when eventid='ad-2' and params['deeplink'] is not null then 1 else 0 end) success_deeplinkpv_rate, sum(case when eventid='ad-33' then 1 else 0 end)/sum(case when eventid='ad-2' then 1 else 0 end) success_pv_rate, dt from lofter.ods_mda_app_partition_di where dt='${azkaban.flow.1.days.ago}' and actionType = 'advertisement' and substr(appversion,1,5)>='6.4.2' and eventid in('ad-2','ad-33') group by dt,deviceos,params['ad_source'] distribute by dt;

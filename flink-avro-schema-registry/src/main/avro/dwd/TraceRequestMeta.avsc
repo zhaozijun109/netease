@@ -1,0 +1,15 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "TraceRequestMeta",
+  "fields": [
+    {"name": "traceId", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "itemId", "type": "long"},
+    {"name": "itemType", "type": "int"},
+    {"name": "name", "type": "string"},
+    {"name": "scene", "type": "string"},
+    {"name": "url", "type": "string"},
+    {"name": "requestTime", "type": "long"}
+  ]
+}

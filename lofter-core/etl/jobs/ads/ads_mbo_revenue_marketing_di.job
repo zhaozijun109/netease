@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_mbo_revenue_marketing_di partition (dt = '${azkaban.flow.1.days.ago}') \
+              select nvl(b.money,0) as aggregation_collection_money, nvl(b.uv,0) as aggregation_collection_uv, \
+                     nvl(c.money,0) as aggregation_grain_money, nvl(c.uv,0) as aggregation_grain_uv, \
+                     nvl(coupon_uv,0) as coupon_uv, nvl(coupon_money, 0) as coupon_money, \
+                     nvl(exchange_num, 0) as exchange_num, nvl(post_exchange_num,0) as post_exchange_num, \
+                     nvl(lottery_exchange_num,0) as lottery_exchange_num, \
+                     nvl(remain_balance, 0) as remain_balance, nvl(expire_balance, 0) as expire_balance \
+              from ( \
+                  select '${azkaban.flow.1.days.ago}' as dt \
+              ) a \
+              left join ( \
+                  select from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+                         sum(coin) /10  as money, count(distinct userid) as uv, count(distinct collectionId) as num \
+                  from lofter_db_dump.ods_db_trade_collection_gift_order_nd \
+                  where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and coin > 0 \
+                  group by 1 \
+              ) b on a.dt = b.dt \
+              left join ( \
+                  select from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+                         sum(coin) / 10 as money, count(distinct userid) as uv, count(distinct grainId) as num \
+                  from lofter_db_dump.ods_db_trade_grain_gift_order_nd \
+                  where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and coin > 0 \
+                  group by 1 \
+              ) c on a.dt = c.dt \
+              left join ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                         count(distinct userId) as coupon_uv, \
+                         sum(money) as coupon_money \
+                  from lofter.dwd_user_order_dd \
+                  where dt = '${azkaban.flow.1.days.ago}' and \
+                        pay_date = '${azkaban.flow.1.days.ago}' and \
+                        revenue_module = '券包' \
+              ) d on a.dt = d.dt \
+              left join ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                          count(1) as exchange_num, \
+                          sum(if(type=1, 1, 0)) as post_exchange_num, \
+                          sum(if(type=2, 1, 0)) as lottery_exchange_num \
+                  from lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+                  where status = 1 and from_unixtime(cast(exchangeTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+              ) e on a.dt = e.dt \
+              left join ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                         sum(if(from_unixtime(cast(expireTime / 1000 AS BIGINT), 'yyyy-MM-dd') > '${azkaban.flow.1.days.ago}', balance, 0)) as remain_balance, \
+                         sum(if(from_unixtime(cast(expireTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}', balance, 0)) as expire_balance \
+                  from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd a \
+              ) f on a.dt = f.dt \

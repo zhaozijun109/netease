@@ -1,0 +1,12 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select blogId as userId, \
+           t1_status as postCountCondition, \
+           t2_status as postGoodFeedbackCondition, \
+           t3_status as postIncomeCondition, \
+           t4_status as postQualityCondition \
+    from lofter_dm.ads_par_creator_gift_level_internship_task_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic LOFTER.BASEGRADE_TASK --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

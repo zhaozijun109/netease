@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_coupon_new_year_user_group_dd partition(dt='${azkaban.flow.1.days.ago}')  \
+select price_band, userId \
+from ( \
+    select cast(amount as bigint) as price_band, userId \
+    from lofter_db_dump.ods_db_trade_coupon_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '2024-01-04' and \
+          from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') >= '2023-12-21' \
+) t \
+group by 1, 2 \

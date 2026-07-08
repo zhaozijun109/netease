@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01 = add jar hdfs://gy-cluster8/user/virtual_character/lib/wm-udx-assembly-0.3.15.jar;
+hive.query.02 = create temporary function nos_rows as 'com.netease.wm.udf.NosRowList';
+hive.query.03 = insert OVERWRITE table vc.dws_vc_feed_boutique_rank_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select package_id as packid, \
+                       rk, \
+                       version, \
+                       characters, \
+                       20   as                                                                                msgType, \
+                       concat(replace('${azkaban.flow.current.date}', '-', ''), '${azkaban.flow.start.hour}') ts, \
+                       nums as                                                                                _count \
+                from (select package_id, \
+                             trim(split(character_rk, ',')[1])        as rk, \
+                             array(trim(split(character_rk, ',')[0])) as characters, \
+                             version, \
+                             count(*) over (partition by package_id)  as nums \
+                      from (select package_id, explode(characters) as character_rk, version \
+                            from (select id                           as package_id, \
+                                         nos_rows(character_file_url) as characters, \
+                                         version + 1                  as version \
+                                  from vc.ods_db_rt1h_vc_character_package_config_nd \
+                                  where character_file_url != '')))
+
+dependencies=ods_db_rt1h_vc_character_package_config_nd

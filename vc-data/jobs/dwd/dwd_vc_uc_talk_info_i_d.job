@@ -1,0 +1,86 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dwd_vc_uc_talk_info_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select a.user_id, \
+                       a.character_id, \
+                       c.character_name, \
+                       a.message_id, \
+                       a.message_send_time, \
+                       nvl(b.asset_type, e.asset_type)                               as asset_type, \
+                       nvl(b.total_consume, 0)                                       as consume_nums, \
+                       a.sender, \
+                       a.content_type, \
+                       a.type, \
+                       a.status, \
+                       d.fetter_nums, \
+                       a.content, \
+                       nvl(b.free_energy, 0)                                         as free_energy, \
+                       nvl(b.buy_energy, 0)                                          as buy_energy, \
+                       nvl(b.reward_energy, 0)                                       as reward_energy, \
+                       c.character_type, \
+                       c.character_status, \
+                       nvl(b.lofter_energy, 0)                                       as lofter_energy, \
+                       e.message_consume_type, \
+                       a.sender_subtype_code                                         as sender_subtype_code, \
+                       if(a.sender_subtype = '', e.sender_subtype, a.sender_subtype) as sender_subtype \
+                from (select user_id, \
+                             character_id, \
+                             message_id, \
+                             FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd HH:mm:ss')                      as message_send_time, \
+                             sender, \
+                             case when sender in (4, 5) then GET_JSON_OBJECT(ext, '$.subType') else -1 end as sender_subtype_code, \
+                             case \
+                                 when instr(ext, '#') > 0 and sender in (4, 5) \
+                                     then lower(split(GET_JSON_OBJECT(ext, '$.eventUniqId'), '#')[0]) \
+                                 else '' end                                                               as sender_subtype, \
+                             case \
+                                 when instr(ext, '#') > 0 and sender in (4, 5) then split(GET_JSON_OBJECT(ext, '$.eventUniqId'), '#')[1] \
+                                 else '' end                                                               as event_uniq_id, \
+                             content_type, \
+                             type, \
+                             status, \
+                             content \
+                      from vc.ods_db_vc_user_message_record_nd \
+                      where sender in (2, 4) \
+                        and status in (2, 6) \
+                        and user_id not in (select user_id from vc.dim_vc_discardted_users_a_d) \
+                        and lower(nvl(from_json(ext,'STRUCT<source: STRING>').source, 'vc')) != 'lofter' \
+                        and create_time between UNIX_TIMESTAMP(cast('${azkaban.flow.1.days.ago}' as date)) * 1000 and \
+                          UNIX_TIMESTAMP(date_add(cast('${azkaban.flow.1.days.ago}' as date), 1)) * 1000) a \
+                         left join \
+                     (select user_id, \
+                             asset_type, \
+                             message_id, \
+                             total_consume, \
+                             free_energy, \
+                             buy_energy, \
+                             reward_energy, \
+                             lofter_energy \
+                      from vc.dwd_vc_uc_talk_message_energy_info_i_d \
+                      where dt = '${azkaban.flow.1.days.ago}') b on a.message_id = b.message_id \
+                         left join \
+                     (select id as character_id, character_name, type as character_type, status as character_status \
+                      from vc.ods_db_vc_character_nd) c \
+                     on a.character_id = c.character_id \
+                         left join (select user_id, character_id, max(value) as fetter_nums \
+                                    from vc.ods_db_vc_user_numeric_nd \
+                                    where value_type = 1 \
+                                    group by user_id, character_id) d \
+                                   on a.user_id = d.user_id and a.character_id = d.character_id \
+                         left join \
+                     (select scene_uniq_id, user_id, character_id, message_consume_type, asset_type, sender_subtype \
+                      from (select case \
+                                       when instr(sceneuniqid, '#') > 0 then SPLIT(sceneuniqid, "#")[1] \
+                                       else sceneuniqid end                                                         as scene_uniq_id, \
+                                   userid                                                                           as user_id, \
+                                   characterid                                                                      as character_id, \
+                                   lower(desc)                                                                      as message_consume_type, \
+                                   if(assettype = 'ENERGY', 1, -1)                                                  as asset_type, \
+                                   lower(assetscene)                                                                as sender_subtype, \
+                                   row_number() over (partition by sceneuniqid,userid,characterid order by logtime) as rk \
+                            from vc.ods_vc_log_message_type_i_d \
+                            where dt = '${azkaban.flow.1.days.ago}') \
+                      where rk = 1) e \
+                     on if(a.event_uniq_id = '', a.message_id, a.event_uniq_id) = e.scene_uniq_id and a.user_id = e.user_id and \
+                        a.character_id = e.character_id
+
+dependencies=dwd_vc_uc_talk_message_energy_info_i_d

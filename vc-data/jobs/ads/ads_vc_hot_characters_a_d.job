@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01 = with ogc_charatcer as (select character_id, character_name, character_type, total_talk_cnt, total_peoples \
+                                       from vc.dws_vc_character_tabulate_data_view \
+                                       where character_type = 'ogc' and status = 1 and audience_type = 1), \
+                     ugc_charatcer as (select x1.character_id, x1.character_name, x1.character_type, total_talk_cnt, total_peoples \
+                                       from vc.dws_vc_character_tabulate_data_view x1 \
+                                                inner join \
+                                            (select character_id, character_type \
+                                             from vc.dws_vc_character_behavior_info_view \
+                                             where public_scope = 1 and status = 1 and audience_type = 1) x2 \
+                                            on x1.character_id = x2.character_id \
+                                       where x1.character_type = 'ugc' \
+                                         and x1.total_talk_cnt >= 10000 \
+                                         and x1.total_peoples >= 15) \
+                insert overwrite table vc.ads_vc_hot_characters_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select character_id, character_name, character_type, total_talk_cnt, total_peoples \
+                from ugc_charatcer \
+                union all \
+                select character_id, character_name, character_type, total_talk_cnt, total_peoples \
+                from ogc_charatcer

@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 性别 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '性别'        as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp, \
+                               ''           as value \
+                        from (    select userId, '性别' as tag, \
+                                         case when gender = 1 then '男' \
+                                              when gender = 2 then '女' \
+                                              end as grp \
+                                  from lofter.dws_par_user_base_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}') \
+                        where grp is not null"

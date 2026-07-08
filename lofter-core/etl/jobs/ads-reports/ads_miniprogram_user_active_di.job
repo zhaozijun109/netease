@@ -1,0 +1,86 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_miniprogram_user_active_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.deviceos \
+	,appkey \
+	,miniid \
+	,CASE  \
+		WHEN a.dt > b.createday \
+			THEN 0 \
+		ELSE 1 \
+		END AS newflg \
+	,CASE  \
+		WHEN d.userid IS NOT NULL \
+			THEN 0 \
+		ELSE 1 \
+		END AS statusflg \
+	,CASE  \
+		WHEN c.userid IS NOT NULL \
+			THEN 1 \
+		ELSE 0 \
+		END AS actpwdflg \
+	,eventid \
+	,count(DISTINCT a.userid) AS uv \
+	,count(a.userid) AS pv \
+FROM ( \
+	SELECT dt \
+		,deviceos \
+		,appkey \
+		,userid \
+		,eventid \
+		,attributes ['miniId'] AS miniid \
+	FROM lofter.ods_mda_bookstore_miniprogram_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' and userid>0 \
+	GROUP BY dt \
+		,deviceos \
+		,appkey \
+		,userid \
+		,eventid \
+		,attributes ['miniId'] \
+	) a \
+JOIN ( \
+	SELECT id AS userid \
+		,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS createday \
+	FROM lofter.dim_user \
+	GROUP BY id \
+		,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+	) b ON a.userid = b.userid \
+LEFT JOIN ( \
+	SELECT dt \
+		,userid \
+	FROM lofter.dwd_growth_actpwd_access_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND actpwd like 'kol_channel%' \
+	GROUP BY dt \
+		,userid \
+	) c ON a.userid = c.userid \
+	AND a.dt = c.dt \
+LEFT JOIN ( \
+	SELECT dt \
+		,userid \
+	FROM lofter.ods_mda_bookstore_miniprogram_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND attributes ['status'] = 0 \
+	GROUP BY dt \
+		,userid \
+	) d ON a.userid = d.userid \
+	AND a.dt = d.dt \
+GROUP BY a.dt \
+	,a.deviceos \
+	,appkey \
+	,eventid \
+	,miniid \
+	,CASE  \
+		WHEN a.dt > b.createday \
+			THEN 0 \
+		ELSE 1 \
+		END \
+	,CASE  \
+		WHEN d.userid IS NOT NULL \
+			THEN 0 \
+		ELSE 1 \
+		END \
+	,CASE  \
+		WHEN c.userid IS NOT NULL \
+			THEN 1 \
+		ELSE 0 \
+		END \

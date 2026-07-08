@@ -1,0 +1,249 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=\
+with yesterday_post_expose_source as( \
+    select detail_scene_level_1,detail_scene_level_2,postid,reaction,deviceId,is_collection,post_content_type \
+    from lofter.dwd_post_expose_di \
+    where dt = '${azkaban.flow.1.days.ago}' and post_content_type in ('图片','文字')  \
+    and (detail_scene_level_1 in ('discovery','related_article') or detail_scene_level_2 in ('tag_discovery')) \
+), \
+yesterday_article_photo_source as( \
+    select '数据' as source,'文章' as large_type,reason,detail_scene_level_1 as scene,'图片' as type, \
+        sum(if(reaction is null, 1, 0)) as expose_pv, \
+        bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+        sum(if(reaction = 'click', 1, 0)) as click_pv, \
+        bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv \
+    from ( \
+        select a.*,b.reason \
+        from( \
+            select * \
+            from yesterday_post_expose_source \
+            where detail_scene_level_1 in ('discovery','related_article') and post_content_type in ('图片') \
+        )a \
+        right join( \
+            select postid, \
+            case  \
+                when recreason like '%人都在看%' then "XXX人都在看" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很甜" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很虐" \
+                when recreason = '万热作品' then "万热作品" \
+                when recreason = '热度飙升' then "热度飙升" \
+                when recreason = '高甜HE' then "高甜HE" \
+                when recreason = '高虐BE' then "高虐BE" \
+                when recreason = '短篇热文' then "短篇热文" \
+                when recreason = '万字长文' then "万字长文" \
+                when recreason = '无彩蛋' then "无彩蛋" \
+                when recreason = '入坑神作' then "入坑神作" \
+            end as reason \
+            from lofter_dm.ads_rec_content_rec_reason_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        )b on a.postid = b.postid \
+    ) \
+    group by reason,detail_scene_level_1 \
+    union all \
+    select '数据' as source,'文章' as large_type,reason,detail_scene_level_2 as scene,'图片' as type, \
+        sum(if(reaction is null, 1, 0)) as expose_pv, \
+        bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+        sum(if(reaction = 'click', 1, 0)) as click_pv, \
+        bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv \
+    from ( \
+        select a.*,b.reason \
+        from( \
+            select * \
+            from yesterday_post_expose_source \
+            where detail_scene_level_2 in ('tag_discovery') and post_content_type in ('图片') \
+        )a \
+        right join( \
+            select postid, \
+            case  \
+                when recreason like '%人都在看%' then "XXX人都在看" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很甜" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很虐" \
+                when recreason = '万热作品' then "万热作品" \
+                when recreason = '热度飙升' then "热度飙升" \
+                when recreason = '高甜HE' then "高甜HE" \
+                when recreason = '高虐BE' then "高虐BE" \
+                when recreason = '短篇热文' then "短篇热文" \
+                when recreason = '万字长文' then "万字长文" \
+                when recreason = '无彩蛋' then "无彩蛋" \
+                when recreason = '入坑神作' then "入坑神作" \
+            end as reason \
+            from lofter_dm.ads_rec_content_rec_reason_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        )b on a.postid = b.postid \
+    ) \
+    group by reason,detail_scene_level_2 \
+union all \
+    select '数据' as source,'文章' as large_type,reason,detail_scene_level_1 as scene,'文字' as type, \
+        sum(if(reaction is null, 1, 0)) as expose_pv, \
+        bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+        sum(if(reaction = 'click', 1, 0)) as click_pv, \
+        bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv \
+    from ( \
+        select a.*,b.reason \
+        from( \
+            select * \
+            from yesterday_post_expose_source \
+            where detail_scene_level_1 in ('discovery','related_article') and post_content_type in ('文字') \
+        )a \
+        right join( \
+            select postid, \
+            case  \
+                when recreason like '%人都在看%' then "XXX人都在看" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很甜" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很虐" \
+                when recreason = '万热作品' then "万热作品" \
+                when recreason = '热度飙升' then "热度飙升" \
+                when recreason = '高甜HE' then "高甜HE" \
+                when recreason = '高虐BE' then "高虐BE" \
+                when recreason = '短篇热文' then "短篇热文" \
+                when recreason = '万字长文' then "万字长文" \
+                when recreason = '无彩蛋' then "无彩蛋" \
+                when recreason = '入坑神作' then "入坑神作" \
+            end as reason \
+            from lofter_dm.ads_rec_content_rec_reason_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        )b on a.postid = b.postid \
+    ) \
+    group by reason,detail_scene_level_1 \
+    union all \
+    select '数据' as source,'文章' as large_type,reason,detail_scene_level_2 as scene,'文字' as type, \
+        sum(if(reaction is null, 1, 0)) as expose_pv, \
+        bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+        sum(if(reaction = 'click', 1, 0)) as click_pv, \
+        bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv \
+    from ( \
+        select a.*,b.reason \
+        from( \
+            select * \
+            from yesterday_post_expose_source \
+            where detail_scene_level_2 in ('tag_discovery') and post_content_type in ('文字') \
+        )a \
+        right join( \
+            select postid, \
+            case  \
+                when recreason like '%人都在看%' then "XXX人都在看" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很甜" \
+                when recreason like '%觉得很虐%' then "XXX人觉得很虐" \
+                when recreason like '%热度飙升%' then "热度飙升" \
+                when recreason like '%万热作品%' then "万热作品" \
+                when recreason = '万热作品' then "万热作品" \
+                when recreason = '热度飙升' then "热度飙升" \
+                when recreason = '高甜HE' then "高甜HE" \
+                when recreason = '高虐BE' then "高虐BE" \
+                when recreason = '短篇热文' then "短篇热文" \
+                when recreason = '万字长文' then "万字长文" \
+                when recreason = '无彩蛋' then "无彩蛋" \
+                when recreason = '入坑神作' then "入坑神作" \
+            end as reason \
+            from lofter_dm.ads_rec_content_rec_reason_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        )b on a.postid = b.postid \
+    ) \
+    group by reason,detail_scene_level_2 \
+), \
+yesterday_collection_source1 as( \
+    select scene,collectionid,reaction,deviceId \
+    from( \
+        select detail_scene_level_1 as scene,postid,reaction,deviceId \
+        from yesterday_post_expose_source \
+        where detail_scene_level_1 in ('discovery','related_article') and post_content_type in ('图片','文字') and is_collection =1 \
+        union all \
+        select detail_scene_level_2 as scene,postid,reaction,deviceId \
+        from yesterday_post_expose_source \
+        where detail_scene_level_2 in ('tag_discovery') and post_content_type in ('图片','文字') and is_collection =1 \
+    ) a \
+    left join( \
+        select postid,collectionid \
+        from lofter_db_dump.ods_db_post_collection_record_nd \
+        where status = 0 \
+        group by 1,2 \
+    )b on a.postid = b.postid \
+), \
+yesterday_collection_source2 as( \
+    select '数据' as source,'合集' as large_type,reason,scene,'合集' as type, \
+        sum(if(reaction is null, 1, 0)) as expose_pv, \
+        bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+        sum(if(reaction = 'click', 1, 0)) as click_pv, \
+        bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv \
+    from( \
+        select collectionid, \
+        case \
+            when recreason like '%篇万热内容%' then "XXX篇万热内容" \
+            when recreason like '%觉得很虐%' then "XXX人觉得很甜" \
+            when recreason like '%觉得很虐%' then "XXX人觉得很虐" \
+            when recreason like '%万人订阅%' then "近7天XXX万人订阅" \
+            when recreason like '%热度飙升榜%' then "热度飙升榜TOPX" \
+            when recreason like '%订阅飙升榜%' then "订阅飙升榜TOPX" \
+            when recreason like '%爆款榜%' then "爆款榜TOPX" \
+            when recreason like '%热门榜%' then "热门榜TOPX" \
+            when recreason like '%订阅榜%' then "订阅榜TOPX" \
+            when recreason like '%篇千热内容%' then "XXX篇千热内容" \
+            when recreason like '&近期有更新%' then "近期有更新" \
+            when recreason like '%万用户看过%' then "XXX万用户看过" \
+            when recreason like '%连续更新%' then "连续更新X天" \
+            when recreason like '%7日内更新%' then "7日内更新XXX篇" \
+        end reason \
+        from lofter_dm.ads_rec_collection_rec_reason_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )a  \
+    left join yesterday_collection_source1 b on a.collectionid = b.collectionid \
+    group by reason,scene \
+), \
+search_words_source as( \
+    select '数据' as source,'搜索词' as large_type,reason,'search' as scene,null as type,null as expose_pv,null as expose_uv, count(userid) as click_pv,count(distinct userid) as click_uv \
+    from( \
+        select keyword, \
+        case \
+            when reason like '%正在热搜%' then "正在热搜" \
+            when reason like '%搜索飙升%' then "搜索飙升" \
+            when reason like '%+人正在搜%' then "XXX+人正在搜" \
+            when reason like '%万人正在搜%' then "XXX万人正在搜" \
+        end reason \
+        from lofter_dm.ads_search_keyword_rec_reason_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )a \
+    left join( \
+        select search_query,userid \
+        from lofter.dwd_search_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )b on a.keyword = b.search_query \
+    group by reason \
+), \
+rec_yesterday_post_collection_source as( \
+    select source,'合集' as large_type,reason,COALESCE(detail_scene_level_2,detail_scene_level_1) as scene,'合集' as type, \
+        sum(if(actiontype = 'expose',1,0)) as expose_pv, \
+        count(distinct if(actiontype = 'expose',deviceudid,null)) as expose_uv, \
+        sum(if(actiontype = 'click',1,0)) as click_pv, \
+        count(distinct if(actiontype = 'click',deviceudid,null)) as click_uv \
+    from lofter.dwd_rec_reason_scene_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_collection = 1 and reason is not null \
+    group by source,reason,COALESCE(detail_scene_level_2,detail_scene_level_1) \
+    union all \
+    select source,'文章' as large_type,reason,COALESCE(detail_scene_level_2,detail_scene_level_1) as scene, \
+        contenttype as type, \
+        sum(if(actiontype = 'expose',1,0)) as expose_pv, \
+        count(distinct if(actiontype = 'expose',deviceudid,null)) as expose_uv, \
+        sum(if(actiontype = 'click',1,0)) as click_pv, \
+        count(distinct if(actiontype = 'click',deviceudid,null)) as click_uv \
+    from lofter.dwd_rec_reason_scene_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_collection = 0 and reason is not null \
+    group by source,reason,COALESCE(detail_scene_level_2,detail_scene_level_1),contenttype \
+) \
+insert overwrite table lofter_dm.ads_rec_easy_fetch_reason_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select source,large_type,reason,scene,type,expose_pv,expose_uv,click_pv,click_uv \
+from yesterday_article_photo_source \
+where reason is not null and scene is not null \
+union all \
+select source,large_type,reason,scene,type,expose_pv,expose_uv,click_pv,click_uv \
+from yesterday_collection_source2 \
+where reason is not null and scene is not null \
+union all \
+select source,large_type,reason,scene,type,expose_pv,expose_uv,click_pv,click_uv \
+from search_words_source \
+where reason is not null and scene is not null \
+union all \
+select source,large_type,reason,scene,type,expose_pv,expose_uv,click_pv,click_uv \
+from rec_yesterday_post_collection_source \
+where reason is not null and scene is not null

@@ -1,0 +1,7 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.ClickhouseLoad
+conf.spark.source.query="select dt,stat_period,pay_type,pay_uv,trade_num,trade_money,product_num,first_pay_uv,first_trade_num,first_trade_money,first_product_num,overall_first_pay_uv,overall_first_trade_num,overall_first_trade_money,overall_first_product_num,overall_re_pay_uv,re_pay_trade_money,pay_uv_bitmap from lofter_dm.ads_revenue_monitor_v2_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_revenue_monitor_v2_dd --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_revenue_monitor_v2_dd
+

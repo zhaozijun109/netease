@@ -1,0 +1,212 @@
+type=sparksql
+hive.query.01= \
+with period_actions as ( \
+        select userId, 7 as period, \
+               '蓝手' as interaction_type, \
+               sum(recommend_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '收藏' as interaction_type, \
+               sum(collect_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '评论' as interaction_type, \
+               sum(comment_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '分享' as interaction_type, \
+               sum(share_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '关注' as interaction_type, \
+               sum(follow_uv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '订阅合集' as interaction_type, \
+               sum(collection_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 7 as period, \
+               '订阅标签' as interaction_type, \
+               sum(tag_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '蓝手' as interaction_type, \
+               sum(recommend_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '收藏' as interaction_type, \
+               sum(collect_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '评论' as interaction_type, \
+               sum(comment_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '分享' as interaction_type, \
+               sum(share_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '关注' as interaction_type, \
+               sum(follow_uv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '订阅合集' as interaction_type, \
+               sum(collection_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 15 as period, \
+               '订阅标签' as interaction_type, \
+               sum(tag_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '蓝手' as interaction_type, \
+               sum(recommend_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '收藏' as interaction_type, \
+               sum(collect_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '评论' as interaction_type, \
+               sum(comment_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '分享' as interaction_type, \
+               sum(share_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '关注' as interaction_type, \
+               sum(follow_uv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '订阅合集' as interaction_type, \
+               sum(collection_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+      union all \
+        select userId, 30 as period, \
+               '订阅标签' as interaction_type, \
+               sum(tag_subscribe_pv) as interaction_pv \
+        from lofter.dws_par_user_interaction_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+) \
+insert overwrite table lofter_dm.ads_user_interaction_level_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(n.user_type, '其他') as user_type, m.period, \
+       m.interaction_type, m.interaction_level, \
+       avg(active_days) as avg_active_days, \
+       count(distinct m.userId) as user_count \
+from ( \
+    select nvl(a.userId, b.userId) as userId, \
+           nvl(a.period, b.period) as period, \
+           b.interaction_type, \
+           case when b.interaction_pv <= 10 then cast(b.interaction_pv as string) \
+                when b.interaction_pv <= 20 then '11-20' \
+                when b.interaction_pv <= 50 then '20-50' \
+                else '50以上' end as interaction_level, \
+           a.active_days \
+    from ( \
+        select userId, 7 as period, active_days_7d as active_days \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select userId, 15 as period, active_days_15d as active_days \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select userId, 30 as period, active_days_30d as active_days \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select * from period_actions \
+      union all \
+        select userId, period, '整体' as interaction_type, sum(interaction_pv) as interaction_pv \
+        from period_actions \
+        group by 1, 2 \
+    ) b on a.userId = b.userId and a.period = b.period \
+    where b.interaction_pv > 0 \
+) m \
+left join ( \
+    select userId, '回流用户' as user_type, 7 as period \
+    from lofter.dwd_user_return_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+  union all \
+    select userId, '新用户' as user_type, 7 as period \
+    from lofter.dwd_user_new_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+  union all \
+    select userId, '回流用户' as user_type, 15 as period \
+    from lofter.dwd_user_return_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+  union all \
+    select userId, '新用户' as user_type, 15 as period \
+    from lofter.dwd_user_new_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+  union all \
+    select userId, '回流用户' as user_type, 30 as period \
+    from lofter.dwd_user_return_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+  union all \
+    select userId, '新用户' as user_type, 30 as period \
+    from lofter.dwd_user_new_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+) n on m.userId = n.userId and m.period = n.period \
+group by 1, 2, 3, 4 \

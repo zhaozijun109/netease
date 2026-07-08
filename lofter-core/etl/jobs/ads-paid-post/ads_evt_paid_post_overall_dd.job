@@ -1,0 +1,334 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_evt_paid_post_overall_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.* \
+	,exposureuv \
+	,clickuv \
+	,browseuv \
+	,realbrowseuv \
+	,'7' AS period \
+FROM ( \
+	SELECT contenttype \
+		,blog_channel \
+		,count(DISTINCT CASE  \
+				WHEN publishdate BETWEEN '${azkaban.flow.7.days.ago}' \
+						AND '${azkaban.flow.1.days.ago}' \
+					THEN a.postid \
+				ELSE NULL \
+				END) AS publish_postnum \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.userid \
+				ELSE NULL \
+				END) AS charge_uv_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.postid \
+				ELSE NULL \
+				END) AS postnum_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.blogid \
+				ELSE NULL \
+				END) AS blognum_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN CONCAT ( \
+							b.userid \
+							,b.blogid \
+							,b.postid \
+							) \
+				ELSE NULL \
+				END) AS chargenum_gift \
+		,sum(CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS money_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.userid \
+				ELSE NULL \
+				END) AS charge_uv_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.postid \
+				ELSE NULL \
+				END) AS postnum_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.blogid \
+				ELSE NULL \
+				END) AS blognum_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN CONCAT ( \
+							b.userid \
+							,b.blogid \
+							,b.postid \
+							) \
+				ELSE NULL \
+				END) AS chargenum_fan \
+		,sum(CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS money_fan \
+		,count(DISTINCT b.userid) AS charge_uv_all \
+		,count(DISTINCT b.postid) AS postnum_all \
+		,count(DISTINCT b.blogid) AS blognum_all \
+		,count(DISTINCT CONCAT ( \
+				b.userid \
+				,b.blogid \
+				,b.postid \
+				)) AS chargenum_all \
+		,sum(MONEY) AS money_all \
+	FROM ( \
+		SELECT postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		FROM lofter.dim_gift_post_return_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND STATUS = 1 \
+			AND ispay_returngift IN ( \
+				0 \
+				,1 \
+				) \
+			AND contenttype IN ( \
+				'图片' \
+				,'文字' \
+				) \
+		GROUP BY postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		) a \
+	LEFT JOIN ( \
+		SELECT postid \
+			,blogid \
+			,MONEY \
+			,userid \
+			,createtime \
+			,pay_type \
+			,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS dt \
+		FROM lofter.dwd_evt_post_paid_detail_dd \
+		WHERE dt = date_sub(CURRENT_DATE (), 1) \
+			AND pay_type IN ( \
+				'付费礼物' \
+				,'粉丝会员' \
+				) \
+			AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.7.days.ago}' \
+				AND '${azkaban.flow.1.days.ago}' \
+		) b ON a.postid = b.postid \
+	GROUP BY contenttype \
+		,blog_channel \
+	) a \
+JOIN ( \
+	SELECT contenttype \
+		,blog_channel \
+		,sum(exposureuv) AS exposureuv \
+		,sum(clickuv) AS clickuv \
+		,sum(browseuv) AS browseuv \
+		,sum(realbrowseuv) AS realbrowseuv \
+	FROM ( \
+		SELECT postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		FROM lofter.dim_gift_post_return_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND STATUS = 1 \
+			AND ispay_returngift IN ( \
+				0 \
+				,1 \
+				) \
+			AND contenttype IN ( \
+				'图片' \
+				,'文字' \
+				) \
+		GROUP BY postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		) a \
+	LEFT JOIN ( \
+		SELECT postid \
+			,sum(exposureuv) AS exposureuv \
+			,sum(clickuv) AS clickuv \
+			,sum(browseuv) AS browseuv \
+			,sum(realbrowseuv) AS realbrowseuv \
+		FROM lofter.dws_post_base_stats_di \
+		WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' \
+				AND '${azkaban.flow.1.days.ago}' \
+		GROUP BY postid \
+		) b ON a.postid = b.postid \
+	GROUP BY contenttype \
+		,blog_channel \
+	) b ON a.contenttype = b.contenttype \
+	AND a.blog_channel = b.blog_channel \
+ \
+UNION \
+ \
+SELECT a.* \
+	,exposureuv \
+	,clickuv \
+	,browseuv \
+	,realbrowseuv \
+	,'1' AS period \
+FROM ( \
+	SELECT contenttype \
+		,blog_channel \
+		,count(DISTINCT CASE  \
+				WHEN publishdate ='${azkaban.flow.1.days.ago}' \
+					THEN a.postid \
+				ELSE NULL \
+				END) AS publish_postnum \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.userid \
+				ELSE NULL \
+				END) AS charge_uv_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.postid \
+				ELSE NULL \
+				END) AS postnum_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN b.blogid \
+				ELSE NULL \
+				END) AS blognum_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN CONCAT ( \
+							b.userid \
+							,b.blogid \
+							,b.postid \
+							) \
+				ELSE NULL \
+				END) AS chargenum_gift \
+		,sum(CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS money_gift \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.userid \
+				ELSE NULL \
+				END) AS charge_uv_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.postid \
+				ELSE NULL \
+				END) AS postnum_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN b.blogid \
+				ELSE NULL \
+				END) AS blognum_fan \
+		,count(DISTINCT CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN CONCAT ( \
+							b.userid \
+							,b.blogid \
+							,b.postid \
+							) \
+				ELSE NULL \
+				END) AS chargenum_fan \
+		,sum(CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS money_fan \
+		,count(DISTINCT b.userid) AS charge_uv_all \
+		,count(DISTINCT b.postid) AS postnum_all \
+		,count(DISTINCT b.blogid) AS blognum_all \
+		,count(DISTINCT CONCAT ( \
+				b.userid \
+				,b.blogid \
+				,b.postid \
+				)) AS chargenum_all \
+		,sum(MONEY) AS money_all \
+	FROM ( \
+		SELECT postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		FROM lofter.dim_gift_post_return_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND STATUS = 1 \
+			AND ispay_returngift IN ( \
+				0 \
+				,1 \
+				) \
+			AND contenttype IN ( \
+				'图片' \
+				,'文字' \
+				) \
+		GROUP BY postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		) a \
+	LEFT JOIN ( \
+		SELECT postid \
+			,blogid \
+			,MONEY \
+			,userid \
+			,createtime \
+			,pay_type \
+			,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS dt \
+		FROM lofter.dwd_evt_post_paid_detail_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND pay_type IN ( \
+				'付费礼物' \
+				,'粉丝会员' \
+				) \
+			AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' \
+		) b ON a.postid = b.postid \
+	GROUP BY contenttype \
+		,blog_channel \
+	) a \
+JOIN ( \
+	SELECT contenttype \
+		,blog_channel \
+		,sum(exposureuv) AS exposureuv \
+		,sum(clickuv) AS clickuv \
+		,sum(browseuv) AS browseuv \
+		,sum(realbrowseuv) AS realbrowseuv \
+	FROM ( \
+		SELECT postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		FROM lofter.dim_gift_post_return_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND STATUS = 1 \
+			AND ispay_returngift IN ( \
+				0 \
+				,1 \
+				) \
+			AND contenttype IN ( \
+				'图片' \
+				,'文字' \
+				) \
+		GROUP BY postid \
+			,contenttype \
+			,blog_channel \
+			,publishdate \
+		) a \
+	LEFT JOIN ( \
+		SELECT postid \
+			,sum(exposureuv) AS exposureuv \
+			,sum(clickuv) AS clickuv \
+			,sum(browseuv) AS browseuv \
+			,sum(realbrowseuv) AS realbrowseuv \
+		FROM lofter.dws_post_base_stats_di \
+		WHERE dt ='${azkaban.flow.1.days.ago}' \
+		GROUP BY postid \
+		) b ON a.postid = b.postid \
+	GROUP BY contenttype \
+		,blog_channel \
+	) b ON a.contenttype = b.contenttype \
+	AND a.blog_channel = b.blog_channel \

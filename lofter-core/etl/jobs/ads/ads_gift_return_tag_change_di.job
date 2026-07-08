@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_return_tag_change_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.return_gift_id, a.postid, a.blogid, \
+       a.tag, \
+       if(length(a.tag_state) = 0, b.tag_state, a.tag_state) as tag_state, \
+       if(length(a.tag_state) = 0, 0, 1) as action \
+from ( \
+    select * from lofter_dm.ads_gift_return_tag_di where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select * \
+    from ( \
+        select *, row_number() over (partition by return_gift_id, tag order by dt desc) as rk \
+        from lofter_dm.ads_gift_return_tag_di \
+        where dt < '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rk = 1 \
+) b on a.return_gift_id = b.return_gift_id and a.tag = b.tag \
+where (b.tag is null and length(a.tag_state) > 0) or a.tag_state != b.tag_state \
+
+dependencies=ads_gift_return_tag_di

@@ -1,0 +1,14 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_cmb_tag_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.id as cmb_tag_id, a.name as tag, b.hot7d, pv7d, uv7d, subscribe7d, post7d \
+    from ( \
+      select id, name from lofter_db_dump.ods_db_cmb_tag_nd \
+    ) a left join ( \
+        select distinct tag,hot as hot7d,browsingCount as pv7d,browsingUserCount as uv7d, \
+                        subscribeCount as subscribe7d,postCount as post7d \
+        from lofter_dm.ads_tag_general_7d \
+        where length(tag) > 0 and dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.name = b.tag \
+    distribute by 1
+dependencies=ads_tag_general_7d

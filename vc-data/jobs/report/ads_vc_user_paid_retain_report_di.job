@@ -1,0 +1,259 @@
+type=sparksql
+hive.query.01= \
+WITH \
+t1 AS ( \
+select dt,NVL(detail_type,'汇总') as detail_type  ,  \
+NVL(sub_type,'汇总') sub_type, \
+user_id, \
+money \
+from \
+(SELECT t1.dt, \
+t2.pay_item_code as detail_type, \
+CASE  \
+WHEN t2.pay_item_code IN ('new_limitgift','week_limitgift','month_limitgift', \
+ 'ad_29.9', 'ad_59.9',  \
+ 'week_light_limitgift_29.9', 'month_light_limitgift_59.9')  \
+THEN '新人礼包' \
+ \
+WHEN t2.pay_item_code LIKE '%light_limitgift%'  \
+OR t2.pay_item_code LIKE 'day_light%' \
+THEN '琉光新人礼包' \
+ \
+WHEN t2.pay_item_code IN ('energy_10', 'energy_56')  \
+THEN '拍照' \
+ \
+WHEN t2.pay_item_code LIKE 'energy_card%'  \
+THEN '周月卡' \
+ \
+WHEN (t2.pay_item_code LIKE 'energy_first%'  \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+$' \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+_[0-9]+')  \
+THEN '能量' \
+ \
+WHEN t2.pay_item_code LIKE 'memory_card%'  \
+THEN '忘忧草' \
+ \
+WHEN t2.pay_item_code = 'speedup_card'  \
+THEN '道具' \
+ \
+WHEN t2.pay_item_code LIKE 'light%'  \
+THEN '琉光' \
+ \
+ELSE '其他' \
+END AS sub_type, \
+t1.user_id, \
+sum(order_price) as money \
+FROM vc.dwd_vc_order_i_d t1 \
+left join vc.ods_db_vc_item_nd t2 on t1.item_id = t2.id \
+WHERE t1.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+t2.pay_item_code, \
+CASE  \
+WHEN t2.pay_item_code IN ('new_limitgift','week_limitgift','month_limitgift', \
+ 'ad_29.9', 'ad_59.9',  \
+ 'week_light_limitgift_29.9', 'month_light_limitgift_59.9')  \
+THEN '新人礼包' \
+ \
+WHEN t2.pay_item_code LIKE '%light_limitgift%'  \
+OR t2.pay_item_code LIKE 'day_light%' \
+THEN '琉光新人礼包' \
+ \
+WHEN t2.pay_item_code IN ('energy_10', 'energy_56')  \
+THEN '拍照' \
+ \
+WHEN t2.pay_item_code LIKE 'energy_card%'  \
+THEN '周月卡' \
+ \
+WHEN (t2.pay_item_code LIKE 'energy_first%'  \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+$'  \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+_[0-9]+')  \
+THEN '能量' \
+ \
+WHEN t2.pay_item_code LIKE 'memory_card%'  \
+THEN '忘忧草' \
+ \
+WHEN t2.pay_item_code = 'speedup_card'  \
+THEN '道具' \
+ \
+WHEN t2.pay_item_code LIKE 'light%'  \
+THEN '琉光' \
+ \
+ELSE '其他' \
+END, \
+t1.user_id \
+grouping sets \
+((t1.dt, \
+t2.pay_item_code, \
+CASE  \
+WHEN t2.pay_item_code IN ('new_limitgift','week_limitgift','month_limitgift', \
+ 'ad_29.9', 'ad_59.9',  \
+ 'week_light_limitgift_29.9', 'month_light_limitgift_59.9')  \
+THEN '新人礼包' \
+ \
+WHEN t2.pay_item_code LIKE '%light_limitgift%'  \
+OR t2.pay_item_code LIKE 'day_light%' \
+THEN '琉光新人礼包' \
+ \
+WHEN t2.pay_item_code IN ('energy_10', 'energy_56')  \
+THEN '拍照' \
+ \
+WHEN t2.pay_item_code LIKE 'energy_card%'  \
+THEN '周月卡' \
+ \
+WHEN (t2.pay_item_code LIKE 'energy_first%'  \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+$'  \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+_[0-9]+')  \
+THEN '能量' \
+ \
+WHEN t2.pay_item_code LIKE 'memory_card%'  \
+THEN '忘忧草' \
+ \
+WHEN t2.pay_item_code = 'speedup_card'  \
+THEN '道具' \
+ \
+WHEN t2.pay_item_code LIKE 'light%'  \
+THEN '琉光' \
+ \
+ELSE '其他' \
+END, \
+t1.user_id ),(t1.dt, \
+CASE  \
+WHEN t2.pay_item_code IN ('new_limitgift','week_limitgift','month_limitgift', \
+ 'ad_29.9', 'ad_59.9',  \
+ 'week_light_limitgift_29.9', 'month_light_limitgift_59.9')  \
+THEN '新人礼包' \
+ \
+WHEN t2.pay_item_code LIKE '%light_limitgift%'  \
+OR t2.pay_item_code LIKE 'day_light%' \
+THEN '琉光新人礼包' \
+ \
+WHEN t2.pay_item_code IN ('energy_10', 'energy_56')  \
+THEN '拍照' \
+ \
+WHEN t2.pay_item_code LIKE 'energy_card%'  \
+THEN '周月卡' \
+ \
+WHEN (t2.pay_item_code LIKE 'energy_first%' \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+$' \
+OR t2.pay_item_code REGEXP 'energy_[0-9]+_[0-9]+') \
+THEN '能量' \
+ \
+WHEN t2.pay_item_code LIKE 'memory_card%'  \
+THEN '忘忧草' \
+ \
+WHEN t2.pay_item_code = 'speedup_card'  \
+THEN '道具' \
+ \
+WHEN t2.pay_item_code LIKE 'light%'  \
+THEN '琉光' \
+ \
+ELSE '其他' \
+END, \
+t1.user_id),( \
+t1.dt,t1.user_id) \
+) \
+) a) \
+ \
+ \
+insert overwrite table vc_dm.ads_vc_user_paid_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+b.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', b.dt) as period, \
+a.origin_type, \
+a.device_os, \
+case \
+when a.first_order_date = b.dt then 1 \
+else 0 \
+end as new_flg, \
+b.detail_type, \
+b.sub_type, \
+count(DISTINCT b.user_id) AS uv, \
+sum(b.money) as money, \
+count( \
+DISTINCT CASE \
+WHEN c.dt = date_add(b.dt, 0) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_1d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt = date_add(b.dt, 1) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_2d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and  date_add(b.dt, 6) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_7d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 14) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_15d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 29) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_30d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 59) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (59) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_60d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 89) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (89) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_90d, \
+case \
+when a.register_date = b.dt then 1 \
+else 0 \
+end as new_register_flg \
+from \
+( \
+select \
+user_id, \
+origin_type, \
+device_os, \
+first_order_date, \
+register_date \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+) a \
+join t1 b on a.user_id = b.user_id \
+left join t1 c on b.user_id = c.user_id \
+AND c.dt BETWEEN date_add(b.dt, 0) \
+AND date_add(b.dt, 89) \
+and b.detail_type = c.detail_type \
+and b.sub_type = c.sub_type \
+WHERE \
+datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 6, 14, 29, 59, 89) \
+group by \
+b.dt, \
+datediff('${azkaban.flow.1.days.ago}', b.dt), \
+a.origin_type, \
+a.device_os, \
+case \
+when a.first_order_date = b.dt then 1 \
+else 0 \
+end, \
+case \
+when a.register_date = b.dt then 1 \
+else 0 \
+end, \
+b.detail_type, \
+b.sub_type \

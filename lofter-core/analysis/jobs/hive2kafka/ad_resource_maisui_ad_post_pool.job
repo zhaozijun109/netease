@@ -1,0 +1,10 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select postId, blogId, groupId, replace(dt, '-', '') as date, \
+       count(1) over () as totalCount, \
+       row_number() over (order by postId desc) as no \
+from lofter_dm.ads_ad_resource_content_pool_di \
+where dt ='${azkaban.flow.1.days.ago}' \
+"
+params= --topic AD.RESOURCE_MAISUI.ADPOSTPOOL --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

@@ -1,0 +1,181 @@
+type=sparksql
+hive.query.01=\
+with tag_source as ( \
+    select tag from lofter_dm.ads_rec_auto_column_premium_tag_di where dt = '${azkaban.flow.1.days.ago}' \
+), \
+collection_source as ( \
+    select r2.collectionId, \
+           r2.blogId, \
+           r2.blog_level, \
+           r2.subscribe_uv_acc, \
+           r2.postCollectionHot, \
+           r2.viewCount, \
+           r2.postCount, \
+           r2.tag, \
+           r3.recReason \
+    from tag_source r1 \
+    join ( \
+        select collectionId, \
+               blogId, \
+               blog_level, \
+               subscribe_uv_acc, \
+               postCollectionHot, \
+               viewCount, \
+               postCount, \
+               tag \
+        from lofter.dws_collection_dd lateral view explode(split(tags,',')) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and postCount > 5 and status = 0 \
+    ) r2 \
+    on r1.tag = r2.tag \
+    left join ( \
+         select collectionId, recReason \
+         from lofter_dm.ads_rec_collection_rec_reason_di \
+         where dt = '${azkaban.flow.1.days.ago}' \
+    ) r3 \
+    on r2.collectionId = r3.collectionId \
+    left join ( \
+        select distinct collectionId \
+        from ( \
+            select postId from lofter.dim_gift_post \
+            union all \
+            select postId from lofter_db_dump.ods_db_invalid_nos_image_nd \
+        ) t1 \
+        join ( \
+            select postId, \
+                   collectionId \
+            from lofter.bridge_collection_post \
+        ) t2 \
+        on t1.postId = t2.postId \
+    ) r4 \
+    on r2.collectionId= r4.collectionId \
+    left join ( \
+        select collectionId \
+        from ( \
+            select t4.collectionId, \
+                   max(t4.postCount) as postCount, \
+                   count(distinct t2.postId) as tagPostCount \
+            from tag_source t1 \
+            join ( \
+                select id as postId, \
+                       tag \
+                from lofter.dim_post_article lateral view explode(tags) as tag \
+                where publishDate <= '${azkaban.flow.1.days.ago}' and contentType in ("图片","文字") and isPublished = true \
+                and valid = 0 and allowView = 0 and isForbidden = false and isCitedPost = false and isActivityAutoPost = 0 \
+                and isImported = 0 and isMoved = 0 \
+            ) t2 \
+            on t1.tag = t2.tag \
+            join ( \
+                select postId, collectionId \
+                from lofter.bridge_collection_post \
+            ) t3 \
+            on t2.postId = t3.postId \
+            join ( \
+                select collectionId, postCount from lofter.dws_collection_dd where dt = '${azkaban.flow.1.days.ago}' \
+            ) t4 \
+            on t3.collectionId = t4.collectionId \
+            group by t4.collectionId \
+        ) t5 \
+        where tagPostCount < 0.6 * postCount \
+    ) r5 \
+    on r2.collectionId = r5.collectionId \
+    where r4.collectionId is null and r5.collectionId is null \
+) \
+insert overwrite table lofter_dm.ads_rec_auto_column_collection_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag, \
+       0 as rankType, \
+       '普通' as rankName, \
+       cast(to_json(transform(sort_array(collect_list(struct(rank, collectionId, blogId, recReason)), true), x -> struct(x.collectionId, x.blogId, x.recReason))) as string) as tagCollectionReasons \
+from ( \
+      select tag, \
+             collectionId, \
+             blogId, \
+             recReason, \
+             row_number() over(partition by tag order by priorityType desc, subscribe_uv_acc desc) as rank \
+      from ( \
+            select tag, \
+                   collectionId, \
+                   blogId, \
+                   recReason, \
+                   subscribe_uv_acc, \
+                   priorityType \
+            from ( \
+                 select tag, \
+                        collectionId, \
+                        blogId, \
+                        recReason, \
+                        subscribe_uv_acc, \
+                        priorityType, \
+                        row_number() over(partition by tag, collectionId order by priorityType desc) as rn2 \
+                 from ( \
+                        select tag, collectionId, blogId, recReason, subscribe_uv_acc, 0 as priorityType \
+                        from ( \
+                            select collectionId, \
+                                   blogId, \
+                                   subscribe_uv_acc, \
+                                   recReason, \
+                                   tag, \
+                                   row_number() over(partition by tag order by subscribe_uv_acc desc) as rn \
+                            from collection_source \
+                        ) t1 \
+                        where rn <= 20 \
+                        union all \
+                        select tag, collectionId, blogId, recReason, subscribe_uv_acc, 0 as priorityType \
+                        from ( \
+                            select collectionId, \
+                                   blogId, \
+                                   subscribe_uv_acc, \
+                                   recReason, \
+                                   tag, \
+                                   row_number() over(partition by tag order by postCollectionHot desc) as rn \
+                            from collection_source \
+                        ) t1 \
+                        where rn <= 20 \
+                        union all \
+                        select tag, collectionId, blogId, recReason, subscribe_uv_acc, 0 as priorityType \
+                        from ( \
+                            select collectionId, \
+                                   blogId, \
+                                   subscribe_uv_acc, \
+                                   recReason, \
+                                   tag, \
+                                   row_number() over(partition by tag order by viewCount desc) as rn \
+                            from collection_source \
+                        ) t1 \
+                        where rn <= 20 \
+                        union all \
+                        select tag, collectionId, blogId, recReason, subscribe_uv_acc, 0 as priorityType \
+                        from ( \
+                            select collectionId, \
+                                   blogId, \
+                                   subscribe_uv_acc, \
+                                   recReason, \
+                                   tag, \
+                                   row_number() over(partition by tag order by subscribe_uv_acc desc) as rn \
+                            from collection_source \
+                            where blog_level in ('S','A') \
+                        ) t1 \
+                        where rn <= 20 \
+                        union all \
+                        select t2.tag, t2.collectionId, t2.blogId, t2.recReason, t2.subscribe_uv_acc, 1 as priorityType \
+                        from ( \
+                            select collectionId \
+                            from lofter_db_dump.ods_db_deity_recommend_nd \
+                            where type = 1 and status = 0 \
+                        ) t1 \
+                        join ( \
+                            select collectionId, \
+                                   blogId, \
+                                   subscribe_uv_acc, \
+                                   recReason, \
+                                   tag \
+                            from collection_source \
+                        ) t2 \
+                        on t1.collectionId = t2.collectionId \
+                 ) t3 \
+            ) t4 \
+            where rn2 = 1 \
+      ) t5 \
+) tmp1 \
+where rank <= 20 \
+group by tag
+dependencies=ads_rec_auto_column_premium_tag_di,ads_rec_collection_rec_reason_di

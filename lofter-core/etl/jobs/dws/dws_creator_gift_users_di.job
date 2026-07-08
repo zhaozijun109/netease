@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dws_creator_gift_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.userId, \
+    if(b.userId is null, 1, 0) as is_first_browse, \
+    if(c.userId is null, 1, 0) as is_nopay_user, \
+    a.browse_pv \
+from ( \
+    select post_userId as blogId, userId, count(1) as browse_pv \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+    group by 1, 2 \
+) a \
+join lofter_db_dump.ods_db_trade_pay_grade_nd a1 on a.blogId = a1.userId \
+left join ( \
+    select blogId, userId \
+    from lofter.dws_creator_browse_users_di \
+    where dt <= '${azkaban.flow.2.days.ago}' \
+    group by 1, 2 \
+) b on a.blogId = b.blogId and a.userId = b.userId \
+left join ( \
+    select blogId, userId \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.2.days.ago}' \
+    group by 1, 2 \
+) c on a.blogId = c.blogId and a.userId = c.userId \
+where (b.userId is null or c.userId is null) \
+
+dependencies=dws_creator_browse_users_di

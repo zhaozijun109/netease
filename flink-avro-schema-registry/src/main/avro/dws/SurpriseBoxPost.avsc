@@ -1,0 +1,9 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "SurpriseBoxPost",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "permalink", "type": "string"}
+  ]
+}

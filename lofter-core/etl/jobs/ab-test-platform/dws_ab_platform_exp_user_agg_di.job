@@ -1,0 +1,15 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01= \
+insert overwrite table lofter.dws_ab_platform_exp_user_agg_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select user_id, appId, sceneId, exp_id, bucket_id, \
+       count(1) as pv, \
+       max(exp_state) as exp_state, \
+       max(is_return_user) as is_return_user, \
+       max(register_date) as register_date \
+from lofter.dwd_ab_platform_exp_user_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by user_id, appId, sceneId, exp_id, bucket_id
+dependencies=dwd_ab_platform_exp_user_di

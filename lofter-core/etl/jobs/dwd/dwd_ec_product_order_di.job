@@ -1,0 +1,63 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ec_product_order_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.id as orderId, \
+       t1.status, \
+       t1.createTime, \
+       t1.buyerId, \
+       t1.amount, \
+       t1.payTime, \
+       t1.tradeId, \
+       t1.originType, \
+       t2.productId, \
+       t2.type as productType, \
+       t2.storePrice, \
+       t2.marketPrice, \
+       t2.deductPrice, \
+       t2.priceType, \
+       t2.productNum, \
+       t2.newCouponPreferential, \
+       t2.adTrace, \
+       t2.cardActivityCode \
+from ( \
+    select id, \
+           status, \
+           createTime, \
+           productType, \
+           buyerId, \
+           amount, \
+           payTime, \
+           bankOrderTime, \
+           tradeId, \
+           supplierId, \
+           preSaleType, \
+           preSaleId, \
+           originType \
+    from lofter_db_dump.ods_db_benefit_order_nd \
+    where from_unixtime(cast(payTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+join ( \
+    select id, \
+           orderId, \
+           createTime, \
+           status, \
+           buyerId, \
+           productId, \
+           type, \
+           productName, \
+           storePrice, \
+           marketPrice, \
+           deductPrice, \
+           priceType, \
+           productNum, \
+           newCouponPreferential, \
+           adTrace, \
+           sellPriceId, \
+           sellPrice, \
+           preSaleType, \
+           preSaleId, \
+           cardActivityCode \
+    from lofter_db_dump.ods_db_benefit_order_product_nd \
+    where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.id = t2.orderId

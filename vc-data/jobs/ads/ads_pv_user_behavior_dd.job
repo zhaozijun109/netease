@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.ads_pv_user_behavior_dd PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select max(user_id)                                as user_id, \
+                       user_code, \
+                       max(user_type)                              as user_type, \
+                       max(last_talk_date)                         as last_talk_date, \
+                       min(talk_intervals)                         as talk_intervals, \
+                       min(register_date)                          as register_date, \
+                       max(last_active_date)                       as last_active_date, \
+                       min(active_intervals)                       as active_intervals \
+                from (select user_id, \
+                             user_code, \
+                             if(login_type = 'lofter', 3, 1) as user_type, \
+                             last_talk_date, \
+                             talk_intervals, \
+                             register_date, \
+                             last_active_date, \
+                             active_intervals \
+                      from vc.dws_vc_user_behavior_info_view \
+                      where is_anonymity = 'N' \
+                        and is_test_user = 'N' \
+                      union all \
+                      select 0      as user_id, \
+                             userid as user_code, \
+                             2      as user_type, \
+                             last_chats_date, \
+                             datediff('${azkaban.flow.current.date}', last_chats_date), \
+                             first_interview_date, \
+                             last_interview_date, \
+                             datediff('${azkaban.flow.current.date}', last_interview_date) \
+                      from lofter.dim_pve_user \
+                      where first_interview_date is not null) \
+                group by user_code

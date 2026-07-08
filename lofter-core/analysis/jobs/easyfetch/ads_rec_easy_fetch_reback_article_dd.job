@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_rec_easy_fetch_reback_article_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+  item_id, \
+  tags, \
+  type, \
+  article_type, \
+  create_time_days, \
+  return_gift_type, \
+  content_length, \
+  hot, \
+  comment_count, \
+  hot_14d, \
+  comment_count_14d \
+FROM rec.rec_reback_effect_article_pool \
+WHERE day = '${azkaban.flow.1.days.ago}'

@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.wm.clickhouse.Hive2ClickhouseTableSync
+conf.spark.sql.shuffle.partitions=5
+conf.spark.task.maxFailures=1
+conf.spark.blacklist.enabled=false
+conf.spark.sql.hive.convertMetastoreParquet=false
+retries=0
+params=--date ${azkaban.flow.1.days.ago} --full --table

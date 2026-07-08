@@ -1,0 +1,258 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+base_data_1d AS ( \
+    SELECT   \
+        a.deviceid \
+        ,CASE WHEN a.status IN (1,2) THEN '已完成'  \
+              WHEN a.status = 0 THEN '未完成' ELSE CAST(a.status AS STRING) END AS status \
+        ,a.createTime  \
+        ,a.completetime \
+        ,b.deviceudid \
+        ,a.userid \
+        ,sourceplatform  \
+        ,targetplatform  \
+    FROM  \
+        (SELECT  \
+            deviceid \
+            ,sourceplatform \
+            ,targetplatform \
+            ,max(userid) as userid \
+            ,max(status) as status \
+            ,min(FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd')) AS createTime \
+            ,max(FROM_UNIXTIME(CAST(completetime  AS BIGINT), 'yyyy-MM-dd')) AS completetime \
+        FROM lofter_db_dump.ods_db_exchange_task_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        GROUP BY  \
+            deviceid \
+            ,sourceplatform \
+            ,targetplatform \
+        ) a  \
+    LEFT JOIN ( \
+        SELECT  \
+            sid \
+            ,tid AS deviceudid \
+        FROM lofter.dwd_device_mapping \
+        WHERE tid_tp = 'deviceudid'  \
+        AND lastno = 1  \
+        AND sid_tp = 'customudid' \
+        GROUP BY sid, tid \
+    ) b  \
+    ON a.deviceid = b.sid \
+    GROUP BY  \
+        a.deviceid \
+        ,CASE WHEN a.status IN (1,2) THEN '已完成'  \
+              WHEN a.status = 0 THEN '未完成' ELSE CAST(a.status AS STRING) END  \
+        ,a.createTime  \
+        ,a.completetime \
+        ,b.deviceudid \
+        ,a.userid \
+        ,sourceplatform  \
+        ,targetplatform  \
+), \
+active_data_1d AS ( \
+    SELECT  \
+        deviceudid \
+        ,device_type \
+        ,dt \
+    FROM lofter.dwd_device_growth_attribution_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY  \
+        deviceudid \
+        ,device_type \
+        ,dt \
+), \
+baibanlv_data_1d AS ( \
+    SELECT  \
+        a.deviceudid \
+        ,b.is_whiteboard \
+        ,a.createTime AS dt \
+    FROM base_data_1d a  \
+    LEFT JOIN ( \
+        SELECT  \
+            deviceudid, \
+            is_whiteboard, \
+            dt  \
+        FROM lofter.dwd_device_growth_attribution_di  \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+    ) b ON a.deviceudid = b.deviceudid \
+        AND b.dt = a.createTime \
+    GROUP BY   \
+        a.deviceudid \
+       ,b.is_whiteboard \
+       ,a.createTime \
+), \
+session_total_time_1d AS ( \
+    SELECT  \
+        dt  \
+        ,deviceudid \
+        ,sessiontime / (1000 * 60 ) AS mins \
+    FROM lofter.dws_par_device_session_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY  \
+        dt  \
+        ,deviceudid \
+        ,sessiontime / (1000 * 60 )  \
+), \
+return_data_1d AS ( \
+    SELECT  \
+        a.deviceudid \
+        ,MAX(b.deviceudid) AS retain_deviceudid   \
+        ,a.createTime as base_dt \
+    FROM base_data_1d a  \
+    LEFT JOIN ( \
+        SELECT  \
+            deviceudid,  \
+            dt AS base_dt  \
+        FROM lofter.device_active  \
+        WHERE dt = DATE_ADD('${azkaban.flow.1.days.ago}', 1) \
+    ) b ON a.deviceudid = b.deviceudid \
+        AND b.base_dt = DATE_ADD(a.createTime, 1) \
+    GROUP BY  \
+        a.deviceudid \
+        ,a.createTime \
+), \
+seven_day_return_data_1d AS ( \
+    SELECT  \
+        a.deviceudid, \
+        MAX(b.deviceudid) AS retain_deviceudid   \
+        ,a.createTime as base_dt \
+    FROM base_data_1d a  \
+    LEFT JOIN ( \
+        SELECT  \
+            deviceudid,  \
+            dt AS base_dt  \
+        FROM lofter.device_active  \
+        WHERE dt = DATE_ADD('${azkaban.flow.1.days.ago}', 6) \
+    ) b ON a.deviceudid = b.deviceudid \
+        AND b.base_dt = DATE_ADD(a.createTime, 6) \
+    GROUP BY  \
+        a.deviceudid \
+        ,a.createTime \
+), \
+fufei_data_1d AS ( \
+    SELECT  \
+        userid \
+        ,pay_date \
+        ,SUM(money) AS money \
+    FROM lofter.dwd_user_order_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    and pay_date = '${azkaban.flow.1.days.ago}' \
+    GROUP BY  \
+        userid \
+        ,pay_date \
+), \
+overlap_data_1d AS ( \
+    SELECT  \
+        a.deviceudid AS overlap_id \
+       ,a.base_dt \
+       ,a.sourceplatform \
+       ,a.targetplatform \
+    FROM  \
+        (SELECT  \
+            deviceudid \
+            ,createTime  AS base_dt \
+            ,sourceplatform \
+            ,targetplatform \
+        FROM base_data_1d  \
+        WHERE createTime = '${azkaban.flow.1.days.ago}' \
+        GROUP BY  \
+            deviceudid \
+            ,createTime \
+            ,sourceplatform \
+            ,targetplatform \
+        ) a  \
+    JOIN (  \
+select   \
+      b.deviceudid \
+      ,createTime as base_dt \
+      ,sourceplatform \
+      ,targetplatform \
+from  \
+    (select  \
+        deviceid \
+        ,FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd') as createTime \
+        ,sourceplatform \
+        ,targetplatform \
+    from lofter_db_dump.ods_db_exchange_task_nd \
+    where FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd') = DATE_ADD('${azkaban.flow.1.days.ago}',-1) \
+    group by  \
+       deviceid \
+         ,FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd')  \
+         ,sourceplatform \
+        ,targetplatform \
+    )a  \
+left join ( \
+    select  \
+         sid \
+         ,tid as deviceudid \
+    from lofter.dwd_device_mapping \
+    where tid_tp='deviceudid'  \
+    and lastno=1  \
+    and sid_tp='customudid' \
+    group by 1,2 \
+)b  \
+on a.deviceid=b.sid \
+group by b.deviceudid \
+      ,createTime \
+      ,sourceplatform \
+      ,targetplatform \
+    ) b \
+    ON a.deviceudid = b.deviceudid and b.base_dt = DATE_ADD(a.base_dt, -1) and a.sourceplatform=b.sourceplatform and a.targetplatform=b.targetplatform \
+    GROUP BY  \
+        a.deviceudid \
+       ,a.base_dt \
+       ,a.sourceplatform \
+       ,a.targetplatform \
+), \
+is_excellent_data_1d AS ( \
+    SELECT \
+        deviceudid, \
+        IF(valid_pv >= 4 AND hdpv + follow_pv + subscribe_collection_pv + publish_pv > 0 OR total_chats > 30, 1, 0) AS is_excellent \
+        ,dt \
+    FROM lofter.excellent_new_device_info_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY  \
+        deviceudid \
+        ,IF(valid_pv >= 4 AND hdpv + follow_pv + subscribe_collection_pv + publish_pv > 0 OR total_chats > 30, 1, 0) \
+        ,dt \
+) \
+insert overwrite table lofter_dm.ads_growth_maoer_exchange_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    '1' AS period \
+    ,max(createTime) as createTime \
+    ,CASE WHEN GROUPING(b.device_type) = 1 THEN 'ALL' ELSE COALESCE(b.device_type, '其他') END AS device_type \
+    ,CASE WHEN GROUPING(a.status) = 1 THEN 'ALL' ELSE COALESCE(a.status, '其他') END AS status \
+    ,COUNT(DISTINCT a.deviceudid) AS cnt  \
+    ,COUNT(DISTINCT a.deviceid) AS cnt_deviceid \
+    ,COUNT(DISTINCT CASE WHEN c.is_whiteboard = 1 THEN a.deviceudid ELSE NULL END) AS baiban_cnt \
+    ,COUNT(DISTINCT CASE WHEN e.retain_deviceudid IS NOT NULL THEN a.deviceudid ELSE NULL END) AS retain_cnt \
+    ,AVG(mins) AS avg_mins \
+    ,COUNT(DISTINCT CASE WHEN f.retain_deviceudid IS NOT NULL THEN a.deviceudid ELSE NULL END) AS seven_d_retain_cnt \
+    ,SUM(g.money) AS money \
+    ,COUNT(DISTINCT overlap_id) AS cnt_overlap \
+    ,COUNT(DISTINCT CASE WHEN is_excellent = 1 THEN a.deviceudid ELSE NULL END) AS cnt_excellent \
+    ,COUNT(DISTINCT CASE WHEN (a.userid IS NULL OR a.userid IN (0, -1)) THEN a.deviceudid ELSE NULL END) AS not_login_cnt \
+    ,CASE WHEN GROUPING(a.sourceplatform) = 1 THEN 'ALL' ELSE a.sourceplatform END AS sourceplatform  \
+    ,CASE WHEN GROUPING(a.targetplatform) = 1 THEN 'ALL' ELSE a.targetplatform END AS targetplatform  \
+FROM base_data_1d a  \
+LEFT JOIN active_data_1d b ON a.deviceudid = b.deviceudid AND a.createTime = b.dt \
+LEFT JOIN baibanlv_data_1d c ON a.deviceudid = c.deviceudid AND a.createTime = c.dt \
+LEFT JOIN session_total_time_1d d ON a.deviceudid = d.deviceudid AND a.createTime = d.dt \
+LEFT JOIN return_data_1d e ON a.deviceudid = e.deviceudid AND a.createTime = e.base_dt \
+LEFT JOIN seven_day_return_data_1d f ON a.deviceudid = f.deviceudid AND a.createTime = f.base_dt \
+LEFT JOIN fufei_data_1d g ON a.userid = g.userid AND a.createTime = g.pay_date \
+LEFT JOIN overlap_data_1d h ON a.deviceudid = h.overlap_id AND a.createTime = h.base_dt and a.sourceplatform=h.sourceplatform and a.targetplatform=h.targetplatform \
+LEFT JOIN is_excellent_data_1d i ON a.deviceudid = i.deviceudid AND a.createTime = i.dt \
+GROUP BY GROUPING SETS (  \
+   (('1'), b.device_type, a.status, a.sourceplatform, a.targetplatform),  \
+   (('1'), b.device_type, a.status, a.sourceplatform),  \
+   (('1'), b.device_type, a.status, a.targetplatform),  \
+   (('1'), a.status, b.device_type),  \
+   (('1'), a.status),  \
+   (('1'), b.device_type),  \
+   (('1'), a.sourceplatform),  \
+   (('1'), a.targetplatform),  \
+   (('1'), a.sourceplatform, a.targetplatform),   \
+   (('1'))  \
+)

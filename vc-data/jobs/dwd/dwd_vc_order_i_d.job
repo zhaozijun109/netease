@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.dwd_vc_order_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select x1.id                                                as order_id, \
+       x1.user_id, \
+       x1.item_id, \
+       x1.reward_type, \
+       x1.reward_id, \
+       FROM_UNIXTIME(x1.pay_time, 'yyyy-MM-dd HH:mm:ss')    as pay_time, \
+       x1.order_status, \
+       FROM_UNIXTIME(x1.create_time, 'yyyy-MM-dd HH:mm:ss') as order_time, \
+       FROM_UNIXTIME(x1.create_time, 'yyyy-MM-dd')          as order_date, \
+       x1.order_price, \
+       if(x3.is_test = 1, "Y", "N")                         as is_test_user, \
+       x2.pay_item_code, \
+       x2.platform, \
+       x2.category_level1, \
+       x2.product_name                                      as item_name \
+from vc.ods_db_vc_order_nd x1 \
+         left join (select id                                                 as item_id, \
+                           platform                                           as platform_id, \
+                           case \
+                               when platform = 1 then 'ios' \
+                               when platform = 2 then 'android' \
+                               when platform = 99 then 'both' end             as platform, \
+                           pay_item_code, \
+                           GET_JSON_OBJECT(internal_name, '$.categoryLevel1') as category_level1, \
+                           ''                                                 as category_level2, \
+                           GET_JSON_OBJECT(internal_name, '$.itemNameCN')     as product_name \
+                    from vc.ods_db_vc_item_nd) x2 on x1.item_id = x2.item_id \
+         left join (select id as user_id, GET_JSON_OBJECT(ext, '$.isTest') as is_test \
+                    from vc.ods_db_vc_user_account_nd) x3 on x1.user_id = x3.user_id \
+where x1.order_status = 2 \
+  and x1.pay_time between UNIX_TIMESTAMP(cast('${azkaban.flow.1.days.ago}' as date)) and \
+    UNIX_TIMESTAMP(date_add(cast('${azkaban.flow.1.days.ago}' as date), 1)) \
+  and x1.create_time >= UNIX_TIMESTAMP(cast('2024-12-19' as date));
+

@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="select x1.user_id, x1.id as user_code, x1.user_type, x1.last_talk_date, x1.last_active_date \
+                         from (select user_id, user_code as id, user_type, last_talk_date, last_active_date \
+                             from vc.ads_pv_user_behavior_dd \
+                             where dt = '${azkaban.flow.1.days.ago}' \
+                                 and last_talk_date is not null) x1 \
+                                 left join \
+                             (select user_id, user_code as id, user_type, last_talk_date, last_active_date \
+                             from vc.ads_pv_user_behavior_dd \
+                             where dt = '${azkaban.flow.2.days.ago}' \
+                                 and last_talk_date is not null) x2 \
+                             on x1.id = x2.id \
+                         where x1.last_talk_date != x2.last_talk_date or x1.last_active_date != x2.last_active_date"
+
+params= --index both_user_behavior_data --id user_code --update --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG

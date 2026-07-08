@@ -1,0 +1,79 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_user_dialogue_trade_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.day \
+,a.aisource as dimension \
+, 'aisource' as dimension_type \
+, a.ainum, \
+count(distinct a.userid) as dialogueuv \
+,count(distinct b.userid) as tradeuv \
+,sum(amount) as amount \
+,avg(ainum) as avgainum \
+,percentile(ainum, 0.5) as middleainum \
+, '无' as dimension_subtype \
+, 0 as roleid \
+from  \
+(select day,a.aisource,a.userid, \
+sum(case when type=0 then  num else 0 end ) as ainum \
+from  \
+(select  userid,type, \
+aisource,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day, \
+count(distinct id) as num \
+from lofter_db_dump.ods_db_pve_user_dialogue_nd \
+where sortno>0 and sender=0 and status=1 and  \
+from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+group by userid,type, \
+aisource,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) a \
+group by day,a.aisource,a.userid \
+) a \
+ \
+left join  \
+ \
+(select  userid,sum(amount) as amount ,from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+where status=1  \
+and from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+and productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+group by userid,from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+) b \
+ \
+on a.userid=b.userid and a.day=b.day \
+group by a.day,a.aisource,a.ainum \
+grouping sets ((a.day,ainum,a.aisource),(a.day,a.aisource),(a.day,ainum),(a.day)) \
+ \
+ \
+union \
+ \
+ \
+select '累计' As day,a.aisource as dimension,'aisource' as dimension_type,a.ainum,count(distinct a.userid) as dialogueuv,count(distinct b.userid) as tradeuv,sum(amount) as amount  \
+,avg(ainum) as avgainum \
+,percentile(ainum, 0.5) as middleainum \
+, '无' as dimension_subtype \
+, 0 as roleid \
+from  \
+ \
+ \
+(select a.aisource,a.userid, \
+sum(case when type=0 then  num else 0 end ) as ainum \
+from  \
+(select  userid,type, \
+aisource, \
+count(distinct id) as num \
+from lofter_db_dump.ods_db_pve_user_dialogue_nd \
+where sortno>0 and sender=0 and status=1 \
+group by userid,type, \
+aisource) a \
+group by a.aisource,a.userid \
+) a \
+ \
+left join  \
+ \
+(select  userid,sum(amount) as amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+where status=1 and productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+group by userid \
+ \
+) b \
+ \
+on a.userid=b.userid  \
+group by a.aisource,a.ainum \
+grouping sets ((ainum,a.aisource),(a.aisource),(ainum),()) \

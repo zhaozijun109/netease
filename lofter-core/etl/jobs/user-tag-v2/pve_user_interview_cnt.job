@@ -1,0 +1,69 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag pve_user_interview_cnt
+retries=0
+conf.spark.execute.sql="select userId, \
+                               'pve_user_interview_cnt'                as tag_name, \
+                               cat                                  as dim1, \
+                               ''                                   as dim2, \
+                               ''                                   as dim3, \
+                               ''                                   as dim4, \
+                               ''                                   as dim5, \
+                               value \
+                        from ( SELECT userId, \
+                                      'pve_user_interview_cnt' AS tag, \
+                                      'DAY_7' AS cat, \
+                                      cnt AS value \
+                               FROM ( \
+                                     SELECT userId, \
+                                            COUNT(1) AS cnt \
+                                     FROM ( \
+                                         SELECT userId FROM lofter_dm.ads_pve_user_interview_di WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',7) AND dt <= '${azkaban.flow.1.days.ago}' \
+                                     ) t1 \
+                                     GROUP BY userId \
+                               ) t3 \
+                                \
+                               UNION ALL \
+                                \
+                               SELECT userId, \
+                                      'pve_user_interview_cnt' AS tag, \
+                                      'DAY_15' AS cat, \
+                                      cnt AS value \
+                               FROM ( \
+                                     SELECT userId, \
+                                            COUNT(1) AS cnt \
+                                     FROM ( \
+                                         SELECT userId FROM lofter_dm.ads_pve_user_interview_di WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',15) AND dt <= '${azkaban.flow.1.days.ago}' \
+                                     ) t1 \
+                                     GROUP BY userId \
+                               ) t3 \
+                                \
+                               UNION ALL \
+                                \
+                               SELECT userId, \
+                                      'pve_user_interview_cnt' AS tag, \
+                                      'DAY_30' AS cat, \
+                                      cnt AS value \
+                               FROM ( \
+                                     SELECT userId, \
+                                            COUNT(1) AS cnt \
+                                     FROM ( \
+                                         SELECT userId FROM lofter_dm.ads_pve_user_interview_di WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',30) AND dt <= '${azkaban.flow.1.days.ago}' \
+                                     ) t1 \
+                                     GROUP BY userId \
+                               ) t3 \
+                                \
+                               UNION ALL \
+                                \
+                               SELECT userId, \
+                                      'pve_user_interview_cnt' AS tag, \
+                                      'DAY_90' AS cat, \
+                                      cnt AS value \
+                               FROM ( \
+                                     SELECT userId, \
+                                            COUNT(1) AS cnt \
+                                     FROM ( \
+                                         SELECT userId FROM lofter_dm.ads_pve_user_interview_di WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',90) AND dt <= '${azkaban.flow.1.days.ago}' \
+                                     ) t1 \
+                                     GROUP BY userId \
+                               ) t3   ) "

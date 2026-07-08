@@ -1,0 +1,55 @@
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <property name="CONSOLE_LOG_PATTERN"
+              value="%d %thread %X{x-from-ip} %-5level %logger{36}:%line %msg%n"/>
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender class="ch.qos.logback.core.ConsoleAppender">
+                <encoder>
+                    <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                    <charset>utf8</charset>
+                </encoder>
+            </appender>
+        </root>
+        <logger name="com.netease.lofter.tango.impl.mapper" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="test,pre">
+        <root level="INFO">
+            <appender class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <file>logs/main.log</file>
+                <encoder>
+                    <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                    <charset>utf8</charset>
+                </encoder>
+                <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                    <fileNamePattern>logs/main.log-%d{yyyyMMdd}</fileNamePattern>
+                    <maxHistory>30</maxHistory>
+                    <totalSizeCap>5GB</totalSizeCap>
+                </rollingPolicy>
+            </appender>
+        </root>
+    </springProfile>
+
+    <springProfile name="online">
+        <root level="INFO">
+            <appender class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <file>logs/main.log</file>
+                <encoder>
+                    <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                    <charset>utf8</charset>
+                </encoder>
+                <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                    <fileNamePattern>logs/main.log-%d{yyyyMMdd}</fileNamePattern>
+                    <maxHistory>30</maxHistory>
+                    <totalSizeCap>5GB</totalSizeCap>
+                </rollingPolicy>
+            </appender>
+        </root>
+    </springProfile>
+</configuration>
+
+
+
+
+

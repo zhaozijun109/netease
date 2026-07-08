@@ -1,0 +1,71 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_pve_user_timed_stamina_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.id as logId, \
+	   t1.userId, \
+	   t1.timedIds, \
+	   t1.targetId, \
+	   t1.type, \
+       t1.createTime, \
+       t1.dbUpdateTime, \
+       t1.sourceId, \
+       t1.sourceType, \
+       t2.delta, \
+       t2.newStamina, \
+       t2.oldStamina, \
+       t2.startTime, \
+	   t2.endTime \
+from ( \
+    select id, \
+           userId, \
+           timedIds, \
+           targetId, \
+           delta, \
+           type, \
+           createTime, \
+           dbUpdateTime, \
+           sourceId, \
+           sourceType \
+    from lofter_db_dump.ods_db_pve_user_timed_stamina_log_nd \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+        select id, \
+               delta, \
+               sum(case when rn1 = 1 then newStamina else 0 end) as newStamina, \
+               sum(case when rn2 = 1 then oldStamina else 0 end) as oldStamina, \
+               min(startTime) as startTime, \
+               max(endTime) as endTime \
+        from ( \
+                select a.id, \
+                       a.delta, \
+                       b.newStamina, \
+                       b.oldStamina, \
+                       b.startTime, \
+                       b.endTime, \
+                       row_number() over(partition by a.id order by b.createTime desc) as rn1, \
+                       row_number() over(partition by a.id order by b.createTime asc) as rn2 \
+                from ( \
+                        select id, \
+                               delta, \
+                               timedId \
+                        from lofter_db_dump.ods_db_pve_user_timed_stamina_log_nd \
+                        lateral view explode(split(timedIds,',')) as timedId \
+                        where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                ) a \
+                left join ( \
+                        select id, \
+                               initStamina + stamina as newStamina, \
+                               stamina as oldStamina, \
+                               createTime, \
+                               startTime, \
+                               endTime \
+                        from lofter_db_dump.ods_db_pve_user_timed_stamina_nd \
+                        where from_unixtime(cast(endTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' \
+                ) b \
+                on a.timedId = b.id \
+        ) c \
+        where rn1 = 1 or rn2 = 1 \
+        group by id, delta \
+) t2 \
+on t1.id = t2.id

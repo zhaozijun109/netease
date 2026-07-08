@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_blog_follow_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId, a.blogId, a.followTime as follow_time, b.clientType as platform, \
+       c.deviceUdid, c.deviceOs, c.appVersion, c.scene, \
+       source1_scene, source2_scene, module, source1_module, source2_module, source_postId \
+from ( \
+    select userId, blogId, followTime \
+    from ( \
+        select userId, blogId, followTime, _bin_op, \
+              row_number() over (partition by userId, blogId order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_user_following_di \
+        where dt = '${azkaban.flow.1.days.ago}' and _bin_op < 2 \
+    ) t \
+    where rk = 1 and _bin_op = 0 \
+) a \
+left join ( \
+    select userId, blogId, clientType \
+    from ( \
+        select *, row_number() over (partition by userId, blogId order by time desc) as rk \
+        from ( \
+            select cast(accountId as bigint) as userId, cast(itemId as bigint) as blogId,  clientType, time \
+            from lofter.ods_log_follow_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) t \
+    ) tt \
+    where rk = 1 \
+) b on a.userId = b.userId and a.blogId = b.blogId \
+left join ( \
+    select userId, blogId, deviceUdid, deviceOs, appVersion, scene, source1_scene, source2_scene, \
+           module, source1_module, source2_module, source_postId \
+    from ( \
+        select userId, itemId as blogId, deviceUdid, deviceOs, appVersion, scene, \
+               get_json_object(source, '$[1].scene') as source1_scene,get_json_object(source, '$[2].scene') as source2_scene, \
+               params['module'] as module,get_json_object(source, '$[1].module') as source1_module,get_json_object(source, '$[2].module') as source2_module, \
+               case when scene = 'homepage' then \
+                         case when params['module'] = 'Related_Blog' then \
+                                   case when get_json_object(source, '$[0].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[0].itemId') is not null then get_json_object(source, '$[0].itemId') \
+                                        when get_json_object(source, '$[1].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[1].itemId') is not null then get_json_object(source, '$[1].itemId') \
+                                        when get_json_object(source, '$[2].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[2].itemId') is not null then get_json_object(source, '$[2].itemId') \
+                                   end \
+                              when get_json_object(source, '$[0].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[0].itemId') is not null then get_json_object(source, '$[0].itemId') \
+                              when get_json_object(source, '$[1].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[1].itemId') is not null then get_json_object(source, '$[1].itemId') \
+                              when get_json_object(source, '$[2].itemType') in ('TEXT','PHOTO') and get_json_object(source, '$[2].itemId') is not null then get_json_object(source, '$[2].itemId') \
+                              end \
+                    when scene = 'note' and get_json_object(params['ext'],'$.itemType') in ('TEXT','PHOTO') then get_json_object(params['ext'],'$.itemId') \
+                    when scene = 'attention' and get_json_object(params['ext'],'$.itemType') in ('TEXT','PHOTO') then get_json_object(params['ext'],'$.itemId') \
+               end as source_postId, \
+               row_number() over (partition by userId, itemId order by occurTime desc) as rk \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actionType = 'follow' and userId > 0 and itemId > 0 \
+    ) t \
+    where rk = 1 \
+) c on a.userId = c.userId and a.blogId = c.blogId

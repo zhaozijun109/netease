@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_potential_device_active_7d_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select b.dt,b.ip,b.user_type, \
+sum(a.active_days_7d) as total_device_active_7d, \
+count(a.deviceudid) as device_cnt \
+from  \
+    (select \
+        dt  \
+        ,deviceudid \
+        ,active_days_7d \
+    from  lofter.dws_par_device_active_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    )a  \
+join \
+( \
+select \
+a.dt,a.ip,a.user_type,a.userid,b.deviceudid \
+from   \
+(select  dt,ip,user_type,userid \
+from lofter.dws_ip_user_life_cycle_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and user_type in ('新用户','潜力用户') \
+)a  \
+left join  \
+(select  \
+cast(sid as bigint) as userid \
+,tid as deviceudid \
+from lofter.dwd_device_mapping \
+where sid_tp='userid' \
+and tid_tp='deviceudid' \
+and lastno=1 \
+)b  \
+on a.userid=b.userid \
+) b on a.deviceudid=b.deviceudid and a.dt=b.dt \
+group by b.dt,b.ip,b.user_type \
+grouping sets((b.dt,b.ip),(b.dt,b.ip,b.user_type)) \

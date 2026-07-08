@@ -1,0 +1,128 @@
+type=sparksql
+hive.query.01 = with consume as (select b.user_id, \
+                                        b.first_order_time, \
+                                        b.first_order_date, \
+                                        b.last_order_time, \
+                                        b.last_order_date, \
+                                        b.intervals as purchase_intervals, \
+                                        a.total_orders, \
+                                        a.amounts \
+                                 from (select user_id, count(distinct order_id) as total_orders, sum(order_price) as amounts \
+                                       from vc.dwd_vc_order_i_d \
+                                       where dt <= '${azkaban.flow.1.days.ago}' \
+                                         and is_test_user = 'N' \
+                                       group by user_id) a \
+                                          left join \
+                                      (select user_id, \
+                                              max(case when rk1 = 1 then order_time else '1970-01-01 00:00:00' end)                    as first_order_time, \
+                                              TO_DATE(max(case when rk1 = 1 then order_time else '1970-01-01 00:00:00' end))           as first_order_date, \
+                                              max(case when rk2 = 1 then order_time else '1970-01-01 00:00:00' end)                    as last_order_time, \
+                                              TO_DATE(max(case when rk2 = 1 then order_time else '1970-01-01 00:00:00' end))           as last_order_date, \
+                                              DATEDIFF(CURRENT_DATE, \
+                                                       TO_DATE(max(case when rk2 = 1 then order_time else '1970-01-01 00:00:00' end))) as intervals \
+                                       from (select user_id, \
+                                                    order_time, \
+                                                    rank() over (partition by user_id order by order_time)      as rk1, \
+                                                    rank() over (partition by user_id order by order_time desc) as rk2 \
+                                             from vc.dwd_vc_order_i_d \
+                                             where dt <= '${azkaban.flow.1.days.ago}' \
+                                               and is_test_user = 'N') a \
+                                       where (rk1 = 1 or rk2 = 1) \
+                                       group by user_id) b on a.user_id = b.user_id), \
+                     active as (select user_id, \
+                                       max(TO_DATE(occur_time)) as                        last_active_date, \
+                                       DATEDIFF(CURRENT_DATE(), max(TO_DATE(occur_time))) active_intervals \
+                                from vc.dwd_vc_app_event_i_d \
+                                where dt <= '${azkaban.flow.1.days.ago}' \
+                                  and user_id is not null \
+                                group by user_id), \
+                     user as (select * from vc.dim_vc_user_info_a_d where dt = '${azkaban.flow.1.days.ago}'), \
+                     talk as (select user_id, \
+                                     max(case when rk1 = 1 then message_send_time else '1970-01-01 00:00:00' end)                         as first_talk_time, \
+                                     cast(max(case when rk1 = 1 then message_send_time else '1970-01-01 00:00:00' end) as date)           as first_talk_date, \
+                                     max(case when rk2 = 1 then message_send_time else '1970-01-01 00:00:00' end)                         as last_talk_time, \
+                                     cast(max(case when rk2 = 1 then message_send_time else '1970-01-01 00:00:00' end) as date)           as last_talk_date, \
+                                     datediff(CURRENT_DATE, \
+                                              cast(max(case when rk2 = 1 then message_send_time else '1970-01-01 00:00:00' end) as date)) as talk_intervals, \
+                                     max(total_talks)                                                                                     as total_talks \
+                              from (select user_id, \
+                                           message_send_time, \
+                                           rank() over (partition by user_id order by message_send_time)      as rk1, \
+                                           rank() over (partition by user_id order by message_send_time desc) as rk2, \
+                                           count(*) over (partition by user_id)                               as total_talks \
+                                    from vc.dwd_vc_uc_talk_info_i_d \
+                                    where sender = 2 \
+                                      and dt <= '${azkaban.flow.1.days.ago}') \
+                              where (rk1 = 1 or rk2 = 1) \
+                              group by user_id), \
+                     source as (select user_id, \
+                                       case \
+                                           when contains(CONCAT_WS(',', COLLECT_SET(origin_type)), '广告') then '广告' \
+                                           when contains(CONCAT_WS(',', COLLECT_SET(origin_type)), '邀请') then '邀请' \
+                                           else '自然' end as origin_type \
+                                from vc.dwd_vc_device_growth_attribution_i_d \
+                                where device_type = 'new' \
+                                  and user_id is not null \
+                                group by user_id), \
+                     consecutive as (select user_id, \
+                                            max_start_date  as max_cst_start_date, \
+                                            max_end_date    as max_cst_end_date, \
+                                            max_consecutive_days, \
+                                            last_start_date as last_cst_start_date, \
+                                            last_end_date   as last_cst_end_date, \
+                                            last_consecutive_days \
+                                     from vc.dwd_vc_user_consecutive_active_a_d \
+                                     where dt = '${azkaban.flow.1.days.ago}'), \
+                     lofter_users as (select user_id,is_lofter,is_pve \
+                                      from vc.dwd_vc_lofter_real_users_mapping_a_d \
+                                      where dt = '${azkaban.flow.1.days.ago}') \
+                insert overwrite table vc.dws_vc_user_behavior_info_a_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.user_id, \
+                       x1.sex, \
+                       x1.phone, \
+                       x1.register_date, \
+                       x2.first_order_date, \
+                       x2.last_order_date, \
+                       x2.purchase_intervals, \
+                       x2.total_orders, \
+                       x2.amounts, \
+                       x3.last_active_date, \
+                       x3.active_intervals, \
+                       x4.first_talk_date, \
+                       x4.last_talk_date, \
+                       x4.talk_intervals, \
+                       x1.register_days, \
+                       x1.login_type, \
+                       x4.total_talks, \
+                       x1.rest_energy, \
+                       nvl(x5.origin_type, '自然') as origin_type, \
+                       x1.is_notified, \
+                       x1.device_os, \
+                       x1.appversion, \
+                       x1.is_test_user, \
+                       x1.user_code, \
+                       x1.first_active_deviceudid, \
+                       x1.last_active_deviceudid, \
+                       x1.is_anonymity, \
+                       x1.free_rest_energy, \
+                       x1.buy_rest_energy, \
+                       x1.reward_rest_energy, \
+                       x6.max_cst_start_date, \
+                       x6.max_cst_end_date, \
+                       x6.max_consecutive_days, \
+                       x6.last_cst_start_date, \
+                       x6.last_cst_end_date, \
+                       x6.last_consecutive_days, \
+                       nvl(x7.is_lofter,'N') as is_lofter, \
+                       nvl(x7.is_pve,'N') as is_pve, \
+                       x1.expired_energy \
+                from user x1 \
+                         left join active x3 on x1.user_id = x3.user_id \
+                         left join consume x2 on x1.user_id = x2.user_id \
+                         left join talk x4 on x1.user_id = x4.user_id \
+                         left join source x5 on x1.user_id = x5.user_id \
+                         left join consecutive x6 on x1.user_id = x6.user_id \
+                         left join lofter_users x7 on x1.user_id = x7.user_id;
+
+hive.query.02 = create or replace view vc.dws_vc_user_behavior_info_view as \
+                select * from vc.dws_vc_user_behavior_info_a_d where dt = '${azkaban.flow.1.days.ago}'

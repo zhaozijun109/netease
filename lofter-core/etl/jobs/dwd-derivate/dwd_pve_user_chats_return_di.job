@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_pve_user_chats_return_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId \
+from ( \
+    select userId \
+    from lofter.dwd_pve_user_chats_active_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select userId \
+    from lofter.dwd_pve_user_chats_active_di \
+    where dt < '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) b on a.userId = b.userId \
+join ( \
+    select userId, first_chats_date \
+    from lofter.dim_pve_user_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and userType = 0 \
+) c on a.userId = c.userId \
+where c.first_chats_date < '${azkaban.flow.30.days.ago}' and b.userId is null
+dependencies=dwd_pve_user_chats_active_di

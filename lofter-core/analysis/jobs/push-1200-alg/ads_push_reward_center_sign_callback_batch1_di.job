@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_reward_center_sign_callback_batch1_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, user_type, day_index \
+from ( \
+    select a.* \
+    from ( \
+        select userId, userType as user_type, 1 as day_index \
+        from lofter_db_dump.ods_db_reward_user_benefit_period_nd \
+        where startDate = cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint)  and \
+            lastSignDate = cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) \
+    ) a \
+    left join ( \
+        select userId \
+        from ( \
+            select *, row_number() over (partition by userId order by `_bin_op_time` desc) as rk \
+            from lofter.ods_binlog_reward_user_benefit_period_di \
+            where dt = '${azkaban.flow.current.date}' \
+        ) t \
+        where lastSignDate = cast(replace('${azkaban.flow.current.date}', '-', '') as bigint) \
+    ) b on a.userId = b.userId \
+    where b.userId is null \
+) t \

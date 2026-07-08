@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select replace(dt, '-') as id, dayPassPostNum,hisPassPostNum,notAuditPostNum from lofter_dm.ads_video_audit_di where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_video_grab_audit --postfixsep

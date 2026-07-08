@@ -1,0 +1,25 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--cktable vc.user_portrait_datas --b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_user_consume_amount
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '用户充值金额' as tag_name, \
+       statistical_period as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       '' as dim5, \
+       amount as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_user_consume_amount' as tag \
+from ( \
+    select user_id, statistical_period, amount \
+    from vc.ads_vc_user_consume_period_n_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and pay_item_code = 'ALL' \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"
+dependencies=ads_vc_user_consume_period_n_d

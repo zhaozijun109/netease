@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.ClickhouseLoad
+conf.spark.source.query="select dt, tag, postId, value from lofter_dm.ads_post_tag_metric_level1_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.post_portrait_level1_raw --partition '${azkaban.flow.1.days.ago}' --url jdbc:clickhouse:http://lofter-data-common5.gy.ntes:8123/?socket_timeout=1000000
+retries=0
+dependencies=ads_post_tag_metric_level1_dd

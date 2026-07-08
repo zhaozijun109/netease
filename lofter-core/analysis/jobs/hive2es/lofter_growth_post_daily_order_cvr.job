@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select '${azkaban.flow.1.days.ago}' as dt, postId, sum(order_cnt) as order_cnt, sum(all_devices) as search_devices, sum(actpwd_trade_devices) as trade_devices from lofter_dm.ads_ec_paid_subscribe_actpwd_funnel_di where dt = '${azkaban.flow.1.days.ago}' and postId > 0 group by postId"
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_growth_post_daily_order_cvr --atom

@@ -1,0 +1,434 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_base_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    t1.period, \
+    t3.register_uv, \
+    COALESCE(t4.active_device,0), \
+    COALESCE(t7.active_user,0), \
+    COALESCE(t5.new_device,0), \
+    COALESCE(t1.chat_uv,0), \
+    COALESCE(t1.chat_uv_30,0), \
+    COALESCE(t1.chat_uv_100,0), \
+    COALESCE(t1.total_chat_rounds,0), \
+    COALESCE(t1.chat_characters,0), \
+	COALESCE(t1.chat_character_ids,0), \
+    COALESCE(t2.consum_uv,0), \
+    COALESCE(t2.total_amount,0), \
+	t1.is_anonymity, \
+	COALESCE(t1.total_talk_cnt,0), \
+	COALESCE(t1.total_mmt_cnt,0), \
+	COALESCE(t1.total_energy_consume,0), \
+	COALESCE(t1.total_free_energy,0), \
+	COALESCE(t1.total_buy_energy,0), \
+	COALESCE(t1.total_reward_energy,0) \
+from \
+    ( \
+select \
+'1' AS period, \
+is_anonymity, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(character_id) as chat_character_ids, \
+count(distinct case when talk_cnt > 29 then user_id else null end ) as chat_uv_30, \
+count(distinct case when talk_cnt > 99 then user_id else null end ) as chat_uv_100, \
+sum(talk_cnt) as total_talk_cnt, \
+sum(message_cnt) as total_chat_rounds, \
+sum(mmt_cnt) as total_mmt_cnt, \
+sum(energy_consume) as total_energy_consume, \
+sum(free_energy) as total_free_energy, \
+sum(buy_energy) as total_buy_energy, \
+sum(reward_energy) as total_reward_energy \
+from \
+vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt >= '2024-12-19' \
+and dt = '${azkaban.flow.1.days.ago}' \
+group by is_anonymity \
+ \
+			 \
+			 \
+        union \
+        ALL \
+        select \
+            '7' AS period, \
+is_anonymity, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(character_id) as chat_character_ids, \
+count(distinct case when talk_cnt > 29 then user_id else null end ) as chat_uv_30, \
+count(distinct case when talk_cnt > 99 then user_id else null end ) as chat_uv_100, \
+sum(talk_cnt) as total_talk_cnt, \
+sum(message_cnt) as total_chat_rounds, \
+sum(mmt_cnt) as total_mmt_cnt, \
+sum(energy_consume) as total_energy_consume, \
+sum(free_energy) as total_free_energy, \
+sum(buy_energy) as total_buy_energy, \
+sum(reward_energy) as total_reward_energy \
+from \
+vc.dws_vc_uc_talk_day_cnt_single_i_d \
+        where dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+		group by is_anonymity \
+ \
+        union \
+        ALL \
+        select \
+            '15' AS period, \
+is_anonymity, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(character_id) as chat_character_ids, \
+count(distinct case when talk_cnt > 29 then user_id else null end ) as chat_uv_30, \
+count(distinct case when talk_cnt > 99 then user_id else null end ) as chat_uv_100, \
+sum(talk_cnt) as total_talk_cnt, \
+sum(message_cnt) as total_chat_rounds, \
+sum(mmt_cnt) as total_mmt_cnt, \
+sum(energy_consume) as total_energy_consume, \
+sum(free_energy) as total_free_energy, \
+sum(buy_energy) as total_buy_energy, \
+sum(reward_energy) as total_reward_energy \
+from \
+vc.dws_vc_uc_talk_day_cnt_single_i_d \
+        where dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+		group by is_anonymity \
+		 \
+        union \
+        ALL \
+        select \
+            '30' AS period, \
+is_anonymity, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(character_id) as chat_character_ids, \
+count(distinct case when talk_cnt > 29 then user_id else null end ) as chat_uv_30, \
+count(distinct case when talk_cnt > 99 then user_id else null end ) as chat_uv_100, \
+sum(talk_cnt) as total_talk_cnt, \
+sum(message_cnt) as total_chat_rounds, \
+sum(mmt_cnt) as total_mmt_cnt, \
+sum(energy_consume) as total_energy_consume, \
+sum(free_energy) as total_free_energy, \
+sum(buy_energy) as total_buy_energy, \
+sum(reward_energy) as total_reward_energy \
+from \
+vc.dws_vc_uc_talk_day_cnt_single_i_d \
+        where dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+		group by is_anonymity \
+		 \
+        union \
+        ALL \
+        select \
+            'all' AS period, \
+is_anonymity, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(character_id) as chat_character_ids, \
+count(distinct case when talk_cnt > 29 then user_id else null end ) as chat_uv_30, \
+count(distinct case when talk_cnt > 99 then user_id else null end ) as chat_uv_100, \
+sum(talk_cnt) as total_talk_cnt, \
+sum(message_cnt) as total_chat_rounds, \
+sum(mmt_cnt) as total_mmt_cnt, \
+sum(energy_consume) as total_energy_consume, \
+sum(free_energy) as total_free_energy, \
+sum(buy_energy) as total_buy_energy, \
+sum(reward_energy) as total_reward_energy \
+from \
+vc.dws_vc_uc_talk_day_cnt_single_i_d \
+        where dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+		group by is_anonymity \
+    ) t1 \
+    left join ( \
+        select \
+            '1' AS period, \
+			'N' as is_anonymity, \
+            count(distinct user_id) as consum_uv, \
+            sum(order_price) as total_amount \
+        from \
+            vc.dwd_vc_order_i_d \
+        where \
+            order_status = 2 \
+            and is_test_user = 'N' \
+            and dt >= '2024-12-19' \
+            and dt = '${azkaban.flow.1.days.ago}' \
+		group by is_anonymity \
+        union \
+        ALL \
+        select \
+            '7' AS period, \
+			'N' as is_anonymity, \
+            count(distinct user_id) as consum_uv, \
+            sum(order_price) as total_amount \
+        from \
+            vc.dwd_vc_order_i_d \
+        where \
+            order_status = 2 \
+            and is_test_user = 'N' \
+            and dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            and datediff('${azkaban.flow.1.days.ago}', Dt) < 7 \
+		group by is_anonymity \
+        union \
+        ALL \
+        select \
+            '15' AS period, \
+			'N' as is_anonymity, \
+            count(distinct user_id) as consum_uv, \
+            sum(order_price) as total_amount \
+        from \
+            vc.dwd_vc_order_i_d \
+        where \
+            order_status = 2 \
+            and is_test_user = 'N' \
+            and dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            and datediff('${azkaban.flow.1.days.ago}', Dt) < 15 \
+		group by is_anonymity \
+        union \
+        ALL \
+        select \
+            '30' AS period, \
+			'N' as is_anonymity, \
+            count(distinct user_id) as consum_uv, \
+            sum(order_price) as total_amount \
+        from \
+            vc.dwd_vc_order_i_d \
+        where \
+            order_status = 2 \
+            and is_test_user = 'N' \
+            and dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+            and datediff('${azkaban.flow.1.days.ago}', Dt) < 30 \
+		group by is_anonymity \
+        union \
+        ALL \
+        select \
+            'all' AS period, \
+			'N' as is_anonymity, \
+            count(distinct user_id) as consum_uv, \
+            sum(order_price) as total_amount \
+        from \
+            vc.dwd_vc_order_i_d \
+        where \
+            order_status = 2 \
+            and is_test_user = 'N' \
+            and dt >= '2024-12-19' \
+            and dt <= '${azkaban.flow.1.days.ago}' \
+		group by is_anonymity \
+    ) t2 on t1.period = t2.period and t1.is_anonymity=t2.is_anonymity \
+    left join ( \
+	 \
+select '1' AS period, \
+is_anonymity, \
+count(distinct user_id) as register_uv \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt= (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and register_date>='2024-12-19' \
+and register_date = '${azkaban.flow.1.days.ago}' \
+group by is_anonymity \
+union \
+ALL \
+ \
+select '7' AS period, \
+is_anonymity, \
+count(distinct user_id) as register_uv \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt= (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and register_date>='2024-12-19' \
+and register_date <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}',register_date) < 7 \
+group by is_anonymity \
+union \
+ALL \
+ \
+select '15' AS period, \
+is_anonymity, \
+count(distinct user_id) as register_uv \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt= (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and register_date>='2024-12-19' \
+and register_date <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}',register_date) < 15 \
+group by is_anonymity \
+union \
+ALL \
+ \
+select '30' AS period, \
+is_anonymity, \
+count(distinct user_id) as register_uv \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt= (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and register_date>='2024-12-19' \
+and register_date <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}',register_date) < 30 \
+group by is_anonymity \
+union \
+ALL \
+ \
+select 'all' AS period, \
+is_anonymity, \
+count(distinct user_id) as register_uv \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt= (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and register_date>='2024-12-19' \
+and register_date <= '${azkaban.flow.1.days.ago}' \
+group by is_anonymity \
+    ) t3 on t1.period = t3.period and t1.is_anonymity=t3.is_anonymity \
+    left join ( \
+        \
+        select \
+            '1' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as active_device \
+        from \
+            vc.dwd_device_active_di  \
+        where \
+            dt = '${azkaban.flow.1.days.ago}' \
+		union \
+        ALL \
+         \
+		select \
+            '7' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as active_device \
+        from \
+            vc.dwd_device_active_di  \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+		union \
+        ALL \
+         \
+		select \
+            '15' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as active_device \
+        from \
+            vc.dwd_device_active_di  \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+		union \
+        ALL \
+         \
+		select \
+            '30' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as active_device \
+        from \
+            vc.dwd_device_active_di  \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+        union \
+        ALL \
+        select \
+            'all' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as active_device \
+        from \
+            vc.dwd_device_active_di  \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+    ) t4 on t1.period = t4.period and t1.is_anonymity = t4.is_anonymity \
+    left join ( \
+        \
+        select \
+            '1' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as new_device \
+        from \
+            vc.dwd_device_new_di \
+        where \
+            dt = '${azkaban.flow.1.days.ago}' \
+        union \
+        ALL \
+        select \
+            '7' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as new_device \
+        from \
+            vc.dwd_device_new_di \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+        union \
+        ALL \
+        select \
+            '15' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as new_device \
+        from \
+            vc.dwd_device_new_di \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+        union \
+        ALL \
+        select \
+            '30' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as new_device \
+        from \
+            vc.dwd_device_new_di \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+            AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+        union \
+        ALL \
+        select \
+            'all' AS period, \
+			'N' as is_anonymity, \
+            count(distinct deviceudid) as new_device \
+        from \
+            vc.dwd_device_new_di \
+        where \
+            dt <= '${azkaban.flow.1.days.ago}' \
+    ) t5 on t1.period = t5.period and t1.is_anonymity = t5.is_anonymity \
+left join \
+( \
+    select '1' AS period, \
+	nvl(is_anonymity,'N') as is_anonymity, \
+count(distinct user_id) as active_user \
+from vc.dwd_vc_user_active_i_d  \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by nvl(is_anonymity,'N') \
+union ALL  \
+ \
+select '7' AS period, \
+nvl(is_anonymity,'N') as is_anonymity, \
+count(distinct user_id) as active_user \
+from vc.dwd_vc_user_active_i_d  \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by nvl(is_anonymity,'N') \
+union ALL  \
+ \
+select '15' AS period, \
+nvl(is_anonymity,'N') as is_anonymity, \
+count(distinct user_id) as active_user \
+from vc.dwd_vc_user_active_i_d  \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 15 \
+group by nvl(is_anonymity,'N') \
+union ALL  \
+ \
+select '30' AS period, \
+nvl(is_anonymity,'N') as is_anonymity, \
+count(distinct user_id) as active_user \
+from vc.dwd_vc_user_active_i_d  \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 30 \
+group by nvl(is_anonymity,'N') \
+union ALL  \
+ \
+select 'all' AS period, \
+nvl(is_anonymity,'N') as is_anonymity, \
+count(distinct user_id) as active_user \
+from vc.dwd_vc_user_active_i_d  \
+where dt <= '${azkaban.flow.1.days.ago}' \
+group by nvl(is_anonymity,'N') \
+) t7 on t1.period = t7.period and t1.is_anonymity = t7.is_anonymity \

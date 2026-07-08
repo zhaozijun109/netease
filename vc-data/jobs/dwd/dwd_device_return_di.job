@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dwd_device_return_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.deviceUdid, deviceModel, deviceOs, firstAccessTime, \
+       if(size(userIds) = 0, null, userIds) as userIds, \
+       if(size(appChannels) = 0, null, appChannels) as appChannels, \
+       if(size(appVersions) = 0, null, appVersions) as appVersions, \
+       a.returnOccurTime, \
+       a.last_appChannel, \
+       a.last_appVersion \
+from ( \
+    select * from vc.dwd_device_active_di where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join (select deviceUdid from vc.dwd_device_new_di where dt='${azkaban.flow.1.days.ago}') b on a.deviceUdid = b.deviceUdid \
+left join ( \
+    select deviceUdid \
+    from vc.dwd_device_active_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 30) and \
+          dt < '${azkaban.flow.1.days.ago}' \
+    group by deviceUdid \
+) m on a.deviceUdid = m.deviceUdid \
+where b.deviceUdid is null and m.deviceUdid is null \
+
+dependencies=dwd_device_active_di,dwd_device_new_di

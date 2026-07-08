@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_tag_fetch_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.postId, a.publishDate as publish_date, a.url, a.blogId as userId, nvl(concat_ws('|',a.authDomainNames),'') as authenticate_names, \
+       a.blogNickName as blog_nickname, a.blogName as blog_name, nvl(post_count_std,0), nvl(fans_std,0), \
+       nvl(concat_ws('|', a.tags),'') as tags, nvl(a.contentType,'') as content_type, nvl(a.title,''), nvl(c.level,''), \
+       nvl(a.publishTime,0), nvl(a.recomStatus,0), nvl(c.post_main_content_type, ''), nvl(d.return_gift_plantype, ''), \
+       if(e.postId is not null, 1, 0) as is_premium, \
+       nvl(ispay_returngift, '') as pay_status, \
+       if(f.postId is not null, 1, 0) as is_gift_premium \
+from ( \
+   select a.id as postId, a.blogId, a.tags, a.contentType, a.title, a.publishDate, b.authDomainNames, b.blogNickName, b.blogName, a.url, \
+          a.publishTime, a.recomStatus \
+   from lofter.dim_post a join \
+        lofter.dim_blog b on a.blogId = b.id \
+   where publishDate <= '${azkaban.flow.1.days.ago}' and \
+         datediff('${azkaban.flow.1.days.ago}', publishDate) < 365 and \
+         a.contentType != '问答' and \
+         a.isPublished = true and \
+         a.isCitedPost = false and \
+         a.isForbidden=false and \
+         a.allowView = 0 and \
+         a.valid in (0,12,15,16) and \
+         b.isValid = true \
+) a \
+left join ( \
+   select userId, level, post_count_std, fans_std, post_main_content_type \
+   from lofter.dws_par_creator_dd \
+   where dt='${azkaban.flow.1.days.ago}' \
+) c on a.blogId = c.userId \
+left join ( \
+    select postId, \
+           concat_ws(' ', collect_set(case when ispay_returngift = 0 then '付费免费' \
+                                           when ispay_returngift = 1 then '仅付费' \
+                                           when ispay_returngift = 2 then '仅粮票' \
+                                           else '完全免费' end)) as ispay_returngift, \
+           concat_ws(' ', collect_set(return_gift_plantype)) as return_gift_plantype \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.postId = d.postId \
+left join ( \
+    select postId \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) e on a.postId = e.postId \
+left join ( \
+    select postId from lofter.dws_gift_post_premium_scoring_dd where dt = '${azkaban.flow.1.days.ago}' \
+) f on a.postId = f.postId \

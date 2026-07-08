@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select postId, blogId, groupId, replace('${azkaban.flow.1.days.ago}', '-', '') as date, \
+       -1 as totalCount, \
+       -1 as no \
+from ( \
+    select * \
+    from lofter_dm.ads_ad_resource_content_pool_hi \
+    where dt = '${azkaban.flow.current.date}' and hour = ${azkaban.flow.start.hour} \
+) t \
+"
+params= --topic AD.RESOURCE_MAISUI.ADPOSTPOOL --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=ads_ad_resource_content_pool_hi

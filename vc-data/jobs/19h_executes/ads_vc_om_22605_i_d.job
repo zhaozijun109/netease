@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01 = with result_data as (select userid, \
+                                            characterid, \
+                                            GET_JSON_OBJECT(responsejson, '$.model') as model, \
+                                            content_element.turnId                   as turnId, \
+                                            content_element.response                 as response, \
+                                            content_element.reason                   as reason, \
+                                            content_element.label                    as label, \
+                                            content_element.confidence               as confidence \
+                                     from (SELECT userid, characterid, responsejson, choice, content_element \
+                                           FROM ( \
+                                                    SELECT responsejson, \
+                                                           userid, \
+                                                           characterid, \
+                                                           from_json( \
+                                                                   get_json_object(responsejson, '$.choices'), \
+                                                                   'array<struct<index:int, message:struct<content:string>>>' \
+                                                           ) AS choices_array \
+                                                    FROM vc.ods_vc_log_ai_chat_di r \
+                                                    where dt = '${azkaban.flow.1.days.ago}' \
+                                                      and requestJson LIKE '%精通角色扮演及语C技术%' \
+                                                    ) t LATERAL VIEW explode(choices_array) AS choice \
+                                                LATERAL VIEW explode( \
+                                                  from_json( \
+                                                    choice.message.content, \
+                                                    'array<struct<turnId:string, response:string, reason:string, label:string, confidence:string>>' \
+                                                  ) \
+                                                ) AS content_element)), \
+                     character_info as (select character_id, character_name \
+                                        from vc.dws_vc_character_behavior_info_a_d \
+                                        where dt = '${azkaban.flow.1.days.ago}'), \
+                     user_info as (select user_id, sum(talk_cnt) as talk_cnt \
+                                   from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                   group by user_id), \
+                     today_info as (select user_id, count(distinct message_id) as talk_cnt \
+                                    from vc.ods_binlog_vc_user_message_record_partition_di \
+                                    where dt = '${azkaban.flow.current.date}' \
+                                    group by user_id) \
+                insert overwrite table vc.ads_vc_om_22605_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x1.userid, \
+                       x1.characterid, \
+                       x1.model, \
+                       x1.turnId, \
+                       x1.response, \
+                       x1.reason, \
+                       x1.label, \
+                       x1.confidence, \
+                       x2.character_name, \
+                       x3.talk_cnt                                                         as yesterday_cnt, \
+                       case when x4.user_id is null then 'not_active' else x4.talk_cnt end as today_cnt \
+                from result_data x1 \
+                         left join character_info x2 on x1.characterid = x2.character_id \
+                         left join user_info x3 on x1.userid = x3.user_id \
+                         left join today_info x4 on x1.userid = x4.user_id;

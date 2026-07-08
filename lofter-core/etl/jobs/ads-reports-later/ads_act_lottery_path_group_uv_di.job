@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_lottery_path_group_uv_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select eventid_1,eventid_2,eventid_3,tabname,text, \
+        count(userid) as path_pv,count(distinct userid) as path_uv, \
+        count(if(tradeid is not null,userid,null) ) as order_pv, \
+        count(distinct if(tradeid is not null,userid,null) ) as order_uv, \
+        sum(ifnull(product_money,0)) as gmv \
+from lofter_dm.ads_act_lottery_path_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by eventid_1,eventid_2,eventid_3,tabname,text
+dependencies=ads_act_lottery_path_di

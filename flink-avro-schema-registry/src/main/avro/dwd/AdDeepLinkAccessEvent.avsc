@@ -1,0 +1,14 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "AdDeepLinkAccessEvent",
+  "fields": [
+    {"name": "deviceId", "type": "string"},
+    {"name": "ip", "type": "string"},
+    {"name": "ua", "type": "string"},
+    {"name": "oaid", "type": "string"},
+    {"name": "androidid", "type": "string"},
+    {"name": "platform", "type": "string"},
+    {"name": "url", "type": "string"}
+  ]
+}

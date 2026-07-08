@@ -1,0 +1,280 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.blogid, \
+  a.blogname, \
+  a.url, \
+  count(distinct a.id) as 30_all_postnum, \
+  count( \
+    distinct case \
+      when ispay_returngift = 1 then a.id \
+      else null \
+    end \
+  ) as jinfufei_postnum, \
+   count( \
+    distinct case \
+      when ispay_returngift = 0 then a.id \
+      else null \
+    end \
+  ) as fufei_mianfei_postnum, \
+  count( \
+    distinct case \
+      when review_status = -2 then a.id \
+      else null \
+    end \
+  ) as fumian_huilinum, \
+  count( \
+    distinct case \
+      when review_status = -1 then a.id \
+      else null \
+    end \
+  ) as dizhi_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (mark_tags, '非截断') = 1 then a.id \
+      else null \
+    end \
+  ) as feijieduan_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (mark_tags, '截断') = 1 then a.id \
+      else null \
+    end \
+  ) as jieduan_huilinum, \
+  count( \
+    distinct case \
+      when   size(array_intersect(ai_results, array('同质化套路场景型', '套路场景型','观影型','擦边型'))) > 0    then a.id \
+      else null \
+    end \
+  ) as zonghe_fumian_ai_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '同质化套路场景型') = 1 then a.id \
+      else null \
+    end \
+  ) as tongzhi_taolu_changjing_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '套路场景型') = 1 then a.id \
+      else null \
+    end \
+  ) as taolu_changjing_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '观影型') = 1 then a.id \
+      else null \
+    end \
+  ) as guanying_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '擦边型') = 1 then a.id \
+      else null \
+    end \
+  ) as cabian_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '长连载型') = 1 then a.id \
+      else null \
+    end \
+  ) as changlianzai_huilinum, \
+  count( \
+    distinct case \
+      when array_contains (ai_results, '文学型') = 1 then a.id \
+      else null \
+    end \
+  ) as wenxue_huilinum, \
+  ipnum, \
+  30_day_trade_money, \
+  allday_trade_money, \
+  ai_flgs as blog_ai_flgs, \
+  b.publishdate as first_huiliu_publishdate, \
+  b.agreeday, \
+  b.createdate as first_createdate, \
+  c.createday as zhuce_createday, \
+  from_platform,accounttype,name,idnumber, \
+  all_blog_fans,post_count_std, \
+  last_login_ip,privilegelevel,register_ip, \
+  blog_status,login_days_30d,is_black_phone, \
+  count( \
+      distinct case \
+        when   size(array_intersect(ai_results, array('同质化套路场景型', '套路场景型'))) > 0    then a.id \
+        else null \
+      end \
+    ) as zonghe_taolu_changjing_huilinum \
+from \
+  ( \
+    SELECT \
+      id, \
+      blogid, \
+      blogname, \
+      concat('https://', blogname, '.lofter.com') as url \
+    FROM \
+      lofter.dim_post \
+    where \
+      valid = 0 \
+      and allowview = 0 \
+      and contenttype = '文字' \
+      and publishdate between date_sub('${azkaban.flow.1.days.ago}', 29) \
+      and '${azkaban.flow.1.days.ago}' \
+  ) a \
+ join ( \
+    select \
+      min(publishdate) as publishdate, \
+      blogid, \
+      blog_channel, \
+      agreeday, \
+      min(createdate) as createdate \
+    from \
+      lofter.dim_gift_post_return \
+    where \
+      blog_channel in (0) \
+      and ispay_returngift in (0, 1) \
+    group by \
+      blogid, \
+      blog_channel, \
+      agreeday \
+  ) b on a.blogid = b.blogid   \
+   \
+  left join ( \
+    select \
+      a.id, \
+      postid, \
+      text_length, \
+      ispay_returngift, \
+      review_status, \
+      mark_tags \
+    from \
+      ( \
+        select \
+          id, \
+          postid, \
+          text_length, \
+          ispay_returngift, \
+          review_status, \
+          mark_tags, \
+          row_number() over( \
+            partition by postid \
+            order by \
+              ispay_returngift desc, \
+              review_status asc \
+          ) as rk \
+        from \
+          lofter.dim_gift_post_return \
+        where \
+          status = 1 \
+          and auditstatus = 1 \
+          And contenttype = '文字' \
+          and blog_channel in (0) \
+          and ispay_returngift in (0, 1) \
+          and review_status >= -2 \
+          and review_status <= 1 \
+      ) a \
+    where \
+      rk = 1 \
+  ) d on a.id = d.postid \
+  left join ( \
+    select \
+      post_id as postid, \
+      split(concat_ws(',', collect_set(result)), ',') as ai_results \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify = 1 \
+      and probability > 0.6999 \
+      and day between date_sub('${azkaban.flow.1.days.ago}', 29) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+      post_id \
+  ) h on a.id = h.postid \
+  left join ( \
+    SELECT \
+       \
+      blogid, \
+      count(distinct ip) ipnum, \
+      blogname \
+    FROM \
+      lofter.dim_post LATERAL VIEW explode(ips) t2 AS ip \
+    where \
+      valid = 0 \
+      and allowview = 0 \
+      and contenttype = '文字' \
+      and publishdate between date_sub('${azkaban.flow.1.days.ago}', 59) \
+      and '${azkaban.flow.1.days.ago}' \
+    group by \
+       \
+      blogid, \
+      blogname \
+  ) e on a.blogid = e.blogid \
+  left join ( \
+    select \
+      blogid, \
+      sum( \
+        case \
+          when period = '30' then trade_money \
+          else 0 \
+        end \
+      ) as 30_day_trade_money, \
+      sum( \
+        case \
+          when period = 'history' then trade_money \
+          else 0 \
+        end \
+      ) as allday_trade_money \
+    from \
+      lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+    where \
+      pay_type = 'all' \
+      and dt ='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid \
+  ) f on a.blogid = f.blogid \
+  left join ( \
+    select \
+      blogid, \
+      concat_ws(',', collect_set(flg)) as ai_flgs \
+    from \
+      lofter_dm.ads_gift_post_title_classify_1_modle_blog_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and period = '120日' \
+    group by \
+      blogid \
+  ) g on a.blogid = g.blogid \
+    \
+  left join ( \
+    select \
+      id, \
+      blogname, \
+      concat('https://', blogname, '.lofter.com') as url, \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as createday \
+    from \
+      lofter.dim_blog \
+  ) c on a.blogid = c.id \
+   \
+ left join \
+  \
+ (select userid,from_platform,accounttype,name, \
+ idnumber,all_blog_fans,follow_blogs,post_count_std, \
+ last_login_ip,privilegelevel,register_ip,blog_status, \
+ login_days_30d,is_black_phone \
+ from  \
+ lofter.dws_par_user_base_dd \
+ where dt='${azkaban.flow.1.days.ago}') h \
+ on a.blogid=h.userid \
+group by \
+  a.blogid, \
+  a.blogname, \
+  a.url, \
+  ipnum, \
+  30_day_trade_money, \
+  allday_trade_money, \
+  ai_flgs, \
+  b.publishdate, \
+  b.agreeday, \
+  b.createdate, \
+  c.createday, \
+  from_platform,accounttype,name,idnumber,all_blog_fans \
+  ,post_count_std,last_login_ip,privilegelevel, \
+  register_ip,blog_status,login_days_30d,is_black_phone \
+
+dependencies=ads_post_paid_creator_revenue_detail_v2_di,ads_gift_post_title_classify_1_modle_blog_dd

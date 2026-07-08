@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_evt_paid_post_quality_score_detail_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk \
+from lofter.dws_gift_post_premium_scoring_detail_dd \
+where dt = '${azkaban.flow.1.days.ago}'

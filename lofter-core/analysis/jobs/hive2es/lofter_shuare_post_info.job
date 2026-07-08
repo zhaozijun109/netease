@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select postId as id, postId, blogId, dt, 0 as status from lofter_dm.ads_risk_shuare_model_backend_di where dt='${azkaban.flow.1.days.ago}' "
+params= --dest  risk_brash_hot_post --update --url lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F

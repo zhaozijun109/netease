@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+insert overwrite table lofter_dm.ads_rec_tag_rec_reason_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag,recReason,priority \
+from( \
+    select tag, concat('近期', postCount, '篇高热作品') as recReason, 0 as priority \
+    from ( \
+        select tag, count(distinct postId) as postCount \
+        from lofter_dm.ads_rec_tag_wanre_post_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by tag \
+    ) tmp1 \
+    where postCount >= 10 \
+union all \
+    select tag, concat('近期', if(hdUv < 10000, hdUV, concat(round(hdUv / 10000, 1), 'w')), '人活跃') as recReason, 1 as priority \
+    from ( \
+        select t1.tag, \
+               bitmap_count(bitmap_union(t2.hd_device_bitmap)) as hdUv \
+        from ( \
+            select postId, tag from lofter_dm.ads_rec_tag_wanre_post_di where dt = '${azkaban.flow.1.days.ago}' \
+        ) t1 \
+        join ( \
+            select postId, hd_device_bitmap from lofter.dws_post_interaction_di where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        ) t2 \
+        on t1.postId = t2.postId \
+        group by t1.tag \
+    ) tmp1 \
+    where hdUv >= 100 \
+union all \
+    select tag, concat(case domain when 'tv' then '影视' when 'cp' then  '二次元' when 'game' then '游戏' when 'derive_role' then '衍生角色' when 'derive_cp' then '衍生cp' else domain end, '榜TOP10')  as recReason, 2 as priority \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain in ('tv', 'cp', 'game', 'derive_role', 'derive_cp') and hot_rank <= 10 \
+union all \
+    select tag, concat('千热内容', post_1k_hot_count,'篇') as recReason, 3 as priority \
+    from lofter.dws_tag_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and post_1k_hot_count >= 500 \
+union all \
+    select tag, concat('万热内容', post_1w_hot_count,'篇') as recReason, 3 as priority \
+    from lofter.dws_tag_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and post_1w_hot_count >= 500 \
+union all \
+    select tag, concat('近期更新', post_count_7d, '篇') as recReason, 4 as priority \
+    from lofter.dws_tag_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and post_count_7d >= 300 \
+union all \
+    select tag, printf('%s万人都在看', cast((view_pv_std/10000) as DECIMAL(10, 1))) as recReason, 5 as priority \
+    from lofter.dws_tag_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and view_pv_std >= 10000 \
+)a
+dependencies=ads_rec_tag_wanre_post_di,ads_domain_tag_rank_di

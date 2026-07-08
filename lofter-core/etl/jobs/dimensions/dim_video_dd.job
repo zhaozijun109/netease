@@ -1,0 +1,103 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_video_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    p.postId, \
+    p.userId, \
+    p.blogId, \
+    p.blog_name, \
+    p.blog_nickname, \
+    p.post_title, \
+    p.publish_date, \
+    p.publish_time, \
+    p.post_tags, \
+    p.post_ips, \
+    p.post_domains, \
+    p.is_imported, \
+    p.import_platform_type, \
+    p.allow_view, \
+    p.valid, \
+    p.is_published, \
+    p.is_forbidden, \
+    p.post_url, \
+    p.movefrom, \
+    q.caption, \
+    q.video_type, \
+    q.origin_url, \
+    q.hls_url, \
+    q.h265_url, \
+    q.flash_url, \
+    q.video_down_url, \
+    q.video_first_img, \
+    q.video_img_url, \
+    q.vid, \
+    q.duration_sec, \
+    q.size_bytes, \
+    q.img_width, \
+    q.img_height, \
+    q.aspect_ratio, \
+    q.embed_type \
+from ( \
+    select \
+        id                          as postId, \
+        userId, \
+        blogId, \
+        blogName                    as blog_name, \
+        blogNickName                as blog_nickname, \
+        title                       as post_title, \
+        publishDate                 as publish_date, \
+        publishTime                 as publish_time, \
+        tags                        as post_tags, \
+        ips                         as post_ips, \
+        domains                     as post_domains, \
+        isImported                  as is_imported, \
+        ImportPlatformType          as import_platform_type, \
+        allowView                   as allow_view, \
+        valid, \
+        isPublished                 as is_published, \
+        isForbidden                 as is_forbidden, \
+        url                         as post_url, \
+        case \
+            when movefrom like '%ios%' or movefrom like '%iphone%' then 'ios' \
+            when movefrom like '%android%' then 'android' \
+            when movefrom is null then 'web' \
+            else split(movefrom, '\\\\&')[0] \
+        end                         as movefrom \
+    from lofter.dim_post \
+    where contentType = '视频' \
+) p \
+left join ( \
+    select \
+        id                                                            as postId, \
+        caption, \
+        videoType                                                     as video_type, \
+        get_json_object(embed, '$.originUrl')                         as origin_url, \
+        get_json_object(embed, '$.hlsUrl')                            as hls_url, \
+        get_json_object(embed, '$.h265Url')                           as h265_url, \
+        get_json_object(embed, '$.flashurl')                          as flash_url, \
+        get_json_object(embed, '$.video_down_url')                    as video_down_url, \
+        get_json_object(embed, '$.video_first_img')                   as video_first_img, \
+        get_json_object(embed, '$.video_img_url')                     as video_img_url, \
+        cast(get_json_object(embed, '$.vid')        as bigint)        as vid, \
+        cast(get_json_object(embed, '$.duration')   as bigint)        as duration_sec, \
+        cast(get_json_object(embed, '$.size')       as bigint)        as size_bytes, \
+        cast(get_json_object(embed, '$.img_width')  as int)           as img_width, \
+        cast(get_json_object(embed, '$.img_height') as int)           as img_height, \
+        case \
+            when cast(get_json_object(embed, '$.img_width')  as double) > 0 \
+             and cast(get_json_object(embed, '$.img_height') as double) > 0 \
+            then case \
+                     when cast(get_json_object(embed, '$.img_width')  as double) \
+                        / cast(get_json_object(embed, '$.img_height') as double) > 1.05 then 'landscape' \
+                     when cast(get_json_object(embed, '$.img_width')  as double) \
+                        / cast(get_json_object(embed, '$.img_height') as double) < 0.95 then 'portrait' \
+                     else 'square' \
+                 end \
+            else 'unknown' \
+        end                                                           as aspect_ratio, \
+        get_json_object(embed, '$.type')                              as embed_type \
+    from lofter_db_dump.ods_db_video_post_nd \
+) q \
+on p.postId = q.postId \
+distribute by p.postId % 10
+hive.query.02=create or replace view lofter.dim_video as select * from lofter.dim_video_dd where dt = '${azkaban.flow.1.days.ago}'
+dependencies=dim_post

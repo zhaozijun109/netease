@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaRaw
+conf.spark.source.query="select to_json(collect_set(tag)) as value from lofter_dm.ads_search_trend_hot_tag_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.TAG.RECENT90.HOT --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

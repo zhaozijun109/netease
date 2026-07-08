@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_ip_growth_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a1.ip, \
+       to_bitmap(if(a.dt = '${azkaban.flow.1.days.ago}', b.userId, null)) as new_bitmap_1d, \
+       to_bitmap(if(a.dt >= '${azkaban.flow.7.days.ago}', b.userId, null)) as new_bitmap_7d, \
+       to_bitmap(if(a.dt = '${azkaban.flow.1.days.ago}', b.userId, null)) as new_bitmap_15d, \
+       to_bitmap(b.userId) as new_bitmap_30d \
+from ( \
+    select dt, deviceUdid, finalUserid as userId \
+    from lofter.device_new \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) a \
+join ( \
+    select dt, deviceUdid, ip \
+    from lofter.dwd_device_growth_content_di \
+         lateral view explode(split(ips, ',')) as ip \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) a1 on a.deviceUdid = a1.deviceUdid and a.dt = a1.dt \
+join ( \
+    select dt, userId from lofter.dwd_user_new_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_anonymous = 0 \
+) b on a.userId = b.userId and a.dt = b.dt \
+group by 1 \
+distribute by 1

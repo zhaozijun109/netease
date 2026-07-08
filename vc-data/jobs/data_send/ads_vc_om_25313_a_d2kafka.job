@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select user_id,character_type,characters,'OM25313_USER_NOT_TALK_CHARACTERS' as metricId from vc.ads_vc_om_25313_a_d where dt = '${azkaban.flow.1.days.ago}'"
+params= --topic vc_character_free_topic --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092 --withCount
+
+dependencies=ads_vc_om_25313_a_d

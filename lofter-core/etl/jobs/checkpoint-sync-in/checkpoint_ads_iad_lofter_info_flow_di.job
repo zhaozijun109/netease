@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.CheckPointFileTask
+params= --input /user/da_lofter/hive_db/lofter.db/ads_iad_lofter_info_flow_di/dt=${azkaban.flow.1.days.ago}
+dependencies=

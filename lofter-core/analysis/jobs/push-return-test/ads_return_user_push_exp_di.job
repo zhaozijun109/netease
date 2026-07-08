@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=\
+with source_data as( \
+  SELECT a.userId \
+  from ( \
+    select userId \
+    from lofter.dws_par_user_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_anonymous = 0 and active_days_30d = 0 \
+  ) a \
+  join lofter.dim_user a1 on a.userId = a1.id and a1.createdate < '${azkaban.flow.30.days.ago}' \
+  join ( \
+    SELECT userId \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.current.date}' and userId > 0 \
+  ) b on a.userId = b.userId \
+  group by a.userId \
+), \
+middle_data2 as( \
+  select a.userId \
+  from( \
+      select userId \
+      from lofter.dws_par_user_traffic_dd \
+      where dt <='${azkaban.flow.1.days.ago}' and  dt > date_sub('${azkaban.flow.1.days.ago}', 365) \
+      and paid_post_browse_count_30d >= 20 \
+      group by userId \
+  ) a \
+  join ( \
+    select userId, count(distinct dt) as active_days \
+    from lofter.dwd_user_active_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 365) and  \
+        device_os = 'Android' and \
+        is_anonymous = 0 \
+    group by 1 \
+    having active_days >= 100 \
+  ) b on a.userId = b.userId \
+  left join ( \
+      select userId, sum(money) as pay_money \
+      from lofter.dwd_user_order_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and pay_date > date_sub('${azkaban.flow.1.days.ago}', 365) \
+      group by 1 \
+      having pay_money > 0.9 \
+  ) c on a.userId = c.userId \
+  join source_data d on a.userId = d.userId \
+  where c.userId is null \
+), \
+result_data2 as( \
+  select userId, \
+    case  \
+      when rn <= 500 then 'test2-a' \
+      else 'test2-b' \
+    end as exp_group \
+  from( \
+    select userId, \
+      row_number() over(order by rand()) as rn \
+    from middle_data2 \
+  ) \
+  where rn <= 1000 \
+), \
+middle_data1 as( \
+  select a.userId, c.userId as reward_userId \
+  from source_data a \
+  left join ( \
+    select userId \
+    from lofter.ods_binlog_dressing_user_suit_di \
+    where dt = '${azkaban.flow.current.date}' and suitId = 3003 and `_bin_op` = 0 \
+    group by 1 \
+  ) c on a.userId = c.userId \
+  left join result_data2 d on a.userId = d.userId \
+  where d.userId is null \
+  group by a.userId, c.userId \
+), \
+result_data1 as( \
+  SELECT userId, 'test1-a' as exp_group \
+  from( \
+    select userId, row_number() over(order by rand()) as rn \
+    from middle_data1 where reward_userId is NULL  \
+  ) \
+  where rn <= 2000 \
+  union all \
+  SELECT userId,  \
+    case  \
+      when rn <= 2000 then 'test1-b'  \
+      else 'test1-c'  \
+    end as exp_group \
+  from( \
+    select userId, row_number() over(order by rand()) as rn \
+    from middle_data1 where reward_userId is not null \
+  ) \
+  where rn <= 4000 \
+) \
+insert overwrite lofter_dm.ads_return_user_push_exp_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, exp_group \
+from result_data1 \
+union all \
+select userId, exp_group \
+from result_data2

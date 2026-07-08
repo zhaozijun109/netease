@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id as rank, name, url, clickPv, clickUv from lofter_dm.ads_cc_question_top_di where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id rank --dest lofter_customer_service_question_top --full --atom

@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_rec_review_retrospect_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid \
+from ( \
+    select a.postid,exposurePv as expose_cnt, clickPv,clickPv/exposurePv as click_rate,hdPv,browsePv,realBrowsePv,hdPv/realBrowsePv as hd_rate, \
+           sharePv,if(f.postid is null,0,1) as negative_return_gift,new_devices_cnt,hotPv,pay_cnt/browsePv as pay_rate,quality_comment_num \
+    from ( \
+        select dt,conv(split(a.item_id,'_')[1], 16, 10) as postid,a.item_id,pass_human,pass_low_quality_model \
+        from ( \
+            select item_id,pass_human,pass_low_quality_model \
+            from rec.rec_lofter_review_status \
+            where day = '${azkaban.flow.1.days.ago}' and (pass_human = -1 or pass_low_quality_model = 0) \
+        ) a \
+        join ( \
+            select day as dt,item_id \
+            from rec.rec_lofter_features_article_meta_v2 \
+            where day  = '${azkaban.flow.1.days.ago}' and \
+                ( from_unixtime(cast(publish_time / 1000 as int), 'yyyy-MM-dd') between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' or \
+                  from_unixtime(cast(modify_time / 1000 as int), 'yyyy-MM-dd') between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' ) \
+        ) b on a.item_id = b.item_id \
+    ) as a \
+    left join ( \
+        select postid,sum(exposurepv) as exposurepv,sum(clickpv) as clickpv,sum(hdpv) as hdpv,sum(sharepv)as sharepv,sum(realbrowsepv) as realbrowsepv,sum(poshotpv-neghotpv)as hotpv,sum(browsepv) as browsepv \
+        from lofter.dws_post_base_stats_di \
+        where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) as b on a.postid = b.postid \
+    left join( \
+        select content_id,sum(new_devices) as new_devices_cnt \
+        from lofter_dm.ads_growth_content_di \
+        where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by content_id \
+    ) as c on a.postid = c.content_id \
+    left join( \
+        select item_id,sum(quality_comment_num) as quality_comment_num \
+        from rec.rec_data_ecology_high_quality_item_by_comment \
+        where day between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by item_id \
+    ) as d on a.item_id = d.item_id \
+    left join( \
+        select postid,sum(money) as money,count(userid) as pay_cnt \
+        from lofter.dwd_evt_post_paid_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+              and from_unixtime(cast(createtime / 1000 as int), 'yyyy-MM-dd') between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) e on a.postid = e.postid \
+    left join( \
+        select postid \
+        from lofter_db_dump.ods_db_recommend_review_post_gift_mark_nd \
+        where state = -2 and from_unixtime(cast(createtime / 1000 as int), 'yyyy-MM-dd') between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) as f on a.postid = f.postid \
+) t \
+where (expose_cnt >= 300 and click_rate >= 0.05 and hd_rate >= 0.15) or new_devices_cnt >= 1 or sharePv >= 5 or (expose_cnt >= 500 and hotPv >= 50) \
+      or (expose_cnt >= 200 and negative_return_gift = 0 and pay_rate >= 0.01) or quality_comment_num >= 1 \
+group by postid
+dependencies=ads_growth_content_di

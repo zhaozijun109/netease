@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table vc.bridge_exp_metric_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select appId,exp_id,metric,dimension,dimension_value \
+from( \
+    select 1 as appId, a.expId as exp_id, b.metricCode as metric, nvl(c.dimName, '全部') as dimension, nvl(c.dimCode, 'ALL') as dimension_value \
+    from \
+        vc.ods_db_ab_exp_metric_nd a \
+        join vc.ods_db_ab_metric_detail_nd b on a.metricId = b.id \
+        left join vc.ods_db_ab_metric_dim_nd c on a.dimId = c.id \
+    union  \
+    select 1 as appId, 5 as exp_id,a.metricCode as metric,nvl(b.dimName, '全部') as dimension, nvl(b.dimCode, 'ALL') as dimension_value \
+    from( \
+        select id as metricId,metricCode \
+        from vc.ods_db_ab_metric_detail_nd  \
+        where status = 1 and metricname in ('访问聊天界面UV','留存uv','聊天超过30轮的人数','新设备注册数','新设备数','用户聊天角色数','用户聊天轮次','用户付费UV','用户聊天UV','用户访问UV','实验UV','留存访问UV') \
+    )a  \
+    join vc.ods_db_ab_metric_dim_nd b on a.metricId = b.metricid  \
+    union  \
+    select 1 as appId, 6 as exp_id,a.metricCode as metric,nvl(b.dimName, '全部') as dimension, nvl(b.dimCode, 'ALL') as dimension_value \
+    from( \
+        select id as metricId,metricCode \
+        from vc.ods_db_ab_metric_detail_nd  \
+        where status = 1 and metricname in ('访问聊天界面UV','留存uv','聊天超过30轮的人数','新设备注册数','新设备数','用户聊天角色数','用户聊天轮次','用户付费UV','用户聊天UV','用户访问UV','实验UV') \
+    )a  \
+    join vc.ods_db_ab_metric_dim_nd b on a.metricId = b.metricid  \
+)
+
+hive.query.02=create or replace view vc.bridge_exp_metric as select * from vc.bridge_exp_metric_dd where dt = '${azkaban.flow.1.days.ago}' \

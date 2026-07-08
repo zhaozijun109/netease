@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_miniprogram_post_hot_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+select miniId, postId, blogId, \
+       if(new_top_rnk > 0, new_top_rnk, if(other_rnk <= 2, other_rnk + 1, other_rnk + 3)) as rk \
+from ( \
+    select miniId, postId, blogId, \
+           if(is_new = 1 and rnk <= 3, if(rnk == 1, 1, rnk + 2), null) as new_top_rnk, \
+           row_number() over (partition by miniId order by if(is_new = 1 and rnk <= 3, 1, 0), pay_orders desc, pay_amount desc) as other_rnk \
+    from ( \
+        select a.miniId, a.postId, a.blogId, a.is_new, b.pay_orders, b.pay_amount, \
+               row_number() over (partition by a.miniId, is_new order by b.pay_orders desc, b.pay_amount desc) rnk \
+        from ( \
+            select miniId, postId, blogId, \
+                   if(from_unixtime(cast(list_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.3.days.ago}', 1, 0) is_new \
+            from lofter.dim_miniprogram_post_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) a \
+        join ( \
+            select miniId, postId, pay_orders_7d as pay_orders, pay_amount_7d as pay_amount \
+            from lofter.dws_miniprogram_post_order_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and pay_orders_7d > 0 \
+        ) b on a.postId = b.postId and a.miniId = b.miniId \
+    ) t \
+) tt \
+where if(new_top_rnk > 0, new_top_rnk, if(other_rnk <= 2, other_rnk + 1, other_rnk + 3)) <= 100 \
+distribute by 1

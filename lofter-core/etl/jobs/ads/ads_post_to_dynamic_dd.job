@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_to_dynamic_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.postId, t1.blogId \
+from ( \
+    select id as postId, blogId, contentType \
+    from lofter.dim_post_article \
+    where publishDate between date_sub('${azkaban.flow.1.days.ago}', 179) and '${azkaban.flow.1.days.ago}' \
+    and is_book_store = 0 and isPublished=  true and isForbidden = false and isCitedPost = false and valid = 0 and allowView = 0 \
+    and isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 and contentType in ('图片','视频') and recomStatus = 1 \
+) t1 \
+join ( \
+    select postId, like_cnt, hot, comment_cnt \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.postId = t2.postId \
+where (t1.contentType = '图片' and t2.hot >= 100 and t2.comment_cnt >= 1.05 * t2.like_cnt) or (t1.contentType = '视频' and t2.hot >= 100)

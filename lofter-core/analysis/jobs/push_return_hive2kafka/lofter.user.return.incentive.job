@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId, case when exp_group = 'test1-c' then 1 when exp_group = 'test2-a' then 3 end as type, cast(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) as bigint) *1000 as timestamp from lofter_dm.ads_return_user_push_exp_di where dt = '${azkaban.flow.current.date}' and exp_group in('test1-c','test2-a') union all select userId, 2 as type,  cast(UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) as bigint) *1000 as timestamp from lofter_dm.ads_push_return_achieved_task_di where dt = '${azkaban.flow.1.days.ago}'"
+params= --topic LOFTER.USER.RETURN.INCENTIVE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

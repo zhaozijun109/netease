@@ -1,0 +1,108 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_active_chat_consum_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.new_flag, \
+t1.active_uv, \
+t2.chat_uv, \
+t2.chat_uv_10up, \
+t2.chat_uv_30up, \
+t2.chat_uv_100up, \
+t2.total_chats, \
+t3.consum_uv, \
+t3.total_amount \
+from \
+( \
+select COALESCE(new_flag,2) as new_flag, \
+active_uv \
+from  \
+( \
+select case when a.dt>b.register_date then 0 else 1 end as new_flag, \
+count(distinct a.user_id) as active_uv \
+from  \
+( \
+select user_id,dt \
+from vc.dwd_vc_user_active_i_d  \
+where dt = '${azkaban.flow.1.days.ago}' \
+and is_anonymity ='N' \
+group by 1,2 \
+) a \
+left join \
+( \
+select user_id,register_date \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity = 'N' \
+group by 1,2 \
+) b on a.user_id=b.user_id \
+group by 1 \
+grouping sets((),(1)) \
+) c \
+) t1  \
+left join  \
+( \
+select COALESCE(new_flag,2) as new_flag, \
+chat_uv, \
+chat_uv_10up, \
+chat_uv_30up, \
+chat_uv_100up, \
+total_chats \
+from  \
+( \
+select case when a.dt>b.register_date then 0 else 1 end as new_flag, \
+count(distinct a.user_id) as chat_uv, \
+count(case when a.total_chats>9 then a.user_id  end) as chat_uv_10up, \
+count(case when a.total_chats>29 then a.user_id end) as chat_uv_30up, \
+count(case when a.total_chats>99 then a.user_id end) as chat_uv_100up, \
+sum(a.total_chats) as total_chats \
+from  \
+( \
+select user_id,dt,sum(message_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+and is_anonymity = 'N'  \
+and dt >= '2024-12-19' \
+group by 1,2 \
+) a \
+left join \
+( \
+select user_id,register_date \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt  in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity = 'N' \
+group by 1,2 \
+) b on a.user_id=b.user_id \
+group by 1 \
+grouping sets((),(1)) \
+) c \
+) t2 on t1.new_flag=t2.new_flag \
+left join  \
+( \
+select COALESCE(new_flag,2) as new_flag,  \
+consum_uv, \
+total_amount \
+from  \
+( \
+select case when a.dt>b.register_date then 0 else 1 end as new_flag, \
+count(distinct a.user_id) as consum_uv, \
+sum(a.total_amount) as total_amount \
+from  \
+( \
+select user_id,dt,sum(order_price) as total_amount \
+from vc.dwd_vc_order_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+and dt >= '2024-12-19' \
+and order_status = 2 \
+and is_test_user = 'N' \
+group by 1,2 \
+) a \
+left join \
+( \
+select user_id,register_date \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity = 'N' \
+group by 1,2 \
+) b on a.user_id=b.user_id \
+group by 1 \
+grouping sets((),(1)) \
+) c \
+) t3 on t1.new_flag=t3.new_flag \

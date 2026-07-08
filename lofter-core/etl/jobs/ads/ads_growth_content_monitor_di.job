@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_content_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+select content_id, content_type, \
+       min_by(grade, translate(if(grade = 'C', 'D', grade), 'SABCD', 'ABCDE')) as max_grade, \
+       min(if(grade = max_grade, max_grade_first_date, null)) as max_grade_first_date, \
+       min(new_first_date) as new_first_date \
+from ( \
+    select *, min_by(grade, translate(if(grade = 'C', 'D', grade), 'SABCD', 'ABCDE')) over (partition by content_id, content_type) as max_grade \
+    from ( \
+        select content_id, content_type, grade, dt as max_grade_first_date, if(new_devices > 0, dt, null) as new_first_date \
+        from lofter_dm.ads_growth_content_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select content_id, content_type, max_grade as grade, max_grade_first_date, new_first_date \
+        from lofter_dm.ads_growth_content_monitor_di \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) tt \
+) t \
+group by content_id, content_type \
+
+dependencies=ads_growth_content_di

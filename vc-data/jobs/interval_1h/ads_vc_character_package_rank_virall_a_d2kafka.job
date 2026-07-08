@@ -1,0 +1,13 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select named_struct('targetType', target_type, 'rankId', rank_id, 'packId', pack_id, 'targetId', target_id, 'nums', \
+                                             nums,'batchId',rank_id, 'rk', rk, '_count', _count, 'version', version)                     as data, \
+                                concat(replace('${azkaban.flow.current.date}', '-', ''), '${azkaban.flow.start.hour}') as ts, \
+                                _count, \
+                                rank_id as batchId, \
+                                50 as msgType \
+                         from vc.ads_vc_character_package_rank_virall_a_d"
+params= --topic vc_data_push_msg --key batchId --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092
+
+dependencies=ads_vc_character_package_rank_virall_a_d
+

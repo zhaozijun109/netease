@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.02= \
+with sdk_post as ( \
+    select x.*, y.real_browse_pv \
+    from ( \
+        select postId, \
+               sum(bgPv) as bg_pv, \
+               sum(clickPv) as click_pv, \
+               sum(bid_amount) / 1000 as revenue \
+        from ( \
+            select cast(get_json_object(ext['bizTracking'], '$.postId') as bigint) as postId, * \
+            from lofter.dwd_ad_actions_di \
+            where dt = '${azkaban.flow.1.days.ago}' and (bgPv > 0 or clickPv > 0) and \
+              positionId in ('147004') and dspId not in ('5002') \
+        ) t \
+        where postId > 0 \
+        group by 1 \
+    ) x \
+    left join ( \
+        select b.postId, count(distinct b.userId) as real_browse_pv \
+        from ( \
+            select cast(get_json_object(ext['bizTracking'], '$.postId') as bigint) as postId, userId \
+            from lofter.dwd_ad_actions_di \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                positionId in ('147004') and dspId not in ('5002') \
+            group by 1,2 \
+        ) a \
+        join ( \
+            select postId, userId \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+            group by 1,2 \
+        ) b on a.postId = b.postId and a.userId = b.userId \
+        group by 1 \
+    ) y on x.postId = y.postId \
+) \
+insert overwrite table lofter_dm.ads_ad_resource_sdk_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, b.blogId, a.real_browse_pv, a.bg_pv, a.click_pv, \
+       a.bg_pv / (sum(a.bg_pv) over (partition by b.contentType)) * (sum(a.revenue) over (partition by b.contentType)) * 0.2 as revenue, \
+       b.contentType \
+from sdk_post a \
+join lofter.dim_post b on a.postId = b.id \

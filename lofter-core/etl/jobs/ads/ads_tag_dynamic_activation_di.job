@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_tag_dynamic_activation_di partition(dt='${azkaban.flow.1.days.ago}') \
+select tag \
+from lofter.dwd_post_browse_di lateral view explode(post_tags) as tag \
+where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+group by tag \
+having count(distinct userId) >= 50000

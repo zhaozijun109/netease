@@ -1,0 +1,18 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query=" \
+select collectionId, \
+       map_from_arrays(priorities, reasons) as reason \
+from ( \
+    select collectionId, \
+           transform(recs, x -> concat('P', x.priority)) as priorities, \
+           transform(recs, x -> x.recReason) as reasons \
+    from ( \
+        select collectionId, collect_set(struct(priority, recReason)) as recs \
+        from lofter_dm.ads_rec_collection_rec_reason_detail_di \
+        where dt = '${azkaban.flow.1.days.ago}' and priority is not null \
+        group by 1 \
+    ) t \
+) tt \
+"
+params= --topic LOFTER.COMMON.REASON.COLLECTION.v2 --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

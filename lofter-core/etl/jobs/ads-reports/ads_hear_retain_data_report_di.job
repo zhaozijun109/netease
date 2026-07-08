@@ -1,0 +1,28 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_hear_retain_data_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select   \
+a.dt day1,  \
+datediff('${azkaban.flow.1.days.ago}' ,a.dt)diff,  \
+count(distinct a.userid) uv,  \
+count(distinct case when a.dt=date_sub(b.dt,1) and datediff('${azkaban.flow.1.days.ago}' ,a.dt)=1 then b.userid end) uv_1day,  \
+count(distinct case when a.dt=date_sub(b.dt,2) and datediff('${azkaban.flow.1.days.ago}' ,a.dt)=2 then b.userid end) uv_3day,  \
+count(distinct case when a.dt=date_sub(b.dt,6) and datediff('${azkaban.flow.1.days.ago}' ,a.dt)=6 then b.userid end) uv_7day,  \
+count(distinct case when a.dt=date_sub(b.dt,14) and datediff('${azkaban.flow.1.days.ago}' ,a.dt)=14 then b.userid end) uv_15day,  \
+count(distinct case when a.dt=date_sub(b.dt,29) and datediff('${azkaban.flow.1.days.ago}' ,a.dt)=29 then b.userid end) uv_30day  \
+from(  \
+select dt,userid  \
+from  lofter.ods_mda_app_partition_di  \
+where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}'   \
+and eventid='m6-5'  \
+group by  1,2   \
+) a   \
+left join   \
+(  \
+select dt,userid  \
+from  lofter.ods_mda_app_partition_di  \
+where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}'    \
+and eventid='m6-5'  \
+group by  1,2   \
+) b on a.userid=b.userid and a.dt<b.dt   \
+where datediff('${azkaban.flow.1.days.ago}' ,a.dt) in (1,2,6,14,29)  \
+group by 1 ,2  \

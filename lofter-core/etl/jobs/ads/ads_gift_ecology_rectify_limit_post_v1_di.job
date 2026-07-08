@@ -1,0 +1,67 @@
+type=sparksql
+hive.query.01=\
+with youzhi_zuozhe as ( \
+    select a.postid,a.blogid,b.level,c.grade, \
+        case when d.postid is null then 0 else 1 end as youzhi_fufei_flg, \
+        case when e.postid is null then 0 else 1 end as youzhi_shentai_flg \
+    from ( \
+        select postid,blogid \
+        from lofter.dim_gift_post_return \
+        where array_contains (mark_tags,'截断')=1 \
+        and ispay_returngift in (0,1) \
+        and contenttype='文字' \
+        group by postid,blogid \
+    ) a \
+    left join ( \
+        select userid,level \
+        from lofter.dws_par_creator_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.blogid=b.userid \
+    left join ( \
+        select userId as blogid, grade \
+        from lofter_db_dump.ods_db_trade_pay_grade_nd \
+    ) c on a.blogid=c.blogid \
+    left join ( \
+        select postid \
+        from lofter.dws_gift_post_premium_scoring_v2_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        and type='优质' \
+        group by postid \
+    ) d on a.postid=d.postid \
+    left join ( \
+        select postid from \
+        lofter.dws_post_premium_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) e on a.postid=e.postid \
+), \
+dizhi_post as ( \
+    select a.postid,a.blogid,text_length,words_count,review_status \
+    from ( \
+        select postid,max(text_length) as text_length ,blogid ,review_status \
+        from lofter.dim_gift_post_return \
+        where contenttype='文字' and \
+             ispay_returngift in (0,1) \
+        group by postid,blogid,review_status \
+    ) a \
+    join ( \
+        select  postid,words_count,photo_count \
+        from lofter.dwd_post_length_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postid=b.postid \
+    group by a.postid,a.blogid,text_length,words_count,review_status \
+) \
+insert overwrite table lofter_dm.ads_gift_ecology_rectify_limit_post_v1_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogid, postid \
+from ( \
+    select blogid, postid \
+    from youzhi_zuozhe \
+    where (level is null or level not in  ('S','A','B')) \
+         and (grade is null or grade!=4) \
+         and youzhi_fufei_flg=0 \
+         and youzhi_shentai_flg=0 \
+ union \
+    select blogid, postid \
+    from dizhi_post \
+    where text_length<=300 or words_count<=300 or review_status in (-1,-2) \
+) t \

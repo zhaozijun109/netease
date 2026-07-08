@@ -1,0 +1,5 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.netease.lofter.tango.integration.apollo.listener.TangoConfigListener,\
+com.netease.lofter.tango.integration.apollo.TangoPropertySourcePostProcessor
+org.springframework.context.ApplicationContextInitializer=\
+com.netease.lofter.tango.integration.apollo.TangoConfigApplicationContextInitializer

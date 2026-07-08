@@ -1,0 +1,150 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_user_interview_retain_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  b.dt as base_date, \
+  datediff('${azkaban.flow.1.days.ago}', b.dt) as period, \
+  a.userchannel, \
+  case \
+    when c.import_flg is null then '其他' \
+    else c.import_flg \
+  end as import_flg, \
+  case \
+    when d.userid is null then 0 \
+    else 1 \
+  end as new_flg, \
+  case \
+    when e.userid is null then 0 \
+    else 1 \
+  end as return_flg, \
+  count(DISTINCT b.userid) AS uv, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 1) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_2d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (2) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_3d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (4) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_5d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN f.dt = date_add(b.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN f.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_30d \
+from \
+  ( \
+    select \
+      userid, \
+      userchannel \
+    from \
+      lofter.dim_pve_user \
+  ) a \
+  join ( \
+    select \
+      userid, \
+      dt \
+    from \
+      lofter.dwd_pve_user_interview_active_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+  ) b on a.userid = b.userid \
+  left join ( \
+    select \
+      dt, \
+      import_flg, \
+      userid \
+    from \
+      lofter_dm.ads_pve_user_interview_import_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+    group by \
+      dt, \
+      import_flg, \
+      userid \
+  ) c on b.userid = c.userid \
+  and b.dt = c.dt \
+  left join ( \
+    select \
+      userid, \
+      dt \
+    from \
+      lofter.dwd_pve_user_interview_new_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+  ) d on b.userid = d.userid \
+  and b.dt = d.dt \
+  left join ( \
+    select \
+      userid, \
+      dt \
+    from \
+      lofter.dwd_pve_user_interview_return_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+  ) e on b.userid = e.userid \
+  and b.dt = e.dt \
+  left join ( \
+    select \
+      userid, \
+      dt \
+    from \
+      lofter.dwd_pve_user_interview_active_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+  ) f on b.userid = f.userid \
+  AND f.dt BETWEEN date_add(b.dt, 0) \
+  AND date_add(b.dt, 30) \
+WHERE \
+  datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 2, 4, 6, 14, 29) \
+group by \
+  b.dt, \
+  datediff('${azkaban.flow.1.days.ago}', b.dt), \
+  a.userchannel, \
+  case \
+    when c.import_flg is null then '其他' \
+    else c.import_flg \
+  end, \
+  case \
+    when d.userid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when e.userid is null then 0 \
+    else 1 \
+  end
+dependencies=ads_pve_user_interview_import_di

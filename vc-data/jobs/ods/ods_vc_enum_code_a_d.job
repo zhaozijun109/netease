@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ods_vc_enum_code_a_d \
+                select code, description, enumname \
+                from vc.ods_vc_log_vc_enum_i_d \
+                where dt = (select max(dt) from vc.ods_vc_log_vc_enum_i_d) \
+                group by code, description, enumname
+
+dependencies=ods_vc_log_tables_data_load

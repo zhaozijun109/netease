@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ec_product_ip_rank_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select productId, \
+	   cardActivityCode, \
+	   ipName, \
+	   type, \
+	   rn as rank \
+from ( \
+	select productId, \
+		   cardActivityCode, \
+		   ipName, \
+		   type, \
+		   row_number() over(partition by ipName order by sale_cnt_7d desc) as rn \
+	from ( \
+		select t1.productId, \
+			   null as cardActivityCode, \
+			   t1.sale_cnt_7d, \
+			   t2.ipName, \
+			   t2.type \
+		from ( \
+			select productId, \
+				   sum(productNum) as sale_cnt_7d \
+			from lofter.dwd_benefit_product_trade_di \
+			where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and productType = 3 and productId is not null \
+			group by productId \
+		) t1 \
+		join ( \
+			select productId, \
+				   cmbIpName as ipName, \
+				   type \
+			from lofter_db_dump.ods_db_benefit_product_cmb_ip_relation_nd \
+			where status = 0 and type = 0 \
+		) t2 \
+		on t1.productId = t2.productId \
+		union all \
+		select null as productId, \
+			   t1.cardActivityCode, \
+			   t1.sale_cnt_7d, \
+			   t3.ipName, \
+			   t3.type \
+		from ( \
+			select cardActivityCode, \
+				   sum(slotNum) as sale_cnt_7d \
+			from lofter.dwd_benefit_product_trade_di \
+			where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and productType = 5 and cardActivityCode is not null \
+			group by cardActivityCode \
+		) t1 \
+		join ( \
+			select id, \
+				   code \
+			from lofter_db_dump.ods_db_benefit_card_activity_nd \
+		) t2 \
+		on t1.cardActivityCode = t2.code \
+		join ( \
+			select productId, \
+				   cmbIpName as ipName, \
+				   type \
+			from lofter_db_dump.ods_db_benefit_product_cmb_ip_relation_nd \
+			where status = 0 and type = 1 \
+		) t3 \
+		on t2.id = t3.productId \
+	) t4 \
+) t5 \
+where rn <= 10

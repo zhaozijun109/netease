@@ -1,0 +1,35 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_hear_collection_data_report_di partition(dt ='${azkaban.flow.1.days.ago}')     \
+select    \
+a.collectionid,   \
+b.collection_name,   \
+count(distinct userid)uv,   \
+count(userid)pv,   \
+sum(playedtime)/count(distinct userid) avg_per_playedtime,   \
+sum(playedtime)/count(distinct postid) avg_post_playedtime,   \
+sum(playedtime)/count(userid) avg_playedtime,   \
+sum(playedtime) playedtime,   \
+sum(playedtime)/sum(duration) rate_play,   \
+count(distinct userid) play_user_cnt,   \
+count(distinct postid) play_post_cnt    \
+from(   \
+select dt,userid,duration,playedtime,postid,collectionid ,playedtime/duration play_progress \
+from(     \
+select dt,userid,params['duration']/1000 duration, \
+case when params['playedTime']/1000>0 then params['playedTime']/1000 \
+     when params['playedTimeme']/1000>0 then params['playedTimeme']/1000  end playedtime,   \
+params['postId'] postid,params['collectionId'] collectionid   \
+from lofter.ods_mda_app_partition_di a    \
+where dt='${azkaban.flow.1.days.ago}'   \
+and eventid='m6-5'   \
+) a  \
+where playedtime>5  \
+) a    \
+left join    \
+(   \
+select collectionid,collection_name   \
+from  lofter.bridge_collection_post_dd   \
+where dt='${azkaban.flow.1.days.ago}'   \
+group by 1,2   \
+) b on a.collectionid=b.collectionid    \
+group by 1,2   \

@@ -1,0 +1,177 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_fans_vip_blog_detail_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.userid \
+	,a.status \
+	,a.agreeday \
+	,a.updateday \
+	,a.days \
+	,b.blogname \
+	,b.blognickname \
+	,b.all_blog_fans \
+	,b.url \
+	,c.allpostnum \
+	,c.daypostnum \
+	,c.allpostnum_exclusive \
+	,c.daypostnum_exclusive \
+	,d.daygiftamount \
+	,d.allgiftamount \
+	,d.dayfanamount \
+	,d.allfanamount \
+	,d.dayamount \
+	,d.allamount \
+	,e.allgiftdelta \
+	,e.allfandelta \
+	,e.alldelta \
+	,e.daygiftdelta \
+	,e.dayfandelta \
+	,e.daydelta \
+	,CASE  \
+		WHEN f.blogid IS NULL \
+			THEN 0 \
+		ELSE 1 \
+		END AS is_authority \
+FROM ( \
+	SELECT userid \
+		,status \
+		,from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd') AS agreeday \
+		,from_unixtime(cast(dbupdatetime AS BIGINT), 'yyyy-MM-dd') AS updateday \
+		,datediff(from_unixtime(cast(dbupdatetime AS BIGINT), 'yyyy-MM-dd'), from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS days \
+	FROM lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+	WHERE STATUS IN ( \
+			2 \
+			,10 \
+			) \
+	) a \
+LEFT JOIN ( \
+	SELECT userid \
+		,blogname \
+		,blognickname \
+		,all_blog_fans \
+		,CONCAT ( \
+			'https://' \
+			,blogname \
+			,'.lofter.com' \
+			) AS url \
+	FROM lofter.dws_par_user_base_dd \
+	WHERE dt  = '${azkaban.flow.1.days.ago}' \
+	) b ON a.userid = b.userid \
+LEFT JOIN ( \
+	SELECT count(DISTINCT postid) AS allpostnum \
+		,blogid \
+		,count(DISTINCT CASE  \
+				WHEN createdate = '${azkaban.flow.1.days.ago}' \
+					THEN postid \
+				ELSE NULL \
+				END) AS daypostnum \
+		,count(DISTINCT CASE  \
+				WHEN unlocktype = 1 \
+					THEN postid \
+				ELSE NULL \
+				END) AS allpostnum_exclusive \
+		,count(DISTINCT CASE  \
+				WHEN createdate = '${azkaban.flow.1.days.ago}' \
+					AND unlocktype = 1 \
+					THEN postid \
+				ELSE NULL \
+				END) AS daypostnum_exclusive \
+	FROM lofter.dim_gift_post_return_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	GROUP BY blogid \
+	) c ON a.userid = c.blogid \
+LEFT JOIN ( \
+	SELECT blogid \
+		,sum(CASE  \
+				WHEN pay_type = '付费礼物' \
+					AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS daygiftamount \
+		,sum(CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS allgiftamount \
+		,sum(CASE  \
+				WHEN pay_type IN ( \
+						'粉丝会员' \
+						,'官方账号' \
+						) \
+					AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS dayfanamount \
+		,sum(CASE  \
+				WHEN pay_type IN ( \
+						'粉丝会员' \
+						,'官方账号' \
+						) \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS allfanamount \
+		,sum(CASE  \
+				WHEN from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS dayamount \
+		,sum(MONEY) AS allamount \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	GROUP BY blogid \
+	) d ON a.userid = d.blogid \
+LEFT JOIN ( \
+	SELECT userid AS blogid \
+		,sum(CASE  \
+				WHEN type IN ( \
+						0 \
+						,1 \
+						) \
+					THEN delta \
+				ELSE 0 \
+				END) AS allgiftdelta \
+		,sum(CASE  \
+				WHEN type = 3 \
+					THEN delta \
+				ELSE 0 \
+				END) AS allfandelta \
+		,sum(CASE  \
+				WHEN type IN ( \
+						0 \
+						,1 \
+						,3 \
+						) \
+					THEN delta \
+				ELSE 0 \
+				END) AS alldelta \
+		,sum(CASE  \
+				WHEN type IN ( \
+						0 \
+						,1 \
+						) \
+					AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN delta \
+				ELSE 0 \
+				END) AS daygiftdelta \
+		,sum(CASE  \
+				WHEN type = 3 \
+					AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN delta \
+				ELSE 0 \
+				END) AS dayfandelta \
+		,sum(CASE  \
+				WHEN type IN ( \
+						0 \
+						,1 \
+						,3 \
+						) \
+					AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+					THEN delta \
+				ELSE 0 \
+				END) AS daydelta \
+	FROM lofter_db_dump.ods_db_trade_gift_money_balance_log_nd \
+	GROUP BY userid \
+	) e ON a.userid = e.blogid \
+LEFT JOIN ( \
+	SELECT blogid \
+	FROM lofter_db_dump.ods_db_admin_pub_data_nd LATERAL VIEW explode(split(content, ',')) t2 AS blogid \
+	WHERE name = 'book_store_blogIds' \
+	) f ON a.userid = f.blogid \

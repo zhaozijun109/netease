@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01 = with activity as (select id as activity_id,activity_name,activity_type, \
+                case when valid_start_time < 0 and valid_end_time < 0 then 'Y' \
+                when '${azkaban.flow.1.days.ago}' between FROM_UNIXTIME(valid_start_time,'yyyy-MM-dd') and FROM_UNIXTIME(valid_end_time,'yyyy-MM-dd') then 'Y' \
+                else 'N' end as is_valid,period \
+                from vc.ods_db_vc_activity_nd),  \
+                module as ( \
+                    select id as module_id,title as module_title,sub_title as module_sub_title,activity_id,module_type from vc.ods_db_vc_activity_module_nd \
+                ) \
+                insert overwrite table vc.dwd_vc_activity_detail_a_d partition (dt = '${azkaban.flow.1.days.ago}')  \
+                select x1.activity_id,x1.activity_name,x1.activity_type,x1.is_valid,x1.period, \
+                x2.module_id,x2.module_type,x2.module_title,x2.module_sub_title \
+                from activity x1 left join module x2 on x1.activity_id = x2.activity_id ;

@@ -1,0 +1,99 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_tag_fetch_blog_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.blogId as userId, \
+       nvl(blog_url,'') as blog_url, \
+       nvl(concat_ws(',', authDomainNames),'') as daren_names, \
+       nvl(blogName, ''), \
+       nvl(fans_std,0), \
+       nvl(post_count_std,0), \
+       nvl(level,'') as level, \
+       nvl(domain_r1,'') as domain_r1, \
+       nvl(is_premium,0) as is_premium, \
+       nvl(post_main_content_type, '') as post_main_content_type, \
+       nvl(blogNickName, '') as blog_nickname, \
+       nvl(creator_center_level, '') as creator_center_level, \
+       nvl(createTime, 0) as create_time, \
+       nvl(first_publish_date, '') as first_publish_date, \
+       nvl(last_publish_date, '') as last_publish_date, \
+       nvl(premium_post_count, 0) as premium_post_count, \
+       nvl(text_post_count_std, 0) as text_post_count_std, \
+       nvl(photo_post_count_std, 0) as photo_post_count_std, \
+       nvl(video_post_count_std, 0) as video_post_count_std, \
+       nvl(pay_post_count, 0) as pay_post_count, \
+       nvl(receive_hot_std,0), \
+       nvl(receive_recommend_cnt,0), \
+       nvl(fans_cnt_7d,0), \
+       nvl(fans_cnt_30d,0), \
+       nvl(j.sourceType, '') as source_type \
+from ( \
+    select b.id as blogId, b.authDomainNames, b.blogNickName, b.blogName, b.createTime \
+    from lofter.dim_blog b \
+    where b.isValid = true \
+) a \
+left join ( \
+    select blogId, \
+           min(publishDate) as first_publish_date,\
+           max(publishDate) as last_publish_date, \
+           count(distinct id) as post_count_std, \
+           count(distinct if(contentType = '文字', id, null)) as text_post_count_std, \
+           count(distinct if(contentType = '图片', id, null)) as photo_post_count_std, \
+           count(distinct if(contentType = '视频', id, null)) as video_post_count_std \
+    from lofter.dim_post a \
+    where publishDate <= '${azkaban.flow.1.days.ago}' and \
+          a.isPublished = true and \
+          a.isCitedPost = false and \
+          a.isForbidden=false and \
+          a.allowView = 0 and \
+          a.valid in (0,12,15,16) and \
+          contentType in ('文字', '图片', '视频') \
+    group by 1 \
+) a1 on a.blogId = a1.blogId \
+left join ( \
+    select userId, blog_url, fans_std, level, element_at(post_top_domains, 1) as domain_r1, \
+           post_main_content_type, fans_cnt_7d, fans_cnt_30d \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b on a.blogId = b.userId \
+left join ( \
+    select userId, is_premium \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.blogId = c.userId \
+left join ( \
+    select blogId, \
+           case creatorStatus when '10' then '发文吧鸽' \
+                              when '20' then '回来吧鸽' \
+                              when '30' then '求你了鸽' \
+                              when '40' then '出山鸽' \
+                              when '50' then '成长鸽' \
+                              when '60' then '守护鸽' \
+                              when '70' then '起飞鸽' \
+                              when '80' then '火箭鸽' \
+                              when '90' then '太太鸽' \
+                              when '100' then '宗师鸽' \
+                              when '110' then '传奇鸽' \
+                              else creatorStatus end as creator_center_level \
+    from lofter_dm.ads_creator_ecology_identity_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) d on a.blogId = d.blogId \
+left join ( \
+    select userId as blogId, count(distinct postId) as premium_post_count \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.blogId = e.blogId \
+left join ( \
+    select blogId, count(distinct postId) as pay_post_count \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 1) \
+    group by 1 \
+) f on a.blogId = f.blogId \
+left join ( \
+    select userId as blogId, receive_hot_std, receive_recommend_cnt \
+    from lofter.dws_par_creator_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) h on a.blogId = h.blogId \
+left join (select id, sourceType from lofter.dim_user ) j on a.blogId = j.id \
+where datediff('${azkaban.flow.1.days.ago}', a1.last_publish_date) <= 365*2 \

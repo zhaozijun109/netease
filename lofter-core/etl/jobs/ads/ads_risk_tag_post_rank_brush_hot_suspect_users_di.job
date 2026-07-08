@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.userId, b.ip as ip, c.ip as reg_ip, d.ip_switch_count_30d \
+from ( \
+    select postId, userId \
+    from lofter.dwd_risk_brush_hot_suspect_post_rank_ip_users_di where dt = '${azkaban.flow.1.days.ago}' \
+  union \
+    select postId, userId \
+    from lofter.dwd_risk_brush_hot_suspect_post_rank_users_di where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select postId, blogId, userId, ip, opTime \
+    from ( \
+        select postId, blogId, publisherUserid as userId, opTime, ip, \
+            row_number() over (partition by postId, publisherUserid order by opTime) as rk \
+        from lofter_db_dump.ods_db_post_hot_nd \
+        where from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    where rk = 1 \
+) b on a.postId = b.postId and a.userId = b.userId \
+left join ( \
+    select userId, ip \
+    from lofter_db_dump.ods_db_audit_log_nd \
+    where opType = 6 AND ip is not null AND ip NOT IN ('127.0.0.1', '127.0.1') \
+) c on a.userId = c.userId \
+left join ( \
+    select cast(accountId as bigint) as userId, \
+           count(distinct ip) as ip_switch_count_30d \
+    FROM lofter.dwd_evt_user_login_di \
+    WHERE actionType = 'login'  and \
+        dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) d on a.userId = d.userId \

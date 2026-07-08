@@ -1,0 +1,10 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "TagEvent",
+  "fields": [
+    {"name": "tag", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "time", "type": "long"}
+  ]
+}

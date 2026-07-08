@@ -1,0 +1,226 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_evt_post_paid_hotsell_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.pay_type \
+	,a.day AS maxmoney_day \
+	,a.postid \
+	,a.MONEY AS maxmoney \
+	,b.day AS min10000_day \
+	,CASE  \
+		WHEN b.day IS NULL \
+			THEN - 1 \
+		ELSE datediff(b.day, f.publishdate) \
+		END AS min10000days \
+	,b.MONEY AS min10000 \
+	,c.day AS min100000_day \
+	,CASE  \
+		WHEN c.day IS NULL \
+			THEN - 1 \
+		ELSE datediff(c.day, f.publishdate) \
+		END AS min100000days \
+	,c.MONEY AS min100000 \
+	,providerid \
+	,providerType \
+	,contenttitle \
+	,copyRightType \
+	,providername \
+	,contractid \
+	,f.blogid \
+	,d.type \
+	,f.url \
+	,f.publishdate \
+	,f.title \
+	,d.sharetype \
+	,d.editoremail \
+	,e.giftmoney \
+	,e.blogmoney \
+	,e.fansmoney \
+	,e.authoritymoney \
+	,e.bookstoremoney \
+ \
+from  \
+ \
+(select a.pay_type,a.day,a.postid,a.money \
+from  \
+(select a.pay_type,a.day,a.postid,a.money,row_number()OVER ( partition by a.postid,a.pay_type  ORDER BY money desc)  as money_rk \
+ \
+from  \
+ \
+(select a.pay_type,a.day,a.postid,sum(b.money) as money \
+from  \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) a \
+ \
+join \
+ \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) b \
+ \
+on a.pay_type=b.pay_type and b.day between date_sub(a.day,29) and a.day and a.postid=b.postid \
+group by a.pay_type,a.day,a.postid ) a) a \
+ \
+where a.money_rk=1 \
+group by a.pay_type,a.day,a.postid,a.money) a \
+ \
+ \
+left join \
+ \
+ \
+(select a.pay_type,a.day,a.postid,a.money \
+from  \
+(select a.pay_type,a.day,a.postid,a.money,row_number()OVER ( partition by a.postid,a.pay_type  ORDER BY day asc)  as day_rk \
+from  \
+(select a.pay_type,a.day,a.postid,sum(b.money) as money \
+from  \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) a \
+ \
+join \
+ \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) b \
+ \
+on a.pay_type=b.pay_type and b.day between date_sub(a.day,29) and a.day and a.postid=b.postid \
+group by a.pay_type,a.day,a.postid ) a \
+where money>=10000 ) a \
+where a.day_rk=1 \
+group by a.pay_type,a.day,a.postid,a.money) b \
+ \
+on a.pay_type=b.pay_type and a.postid=b.postid  \
+ \
+ \
+ \
+ \
+left join \
+ \
+ \
+(select a.pay_type,a.day,a.postid,a.money \
+from  \
+(select a.pay_type,a.day,a.postid,a.money,row_number()OVER ( partition by a.postid,a.pay_type  ORDER BY day asc)  as day_rk \
+from  \
+(select a.pay_type,a.day,a.postid,sum(b.money) as money \
+from  \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) a \
+ \
+join \
+ \
+(select NVL(pay_type,'汇总') as pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,postid,sum(money) as money \
+from  \
+lofter.dwd_evt_post_paid_detail_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and postid>0 \
+group by pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),postid \
+grouping sets ( (postid,pay_type,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(postid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')))) b \
+ \
+on a.pay_type=b.pay_type and b.day between date_sub(a.day,29) and a.day and a.postid=b.postid \
+group by a.pay_type,a.day,a.postid ) a \
+where money>=100000 ) a \
+where a.day_rk=1 \
+group by a.pay_type,a.day,a.postid,a.money) c \
+ \
+on a.pay_type=c.pay_type and a.postid=c.postid  \
+ \
+ \
+ \
+left join \
+ \
+ \
+( \
+		SELECT a.* \
+			,postid \
+			,b.type \
+			,c.sharetype \
+			,c.editoremail \
+		FROM ( \
+			SELECT id \
+				,providerid \
+				,providerType \
+				,title AS contenttitle \
+				,copyRightType \
+				,providername \
+				,contractid \
+			FROM lofter_db_dump.ods_db_pfb_content_nd \
+			) a \
+		JOIN ( \
+			SELECT contentid \
+				,type \
+				,postid \
+				,blogid \
+			FROM lofter_db_dump.ods_db_pfb_content_related_post_nd \
+			WHERE STATUS = 0 \
+			) b ON a.id = b.contentid \
+		JOIN ( \
+			SELECT id \
+				,sharetype \
+				,editoremail \
+			FROM lofter_db_dump.ods_db_pfb_contract_nd \
+			) c ON a.contractid = c.id \
+		) d ON a.postid = d.postid \
+LEFT JOIN ( \
+	SELECT id \
+		,blogid \
+		,CONCAT ( \
+			'https://' \
+			,url \
+			) AS url \
+		,title \
+		,publishdate \
+	FROM lofter.dim_post \
+	) f ON a.postid = f.id \
+LEFT JOIN ( \
+	SELECT postid \
+		,sum(CASE  \
+				WHEN pay_type = '付费礼物' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS giftmoney \
+		,sum(CASE  \
+				WHEN pay_type = '博客订阅' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS blogmoney \
+		,sum(CASE  \
+				WHEN pay_type = '粉丝会员' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS fansmoney \
+		,sum(CASE  \
+				WHEN pay_type = '官方账号' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS authoritymoney \
+		,sum(CASE  \
+				WHEN pay_type = '书城会员' \
+					THEN MONEY \
+				ELSE 0 \
+				END) AS bookstoremoney \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt= '${azkaban.flow.1.days.ago}'  \
+		AND postid > 0 \
+	GROUP BY postid \
+	) e ON a.postid = e.postid \

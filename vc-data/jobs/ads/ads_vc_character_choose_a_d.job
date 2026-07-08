@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.ads_vc_character_choose_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select character_id, \
+                       character_type, \
+                       total_talk_cnt, \
+                       total_peoples, \
+                       status, \
+                       index_feed_status, \
+                       stranger_msg_status, \
+                       chat_recommend_status, \
+                       case when channel = 2 then 'data' when channel = 1 then 'manual' end as channel \
+                from (select *, \
+                             row_number() over (partition by character_id order by channel) as rk \
+                      from (select x1.character_id, \
+                                   x1.character_type, \
+                                   x1.total_talk_cnt, \
+                                   x1.total_peoples, \
+                                   nvl(x2.status, 1)                as status, \
+                                   nvl(x2.index_feed_status, 0)     as index_feed_status, \
+                                   nvl(x2.stranger_msg_status, 0)   as stranger_msg_status, \
+                                   nvl(x2.chat_recommend_status, 0) as chat_recommend_status, \
+                                   2                                as channel \
+                            from (select character_id, character_type, total_talk_cnt, total_peoples \
+                                  from vc.ads_vc_hot_characters_a_d \
+                                  where dt = '${azkaban.flow.1.days.ago}') x1 \
+                                     left join \
+                                 (select character_id, status, index_feed_status, stranger_msg_status, chat_recommend_status \
+                                  from vc.ods_db_vc_data_character_choose_nd) x2 on x1.character_id = x2.character_id \
+                            where x1.total_talk_cnt > 0 \
+                            union ALL \
+                            select x2.character_id, \
+                                   x2.character_type, \
+                                   x2.total_talk_cnt, \
+                                   x2.total_peoples, \
+                                   x1.status, \
+                                   index_feed_status, \
+                                   stranger_msg_status, \
+                                   chat_recommend_status, \
+                                   1 as channel \
+                            from vc.ods_db_vc_character_choose_nd x1 \
+                                     inner join vc.dws_vc_character_tabulate_data_view x2 on x1.character_id = x2.character_id)) \
+                where rk = 1
+
+dependencies=ads_vc_hot_characters_a_d

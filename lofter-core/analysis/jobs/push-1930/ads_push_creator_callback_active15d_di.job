@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_creator_callback_active15d_di partition(dt = '${azkaban.flow.current.date}') \
+select a.userId, d.home_uv \
+from ( \
+    select userId \
+    from lofter.dws_par_user_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_anonymous = 0 and active_days_7d = 0 and active_days_15d > 0 \
+) a \
+join (select userId from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std > 0) b on a.userId = b.userId \
+left join ( \
+    select userId \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.current.date}' \
+) c on a.userId = c.userId \
+join ( \
+    select blogId, count(distinct userId) home_uv from lofter.dws_par_user_home_visit_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' group by 1 having home_uv >= 10 \
+) d on a.userId = d.blogId \
+where c.userId is null \

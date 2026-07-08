@@ -1,0 +1,26 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=10
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.category_domain_mapping \
+    select nvl(nullif(c1, '无'), '其他') as category, \
+           nvl(nullif(c2, '无'), '其他') as category2, \
+           nvl(nullif(c3, '无'), '其他') as category3, \
+           domainName \
+    from ( \
+        select m.domainName, \
+              nvl(y.tagName, nvl(x.tagName, n.tagName)) as c1, \
+              if(x.parentId > 0, x.tagName, if(n.parentId > 0, n.tagName, '无')) as c2, \
+              if(x.parentId > 0, n.tagName, '无') as c3 \
+        from ( \
+            select a.tagId, b.domainName \
+            from lofter_db_dump.ods_db_recommend_domain_tag_mapping_nd a \
+            join lofter_db_dump.ods_db_recommend_review_domain_nd b on a.domainId = b.id \
+            where a.status = 0 and b.status = 0 \
+        ) m join (select * from lofter_db_dump.ods_db_recommend_review_tag_nd where status = 0) n on m.tagId = n.id \
+            left join (select * from lofter_db_dump.ods_db_recommend_review_tag_nd where status = 0) x on n.parentId = x.id \
+            left join (select * from lofter_db_dump.ods_db_recommend_review_tag_nd where status = 0) y on x.parentId = y.id \
+    ) t distribute by 1

@@ -1,0 +1,83 @@
+type=sparksql
+hive.query.01=insert overwrite lofter.dwd_membership_order_di partition(dt='${azkaban.flow.1.days.ago}') \
+select order_id, userId, blogId, postId, amount, payTime as pay_time, \
+       if(y.orderId is null and z.deviceUdid is null, x.deviceUdid, null) as deviceUdid, \
+       if(y.orderId is null and z.deviceUdid is null, customUuid, null) as customUuid, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd, null) as actpwd, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd_channel, null) as actpwd_channel, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd_search_time, null) as actpwd_search_time, \
+       if(size(actpwd_search_list) > 0, actpwd_search_list, array(actpwd)) as actpwd_search_list, \
+       x.order_type, \
+       if((y.orderId is not null or z.deviceUdid is not null) and actpwd is not null, 2, is_internal_attribute_order) as is_internal_attribute_order, \
+       vip_days, platform \
+from ( \
+    select id as order_id, userId, vipBlogId as blogId, postId, amount, payTime, \
+           if(is_internal_attribute_order = 0, deviceUdid, null) as deviceUdid, customUuid, \
+           if(is_internal_attribute_order = 0, actpwd, null) as actpwd, \
+           if(is_internal_attribute_order = 0, actpwd_channel, null) as actpwd_channel, \
+           if(is_internal_attribute_order = 0, actpwd_search_time, null) as actpwd_search_time, \
+           order_type, \
+           collect_set(actpwd_search) over (partition by id) as actpwd_search_list, \
+           row_number() over (partition by id order by actpwd_search_time desc) as rk, \
+           is_internal_attribute_order, vip_days, platform \
+    from ( \
+        select t1.id, t1.amount, t1.customUuid, t1.vipBlogId, t1.userId, t1.postId, t1.payTime, \
+               if(t5.orderId > 0, if(is_new_device_first_order > 0, if(t6.deviceUdid is not null, t6.deviceUdid, t3.deviceUdid), null), if(t6.deviceUdid is not null, t6.deviceUdid, if(t3.is_membership > 0, t3.deviceUdid, null))) as deviceUdid, \
+               if(t5.orderId > 0, if(is_new_device_first_order > 0, if(t6.deviceUdid is not null, t6.actpwd, t3.actpwd), null), if(t6.deviceUdid is not null, t6.actpwd, if(t3.is_membership > 0, t3.actpwd, null))) as actpwd, \
+               if(t5.orderId > 0, if(is_new_device_first_order > 0, if(t6.deviceUdid is not null, t6.channel, t3.channel), null), if(t6.deviceUdid is not null, t6.channel, if(t3.is_membership > 0, t3.channel, null))) as actpwd_channel, \
+               if(t5.orderId > 0, if(is_new_device_first_order > 0, if(t6.deviceUdid is not null, t6.time, t3.time), null), if(t6.deviceUdid is not null, t6.time, if(t3.is_membership > 0, t3.time, null))) as actpwd_search_time, \
+               nvl(t3.actpwd, t6.actpwd) as actpwd_search, t1.order_type, \
+               if(t1.is_system_order > 0, 1, 0) as is_internal_attribute_order, \
+               vip_days, platform \
+        from ( \
+            select id, deviceId customUuid, finishTime payTime, postId, amount, null as vipBlogId, userId, 6 as order_type, source as is_system_order, vipdays as vip_days, platform \
+            from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+        ) t1 \
+        left join ( \
+            select time,actpwd,channel, deviceUdid, customUuid, userid, itemId as postid, content_type, is_paid_subscribe, is_membership \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  is_paid_subscribe > 0 \
+        ) t3 on t1.customUuid = t3.customUuid and t1.payTime >= t3.time and t1.payTime <= t3.time + 86400000 \
+        left join ( \
+            select b.id as orderId, if(rk = 1, 1, 0) as is_new_device_first_order \
+            from ( \
+                select customUdid as deviceId, min(firstAccessTime) as newTime \
+                from lofter.device_new \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and firstAccessTime > 0 \
+                group by 1 \
+            ) a \
+            join ( \
+                select id, deviceId, finishTime payTime, row_number() over (partition by deviceId order by finishTime) as rk \
+                from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+                where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+            ) b on a.deviceId = b.deviceId \
+            where b.payTime <= a.newTime + 86400000 \
+        ) t5 on t1.id = t5.orderId \
+        left join ( \
+            select time,actpwd,channel, deviceUdid, customUuid, userid, itemId as postid, content_type, is_paid_subscribe, is_membership \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  settlement_type = 'CPA' \
+        ) t6 on t1.customUuid = t6.customUuid and t1.payTime >= t6.time and t1.payTime <= t6.time + 86400000 \
+    ) t \
+) x \
+left join ( \
+        select orderId, order_type \
+        from lofter.dwd_ad_growth_order_activate_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+) y on x.order_id = y.orderId and x.order_type = y.order_type \
+left join ( \
+    select deviceUdid \
+    from lofter.dwd_ad_growth_device_di \
+    where appid = 'lofter' and \
+          device_type = 'new' and \
+          dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+          media = '快手' and proxy = '芒果' \
+    group by 1 \
+) z on x.deviceUdid = z.deviceUdid \
+where x.rk = 1 \
+distribute by 1
+dependencies=dwd_growth_actpwd_access_di,dwd_ad_growth_order_activate_di,dwd_ad_growth_device_di

@@ -1,0 +1,77 @@
+type=sparksql
+hive.query.01=\
+with ad_reward_users as ( \
+    select dt, userId, '访问用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    union all \
+    select dt, userId, '新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_platform_new > 0 \
+    union all \
+    select dt, userId, '回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_platform_return > 0 \
+    union all \
+    select dt, userId, '权益中心新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_new_user > 0 \
+    union all \
+    select dt, userId, '权益中心回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_return_user > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_reward_roi_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select ad_revenue_1d / user_type_uv as ad_arpu, ad_rewardcenter_revenue_1d / user_type_uv as ad_rewardcenter_arpu, \
+       ad_rewardcenter_revenue_1d / cost_1d as direct_roi_1d, ad_revenue_1d / cost_1d as indirect_roi_1d, \
+       ad_rewardcenter_revenue_3d / cost_3d as direct_roi_3d, ad_revenue_3d / cost_3d as indirect_roi_3d, \
+       ad_rewardcenter_revenue_7d / cost_7d as direct_roi_7d, ad_revenue_7d / cost_7d as indirect_roi_7d, \
+       ad_rewardcenter_revenue_14d / cost_14d as direct_roi_14d, ad_revenue_14d / cost_14d as indirect_roi_14d, \
+       ad_rewardcenter_revenue_21d / cost_21d as direct_roi_21d, ad_revenue_21d / cost_21d as indirect_roi_21d, \
+       ad_rewardcenter_revenue_30d / cost_30d as direct_roi_30d, ad_revenue_30d / cost_30d as indirect_roi_30d, \
+       ad_rewardcenter_revenue_1d, cost_1d, ad_revenue_1d, \
+       ad_rewardcenter_revenue_3d, cost_3d, ad_revenue_3d, \
+       ad_rewardcenter_revenue_7d, cost_7d, ad_revenue_7d, \
+       ad_rewardcenter_revenue_14d, cost_14d, ad_revenue_14d, \
+       ad_rewardcenter_revenue_21d, cost_21d, ad_revenue_21d, \
+       ad_rewardcenter_revenue_30d, cost_30d, ad_revenue_30d, \
+       nvl(nvl(a.user_type, b.user_type), c.user_type) as user_type \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+        b.user_type, \
+        count(distinct if(a.dt = '${azkaban.flow.1.days.ago}',a.userId, null)) ad_uv_1d, \
+        count(distinct if(a.position_name like '%权益中心%' and a.dt = '${azkaban.flow.1.days.ago}', a.userId, null)) as ad_rewardcenter_uv_1d, \
+        sum(if(a.dt = '${azkaban.flow.1.days.ago}', a.money,0)) as ad_revenue_1d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt = '${azkaban.flow.1.days.ago}', a.money,0)) as ad_rewardcenter_revenue_1d, \
+        sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 3), a.money,0)) as ad_revenue_3d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt >= date_sub('${azkaban.flow.current.date}', 3), a.money,0)) as ad_rewardcenter_revenue_3d, \
+        sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 7), a.money,0)) as ad_revenue_7d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt >= date_sub('${azkaban.flow.current.date}', 7), a.money,0)) as ad_rewardcenter_revenue_7d, \
+        sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 14), a.money,0)) as ad_revenue_14d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt >= date_sub('${azkaban.flow.current.date}', 14), a.money,0)) as ad_rewardcenter_revenue_14d, \
+        sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 21), a.money,0)) as ad_revenue_21d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt >= date_sub('${azkaban.flow.current.date}', 21), a.money,0)) as ad_rewardcenter_revenue_21d, \
+        sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 30), a.money,0)) as ad_revenue_30d, \
+        sum(if(a.position_name like '%权益中心%' and a.dt >= date_sub('${azkaban.flow.current.date}', 30), a.money,0)) as ad_rewardcenter_revenue_30d \
+    from ( \
+        select * \
+        from lofter.dwd_user_ad_revenue_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    ) a \
+    join ad_reward_users b on a.dt = b.dt and a.userId = b.userId \
+    group by 1, 2 \
+) a \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           b.user_type, \
+           sum(if(a.dt = date_sub('${azkaban.flow.current.date}', 1), a.delta, 0)) * 0.001 as cost_1d, \
+           sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 3), a.delta, 0)) * 0.001 as cost_3d, \
+           sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 7), a.delta, 0)) * 0.001 as cost_7d, \
+           sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 14), a.delta, 0)) * 0.001 as cost_14d, \
+           sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 21), a.delta, 0)) * 0.001 as cost_21d, \
+           sum(if(a.dt >= date_sub('${azkaban.flow.current.date}', 30), a.delta, 0)) * 0.001 as cost_30d \
+    from ( \
+        select userId, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, delta \
+        from lofter_db_dump.ods_db_reward_user_score_log_nd \
+        where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+               action > 0 \
+    ) a \
+    join ad_reward_users b on a.dt = b.dt and a.userId = b.userId \
+    group by 1, 2 \
+) b on a.dt = b.dt and a.user_type = b.user_type \
+left join ( \
+    select dt, user_type, count(distinct userId) as user_type_uv \
+    from ad_reward_users \
+    group by 1, 2 \
+) c on a.dt = c.dt and a.user_type = c.user_type \

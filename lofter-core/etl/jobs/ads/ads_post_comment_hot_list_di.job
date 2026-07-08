@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_comment_hot_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select id commentId, publishtime commentTime, commentUserId, commentHot, content, postId, blogId, contentType, title, tags  \
+              from (  \
+                  select t1.id, t1.publishtime, t1.postid, t1.blogId, commentHot, commentUserId, content, contenttype, title, tags,  \
+              	    row_number() over(partition by t1.postid order by t1.commenthot desc) rnk,   \
+                      case when t2.contenttype = '图片' and t1.commenthot >= 188 then t1.commenthot  \
+                           when t2.contenttype = '文字' and t1.commenthot >= 50 then t1.commenthot  \
+                           when t2.contenttype = '视频' and t1.commenthot >= 100 then t1.commenthot  \
+                      else 0 end num  \
+                  from (  \
+                      select id, postid, blogId, publisheruserid as commentUserId, content, commenthot, publishtime  \
+                      from lofter_db_dump.ods_db_post_response_nd  \
+                      where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd')) between 0 and 14  \
+                      and replyl1commentid = 0 and replyl2commentid = 0 and commenthot >= 50 and blogId <> publisheruserid \
+                  ) t1 join (  \
+                      select id postid, contenttype, title, concat_ws(',',tags) as tags  \
+                      from lofter.dim_post  \
+                      where ispublished = true and isforbidden = false and iscitedpost = false  \
+                      and allowview = 0  \
+                      and contenttype in ("图片","文字","视频")  \
+                      and isactivityautopost = 0 and isimported = 0 and ismoved = 0  \
+                  ) t2  \
+                  on t1.postid = t2.postid  \
+              ) t  \
+              where rnk <= 3 and num > 0   \
+              distribute by 1

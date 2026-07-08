@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_ug_new_return_device_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select  \
+    nvl(device_type, 'ALL') as device_type,  \
+    nvl(origin_type, 'ALL') as origin_type,  \
+    nvl(is_paid_subscribe, 'ALL') as is_paid_subscribe,  \
+    nvl(origin_channel, 'ALL') as origin_channel,  \
+    nvl(deviceos, 'ALL') as deviceos, \
+    nvl(is_ture_new_return ,'ALL') is_ture_new_return, \
+    count(1) as device_num, \
+    avg(nvl(real_browse_pv, 0)) as real_browse_pv,  \
+    count(if(nvl(real_browse_pv, 0) > 0, 1, null)) as real_browse_uv, \
+    avg(nvl(hdpv, 0)) as hdpv,  \
+    count(if(nvl(hdpv, 0) > 0, 1, null)) as hduv, \
+    count(if(nvl(search_cnt, 0) > 0, 1, null)) as search_uv, \
+    count(if(nvl(device_pay_amount, 0) > 0, 1, null)) as pay_uv, \
+    avg(if(size(valid_ips) <= 0, 0, size(valid_ips))) as valid_ips_num,  \
+    count(if(size(valid_ips) <= 0, null, 1)) as valid_ips_uv \
+from \
+    ( \
+        select  \
+        nvl(device_type, '无') as device_type,  \
+        nvl(origin_type, '无') as origin_type,  \
+        nvl(is_paid_subscribe, '无') as is_paid_subscribe,  \
+        nvl(origin_channel, '无') as origin_channel,  \
+        nvl(deviceos, '无') as deviceos, \
+        if((device_type='new' and isanonymous = 0 and u.createdate >= a.dt) or (device_type='return_30' and isanonymous = 0 and b0.userId is not null ) ,1 ,0) is_ture_new_return, \
+        a.deviceudid, real_browse_pv, hdpv, search_cnt, post_cnt, device_pay_amount, valid_ips \
+    from  \
+        (select  \
+            device_type, origin_type, is_paid_subscribe, origin_channel, deviceos, \
+            deviceudid, real_browse_pv, hdpv, search_cnt, post_cnt, device_pay_amount, valid_ips ,day as dt  \
+            from rec.rec_ug_new_return_device_action_stat_di where day = '${azkaban.flow.1.days.ago}' and is_whiteboard = 0 \
+        ) a  \
+      join (  \
+          select deviceUdid, element_at(userIds, 1) as userId  \
+          from lofter.device_active  \
+          where dt='${azkaban.flow.1.days.ago}'  \
+      ) b on a.deviceUdid = b.deviceUdid  \
+    left join lofter.dim_user u on b.userId = u.id  \
+    left join  \
+        (select userid from lofter.dwd_user_return_di WHERE dt='${azkaban.flow.1.days.ago}' group by 1) b0   \
+    on b.userId =b0.userId \
+    )t \
+group by device_type, origin_type, is_paid_subscribe, origin_channel, deviceos ,is_ture_new_return \
+grouping sets( \
+  (device_type, is_paid_subscribe), \
+  (device_type, is_paid_subscribe, origin_type), \
+  (device_type, is_paid_subscribe, origin_type, origin_channel), \
+  (device_type, is_paid_subscribe, deviceos), \
+  (device_type, is_paid_subscribe ,is_ture_new_return), \
+  (device_type, is_paid_subscribe, origin_type ,is_ture_new_return), \
+  (device_type, is_paid_subscribe, origin_type, origin_channel ,is_ture_new_return), \
+  (device_type, is_paid_subscribe, deviceos ,is_ture_new_return) \
+) \

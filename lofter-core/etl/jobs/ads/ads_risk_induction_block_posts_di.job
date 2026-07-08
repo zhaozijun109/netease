@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_induction_block_posts_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.postId, a.induction_type \
+from ( \
+    select blogId, postId, 'shortlink' as induction_type from lofter_dm.ads_risk_shortlink_induction_posts_di where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select blogId, postId, 'actpwd_content' as induction_type from lofter_dm.ads_risk_actpwd_similar_posts_di where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select blogId, postId, 'actpwd_comment' as induction_type from lofter_dm.ads_risk_actpwd_comment_induction_di where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select blogId, postId, 'actpwd_footer' as induction_type from lofter_dm.ads_risk_actpwd_post_footer_induction_di where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+      select blogId, postId, 'actpwd_header' as induction_type from lofter_dm.ads_risk_actpwd_post_header_induction_di where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+      select blogId, postId, 'collection' as induction_type from lofter_dm.ads_risk_offsite_induction_zhihu_collection_di where dt = '${azkaban.flow.1.days.ago}' \
+) a left join ( \
+    select nvl(x.blogId, y.blogId) as blogId \
+    from ( \
+        select userId as blogid, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    full outer join ( \
+       select userId as blogId \
+       from lofter_db_dump.ods_db_trade_gift_account_nd \
+       where status = 2 \
+      union all \
+        select userId as blogId \
+        from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+        where status = 2 \
+      union all \
+        select userid as blogid from lofter_db_dump.ods_db_trade_fans_vip_account_nd where status = 2 \
+      union all \
+        select blogid from lofter_db_dump.ods_db_user_following_nd where userid=1943463653 group by blogid \
+      union all \
+        select blogid from lofter_db_dump.ods_db_pfb_content_related_post_nd group by blogid \
+    ) y on x.blogId = y.blogId \
+    where x.level in ('S','A','B','C') or y.blogId is not null \
+    group by 1 \
+) b on a.blogId = b.blogId \
+left join ( \
+    select postId \
+    from lofter_dm.ads_risk_induction_block_posts_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId \
+left join ( \
+    select postId \
+    from lofter.dim_miniprogram_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.postId = d.postId \
+left join lofter_db_dump.ods_db_forbid_nd e on a.blogId = e.blogId \
+where b.blogId is null and c.postId is null and d.postId is null and e.blogId is null \
+group by 1, 2, 3
+dependencies=ads_risk_shortlink_induction_posts_di,ads_risk_actpwd_similar_posts_di,ads_risk_actpwd_comment_induction_di,ads_risk_actpwd_post_footer_induction_di,ads_risk_actpwd_post_header_induction_di,ads_risk_offsite_induction_zhihu_collection_di

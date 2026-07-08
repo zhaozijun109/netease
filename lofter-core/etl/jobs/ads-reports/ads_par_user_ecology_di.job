@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_ecology_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.creators, x.active_creators, x.premium_creators, y.post_pv, y.post_uv, z.real_pv, z2.dau, z3.premium_post_count, \
+       z4.core_user_count \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct a.userId) as creators, \
+           count(distinct b.userId) as active_creators, \
+           count(distinct c.userId) as premium_creators \
+    from ( \
+      select userId, level \
+      from lofter.dws_par_creator_level_scoring_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and level is not null and level != 'D*' \
+    ) a \
+    left join ( \
+      select userId \
+      from lofter.dws_par_creator_di \
+      where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and post_count > 0 \
+      group by userId \
+    ) b on a.userId = b.userId \
+    left join ( \
+      select userId \
+      from lofter.dws_par_creator_premium_staging_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+    ) c on a.userId = c.userId \
+) x \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, sum(post_count) post_pv, count(distinct userId) post_uv \
+    from lofter.dws_par_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' and post_count > 0 \
+) y on x.dt = y.dt \
+left join ( \
+    select dt, sum(real_browse_play_pv) as real_pv \
+    from lofter.dws_page_note_source_scene_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) z on x.dt = z.dt \
+left join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, count(distinct deviceUdid) as dau \
+  from lofter.device_active \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) z2 on x.dt = z2.dt \
+left join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, count(distinct postId) premium_post_count \
+  from lofter.dws_post_premium_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) z3 on x.dt = z3.dt \
+left join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, count(distinct userId) core_user_count \
+  from lofter.dws_par_user_core_staging_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) z4 on x.dt = z4.dt
+dependencies=

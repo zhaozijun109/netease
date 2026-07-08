@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_easy_fetch_tag_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.postId, \
+  a.blogId, \
+  contenttype, \
+  ispay_returngift, \
+  b.tags, \
+  case blog_channel when 0 then 'UGC' when 1 then 'PGC' when 2 then '高粉' else '书城及小程序'  end as blog_channel \
+from( \
+  select distinct blog_channel, postid, blogid, contenttype,  \
+    case ispay_returngift when 0 then '付费免费' when 1 then '仅付费' when 2 then '仅免费' end as ispay_returngift \
+  from lofter.dwd_gift_return_post_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join( \
+  select id, blogid, concat_ws(',',tags) as tags, publishdate \
+  from lofter.dim_post \
+) b \
+on a.postid = b.id and a.blogid = b.blogid

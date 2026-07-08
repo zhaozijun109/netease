@@ -1,0 +1,10 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "RecItemPvUserList",
+  "fields": [
+    {"name": "itemId", "type": "string"},
+    {"name": "userList", "type": "string"},
+    {"name": "isNew", "type": "long"}
+  ]
+}

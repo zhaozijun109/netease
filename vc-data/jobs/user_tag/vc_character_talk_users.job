@@ -1,0 +1,27 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --bitmap --tags vc_character_talk_users
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '角色聊天用户' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       character_name as grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_character_talk_users' as tag \
+from ( \
+    select user_id, character_name \
+    from vc.dws_vc_uc_talk_summary_single_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and character_type = 'ogc' \
+      and character_name != '' \
+      and character_name is not null \
+    group by character_id, character_name, user_id \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

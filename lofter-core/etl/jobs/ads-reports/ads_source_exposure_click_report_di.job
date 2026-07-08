@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01= \
+WITH base_data AS ( \
+    SELECT deviceudid, dt \
+    FROM lofter.device_active \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) \
+, preprocessed_mda AS ( \
+    SELECT \
+        CASE \
+            WHEN a.eventid IN ('k1-12', 'k1-13') THEN '热搜词' \
+            WHEN a.eventid IN ('k1-14', 'b5-13') THEN '底纹词' \
+            WHEN a.eventid IN ('b5-27', 'b5-28') THEN '搜索Banner' \
+        END AS position, \
+        search_query as queryname, \
+        CASE \
+            WHEN a.eventid IN ('k1-12', 'k1-14', 'b5-27') THEN 'exposure' \
+            ELSE 'click' \
+        END AS event_type, \
+        a.deviceudid, \
+        a.dt \
+    FROM \
+        lofter.dwd_search_action_di AS a \
+    JOIN \
+        base_data AS b ON a.deviceudid = b.deviceudid AND a.dt = b.dt \
+    WHERE \
+        a.dt = '${azkaban.flow.1.days.ago}' \
+        AND a.eventid IN ( \
+            'k1-12', 'k1-13', \
+            'k1-14', 'b5-13', \
+            'b5-27', 'b5-28' \
+        ) \
+) \
+insert overwrite table lofter_dm.ads_source_exposure_click_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    position, \
+    queryname, \
+    COUNT(DISTINCT CASE WHEN event_type = 'exposure' THEN deviceudid END) AS exposure_uv, \
+    COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) AS exposure_pv, \
+    COUNT(DISTINCT CASE WHEN event_type = 'click' THEN deviceudid END) AS click_uv, \
+    COUNT(CASE WHEN event_type = 'click' THEN 1 END) AS click_pv \
+FROM \
+    preprocessed_mda \
+WHERE \
+  queryname IS NOT NULL AND queryname != '' \
+GROUP BY \
+    position, queryname

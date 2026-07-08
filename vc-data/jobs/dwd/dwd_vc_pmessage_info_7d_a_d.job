@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dwd_vc_pmessage_info_7d_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                with duanxin as (select FROM_UNIXTIME(create_time, 'yyyy-MM-dd')          as dt1, \
+                                        FROM_UNIXTIME(create_time, 'yyyy-MM-dd HH:mm:ss') as send_time, \
+                                        source_code, \
+                                        GET_JSON_OBJECT(ext, '$.userId')                  as user_id, \
+                                        GET_JSON_OBJECT(source_content,'$.smsSubTaskId') as sub_task_id, \
+                                        GET_JSON_OBJECT(source_content,'$.smsSubTaskType') as sub_task_type \
+                                 from vc.ods_db_vc_url_source_info_nd \
+                                 where scene = 4 \
+                                   and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') >= '2025-04-17' \
+                                   and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}'), \
+                     sub_task as (select id,GET_JSON_OBJECT(content, '$.scene')                          as scene, \
+                                          task_type \
+                                   from vc.ods_db_vc_sub_task_nd \
+                                   where task_type in (10, 11, 12, 13, 14, 15) \
+                                   group by id,GET_JSON_OBJECT(content, '$.scene'),task_type), \
+                     h5 as (select eventid, \
+                                   REGEXP_REPLACE(REGEXP_REPLACE(attributes['sourcecode'], '^\\\\d!', ''), '!vc.*$', '') as source_code, \
+                                   dt                                                                                  as dt1 \
+                            from vc.ods_mda_wap_di \
+                            where eventid = 'sc1-4' \
+                              and attributes['sourcecode'] != '' \
+                              and instr(attributes['sourcecode'], 'ST') = 0 \
+                              and dt >= '${azkaban.flow.7.days.ago}'), \
+                     mda as (select deviceudid                                                                      as device_udid, \
+                                    user_id, \
+                                    params['type']                                                                  as type, \
+                                    REGEXP_REPLACE(REGEXP_REPLACE(params['sourcecode'], '^\\\\d!', ''), '!vc.*$', '') as source_code, \
+                                    dt                                                                              as dt1 \
+                             from vc.ods_mda_app_di \
+                             where dt >= '2025-04-17' \
+                               and eventid = 'sc1-9' \
+                               and params['type'] in ('sourceCode', 'directly') \
+                               and dt >= '${azkaban.flow.7.days.ago}') \
+                select x1.dt1, \
+                       x1.source_code, \
+                       x1.user_id, \
+                       x2.source_code as h5_source_code, \
+                       x3.device_udid, \
+                       x3.type, \
+                       x3.source_code as servise_source_code, \
+                       x4.scene, \
+                       x4.task_type \
+                from duanxin x1 \
+                         left join sub_task x4 on x1.sub_task_id = x4.id \
+                         left join h5 x2 on x1.source_code = x2.source_code \
+                         left join mda x3 on x1.source_code = x3.source_code ;

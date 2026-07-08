@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select dt, tag, browse_pv, browse_user_bitmap, real_consume_pv,consume_user_bitmap, consume_post_bitmap, expose_pv from lofter.dws_index_tag_action_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.tag_fetch_tag_action_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=dws_index_tag_action_di

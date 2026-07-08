@@ -1,0 +1,101 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.02=insert overwrite table lofter_dm.ads_rec_collection_rec_reason_detail_di partition(dt='${azkaban.flow.1.days.ago}')  \
+    select collectionId, recReason, priority \
+    from ( \
+        select collectionId, \
+                   case when hot_1w_post < 100 then concat('含', hot_1w_post, '篇万热内容') \
+                        else concat('含', cast(hot_1w_post/10 as bigint) * 10, '篇万热内容') end as recReason, \
+            1 as priority \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and hot_1w_post > 5 \
+      union all \
+        select collectionId, \
+               if(sweet_pv >= bitter_pv, concat(sweet_pv, '人觉得很甜'), concat(bitter_pv, '人觉得很虐')) as recReason, \
+                2 as priority \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              nvl(sweet_pv,0) + nvl(bitter_pv,0) > 0 and \
+              (nvl(underscore_comment_pv,0) + nvl(sweet_pv,0) + nvl(bitter_pv,0)) >= 100  \
+      union all \
+        select collectionId,  \
+               case when subscribe_uv_7d < 10000 then concat('近7天', subscribe_uv_7d, '人订阅') \
+                    else printf('近7天%s万人订阅', cast((subscribe_uv_7d/10000) as DECIMAL(10, 1))) end as recReason, 3 as priority \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and subscribe_uv_7d >= 100 \
+      union all \
+        select collectionId, recReason, priority \
+        from ( \
+            select collectionId, 4 as priority, \
+                   concat(case when first_level = 7 and second_level = 1 then '热度飙升榜' \
+                               when first_level = 8 and second_level = 3 then '订阅飙升榜' \
+                               when second_level =  1 then '爆款榜' \
+                               when second_level = 2 then '热门榜' \
+                               when second_level = 3 then '订阅榜' else '热门榜' end, 'TOP', sortNo) as recReason, \
+                   row_number() over (partition by collectionId order by first_level, second_level, sortNo) as list_rk \
+            from lofter_dm.ads_collection_search_hot_list_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where list_rk = 1 and length(recReason) > 0 \
+      union all \
+        select collectionId, \
+                   case when hot_1k_post < 100 then concat('含', hot_1k_post, '篇千热内容') \
+                        else concat('含', cast(hot_1k_post/10 as bigint) * 10, '篇千热内容') end as recReason, 5 as priority \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and hot_1k_post > 15 \
+      union all \
+        select collectionId, \
+               '近期有更新' as recReason, 6 as priority \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 3 \
+      union all \
+        select collectionId, \
+                   case when browse_uv < 10000 then concat(cast(browse_uv/100 as bigint) * 100, '+用户看过') \
+                        else printf('%s万用户看过', cast((browse_uv/10000) as DECIMAL(10, 1))) end as recReason, 7 as priority \
+        from ( \
+            select collectionId, bitmap_count(browse_user_bitmap) as browse_uv \
+            from lofter.dws_collection_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and bitmap_count(browse_user_bitmap) > 10000 \
+        ) \
+      union all \
+        select collectionId, \
+               case when updateDays >= 3 then concat('连续更新',updateDays,'天') \
+                    when update_post_7d >= 2 then concat('7日内更新',update_post_7d,'篇') \
+                    else null \
+               end as recReason, \
+               null as priority \
+        from ( \
+            select collectionId, blogId, update_post_7d, max(updateDays) as updateDays \
+            from ( \
+                select collectionId, blogId, update_post_7d, dts, count(1) as updateDays \
+                from ( \
+                    select collectionId, blogId, update_post_7d, date_sub(publishDate, rn) as dts \
+                    from ( \
+                        select t1.collectionId, t1.blogId, t1.update_post_7d, t3.publishDate, \
+                            row_number() over(partition by t1.collectionId, t1.blogId order by t3.publishDate) as rn \
+                        from ( \
+                            select collectionId, blogId, update_post_7d  \
+                            from ( \
+                                select collectionId, \
+                                    blogId, \
+                                    update_post_7d \
+                                from lofter.dws_collection_dd where dt = '${azkaban.flow.1.days.ago}' and subscribe_uv_acc >= 100 and status = 0 \
+                            ) \
+                        ) t1 \
+                        join ( \
+                            select collectionId, postId from lofter.bridge_collection_post where dt = '${azkaban.flow.1.days.ago}' \
+                        ) t2  \
+                        on t1.collectionId = t2.collectionId \
+                        join ( \
+                            select id, publishDate from lofter.dim_post_article where publishDate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+                        ) t3 \
+                        on t2.postId = t3.id \
+                    ) t4 \
+                ) t5 \
+                group by collectionId, blogId, update_post_7d, dts \
+            ) t6 \
+            group by collectionId, blogId, update_post_7d \
+        ) t7 \
+        where updateDays >= 3 or update_post_7d >= 2 \
+    ) t
+dependencies=ads_collection_search_hot_list_di

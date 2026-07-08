@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_device_ecology_scale_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select new_active,return_active,old_active,mau,new_device_count,natural_new_device_count,content_new_device_count,user_new_device_count,member_new_device_count,else_new_device_count, \
+       return_device_count,natural_return_device_count,content_return_device_count,user_return_device_count,member_return_device_count,else_return_device_count \
+from ( \
+    select dt,count(distinct if(device_type='近30日新增', deviceUdid, null)) new_active, \
+    count(distinct if(device_type='近30日回流', deviceUdid, null)) return_active, \
+    count(distinct if(device_type='持续活跃', deviceUdid, null)) old_active \
+    from lofter.dws_device_growth_dau_stratify_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) a \
+left join ( \
+    select dt,count(distinct deviceUdid) mau \
+    from lofter.dws_par_device_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and active_days_30d>0 \
+    group by dt \
+) b on a.dt=b.dt \
+left join ( \
+    select dt, \
+        sum(if(device_type = 'new', device_count,0)) new_device_count, \
+        sum(distinct case when device_type = 'new' and growth_strategy_type='自然' then device_count end) natural_new_device_count, \
+        sum(distinct case when device_type = 'new' and growth_strategy_type='内容' then device_count end) content_new_device_count, \
+        sum(distinct case when device_type = 'new' and growth_strategy_type='用户' then device_count end) user_new_device_count, \
+        sum(distinct case when device_type = 'new' and growth_strategy_type='会员' then device_count end) member_new_device_count, \
+        sum(distinct case when device_type = 'new' and growth_strategy_type='其他' then device_count end) else_new_device_count, \
+        sum(if(device_type = 'return_30', device_count,0)) return_device_count, \
+        sum(distinct case when device_type = 'return_30' and growth_strategy_type='自然' then device_count end) natural_return_device_count, \
+        sum(distinct case when device_type = 'return_30' and growth_strategy_type='内容' then device_count end) content_return_device_count, \
+        sum(distinct case when device_type = 'return_30' and growth_strategy_type='用户' then device_count end) user_return_device_count, \
+        sum(distinct case when device_type = 'return_30' and growth_strategy_type='会员' then device_count end) member_return_device_count, \
+        sum(distinct case when device_type = 'return_30' and growth_strategy_type='其他' then device_count end) else_return_device_count \
+    from ( \
+        select dt,device_type,origin_type,is_paid_subscribe_origin,origin_channel,growth_strategy_type, \
+               count(distinct deviceudid) device_count \
+        from ( \
+            select dt,device_type, origin_type, origin_channel, deviceUdid, is_paid_subscribe as is_paid_subscribe_origin, is_whiteboard, \
+              case when origin_type='自然' then '自然' \
+                   when (origin_type='广告' or (origin_type='口令' and is_paid_subscribe=0 and origin_channel like '米良%' and origin_channel not in ('米良[YUJIN]', ' 米良[小红书运营]')) or origin_channel in ('CPA智投','快手')) then '内容' \
+                   when (origin_type='口令' and origin_channel in ('KOC招募','嗑学 杯','嗑学杯','热爱者申报','推文视频','自分享','运粮官','站外运粮官','站外运粮官-星瓦克', '金句', '米良[YUJIN]', ' 米良[小红书运营]')) then '用户' \
+                   when is_paid_subscribe=1 then '会员' else  '其他' end as growth_strategy_type \
+            from lofter.dwd_device_growth_attribution_di \
+            where dt='${azkaban.flow.1.days.ago}' \
+        ) t \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by dt,device_type,origin_type,is_paid_subscribe_origin,origin_channel,growth_strategy_type \
+    ) tt \
+    group by dt \
+) c on a.dt=c.dt \

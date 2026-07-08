@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag as tag, \
+       a.domainId, a.domain_name as domainName, a.is_activity_tag as isActivityTag, \
+       browsingCount, browsingUserCount, newBrowsingCount,newBrowsingUserCount, \
+       clientTagBrowsingCount, pcTagBrowsingCount, h5TagBrowsingCount,miniTagBrowsingCount, \
+       hot, postCount, commendCount, newCommendCount, praiseCount,reproduceCount, recommendCount, subscribeCount, \
+       newSubscribeCount, unsubscribeCount, newUserHot, newPostHot \
+from lofter.dim_tag a \
+left join ( \
+    select tag, \
+           count(1) as browsingCount, \
+           count(distinct userId) as browsingUserCount, \
+           sum(if(u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newBrowsingCount, \
+           sum(distinct if(u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', a.userId, null)) as newBrowsingUserCount, \
+           sum(if(platform in ('ANDROID','IPHONE','IPAD'), 1, 0)) as clientTagBrowsingCount, \
+           sum(if(platform in ('PC'), 1, 0)) as pcTagBrowsingCount, \
+           sum(if(platform in ('MOBILE'), 1, 0)) as h5TagBrowsingCount, \
+           sum(if(platform in ('MINI'), 1, 0)) as miniTagBrowsingCount \
+    from lofter.dwd_tag_browse_di a \
+         left join lofter.dim_user u on a.userId = u.id \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.tag = b.tag \
+left join ( \
+    select tag, \
+           sum(hot) as hot, \
+           sum(publishCount) as postCount,sum(commendCount) as commendCount, \
+           sum(praiseCount) as praiseCount, sum(recommendCount) as recommendCount,sum(reproduceCount) as reproduceCount, \
+           sum(newHot) as newUserHot,sum(newCommendCount) as newCommendCount, \
+           sum(if(postPublishDate='${azkaban.flow.1.days.ago}', hot, 0)) as newPostHot \
+    from lofter_dm.ads_post_general_di \
+         lateral view explode(tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) c on a.tag = c.tag \
+left join ( \
+    select a.tag, \
+           count(1) as subscribeCount, \
+           count(distinct a.userId) as subscribeUserCount, \
+           sum(if(u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newSubscribeCount, \
+           0L as unsubscribeCount \
+    from lofter.dwd_tag_subscribe_di a \
+         left join lofter.dim_user u on a.userId = u.id \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.tag = d.tag \
+where b.tag is not null or c.tag is not null or d.tag is not null \
+distribute by 1
+dependencies=ads_post_general_di

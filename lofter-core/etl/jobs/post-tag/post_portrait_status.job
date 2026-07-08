@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.UserTagClickHouseLoad
+params=--ready --dt '${azkaban.flow.1.days.ago}' --flagTable lofter.post_portrait_status
+retries=0
+dependencies=ads_post_tag_group_level1_load2clickhouse,ads_post_tag_group_level2_load2clickhouse,ads_post_tag_metric_level1_load2clickhouse

@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_blog_bind_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select orgId,blogId, \
+      sum(playNum) as playNum, \
+      sum(realPlayNum) as realPlayNum, \
+      sum(likeNum) as likeNum, \
+      sum(recommendNum) as recommendNum, \
+      sum(commentNum) as commentNum, \
+      sum(hotNum) as hotNum \
+from ( \
+    select orgId,a.blogId,postId,publishTime \
+    from ( \
+        select orgId,blogId,bindTime \
+        from lofter_db_dump.ods_db_media_org_bind_user_nd \
+        where status=0 \
+    ) a join ( \
+        select id as postId,blogId, publishTime \
+        from lofter_db_dump.ods_db_post_nd \
+        where type = 4 and citeRootPostid = 0 and valid<>32 and \
+             from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd') between '2021-04-14' and '${azkaban.flow.1.days.ago}' \
+    ) b on a.blogId = b.blogId and a.bindTime < b.publishTime \
+) m \
+left join ( \
+    select nvl(a.postId,nvl(b.postId,c.postId)) as postId,likeNum,recommendNum,hotNum,commentNum,realPlayNum,playNum \
+    from ( \
+        select postId, playUv as playNum, realPlayUv as realPlayNum \
+        from lofter.dws_video_post_general_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a full join ( \
+        select postId, \
+               sum(if(opType = 'praise', 1, 0)) as likeNum, \
+               sum(if(opType = 'recommend', 1, 0)) as recommendNum, \
+               count(1) as hotNum \
+        from lofter.dwd_post_hot_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postId \
+    ) b on a.postId = b.postId \
+    full join ( \
+        select postId, count(1) as commentNum \
+        from lofter.dwd_post_response_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postId \
+    ) c on a.postId = c.postId \
+) n on m.postId = n.postId \
+group by orgId, blogId \
+distribute by 1

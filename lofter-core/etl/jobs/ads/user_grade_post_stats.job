@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ads.UserGradePostStats
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=ads_high_security_user_di

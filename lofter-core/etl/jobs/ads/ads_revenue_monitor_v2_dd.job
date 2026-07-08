@@ -1,0 +1,87 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=\
+with orders as ( \
+     select userId, revenue_module, `money`, product_num, pay_date, 0 as is_ad, \
+           row_number() over (partition by userId order by pay_time) as user_first_pay_rk, \
+           row_number() over (partition by userId, revenue_module order by pay_time) as module_first_pay_rk \
+     from lofter.dwd_user_order_dd \
+     where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' \
+   union all \
+     select userId, 'all' as revenue_module, `money`, product_num, pay_date, 0 as is_ad, \
+           row_number() over (partition by userId order by pay_time) as user_first_pay_rk, \
+           row_number() over (partition by userId order by pay_time) as module_first_pay_rk \
+     from lofter.dwd_user_order_dd \
+     where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' \
+   union all \
+     select userId, revenue_module, `money`, 1 as product_num, request_date as pay_date, 1 as is_ad, \
+           row_number() over (partition by userId order by request_time) as user_first_pay_rk, \
+           row_number() over (partition by userId, revenue_module order by request_time) as module_first_pay_rk \
+     from lofter.dwd_user_ad_revenue_di \
+     where dt <= '${azkaban.flow.1.days.ago}' and is_paid_post > 0 \
+), first_pay_users as ( \
+     select b.period, a.userId, min(pay_date) as pay_date \
+     from orders a \
+     join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+     where a.user_first_pay_rk = 1 and b.calendar_date = '${azkaban.flow.1.days.ago}' and is_ad = 0 \
+     group by 1, 2 \
+), module_first_pay_users as ( \
+     select b.period, a.revenue_module, a.userId, min(pay_date) as pay_date \
+     from orders a \
+     join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+     where a.module_first_pay_rk = 1 and b.calendar_date = '${azkaban.flow.1.days.ago}' \
+     group by 1, 2, 3 \
+), module_repay_users as ( \
+     select b.period, a.revenue_module, a.userId, count(distinct pay_date) as pay_days \
+     from orders a \
+     join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+     where a.module_first_pay_rk = 1 and b.calendar_date = '${azkaban.flow.1.days.ago}' \
+     group by 1, 2, 3 \
+     having pay_days > 1 \
+) \
+insert overwrite table lofter_dm.ads_revenue_monitor_v2_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+    select b.period as stat_period, a.revenue_module as pay_type, \
+        bitmap_count(to_bitmap(a.userId)) as pay_uv, \
+        count(1) as trade_num, \
+        sum(a.`money`) as trade_money, \
+        sum(a.product_num) as product_num, \
+        count(distinct d.userId) as first_pay_uv, \
+        sum(if(d.userId is not null, 1, 0)) as first_trade_num, \
+        sum(if(d.userId is not null, a.`money`, 0)) as first_trade_money, \
+        sum(if(d.userId is not null, a.product_num, 0)) as first_product_num, \
+        count(distinct c.userId) as overall_first_pay_uv, \
+        sum(if(c.userId is not null, 1, 0)) as overall_first_trade_num, \
+        sum(if(c.userId is not null, a.`money`, 0)) as overall_first_trade_money, \
+        sum(if(c.userId is not null, a.product_num, 0)) as overall_first_product_num, \
+        count(distinct e.userId) as re_pay_uv, \
+        sum(if(e.userId is not null, a.`money`, 0)) as re_pay_trade_money, \
+        to_bitmap(a.userId) as pay_uv_bitmap \
+    from orders a \
+    join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+    left join first_pay_users c on b.period = c.period and a.userId = c.userId \
+    left join module_first_pay_users d on b.period = d.period and a.revenue_module = d.revenue_module and a.userId = d.userId \
+    left join module_repay_users e on b.period = e.period and a.revenue_module = e.revenue_module and a.userId = e.userId \
+    where b.calendar_date = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+  union all \
+    select 'history' as stat_period, a.revenue_module as pay_type, \
+        bitmap_count(to_bitmap(a.userId)) as pay_uv, \
+        count(1) as trade_num, \
+        sum(a.`money`) as trade_money, \
+        sum(a.product_num) as product_num, \
+        null as first_pay_uv, \
+        null as first_trade_num, \
+        null as first_trade_money, \
+        null as first_product_num, \
+        null as overall_first_pay_uv, \
+        null as overall_first_trade_num, \
+        null as overall_first_trade_money, \
+        null as overall_first_product_num, \
+        count(distinct b.userId) as re_pay_uv, \
+        sum(if(b.userId is not null, a.`money`, 0)) as re_pay_trade_money, \
+        to_bitmap(a.userId) as pay_uv_bitmap \
+    from orders a \
+    left join (select userId, count(distinct pay_date) as pay_days from orders group by 1 having pay_days > 1) b on a.userId = b.userId \
+    group by a.revenue_module
+dependencies=

@@ -1,0 +1,18 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 入池文章 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '入池文章' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '入池文章' as tag, \
+                                          case when post_count_recommend_pool_180d < 3 then 'COUNT_1_3' \
+                                               when post_count_recommend_pool_180d < 7 then 'COUNT_3_7' \
+                                               else 'COUNT_7' end as grp \
+                                  from lofter.dws_par_creator_level_scoring_dd \
+                                  where dt='${azkaban.flow.1.days.ago}' and post_count_recommend_pool_180d > 0   ) "

@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_act_pve_action_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select attributes['clienthubbledeviceid'] as deviceUdid, userId, \
+       attributes['activityid'] as activityId, deviceOs, eventId, \
+       attributes['scene'] as scene, occurTime, attributes, \
+       cast(nvl(parse_url(currentUrl, "QUERY", "roleId"), attributes['roleid']) as bigint) as roleId, \
+       currentUrl \
+from lofter.ods_mda_wap_di \
+where dt = '${azkaban.flow.1.days.ago}' and eventId like 'pve-%' \

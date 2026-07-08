@@ -1,0 +1,56 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_push_discuss_question_update_di partition(dt = '${azkaban.flow.current.date}') \
+select r1.userId, \
+       r1.questionId \
+from ( \
+    select userId, \
+           questionId \
+    from ( \
+        select userId, \
+               questionId, \
+               row_number() over(partition by userId order by type, discussCount desc) as rn \
+        from ( \
+            select t1.userId, \
+                   t1.questionId, \
+                   t1.type, \
+                   nvl(t2.discussCount, 0) as discussCount \
+            from ( \
+                select userId, \
+                       questionId, \
+                       1 as type \
+                from lofter.dwd_post_talk_response_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and talkType in ('ANSWER', 'COS_ANSWER') and questionId <> 0 \
+                group by userId, questionId \
+                union all \
+                select userId, \
+                       questionId, \
+                       2 as type \
+                from lofter.dwd_post_talk_hot_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and talkType in ('ANSWER', 'COS_ANSWER') and questionId <> 0 \
+                group by userId, questionId \
+                union all \
+                select userId, \
+                       questionId, \
+                       3 as type \
+                from lofter.dwd_post_talk_browse_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and talkType in ('ANSWER', 'COS_ANSWER') and questionId <> 0 \
+                group by userId, questionId \
+                having count(distinct talkId) >= 3 \
+            ) t1 \
+            left join ( \
+               select talkId, discussCount from lofter.dim_post_talk where talkType in ('QUESTION', 'COS_QUESTION') \
+            ) t2 \
+            on t1.questionId = t2.talkId \
+        ) t3 \
+    ) t4 \
+    where rn = 1 \
+) r1 \
+join ( \
+    select questionId \
+    from lofter.dim_post_talk \
+    where talkType in ('ANSWER', 'COS_ANSWER') and createDate between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and questionId <> 0 \
+    group by questionId \
+    having count(distinct talkId) >= 3 \
+) r2 \
+on r1.questionId = r2.questionId

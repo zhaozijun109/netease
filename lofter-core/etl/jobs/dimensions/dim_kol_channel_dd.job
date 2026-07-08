@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_kol_channel_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select id, channel \
+from ( \
+    select userId as id, concat('米良[', nickName, ']') as channel, \
+           row_number() over (partition by nickName order by createTime desc) rnk, \
+           row_number() over (partition by userId order by createTime desc) rnk2 \
+    from ( \
+        select nickName, userId, createTime \
+        from lofter_db_dump.ods_db_kol_user_nd \
+        where leaderId = 0 \
+    ) a join (select leaderId from lofter_db_dump.ods_db_kol_promote_word_nd group by leaderId) b on a.userId = b.leaderId \
+) t \
+where rnk = 1 and rnk2 = 1

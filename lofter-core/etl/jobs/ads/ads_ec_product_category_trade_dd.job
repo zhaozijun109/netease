@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_category_trade_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select b.category1 as category_id, b.category1_name as category_name, sum(storePrice * productNum - newCouponPreferential) as gmv_30d \
+    from lofter_db_dump.ods_db_benefit_order_product_nd a \
+    join lofter.dim_benefit_product b on a.productId = b.productId \
+    where a.status in (1,3,4) and \
+          from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    group by b.category1, b.category1_name \
+ union all \
+     select b.category2 as category_id, b.category2_name as category_name, sum(storePrice * productNum - newCouponPreferential) as gmv_30d \
+     from lofter_db_dump.ods_db_benefit_order_product_nd a \
+     join lofter.dim_benefit_product b on a.productId = b.productId \
+     where a.status in (1,3,4) and \
+           from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+           from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+     group by b.category2, b.category2_name \
+ union all \
+     select b.category3 as category_id, b.category3_name as category_name, sum(storePrice * productNum - newCouponPreferential) as gmv_30d \
+     from lofter_db_dump.ods_db_benefit_order_product_nd a \
+     join lofter.dim_benefit_product b on a.productId = b.productId \
+     where a.status in (1,3,4) and \
+           from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+           from_unixtime(cast(a.createTime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+     group by b.category3, b.category3_name \
+) t \
+where category_id > 0

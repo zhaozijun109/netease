@@ -1,0 +1,79 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_tag_dd  partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.tag,case when b.tag is not null then 1 else 0 end is_cmb_tag,derivedflag,ipflag,fanflag,cpflag, \
+       entity,entityspecific,cpprops,otherprops,specialsettingflag,ips,categories, \
+       if(d.tag is not null, 1, 0) as is_activity_tag, \
+       e.domainId, e.domainName as domain_name,dbcreatetime,dbupdatetime \
+from \
+(     \
+    select tag \
+    from lofter.dim_post_article \
+    lateral view explode(tags) t1 as tag \
+    group by tag \
+) a \
+left join \
+( \
+    select a.tag,derivedflag,ipflag,fanflag,cpflag,entity,entityspecific,cpprops,otherprops,specialsettingflag,concat_ws(',',collect_set(b.ip)) as ips,dbcreatetime,dbupdatetime \
+    from \
+    ( \
+        select name tag,derivedflag,ipflag,fanflag,cpflag,entity,entityspecific,cpprops,otherprops,specialsettingflag,dbcreatetime,dbupdatetime \
+        from lofter_db_dump.ods_db_cmb_tag_nd \
+        where status=0 \
+    ) a \
+    left join \
+    ( \
+        select tag,ip \
+        from lofter.dwd_tag_ip_mapping_nd \
+        group by tag,ip  \
+    ) b \
+    on a.tag=b.tag \
+    group by a.tag,derivedflag,ipflag,fanflag,cpflag,entity,entityspecific,cpprops,otherprops,specialsettingflag,dbcreatetime,dbupdatetime \
+) b \
+on a.tag=b.tag \
+left join \
+( \
+    select a.tag,concat_ws(',',collect_set(b.category)) as categories \
+    from \
+    ( \
+        select name tag,categoryid \
+        from lofter_db_dump.ods_db_cmb_tag_nd \
+        lateral view explode(split(categoryids,',')) t as categoryid \
+        where status=0 \
+    ) a \
+    left join \
+    ( \
+        select id as categoryId, name as category \
+        from lofter_db_dump.ods_db_cmb_category_nd where level = 1 and status = 0 \
+        union all \
+        select a.id as categoryId, concat_ws('-', b.name, a.name) as category \
+        from lofter_db_dump.ods_db_cmb_category_nd a \
+        join lofter_db_dump.ods_db_cmb_category_nd b on a.parentId = b.id \
+        where a.level = 2 and a.status = 0 and b.level = 1 and b.status = 0 \
+        union all \
+        select a.id as categoryId, concat_ws('-', c.name, b.name, a.name) as category \
+        from lofter_db_dump.ods_db_cmb_category_nd a \
+        join lofter_db_dump.ods_db_cmb_category_nd b on a.parentId = b.id \
+        join lofter_db_dump.ods_db_cmb_category_nd c on b.parentId = c.id \
+        where a.level = 3 and a.status = 0 and b.level = 2 and b.status = 0 and c.level = 1 and c.status = 0 \
+    ) b \
+    on a.categoryid=b.categoryId \
+    group by a.tag \
+) c on a.tag=c.tag \
+left join ( \
+    select tagName as tag from lofter_db_dump.ods_db_activity_tag_nd group by 1 \
+) d on a.tag = d.tag \
+left join ( \
+    select tag, domainId, domainName \
+    from ( \
+      select tagName as tag, domainId, domainName, \
+             row_number() over (partition by tagName order by domainId) as domainRank \
+      from ( \
+        select id as domainId, domainName,tagName \
+        from lofter.dim_domain \
+            lateral view explode(tags) ss as tagName \
+      ) t \
+    ) tt \
+    where domainRank = 1 \
+) e on a.tag = e.tag
+hive.query.02=create or replace view lofter.dim_tag as select * from lofter.dim_tag_dd where dt = '${azkaban.flow.1.days.ago}';
+dependencies=dim_post_article,dim_domain

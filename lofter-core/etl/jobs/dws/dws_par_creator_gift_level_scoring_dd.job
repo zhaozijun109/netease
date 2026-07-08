@@ -1,0 +1,318 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03= \
+with creator_month_income_summary as ( \
+    select a.blogId, a.flg, b.uv, b.num, b.money, b.repeat_uv, \
+           b.subscribe_after_unlock_uv, b.fenwei, c.month_settled_income \
+    from ( \
+        select blogId, flg \
+        from lofter.dws_par_creator_gift_level_scoring_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select blogid, \
+               count(distinct userid) as uv, \
+               count(distinct if(num > 1, userId, null)) as repeat_uv, \
+               count(distinct if(is_subscribe_after_unlock > 0, userId, null)) as subscribe_after_unlock_uv, \
+               percentile_approx(num, array(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9),9999) as fenwei, \
+               sum(num) as num, \
+               sum(money) as money \
+        from ( \
+            select x.blogId, x.userId, x.num, x.money, if(x.month_first_unlock_time < y.max_subscribe_time, 1, 0) as is_subscribe_after_unlock \
+            from ( \
+                select blogId, userId, sum(num) as num, sum(money) as money, min(month_first_unlock_time) as month_first_unlock_time \
+                from ( \
+                    select a.blogid as blogid, a.userid as userId, count(1) as num, sum(money) as money, min(unlock_time) as month_first_unlock_time \
+                    from ( \
+                        select userid,postid,blogid,content_type, money, unlock_time \
+                        from lofter.dwd_gift_post_unlock_dd \
+                        where dt = '${azkaban.flow.1.days.ago}' and unlock_method <> '粮票' and \
+                            from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                            and content_type in ('图片','文字') \
+                    ) a \
+                    join ( \
+                        select blogid \
+                        from lofter.dim_gift_post_return_dd \
+                        where dt = '${azkaban.flow.1.days.ago}' and blog_channel = 0 \
+                        group by 1 \
+                    ) b on a.blogid=b.blogid \
+                    group by a.blogid, a.userid \
+                  union all \
+                    select blogid, userId, count(1) * 10 as num, sum(money) as money, min(pay_time) as month_first_unlock_time \
+                    from lofter.dwd_user_order_dd \
+                    where dt = '${azkaban.flow.1.days.ago}' and order_type in ('fans_vip') and \
+                          pay_date <= '${azkaban.flow.1.days.ago}' and \
+                          pay_date >= '${azkaban.flow.30.days.ago}' \
+                    group by blogid, userId \
+                ) t \
+                group by 1, 2 \
+            ) x \
+            left join ( \
+                select blogId, userId, max(followTime) as max_subscribe_time \
+                from ( \
+                    select blogId, userId, followTime \
+                    from lofter_db_dump.ods_db_user_following_nd \
+                  union all \
+                    select b.blogId as blogId, a.userId as userId, a.createTime as followTime \
+                    from lofter_db_dump.ods_db_subscribe_collection_nd a \
+                    join lofter_db_dump.ods_db_post_collection_nd b on a.collectionId = b.id \
+                ) t \
+                group by 1, 2 \
+            ) y on x.blogId = y.blogId and x.userId = y.userId \
+        ) t1 \
+        group by 1 \
+    ) b on a.blogId = b.blogId \
+    left join ( \
+      select userId, sum(delta) as month_settled_income \
+      from lofter_db_dump.ods_db_trade_gift_money_balance_log_nd \
+      where type in (2, 4, 5) and \
+            from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 28) \
+      group by userId \
+    ) c on a.blogid = c.userid \
+), \
+creator_post_score as ( \
+    select blogid, content_flg as flg, \
+           sum(post_score * (1.0 / rk + if(rk = 1, 0, 0.2))) as post_score_all, \
+           count(distinct postId) as top5_post_count \
+    from ( \
+        select *, row_number() over(partition by blogid order by post_score desc) as rk \
+        from lofter.dws_gift_post_premium_post_score_di \
+        where dt = '${azkaban.flow.1.days.ago}' and post_score > 0 \
+    ) t \
+    where rk <= 5 \
+    group by 1, 2 \
+), \
+creator_post_score_level_maneuver as ( \
+    select a.flg, a.blog_channel, a.blogid, \
+        case when fumian_post_num = 1 then 1 \
+            when youzhi_post_num = 0 then 2 \
+            when fumian_post_num >= 2 then 0 \
+            when post_count > 0 and fans_vip_money >= 20 then 3 \
+            when post_count > 0 and amount=0 then 4 \
+            else null end as maneuver_flg \
+    from ( \
+        select content_flg as flg,blog_channel,blogid, \
+               count(distinct case when fumian_flg=2 then postid else null end) as fumian_post_num, \
+               count(distinct case when type_dd='优质' and fumian_flg!=2 then postid else null end) as youzhi_post_num, \
+               sum(jiesuo_money) as amount, \
+               count(distinct postId) as post_count \
+        from lofter.dws_gift_post_premium_post_score_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by content_flg,blog_channel,blogid \
+    ) a \
+    left join ( \
+        select blogid, sum(money) as fans_vip_money \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and order_type in ('fans_vip') and \
+              pay_date <= '${azkaban.flow.1.days.ago}' and \
+              pay_date >= '${azkaban.flow.30.days.ago}' \
+        group by blogid \
+    ) b on a.blogid = b.blogid \
+), \
+creator_post_score_level as ( \
+    select flg, blogId, post_score_level, \
+               case when maneuver_flg = 0 and origin_post_score_level in (1,2) then  0.2 * (1 - rk_ratio) \
+                    when maneuver_flg in (1, 2) and origin_post_score_level = 1 then  0.8 * (1 - rk_ratio) \
+                    when maneuver_flg = 3 and origin_post_score_level = 3 then 4.0 * (1 - rk_ratio) \
+                    when maneuver_flg = 4 and post_score_level = 1 then  0.2 * (1 - rk_ratio) \
+                    when maneuver_flg = 4 and post_score_level = 2 then  (0.2 / 0.9) * (1 - rk_ratio) \
+                    when post_score_level = 1 then greatest(1 - 2 * rk_ratio, 0.8) \
+                    when post_score_level = 2 then least(greatest((0.8 / 0.9) * (1 - rk_ratio), 0.2), 0.79) \
+                    when post_score_level = 3 then least((1 - rk_ratio), 0.19) \
+                    when post_score_level is null then null \
+                    else 1 - rk_ratio end as post_score_percentile, \
+           top5_post_count, post_score_all, maneuver_flg \
+    from ( \
+        select flg, blogId, \
+               case when maneuver_flg = 0 then greatest(post_score_level, 3) \
+                    when maneuver_flg in (1, 2) then greatest(post_score_level, 2) \
+                    when maneuver_flg = 3 then least(post_score_level, 2) \
+                    when maneuver_flg = 4 then greatest(post_score_level, 3) \
+                    else post_score_level end as post_score_level, \
+               post_score_level as origin_post_score_level, \
+               blog_rk * 1.0 / blog_rk_max as rk_ratio, \
+               top5_post_count, post_score_all, maneuver_flg \
+        from ( \
+            select b.flg, b.blogid, b.post_score_all, \
+                   case when b.post_score_all >= fenwei[8] then 1 \
+                        when b.post_score_all >= fenwei[1] then 2 \
+                        when b.top5_post_count > 0 then 3 \
+                        else null end as post_score_level, \
+                   c.maneuver_flg, b.top5_post_count, blog_rk, blog_rk_max \
+            from ( \
+                select flg, percentile_approx(post_score_all, array(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9),9999) as fenwei \
+                from creator_post_score \
+                group by flg \
+            ) a \
+            join ( \
+                select flg, post_score_all, blogid, top5_post_count, \
+                       row_number() over (partition by flg order by post_score_all desc) as blog_rk, \
+                       count(1) over (partition by flg) as blog_rk_max \
+                from creator_post_score \
+            ) b on a.flg = b.flg \
+            left join creator_post_score_level_maneuver c on b.blogId = c.blogId \
+        ) t \
+    ) tt \
+), \
+creator_affinity_level as ( \
+    select blogId, flg, affinity_level, \
+           case when affinity_level = 1 then (0.8 + 0.2 * uv / flg_max_uv) \
+                when affinity_level = 2 then (0.5 + 0.3 * uv / flg_max_uv) \
+                when affinity_level = 3 then (0.2 + 0.3 * uv / flg_max_uv) \
+                else null end as affinity_percentile \
+    from ( \
+        select blogId, flg, uv, \
+               case when uv >= 60 and fenwei[5] >= 2 then 1 \
+                    when uv >= 60 and fenwei[8] >= 2 then 2 \
+                    when uv >= 60 then 3 \
+                    else null end as affinity_level, \
+               max(uv) over (partition by flg) as flg_max_uv \
+        from creator_month_income_summary \
+    ) t \
+), \
+creator_gift_level as ( \
+    select a.blogId, a.flg, \
+           case when e.online_grade = 1 then 1 \
+                when d.month_settled_income >= 100 and post_score_level = 1 and nvl(affinity_level, 2) <= 2 then 4 \
+                when d.month_settled_income >= 100 and post_score_level <= 2 and affinity_level = 1 then 4 \
+                when d.month_settled_income >= 20 and if(e.online_grade >= 3 and post_score_level is null, 2, post_score_level) <= 2 then 3 \
+                else 2 end as grade, \
+           null as level \
+    from ( \
+        select blogId, flg \
+        from lofter.dws_par_creator_gift_level_scoring_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and flg in ('文手','画手') \
+    ) a \
+    join ( \
+        select userId \
+        from ( \
+            select userId from lofter_db_dump.ods_db_trade_gift_pay_account_nd where status = 2 \
+          union \
+            select userId from lofter_db_dump.ods_db_trade_gift_account_nd where status = 2 \
+        ) t \
+    ) a1 on a.blogId = a1.userId \
+    left join creator_post_score_level b on a.blogId = b.blogId \
+    left join creator_affinity_level c on a.blogId = c.blogId \
+    left join creator_month_income_summary d on a.blogId = d.blogId \
+    left join ( \
+        select userId, grade as online_grade \
+        from lofter_db_dump.ods_db_trade_pay_grade_nd \
+    ) e on a.blogId = e.userId \
+) \
+insert overwrite table lofter.dws_par_creator_gift_level_scoring_dd partition(dt= '${azkaban.flow.1.days.ago}') \
+ select a.blogid, a.flg, a.level, \
+ 	CASE \
+ 		WHEN publish_activity_level_rk <= (a.uv / 10 * 2) \
+ 			THEN 1 \
+ 		WHEN publish_activity_level_rk > (a.uv / 10 * 6) \
+ 			THEN - 1 \
+ 		ELSE 0 \
+ 		END AS publish_activity_level \
+ 	,CASE \
+ 		WHEN user_experience_level_rk <= (a.uv / 10 * 2) and grade = 4 \
+ 			THEN 1 \
+ 		WHEN user_experience_level_rk > (a.uv / 10 * 8)  or grade = 2 \
+ 			THEN - 1 \
+ 		ELSE 0 \
+ 		END AS user_experience_level \
+ 	,CASE \
+ 		WHEN post_hot_level_rk <= (a.uv / 10 * 2)  and grade <> 2 \
+ 			THEN 1 \
+ 		WHEN post_hot_level_rk > (a.uv / 10 * 8) and grade <> 4 \
+ 			THEN - 1 \
+ 		ELSE 0 \
+ 		END AS post_hot_level \
+ 	,CASE \
+ 		WHEN gift_conversion_level_rk <= (a.uv / 10 * 2) and grade = 4 \
+ 			THEN 1 \
+ 		WHEN gift_conversion_level_rk > (a.uv / 10 * 8) and grade <> 4  \
+ 			THEN - 1 \
+ 		ELSE 0 \
+ 		END AS gift_conversion_level, \
+    a.grade, \
+    b.post_score_all, \
+    b.post_score_percentile, \
+    b.top5_post_count, \
+    e.affinity_level, \
+    e.affinity_percentile, \
+    c.top5_post_tags, \
+    d.num / d.uv as gift_avg_count, \
+    d.repeat_uv / d.uv as gift_repeat_ratio, \
+    d.subscribe_after_unlock_uv / d.uv as gift_subscribe_ratio, \
+    d.num as gift_count, \
+    d.money as gift_amount, \
+    b.post_score_level, \
+    b.maneuver_flg, \
+    d.month_settled_income \
+ from ( \
+ 	select flg, blogid, level, grade \
+ 		,rank() OVER ( \
+ 			PARTITION BY flg ORDER BY publish_activity_level DESC \
+ 			) AS publish_activity_level_rk \
+ 		,rank() OVER ( \
+ 			PARTITION BY flg ORDER BY user_experience_level DESC \
+ 			) AS user_experience_level_rk \
+ 		,rank() OVER ( \
+ 			PARTITION BY flg ORDER BY post_hot_level DESC \
+ 			) AS post_hot_level_rk \
+ 		,rank() OVER ( \
+ 			PARTITION BY flg ORDER BY gift_conversion_level DESC \
+ 			) AS gift_conversion_level_rk, \
+ 		bitmap_count(to_bitmap(blogId) over (partition by flg)) as uv \
+ 	from ( \
+ 		select a.flg \
+ 			,a.blogid \
+ 			,a.level \
+ 			,a.grade \
+ 			,count(DISTINCT postid) AS publish_activity_level \
+ 			,sum(user_experience_level) AS user_experience_level \
+ 			,sum(post_hot_level) AS post_hot_level \
+ 			,sum(gift_conversion_level) AS gift_conversion_level \
+ 		from creator_gift_level a \
+ 		left join ( \
+ 			SELECT blogid \
+ 				,postid \
+ 				,(zhenrate_ln + furate_ln) AS user_experience_level \
+ 				,(realbrowse_rate_ln + hd_rate_ln) AS post_hot_level \
+ 				,(qianbg_amount_ln + liulan_fufei_rate_ln) AS gift_conversion_level \
+ 			FROM lofter.dws_gift_post_premium_scoring_detail_dd \
+ 			WHERE dt = '${azkaban.flow.1.days.ago}' \
+ 				AND publishdate BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+ 	    ) b on a.blogid = b.blogid \
+        left join ( \
+            select blogId, \
+                   sum(if(unlock_method = '礼物', money, 0)) unlock_gift_money, \
+                   sum(if(unlock_method = '粮票', grain_tickets, 0)) unlock_grain_ticket, \
+                   sum(if(unlock_method = '券包', money, 0)) unlock_coupon_money \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                  from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                  from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            group by 1 \
+            having (nvl(unlock_gift_money,0) + nvl(unlock_grain_ticket, 0) * 0.011 + nvl(unlock_coupon_money,0)) >= 30 \
+        ) c on a.blogid = c.blogid \
+ 		group by 1, 2, 3, 4 \
+ 	) a \
+ ) a \
+ left join creator_post_score_level b on a.blogId = b.blogId \
+ left join ( \
+     select blogId, transform(sort_array(collect_set(struct(rk, tag)), true), x -> x.tag) as top5_post_tags \
+     from ( \
+         select blogId, tag, tag_post_count, row_number() over (partition by blogId order by tag_post_count desc) as rk \
+         from ( \
+             select blogId, tag, count(distinct postId) as tag_post_count \
+             from lofter.dws_gift_post_premium_scoring_detail_dd \
+                 lateral view explode(tags) as tag \
+             where dt = '${azkaban.flow.1.days.ago}' \
+             group by 1, 2 \
+         ) t \
+     ) tt \
+     where rk <= 5 and tag_post_count > 0 \
+     group by 1 \
+ ) c on a.blogId = c.blogId \
+ left join creator_month_income_summary d on a.blogId = d.blogId \
+ left join creator_affinity_level e on a.blogId = e.blogId \
+
+dependencies=dws_par_creator_gift_level_scoring_detail_dd,dws_par_creator_level_scoring_dd,dws_gift_post_premium_post_score_di

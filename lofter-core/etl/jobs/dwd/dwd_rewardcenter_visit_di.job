@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE lofter.dwd_rewardcenter_visit_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT userid, deviceudid, eventid, actiontype, occurtime, \
+       parse_url(params['currentUrl'], 'QUERY', 'rc_source_type') as source_type, \
+       parse_url(params['currentUrl'], 'QUERY', 'rc_source')  as source \
+FROM lofter.ods_mda_app_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+  AND eventid LIKE 'rewardcenter%' \
+  AND userid > 0 \
+distribute by 1

@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dws_creator_browse_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select post_userId as blogId, userId, min(occurTime) as first_time, max(occurTime) as last_time \
+from lofter.dwd_post_browse_di \
+where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+group by 1, 2 \

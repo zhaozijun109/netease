@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.bad=" \
+select sum(if(actpwd is not null, 1, 0)) / count(1) as attribute_percent, count(1) as total_order_count \
+from lofter.dwd_membership_order_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+having total_order_count > 0 and attribute_percent < 0.2 \
+"
+dependencies=

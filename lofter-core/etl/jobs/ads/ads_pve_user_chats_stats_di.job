@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01 = insert overwrite table lofter_dm.ads_pve_user_chats_stats_di partition(dt = '${azkaban.flow.1.days.ago}') \
+                select total_chats, count(distinct userid) as uv from \
+                ( \
+                    select dt, userid, \
+                    sum(total_chats) as total_chats, \
+                    count(distinct roleid) as total_roles \
+                    from lofter.dws_pve_user_role_chats_di where dt = '${azkaban.flow.1.days.ago}' \
+                    group by dt, userid \
+                ) t group by total_chats ;

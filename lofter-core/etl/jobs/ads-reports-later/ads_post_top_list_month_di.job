@@ -1,0 +1,160 @@
+type=sparksql
+hive.query.01=with  post_base_stats \
+as \
+( \
+    select a.postid, expose_pv,centralized_expose_pv,click_pv,real_browse_pv,new_user_expose_pv,new_user_real_browse_pv, \
+            commentpv,hotpv,praisepv,recpv,reproducepv,subscribepv,sharepv,  \
+            commentuv,hotuv,praiseuv,recuv,reproduceuv,subscribeuv,shareuv \
+    from  \
+        (  \
+            select postid,  \
+                sum(expose_pv) expose_pv,  \
+                sum(centralized_expose_pv) centralized_expose_pv,  \
+                sum(click_pv) click_pv,  \
+                sum(real_browse_pv) real_browse_pv,  \
+                sum(new_user_expose_pv) new_user_expose_pv,  \
+                sum(new_user_real_browse_pv) new_user_real_browse_pv  \
+            from lofter.dws_post_traffic_di  \
+            where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+            group by postid  \
+        ) a  \
+        left join (   \
+                select postid,  \
+                       sum(if(poscommentpv-negcommentpv<=0,0,poscommentpv-negcommentpv)) commentpv,   \
+                       sum(if(poshotpv-neghotpv<=0,0,poshotpv-neghotpv)) hotpv,  \
+                       sum(if(pospraisepv-negpraisepv<=0,0,pospraisepv-negpraisepv)) praisepv,  \
+                       sum(if(posrecpv-negrecpv<=0,0,posrecpv-negrecpv)) recpv,  \
+                       sum(if(posreproducepv-negreproducepv<=0,0,posreproducepv-negreproducepv)) reproducepv,  \
+                       sum(if(possubscribepv-negsubscribepv<=0,0,possubscribepv-negsubscribepv)) subscribepv,  \
+                       sum(sharepv) sharepv,   \
+                       sum(poscommentuv) commentuv, sum(poshotuv) hotuv, sum(pospraiseuv) praiseuv, sum(posrecuv) recuv, sum(posreproduceuv) reproduceuv, sum(possubscribeuv) subscribeuv,  \
+                       sum(shareuv) shareuv  \
+                from lofter.dws_post_base_stats_di   \
+                where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'   \
+                group by postid  \
+        ) e on a.postid=e.postid   \
+) \
+insert overwrite table lofter_dm.ads_post_top_list_month_di partition(dt = '${azkaban.flow.1.days.ago}')   \
+select a.postid,post_userid,blognickname,level,title,url,tags,ips,categorys,post_publish_date,post_content_type,  \
+       if(d.postid is not null, 1, 0) is_premium,   \
+       if(b.recomstatus=1, 1, 0) is_rec,  \
+       expose_pv,centralized_expose_pv,click_pv,real_browse_pv,new_user_expose_pv,new_user_real_browse_pv,  \
+       commentpv,hotpv,praisepv,recpv,reproducepv,subscribepv,sharepv,  \
+       commentuv,hotuv,praiseuv,recuv,reproduceuv,subscribeuv,shareuv,  \
+       support_exposure_pv, support_induced_pv,  \
+       expose_pv_rank,  \
+       real_browse_pv_rank,  \
+       new_user_expose_pv_rank,  \
+       new_user_real_browse_pv_rank,  \
+       commentpv_rank,  \
+       hotpv_rank,  \
+       praisepv_rank,  \
+       recpv_rank,  \
+       reproducepv_rank,  \
+       subscribepv_rank,  \
+       sharepv_rank  \
+from  \
+(  \
+select * \
+from \
+    ( \
+        select a.*, expose_pv_rank, real_browse_pv_rank, new_user_expose_pv_rank, new_user_real_browse_pv_rank, commentpv_rank, hotpv_rank, praisepv_rank, recpv_rank, reproducepv_rank, subscribepv_rank, sharepv_rank  \
+        from  \
+        post_base_stats a \
+        left join \
+        ( \
+            select postid,row_number()over(order by expose_pv desc) expose_pv_rank \
+            from post_base_stats \
+        ) b \
+        on a.postid=b.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by real_browse_pv desc) real_browse_pv_rank \
+            from post_base_stats \
+        ) c \
+        on a.postid=c.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by new_user_expose_pv desc) new_user_expose_pv_rank \
+            from post_base_stats \
+        ) d \
+        on a.postid=d.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by new_user_real_browse_pv desc) new_user_real_browse_pv_rank \
+            from post_base_stats \
+        ) e \
+        on a.postid=e.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by commentpv desc) commentpv_rank \
+            from post_base_stats \
+        ) f \
+        on a.postid=f.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by hotpv desc) hotpv_rank \
+            from post_base_stats \
+        ) g \
+        on a.postid=g.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by praisepv desc) praisepv_rank \
+            from post_base_stats \
+        ) h \
+        on a.postid=h.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by recpv desc) recpv_rank \
+            from post_base_stats \
+        ) i \
+        on a.postid=i.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by reproducepv desc) reproducepv_rank \
+            from post_base_stats \
+        ) j \
+        on a.postid=j.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by subscribepv desc) subscribepv_rank \
+            from post_base_stats \
+        ) k \
+        on a.postid=k.postid \
+        left join \
+        ( \
+            select postid,row_number()over(order by sharepv desc) sharepv_rank \
+            from post_base_stats \
+        ) l \
+        on a.postid=l.postid \
+    ) t  \
+    where expose_pv_rank<500 or real_browse_pv_rank<500 or new_user_expose_pv_rank<500 or new_user_real_browse_pv_rank<500 or commentpv_rank<500 or hotpv_rank<500 or praisepv_rank<500 or recpv_rank<500 or reproducepv_rank<500 or subscribepv_rank<500 or sharepv_rank<500   \
+) a  \
+join   \
+(   \
+    select id postid, blogid as post_userId, contentType as post_content_type, publishDate as post_publish_date,  blognickname,title,recomstatus, concat_ws('|', tags) as tags, concat_ws('|', ips) as ips, url  \
+    from lofter.dim_post   \
+) b on a.postid=b.postid   \
+left join   \
+(   \
+    select postid,category,category2,category3,concat_ws('-',category,category2,category3) categorys   \
+    from lofter.dim_post_category_dd   \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+) c on a.postid=c.postid   \
+left join   \
+(   \
+    select postid   \
+    from lofter.dws_post_premium_di   \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+) d on a.postid=d.postid   \
+left join   \
+(   \
+    select postId, sum(support_exposure_pv) support_exposure_pv, sum(support_induced_pv) support_induced_pv   \
+    from lofter.dws_post_support_di   \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+    group by postid  \
+) h on a.postId = h.postId   \
+left join   \
+(   \
+  select userId, level from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}'  \
+) j on b.post_userid = j.userId  \

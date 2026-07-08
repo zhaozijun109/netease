@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,userid,postid,giftid,return_gift_id,blogid,money,unlock_time,unlock_method,return_gift_plantype,coin,ips,title,content_type,collectionid,collection_name,is_fans,is_collection_subscribed,gift_name,source_scene,is_post_premium,is_post_gift_premium,return_gift_review_status,ai_contenttype,element_tag,is_high_willing_pay_user,is_rec_paid_traffic_support from lofter_dm.ads_gift_easy_fetch_order_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_gift_easy_fetch_order_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_gift_easy_fetch_order_di

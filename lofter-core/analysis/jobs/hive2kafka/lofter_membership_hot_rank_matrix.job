@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select targetWord, postId, blogId, indexvalue, listRank, listTitle as listName, dt, if(targetWord not in ('全部', '畅读卡免费'),  null, post_ip) as ipName, hot as heatValue, ip_hot as interaction_count from lofter_dm.ads_membership_hot_list_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.MEMBERSHIP.HOT.RANK.MATRIX --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

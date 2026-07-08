@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_maisui_advertisers_detail_report_di  partition(dt='${azkaban.flow.1.days.ago}')    \
+select 	  \
+groupid,  \
+os,  \
+maisui_expose_pv,  \
+maisui_click_pv,  \
+maisui_settle_money,  \
+pool_post_count,  \
+pool_blog_count,  \
+expose_pv,  \
+expose_uv,  \
+click_pv,  \
+click_uv,  \
+download_uv,  \
+install_uv,  \
+lofter_revenue,  \
+lofter_creator_revenue,  \
+maisui_activation_value,  \
+maisui_register_value,  \
+switch_blog_count,  \
+downloadstart_pv,  \
+downloadstart_uv,  \
+download_pv,  \
+installstart_pv,  \
+installstart_uv,  \
+install_pv  \
+from lofter_dm.ads_ad_resource_group_di  \
+where dt='${azkaban.flow.1.days.ago}'  \

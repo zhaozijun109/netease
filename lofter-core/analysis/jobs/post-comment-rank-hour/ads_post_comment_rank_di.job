@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=\
+with postCommentSource as ( \
+    select postId, \
+           createTime, \
+           updateTime, \
+           hotCommentIds \
+    from lofter_dm.ads_post_comment_rank_di \
+    where dt < '${azkaban.flow.current.date}' and hour < ${azkaban.flow.start.hour} \
+) \
+insert overwrite table lofter_dm.ads_post_comment_rank_di partition(dt = '${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select t1.postId, \
+       nvl(t2.createTime, t1.createTime) as createTime, \
+       t1.updateTime, \
+       t1.hotCommentIds \
+from ( \
+    select postId, \
+           unix_timestamp() * 1000 as createTime, \
+           unix_timestamp() * 1000 as updateTime, \
+           concat_ws(',', transform(sort_array(collect_set(struct(rank, commentId)), true), x -> x.commentId)) as hotCommentIds \
+    from lofter_dm.ads_post_comment_rank_detail_dd \
+    where dt = '${azkaban.flow.current.date}' and hour = ${azkaban.flow.start.hour} \
+    group by postId \
+) t1 \
+left join ( \
+    select a.postId, \
+           a.createTime, \
+           a.updateTime, \
+           b.hotCommentIds \
+    from ( \
+        select postId, \
+               min(createTime) as createTime, \
+               max(updateTime) as updateTime \
+        from postCommentSource \
+        group by postId \
+    ) a \
+    join postCommentSource b \
+    on a.postId = b.postId and a.updateTime = b.updateTime \
+) t2 \
+on t1.postId = t2.postId \
+where t2.hotCommentIds is null or t1.hotCommentIds <> t2.hotCommentIds
+dependencies=ads_post_comment_rank_detail_dd

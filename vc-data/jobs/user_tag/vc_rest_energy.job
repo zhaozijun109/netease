@@ -1,0 +1,31 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_rest_energy --bitmap
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '剩余能量' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       tag \
+from ( \
+    select user_id, \
+           'vc_rest_energy' as tag, \
+           case \
+               when rest_energy = 0 or rest_energy is null then '0' \
+               when rest_energy > 0 and rest_energy <= 50 then '0-50' \
+               when rest_energy > 50 and rest_energy <= 100 then '50-100' \
+               when rest_energy > 100 and rest_energy <= 300 then '100-300' \
+               when rest_energy > 300 and rest_energy <= 500 then '300-500' \
+               when rest_energy > 500 then '500+' end as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

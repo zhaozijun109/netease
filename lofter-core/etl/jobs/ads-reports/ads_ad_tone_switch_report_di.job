@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_tone_switch_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tone_switch_expose_uv, tone_switch_expose_pv, tone_switch_click_uv, \
+       tone_switch_click_pv, tone_switch_click_success_uv, tone_switch_click_success_pv, \
+       tone_switch_revenue \
+from ( \
+    select dt, count(distinct if(eventId = 'i1-17', deviceUdid, null)) as tone_switch_expose_uv, \
+        sum(if(eventId = 'i1-17', 1, 0)) as tone_switch_expose_pv, \
+        count(distinct if(eventId = 'i1-18', deviceUdid, null)) as tone_switch_click_uv, \
+        sum(if(eventId = 'i1-18', 1, 0)) as tone_switch_click_pv, \
+        count(distinct if(eventId = 'i1-18' and params['isUnlocked'] = '1', deviceUdid, null)) as tone_switch_click_success_uv, \
+        sum(if(eventId = 'i1-18' and params['isUnlocked'] = '1', 1, 0)) as tone_switch_click_success_pv \
+    from lofter.ods_mda_app_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId in ('i1-17', 'i1-18') \
+    group by 1 \
+) a \
+left join ( \
+    select dt, sum(bid_amount) / 1000 as tone_switch_revenue \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId = 278627 and is_bg > 0 \
+    group by 1 \
+) b on a.dt = b.dt \

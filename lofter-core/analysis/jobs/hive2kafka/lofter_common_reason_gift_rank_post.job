@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaRaw
+conf.spark.source.query=" \
+select concat(postId, ':', recReason) as value \
+from lofter_dm.ads_membership_post_rec_reason_di \
+where dt = '${azkaban.flow.1.days.ago}' and recReason in ('解锁过万', '好评如潮') \
+"
+params= --parallel 1 --topic LOFTER.COMMON.REASON.GIFT.RANK_POST --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

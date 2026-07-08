@@ -1,0 +1,171 @@
+
+type=sparksql
+hive.query.01= \
+WITH \
+phone_mapping AS (    \
+    SELECT \
+        l_user.userid AS lofter_userid, \
+        max(v_user.user_id) AS vc_userid \
+    FROM \
+        lofter.dws_par_user_base_dd l_user \
+    JOIN \
+        vc.dws_vc_user_behavior_info_a_d v_user ON l_user.last_phone = v_user.phone AND l_user.last_phone IS NOT NULL AND l_user.last_phone != '' \
+    WHERE \
+        l_user.dt = '${azkaban.flow.1.days.ago}' AND v_user.dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY 1 \
+), \
+all_lofter_pve_users AS ( \
+    SELECT \
+        userid \
+    FROM \
+        lofter.dim_pve_user_dd \
+    WHERE \
+        dt = '${azkaban.flow.1.days.ago}'  \
+    GROUP BY 1 \
+), \
+lofter_energy_consume AS ( \
+    SELECT dt, userid, SUM(permanent_stamina) AS lofter_permanent_energy_consume, SUM(permanent_stamina + timed_stamina) AS lofter_total_energy_consume \
+    FROM ( \
+        SELECT dt, userid, ABS(delta) AS permanent_stamina, 0 AS timed_stamina FROM lofter.dwd_pve_user_stamina_log_di WHERE dt = '${azkaban.flow.1.days.ago}' AND delta < 0 AND type IN (0, 11, 12) \
+        UNION ALL \
+        SELECT dt, userid, 0 AS permanent_stamina, ABS(delta) AS timed_stamina FROM lofter.dwd_pve_user_timed_stamina_log_di WHERE dt = '${azkaban.flow.1.days.ago}' AND delta < 0 \
+    ) GROUP BY dt, userid \
+), \
+lofter_energy_gain AS ( \
+    SELECT dt, userid, SUM(permanent_gain) as lofter_permanent_energy_gain, SUM(permanent_gain + timed_gain) AS lofter_total_energy_gain \
+    FROM ( \
+        SELECT dt, userid, delta AS permanent_gain, 0 as timed_gain FROM lofter.dwd_pve_user_stamina_log_di WHERE dt = '${azkaban.flow.1.days.ago}' AND delta > 0 \
+        UNION ALL \
+        SELECT dt, userid, 0 as permanent_gain, delta AS timed_gain FROM lofter.dwd_pve_user_timed_stamina_log_di WHERE dt = '${azkaban.flow.1.days.ago}' AND delta > 0 \
+    ) GROUP BY dt, userid \
+), \
+vc_energy_consume AS ( \
+    SELECT dt, user_id AS vc_userid, SUM(energy_consume) AS vc_total_energy_consume, SUM(buy_energy) AS vc_paid_energy_consume \
+    FROM vc.dws_vc_uc_talk_day_cnt_single_i_d WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY dt, user_id \
+), \
+vc_energy_gain AS ( \
+    SELECT dt, user_id AS vc_userid, SUM(amount) AS vc_total_energy_gain, SUM(CASE WHEN scene = 2 THEN amount ELSE 0 END) as vc_paid_energy_gain \
+    FROM vc.dwd_vc_user_income_record_i_d WHERE dt = '${azkaban.flow.1.days.ago}' AND reward_type = 1 GROUP BY dt, user_id \
+), \
+lofter_daily_metrics AS ( \
+    SELECT a.dt, a.userid, 1 AS lofter_is_active, \
+           COALESCE(c.lofter_daily_chats, 0) AS lofter_daily_chats, \
+           COALESCE(c.lofter_daily_ogc_chats, 0) AS lofter_daily_ogc_chats, \
+           COALESCE(c.lofter_daily_ugc_chats, 0) AS lofter_daily_ugc_chats, \
+           COALESCE(p.lofter_daily_amount, 0) AS lofter_daily_amount, \
+           COALESCE(e.lofter_total_energy_consume, 0) AS lofter_total_energy_consume, \
+           COALESCE(e.lofter_permanent_energy_consume, 0) AS lofter_permanent_energy_consume, \
+           COALESCE(g.lofter_total_energy_gain, 0) AS lofter_total_energy_gain, \
+           COALESCE(g.lofter_permanent_energy_gain, 0) AS lofter_permanent_energy_gain \
+    FROM (SELECT DISTINCT dt, userid FROM lofter.dwd_pve_user_interview_active_di WHERE dt = '${azkaban.flow.1.days.ago}') a \
+    LEFT JOIN (SELECT dt, userid, SUM(total_chats) AS lofter_daily_chats, SUM(CASE WHEN roledef = 'ogc' THEN total_chats ELSE 0 END) AS lofter_daily_ogc_chats, SUM(CASE WHEN roledef = 'ugc' THEN total_chats ELSE 0 END) AS lofter_daily_ugc_chats FROM lofter.dws_pve_user_role_chats_di WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY dt, userid) c ON a.dt = c.dt AND a.userid = c.userid \
+    LEFT JOIN (SELECT dt, userid, SUM(amount) AS lofter_daily_amount FROM lofter.dwd_pve_user_amount_info_di WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY dt, userid) p ON a.dt = p.dt AND a.userid = p.userid \
+    LEFT JOIN lofter_energy_consume e ON a.dt = e.dt AND a.userid = e.userid \
+    LEFT JOIN lofter_energy_gain g ON a.dt = g.dt AND a.userid = g.userid \
+), \
+vc_app_daily_metrics AS ( \
+    SELECT a.dt, a.user_id AS vc_userid, 1 AS vc_is_active, \
+           COALESCE(c.vc_daily_chats, 0) AS vc_daily_chats, \
+           COALESCE(c.vc_daily_ogc_chats, 0) AS vc_daily_ogc_chats, \
+           COALESCE(c.vc_daily_ugc_chats, 0) AS vc_daily_ugc_chats, \
+           COALESCE(p.vc_daily_amount, 0) AS vc_daily_amount, \
+           COALESCE(e.vc_total_energy_consume, 0) AS vc_total_energy_consume, \
+           COALESCE(e.vc_paid_energy_consume, 0) AS vc_paid_energy_consume, \
+           COALESCE(g.vc_total_energy_gain, 0) AS vc_total_energy_gain, \
+           COALESCE(g.vc_paid_energy_gain, 0) AS vc_paid_energy_gain \
+    FROM (SELECT DISTINCT dt, user_id FROM vc.dwd_vc_user_active_i_d WHERE dt = '${azkaban.flow.1.days.ago}') a \
+    LEFT JOIN (SELECT dt, user_id, COUNT(1) AS vc_daily_chats, COUNT(CASE WHEN character_type = 0 THEN 1 END) AS vc_daily_ogc_chats, COUNT(CASE WHEN character_type != 0 THEN 1 END) AS vc_daily_ugc_chats FROM vc.dwd_vc_uc_talk_info_i_d WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY dt, user_id) c ON a.dt = c.dt AND a.user_id = c.user_id \
+    LEFT JOIN (SELECT dt, user_id, SUM(order_price) AS vc_daily_amount FROM vc.dwd_vc_order_i_d WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY dt, user_id) p ON a.dt = p.dt AND a.user_id = p.user_id \
+    LEFT JOIN vc_energy_consume e ON a.dt = e.dt AND a.user_id = e.vc_userid \
+    LEFT JOIN vc_energy_gain g ON a.dt = g.dt AND a.user_id = g.vc_userid \
+), \
+vc_metrics_with_lofter_id AS ( \
+    SELECT \
+        vdm.*, \
+        pm.lofter_userid \
+    FROM vc_app_daily_metrics vdm \
+    LEFT JOIN phone_mapping pm ON vdm.vc_userid = pm.vc_userid \
+), \
+combined_daily_metrics AS ( \
+    SELECT \
+        COALESCE(ldm.dt, vcwl.dt) AS dt, \
+        COALESCE(ldm.userid, vcwl.lofter_userid) AS lofter_userid, \
+        vcwl.vc_userid, \
+        COALESCE(ldm.userid, vcwl.lofter_userid, vcwl.vc_userid) as unified_userid, \
+        COALESCE(ldm.lofter_is_active, 0) AS lofter_is_active, \
+        COALESCE(ldm.lofter_daily_chats, 0) AS lofter_daily_chats, \
+        COALESCE(ldm.lofter_daily_ogc_chats, 0) AS lofter_daily_ogc_chats, \
+        COALESCE(ldm.lofter_daily_ugc_chats, 0) AS lofter_daily_ugc_chats, \
+        COALESCE(ldm.lofter_daily_amount, 0) AS lofter_daily_amount, \
+        COALESCE(ldm.lofter_total_energy_consume, 0) AS lofter_total_energy_consume, \
+        COALESCE(ldm.lofter_permanent_energy_consume, 0) AS lofter_permanent_energy_consume, \
+        COALESCE(ldm.lofter_total_energy_gain, 0) AS lofter_total_energy_gain, \
+        COALESCE(ldm.lofter_permanent_energy_gain, 0) AS lofter_permanent_energy_gain, \
+        COALESCE(vcwl.vc_is_active, 0) AS vc_is_active, \
+        COALESCE(vcwl.vc_daily_chats, 0) AS vc_daily_chats, \
+        COALESCE(vcwl.vc_daily_ogc_chats, 0) AS vc_daily_ogc_chats, \
+        COALESCE(vcwl.vc_daily_ugc_chats, 0) AS vc_daily_ugc_chats, \
+        COALESCE(vcwl.vc_daily_amount, 0) AS vc_daily_amount, \
+        COALESCE(vcwl.vc_total_energy_consume, 0) AS vc_total_energy_consume, \
+        COALESCE(vcwl.vc_paid_energy_consume, 0) AS vc_paid_energy_consume, \
+        COALESCE(vcwl.vc_total_energy_gain, 0) AS vc_total_energy_gain, \
+        COALESCE(vcwl.vc_paid_energy_gain, 0) AS vc_paid_energy_gain, \
+        ROW_NUMBER() OVER (PARTITION BY vcwl.dt, vcwl.vc_userid ORDER BY COALESCE(ldm.userid, vcwl.lofter_userid)) as vc_metric_rn \
+    FROM \
+        lofter_daily_metrics ldm \
+    FULL OUTER JOIN \
+        vc_metrics_with_lofter_id vcwl ON ldm.dt = vcwl.dt AND ldm.userid = vcwl.lofter_userid \
+), \
+daily_aggregated_metrics AS ( \
+    SELECT \
+        cdm.dt, \
+        CASE \
+            WHEN pve.userid IS NOT NULL THEN 'LofterPVE用户' \
+            WHEN cdm.lofter_userid IS NOT NULL THEN 'Lofter用户' \
+            ELSE 'VC用户' \
+        END AS user_segment, \
+ \
+        COUNT(DISTINCT CASE WHEN cdm.lofter_is_active = 1 THEN cdm.unified_userid END) AS lofter_active_uv, \
+        COUNT(DISTINCT CASE WHEN cdm.lofter_daily_chats > 0 THEN cdm.unified_userid END) AS lofter_chat_uv, \
+        SUM(cdm.lofter_daily_chats) AS lofter_total_chats, \
+        SUM(cdm.lofter_daily_ogc_chats) AS lofter_ogc_chats, \
+        SUM(cdm.lofter_daily_ugc_chats) AS lofter_ugc_chats, \
+        COUNT(DISTINCT CASE WHEN cdm.lofter_daily_amount > 0 THEN cdm.unified_userid END) AS lofter_paid_uv, \
+        SUM(cdm.lofter_daily_amount) AS lofter_total_amount, \
+        SUM(cdm.lofter_total_energy_consume) AS lofter_total_energy_consume, \
+        SUM(cdm.lofter_permanent_energy_consume) AS lofter_permanent_energy_consume, \
+        SUM(cdm.lofter_total_energy_gain) AS lofter_total_energy_gain, \
+        SUM(cdm.lofter_permanent_energy_gain) AS lofter_permanent_energy_gain, \
+ \
+        COUNT(DISTINCT CASE WHEN cdm.vc_is_active = 1 THEN cdm.unified_userid END) AS vc_active_uv, \
+        COUNT(DISTINCT CASE WHEN cdm.vc_daily_chats > 0 THEN cdm.unified_userid END) AS vc_chat_uv, \
+        COUNT(DISTINCT CASE WHEN cdm.vc_daily_amount > 0 THEN cdm.unified_userid END) AS vc_paid_uv, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_daily_chats ELSE 0 END) AS vc_total_chats, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_daily_ogc_chats ELSE 0 END) AS vc_ogc_chats, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_daily_ugc_chats ELSE 0 END) AS vc_ugc_chats, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_daily_amount ELSE 0 END) AS vc_total_amount, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_total_energy_consume ELSE 0 END) AS vc_total_energy_consume, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_paid_energy_consume ELSE 0 END) AS vc_paid_energy_consume, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_total_energy_gain ELSE 0 END) AS vc_total_energy_gain, \
+        SUM(CASE WHEN cdm.vc_metric_rn = 1 THEN cdm.vc_paid_energy_gain ELSE 0 END) AS vc_paid_energy_gain, \
+        COUNT(DISTINCT cdm.unified_userid) AS total_active_uv, \
+        COUNT(DISTINCT CASE WHEN cdm.lofter_daily_chats > 0 OR cdm.vc_daily_chats > 0 THEN cdm.unified_userid END) AS total_chat_uv, \
+        COUNT(DISTINCT CASE WHEN cdm.lofter_daily_amount > 0 OR cdm.vc_daily_amount > 0 THEN cdm.unified_userid END) AS total_paid_uv \
+    FROM \
+        combined_daily_metrics cdm \
+    LEFT JOIN \
+        all_lofter_pve_users pve ON cdm.lofter_userid = pve.userid \
+    WHERE \
+        cdm.dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY GROUPING SETS ((cdm.dt, user_segment), (cdm.dt)) \
+) \
+ \
+INSERT OVERWRITE TABLE lofter_dm.ads_lofter_vc_user_segment_metrics_report_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+ \
+SELECT \
+    COALESCE(user_segment, '总计') as user_segment, \
+    lofter_active_uv, lofter_chat_uv, lofter_total_chats, lofter_ogc_chats, lofter_ugc_chats, lofter_paid_uv, lofter_total_amount, lofter_total_energy_consume, lofter_permanent_energy_consume, lofter_total_energy_gain, lofter_permanent_energy_gain, \
+    vc_active_uv, vc_chat_uv, vc_total_chats, vc_ogc_chats, vc_ugc_chats, vc_paid_uv, vc_total_amount, vc_total_energy_consume, vc_paid_energy_consume, vc_total_energy_gain, vc_paid_energy_gain, \
+    total_active_uv, total_chat_uv, lofter_total_chats + vc_total_chats as total_chats, lofter_ogc_chats + vc_ogc_chats as total_ogc_chats, lofter_ugc_chats + vc_ugc_chats as total_ugc_chats, total_paid_uv, lofter_total_amount + vc_total_amount as total_amount, lofter_total_energy_consume + vc_total_energy_consume, lofter_total_energy_gain + vc_total_energy_gain as total_energy_gain, lofter_permanent_energy_consume + vc_paid_energy_consume as total_permanent_or_paid_energy_consume, lofter_permanent_energy_gain + vc_paid_energy_gain as total_permanent_or_paid_energy_gain \
+FROM \
+    daily_aggregated_metrics; \

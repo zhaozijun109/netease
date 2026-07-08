@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_video_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, type \
+from ( \
+    select a.userId as userId, '原日常人群包' as type \
+    from ( \
+        select userId \
+        from lofter.dws_par_user_traffic_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and paid_post_browse_count_30d >= 20 \
+    ) a \
+    left join ( \
+        select userId \
+        from lofter.dws_par_user_pay_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (coin_consume_180d > 0 or coin_recharge_180d > 0) \
+    ) b on a.userId = b.userId \
+    join ( \
+        select id as userId \
+        from lofter.dim_user \
+        where  datediff('${azkaban.flow.1.days.ago}', createDate) + 1 between 180 and 2000 \
+    ) c on a.userId = c.userId \
+    where b.userId is null \
+  union all \
+    select userId, '广告激励视频回礼文章扩容' as type \
+    from lofter_dm.ads_ad_video_extend_user_group_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, '核心汇总' as type \
+    from lofter_dm.ads_ad_video_extend_core_user_group_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t \
+group by 1, 2 \
+
+dependencies=ads_ad_video_extend_user_group_di,ads_ad_video_extend_core_user_group_di

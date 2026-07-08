@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_question_easy_fetch_score_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select distinct a.questionId,  \
+        talkcontent as master_question_content, \
+        create_date, \
+        scorecount, \
+        tags,  \
+        timing_userId,  \
+        timing_questionid,  \
+        timing_content, \
+        b.userId as participate_user_id, \
+        action_date, \
+        action, \
+        object \
+from( \
+    select distinct parentquestionid as questionId,  \
+        tags, \
+        userid as timing_userId,  \
+        id as timing_questionid,  \
+        question as timing_content \
+    from lofter_db_dump.ods_db_ask_question_nd \
+)a \
+join( \
+    select distinct questionid, userid, action_date, action, object \
+    from( \
+        select questionid, userid, from_unixtime(createtime/1000, 'yyyy-MM-dd') as action_date, '提名' as action, cast(score as string) as object \
+        from lofter_db_dump.ods_db_ask_user_item_score_nd \
+        where from_unixtime(createtime/1000, 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+        union all \
+        select questionid, blogid as userid, from_unixtime(createtime/1000, 'yyyy-MM-dd') as action_date, '评论' as action, answer as object \
+        from lofter_db_dump.ods_db_ask_answer_post_nd \
+        where from_unixtime(createtime/1000, 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' and answertype <> 5 \
+    ) \
+)b \
+on a.timing_questionid = b.questionid \
+join( \
+    select distinct talkId, talkcontent, blogid, forbidstatus, from_unixtime(createtime/1000, 'yyyy-MM-dd') as create_date, scorecount \
+    from lofter.dim_post_talk \
+    where from_unixtime(createtime/1000, 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+)c  \
+on a.questionId = c.talkId

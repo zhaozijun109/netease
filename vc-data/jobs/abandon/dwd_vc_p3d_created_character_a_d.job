@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dwd_vc_p3d_created_character_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select character_id, \
+                       create_time, \
+                       FROM_UNIXTIME(create_time, 'yyyy-MM-dd HH:mm:ss') as create_time_format, \
+                       character_type \
+                from (select id                                                                                as character_id, \
+                             create_time, \
+                             public_scope, \
+                             case when type = 0 then 'ogc' when type in (1,2) then 'ugc' end                        as character_type, \
+                             row_number() over (partition by id order by _bin_op_time desc,_bin_op_seqno desc) as rk \
+                      from vc.ods_binlog_vc_character_di \
+                      where dt >= '${azkaban.flow.3.days.ago}' \
+                        and _bin_op = 0) \
+                where rk = 1 \
+                  and public_scope = 1

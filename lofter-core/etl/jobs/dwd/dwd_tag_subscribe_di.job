@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_tag_subscribe_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.createDate as user_create_date \
+from ( \
+  select labelName as tag, cast(accountId as bigint) as userId, \
+         `time`, clientType as platform \
+  from lofter.ods_log_subscribe_di \
+  where dt = '${azkaban.flow.1.days.ago}' and length(labelName) > 0 \
+) a \
+left join lofter.dim_user b on a.userId = b.id \

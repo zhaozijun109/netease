@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId, taskId as taskType, task_value as current, warnType from lofter_dm.ads_creator_guide_task_progress_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.COMMON.PAYCREATOR.WARN.TASK --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

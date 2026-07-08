@@ -1,0 +1,133 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_lofter_om_issue_info_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.id,project_key,issue_type,ticket_key,parent_ticket_key,title,reporter,assignee, \
+    case when issue_type = 'SUB_TASK' then coalesce(e.related_team, '无') else coalesce(relation_team, '无') end as relation_team, \
+    priority, \
+    coalesce(area, '无') as area, \
+    estimated_time,status,sprint,a.issue_key, \
+    case t_custom.final_online_bug \
+        when '是' then 1 \
+        when '否' then 0 \
+    end online_bug, \
+    severity,create_time,story_req_time,story_vision_time,story_clarified_time,story_rd_time,story_ready_time,task_scheduled_time,t_resolve,bug_response_time,bug_close_time,bug_reopen_time,t_close,t_cancel,b.task_type, \
+    case when e.related_team <> '测试组' AND b.task_type IN ('技术方案','契约','后端','前端','Android','iPhone','CR','联调','iOS') THEN 1 \
+        when e.related_team = '测试组' AND b.task_type IN ('技术方案','测试用例','测试') THEN 1 \
+        else 0 \
+    end as is_core_hours, \
+    d.name as related_view_name, f.value as review_info \
+from( \
+    select id,project_key,issue_type,jira_key as ticket_key,parent as parent_ticket_key,title,reporter,assignee,team as relation_team, \
+        case priority \
+            when -1 then 'PS' \
+            when 1 then 'P0' \
+            when 3 then 'P1' \
+            when 4 then 'P2' \
+            when 5 then 'P3' \
+        end priority, \
+    component as area,cast(original_estimate/28800 as double) as estimated_time,status,sprint,issue_key,online_bug,severity,create_time,story_req_time,story_vision_time,story_clarified_time,story_rd_time,story_ready_time,task_scheduled_time,t_resolve,bug_response_time,bug_close_time,bug_reopen_time,t_close,t_cancel \
+    from lofter.dwd_issue_with_status_change_for_lofter \
+)a \
+left join( \
+    select issue_key, \
+        case task_type \
+        when 1 then "前端" \
+        when 2 then "后端" \
+        when 3 then "测试用例" \
+        when 4 then "测试" \
+        when 5 then "iPhone" \
+        when 6 then "Android" \
+        when 7 then "契约" \
+        when 9 then "其他" \
+        when 101 then "DSL" \
+        when 102 then "小程序" \
+        when 103 then "H5" \
+        when 104 then "WEB" \
+        when 105 then "RN" \
+        when 106 then "CMS" \
+        when 107 then "前端-三方平台发布" \
+        when 108 then "前端-接口服务" \
+        when 109 then "CMS-低代码" \
+        when 201 then "算法" \
+        when 202 then "算法工程" \
+        when 203 then "数据开发" \
+        when 301 then "技术方案" \
+        when 401 then "CR" \
+        when 402 then "Bugfix" \
+        when 403 then "需求澄清" \
+        when 404 then "版本发布" \
+        when 405 then "值班类型" \
+        when 501 then "交互设计" \
+        when 601 then "需求评估" \
+        when 701 then "其他项" \
+    end task_type \
+    from ( \
+        select issue_key,task_type \
+        from( \
+            select issue_key,task_type,row_number() over(partition by issue_key order by gmt_modify desc) rNo \
+            from lofter.ods_p_task \
+            where issue_key like '%OMLOFTER%' \
+        ) \
+        where rNo = 1 \
+    ) \
+)b on a.issue_key = b.issue_key \
+left join ( \
+    select t_custom_value.issue_key, \
+        max(IF(t_custom_value.name = '线上bug', t_custom_value.value, null))  as final_online_bug \
+    from ( \
+        select IF(t_option.label is not null, t_option.label, t_value.value) as value, \
+            t_config.id, \
+            t_config.name, \
+            t_value.issue_key \
+        from lofter.ods_overmind_issue_field_value t_value \
+        left join lofter.ods_overmind_field_config t_config \
+            on t_value.field_id = t_config.id \
+        left join lofter.ods_overmind_issue_field_option t_option \
+            on t_option.option = t_value.value and t_value.field_id = t_option.field_id \
+    ) t_custom_value \
+    group by t_custom_value.issue_key \
+) t_custom on t_custom.issue_key = a.ticket_key \
+left join lofter.ods_overmind_view_issue_relation c on a.issue_key = c.issue_key \
+left join lofter.ods_overmind_view d on c.view_id = d.id \
+left join( \
+    SELECT member_mail, related_team \
+    FROM ( \
+        SELECT \
+            ARRAY('wb.lujiarui01@mesg.corp.netease.com', 'wb.dongtingting661@mesg.corp.netease.com', 'wb.liuliwei01@mesg.corp.netease.com', 'wb.xcq@mesg.corp.netease.com', 'wb.zhouaini@mesg.corp.netease.com', 'wb.zhangshanshan06@mesg.corp.netease.com', 'sunqiao@corp.netease.com', 'wb.wangdandan542@mesg.corp.netease.com', 'wb.liyinxing02@mesg.corp.netease.com', 'wb.chenhua04@mesg.corp.netease.com', 'hzjiangcong@corp.netease.com') as mail_array, \
+            '测试组' as related_team \
+        UNION ALL \
+        SELECT ARRAY('chengyuntao@corp.netease.com', 'leiyu1@corp.netease.com', 'hzpangchao@corp.netease.com', 'shiliang1@corp.netease.com', 'hzfangxiang@corp.netease.com', 'chengguixing@corp.netease.com', 'hzbaizhichao@corp.netease.com', 'wb.liupengfei03@mesg.corp.netease.com', 'maoyingyu@corp.netease.com', 'wangyongbin02@corp.netease.com', 'wangchen31@corp.netease.com'), \
+            '后端组' \
+        UNION ALL \
+        SELECT ARRAY('huangchenjun@corp.netease.com', 'luofeiyue@corp.netease.com', 'youshiyu@corp.netease.com', 'wb.yurihui01@mesg.corp.netease.com', 'wb.yinchuanjie@mesg.corp.netease.com', 'wb.chenhong20@mesg.corp.netease.com'), \
+            '前端组' \
+        UNION ALL \
+        SELECT ARRAY('wb.yangzhen14@mesg.corp.netease.com', 'wb.hongyu05@mesg.corp.netease.com', 'wb.zhaojunhui02@mesg.corp.netease.com', 'hzdaiyue@corp.netease.com', 'yangzhengcan@corp.netease.com', 'shendong@corp.netease.com', 'xiejiapei@corp.netease.com'), \
+            'iOS组' \
+        UNION ALL \
+        SELECT ARRAY('wb.liubin05@mesg.corp.netease.com', 'hzshengxueming@corp.netease.com', 'lusuihao@corp.netease.com', 'chenshengliang@corp.netease.com', 'yuxinfeng@corp.netease.com'), \
+            'Android组' \
+        UNION ALL \
+        SELECT ARRAY('hejiecheng@corp.netease.com', 'wb.lifeng08@mesg.corp.netease.com', 'hzxiaonaitong@corp.netease.com', 'xiongyangyang01@corp.netease.com', 'zhongsheng01@corp.netease.com', 'zhaozijun03@corp.netease.com', 'wb.mazhihao02@mesg.corp.netease.com', 'hzzhuyangping@corp.netease.com'), \
+            '数据组' \
+        UNION ALL \
+        SELECT ARRAY('zhuquan@corp.netease.com', 'wb.zhouyiqing01@mesg.corp.netease.com', 'wb.zhouyiqing01@mesg.corp.netease.com', 'wb.qibaoguang@mesg.corp.netease.com', 'yaomengyuan01@corp.netease.com', 'huanglvdian@corp.netease.com'), \
+            '商业分析组' \
+    ) t \
+    LATERAL VIEW explode(mail_array) exploded_table AS member_mail \
+) e \
+on a.assignee = e.member_mail and a.issue_type = 'SUB_TASK' \
+left join(  \
+    select if(t_option.label is not null, t_option.label, t_value.value) as value, \
+        t_config.id, \
+        t_config.name, \
+        t_value.issue_key \
+    from lofter.ods_overmind_issue_field_value t_value \
+    left join lofter.ods_overmind_field_config t_config \
+        on t_value.field_id = t_config.id \
+    left join lofter.ods_overmind_issue_field_option t_option \
+        on t_option.option = t_value.value and t_value.field_id = t_option.field_id \
+    where t_config.name = 'Review信息' \
+        and t_value.issue_key like 'OMLOFTER%' \
+) f \
+on a.ticket_key = f.issue_key

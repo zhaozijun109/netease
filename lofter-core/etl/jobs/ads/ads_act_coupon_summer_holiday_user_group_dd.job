@@ -1,0 +1,89 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_coupon_summer_holiday_user_group_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, platform, user_type \
+from ( \
+    select userId, 'Android' as platform, \
+           case when if(winter_consume_amount > 4, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 4 and  consume_amount_30d > 0 then '1' \
+                when if(winter_consume_amount > 8, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 8 and  consume_amount_30d >= 4 then '2' \
+                when if(winter_consume_amount > 10, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 10 and  consume_amount_30d >= 8 then '3' \
+                when if(winter_active_days > 10, false, true) and active_days_30d < 10 and consume_amount_30d >= 15 then '4' \
+                when winter_consume_amount = 0 and winter_active_days > 15 and active_days_30d > 15 and consume_amount_30d = 0 then '5' \
+           end as user_type \
+    from ( \
+        select a.id as userId, \
+               nvl(b.active_days,0) as winter_active_days, nvl(c.money, 0) as winter_consume_amount, \
+               nvl(d.active_days_30d, 0) as active_days_30d, nvl(e.money,0) as consume_amount_30d \
+        from lofter.dim_user a \
+        left join ( \
+            select userId, count(distinct dt) as active_days \
+            from lofter.dws_par_user_active_di \
+            where dt >= '2024-01-25' and dt <= '2024-02-25' \
+            group by 1 \
+        ) b on a.id = b.userId \
+        left join ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_consume_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt = '2024-02-25' \
+        ) c on a.id = c.userId \
+        left join (select userId, active_days_30d from lofter.dws_par_user_active_dd where dt='${azkaban.flow.1.days.ago}') d on a.id = d.userId \
+        left join ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_unlock_money_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) e on a.id = e.userId \
+        where datediff('${azkaban.flow.1.days.ago}', a.createDate) > 90 \
+    ) tt \
+  union all \
+    select userId, 'iOS' as platform, \
+           case when if(winter_consume_amount > 6, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 6 and  consume_amount_30d > 0 then '1' \
+                when if(winter_consume_amount > 10, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 10 and  consume_amount_30d >= 6 then '2' \
+                when if(winter_consume_amount > 14, false, true) and if(winter_active_days > 8, false, true) and active_days_30d < 8 and consume_amount_30d < 14 and  consume_amount_30d >= 10 then '3' \
+                when if(winter_active_days > 10, false, true) and active_days_30d < 10 and consume_amount_30d >= 15 then '4' \
+                when winter_consume_amount = 0 and winter_active_days > 15 and active_days_30d > 15 and consume_amount_30d = 0 then '5' \
+           end as user_type \
+    from ( \
+        select a.id as userId, \
+               nvl(b.active_days,0) as winter_active_days, nvl(c.money, 0) as winter_consume_amount, \
+               nvl(d.active_days_30d, 0) as active_days_30d, nvl(e.money,0) as consume_amount_30d \
+        from lofter.dim_user a \
+        left join ( \
+            select userId, count(distinct dt) as active_days \
+            from lofter.dws_par_user_active_di \
+            where dt >= '2024-01-25' and dt <= '2024-02-25' \
+            group by 1 \
+        ) b on a.id = b.userId \
+        left join ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_consume_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt = '2024-02-25' \
+        ) c on a.id = c.userId \
+        left join (select userId, active_days_30d from lofter.dws_par_user_active_dd where dt='${azkaban.flow.1.days.ago}') d on a.id = d.userId \
+        left join ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_unlock_money_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) e on a.id = e.userId \
+        where datediff('${azkaban.flow.1.days.ago}', a.createDate) > 90 \
+    ) tt \
+) t \
+where if(user_type = 5, userId % 10 in (8,9), user_type is not null) \
+union all \
+select 1281441277 as userId, 'Android' as platform, 1 as user_type \
+union all \
+select 1290100548 as userId, 'Android' as platform, 2 as user_type \
+union all \
+select 2078197287 as userId, 'Android' as platform, 3 as user_type \
+union all \
+select 1280137565 as userId, 'Android' as platform, 4 as user_type \
+union all \
+select 2119292566 as userId, 'Android' as platform, 5 as user_type \
+union all \
+select 1281439231 as userId, 'iOS' as platform, 1 as user_type \
+union all \
+select 2078181635 as userId, 'iOS' as platform, 2 as user_type \
+union all \
+select 1280141508 as userId, 'iOS' as platform, 3 as user_type \
+union all \
+select 2091256688 as userId, 'iOS' as platform, 4 as user_type \
+union all \
+select 1283395842 as userId, 'iOS' as platform, 5 as user_type \

@@ -1,0 +1,14 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=20
+conf.spark.executor.cores=4
+hive.query.01=create temporary function html_text_length as 'com.netease.wm.udf.HtmlTextLength';
+hive.query.02=insert overwrite table lofter.dwd_post_text_length_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select id as postId, blogId, html_text_length(content) as contentSize \
+              from lofter.ods_binlog_text_post_di \
+              where dt='${azkaban.flow.1.days.ago}' \
+              distribute by 1
+dependencies=

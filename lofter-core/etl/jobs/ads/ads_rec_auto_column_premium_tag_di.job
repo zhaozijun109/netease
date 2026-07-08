@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_auto_column_premium_tag_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tmp2.tag \
+from ( \
+    select ip \
+    from ( \
+        select t1.ip, \
+               row_number() over(order by 1d_RealUv desc) as rn \
+        from ( \
+            select ip, sum_realUv as 1d_RealUv from lofter.dws_ip_consume_di where dt = '${azkaban.flow.1.days.ago}' \
+        ) t1 \
+        join ( \
+            select ip from lofter.dim_ip_dd where dt = '${azkaban.flow.1.days.ago}' and derivedFlag = 1 \
+        ) t2 \
+        on t1.ip = t2.ip \
+    ) t3 \
+    where rn <= 100 \
+) tmp1 \
+join ( \
+    select t1.tag,t1.ip \
+    from ( \
+        select tag, ip from lofter.dwd_tag_ip_mapping_nd where tag not like '%乙女%' and tag not like '%梦女%' and tag not like '%你%' and tag not like '%我%' \
+        and tag not like '怼%' and tag not like '反%' \
+    ) t1 \
+    join ( \
+        select tag from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 5000 \
+    ) t2 \
+    on t1.tag = t2.tag \
+) tmp2 \
+on tmp1.ip = tmp2.ip \
+group by tmp2.tag

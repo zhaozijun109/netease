@@ -1,0 +1,20 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=200
+conf.spark.executor.cores=4
+hive.query.01=\
+insert overwrite table lofter.stg_par_creator_interaction_out_130d_wd partition(dt='${azkaban.flow.1.days.ago}') \
+select  blogId as userId, \
+        publisherUserId as hdUserId, \
+        from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') as op_dt, \
+        1 as hot, \
+        if(type = 1, 1, 0) as like_cnt, \
+        if(type = 2, 1, 0) as reproduce_cnt, \
+        if(type = 3, 1, 0) as recommend_cnt, \
+        if(type = 4, 1, 0) as collect_cnt, \
+        0 as comment_cnt, \
+        opTime, \
+        postId \
+from  lofter.stg_post_hot_static_out_130d_wd \
+where dt = '${azkaban.flow.1.days.ago}' and type in (1,2,3,4)
+dependencies=stg_post_hot_130d_wd

@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_concurrency_wd partition(dt='${azkaban.flow.1.days.ago}') \
+select tag, tag_buddy, publishDate, count(distinct id) postCount \
+from  ( \
+    select id, tag, tags, publishDate \
+    from lofter.dim_post lateral view explode(tags) t1 as tag \
+    where dayOfWeek('${azkaban.flow.7.days.ago}') = 1 and \
+          valid in (0,12,15,16) and \
+          isPublished = true and \
+          isForbidden = false \
+) t lateral view explode(tags) t1 as tag_buddy \
+where tag <> tag_buddy \
+group by tag, tag_buddy, publishDate \
+having postCount > 3

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select period,character_id,character_name,character_type,talk_cnt,t_rk,peoples,p_rk,dt,'CHARACTER_PERIOD_SEQ_TOP100' as metricId from vc.ads_vc_character_period_top100_n_d where dt = '${azkaban.flow.1.days.ago}'"
+params= --topic vc_character_top_topic --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092 --withCount

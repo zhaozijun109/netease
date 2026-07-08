@@ -1,0 +1,244 @@
+type=sparksql
+hive.query.01=\
+with grass_res1 as (\
+select logId, \
+       userId, \
+       grassDelta, \
+       delta, \
+       stamina, \
+       type, \
+       status, \
+       createTime, \
+       ext \
+from ( \
+    select t1.logId, \
+           t1.userId, \
+           t1.delta as grassDelta, \
+           t2.delta, \
+           t2.stamina, \
+           t1.type, \
+           t1.status, \
+           t1.createTime, \
+           t1.ext, \
+           row_number() over(partition by t1.userId,t1.createTime order by t1.createTime-t2.createTime asc) as rn \
+    from ( \
+        select id as logId,userId,newStamina,oldStamina,delta,type,status,createTime,ext \
+        from lofter_db_dump.ods_db_pve_user_grass_log_nd where type = 1 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    left join ( \
+        select id, \
+               userid, \
+               type, \
+               status, \
+               createTime, \
+               ext, \
+               delta, \
+               0 as stamina \
+        from lofter_db_dump.ods_db_pve_user_grass_log_nd \
+        where type = 0 \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        union all \
+        select id, \
+               userid, \
+               type, \
+               status, \
+               createTime, \
+               ext, \
+               delta, \
+               case when delta = 1 then 500 \
+                    when delta = 10 then 2500 \
+                    when delta = 30 then 5000 \
+                    when delta = 100 then 10000 \
+                    when delta = 500 then 30000 \
+                    when delta = 1000 then 50000 \
+                    else null \
+                end as stamina \
+        from lofter_db_dump.ods_db_pve_user_grass_log_nd \
+        where type = 3 \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        union all \
+        select id, \
+               userid, \
+               type, \
+               null as status, \
+               createTime, \
+               null as ext, \
+               giftCount as delta, \
+               0 as stamina \
+        from lofter_db_dump.ods_db_pve_user_daily_gift_nd \
+        where type = 2 \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        union all \
+        select id, \
+               userId, \
+               rewardType as type, \
+               null as status, \
+               createTime, \
+               null as ext, \
+               cast(rewardName as bigint) as delta, \
+               0 as stamina \
+        from lofter_db_dump.ods_db_paper_man_backend_reward_nd \
+        where rewardType = 12 \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) t2 \
+    on t1.userid = t2.userid and t1.createTime >= t2.createTime \
+) r1 \
+where rn = 1 ) \
+insert overwrite table lofter.dwd_pve_user_grass_stamina_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select logId, \
+	   userid, \
+	   grassDelta, \
+	   delta, \
+	   stamina, \
+	   type, \
+	   status, \
+	   createTime, \
+	   ext, \
+       roleId, \
+       pveUserId, \
+       roleName, \
+	   roleType, \
+	   roleStatus, \
+	   rolePublicView, \
+	   roleCreatorUid \
+from ( \
+	select r2.logId, \
+		   r2.userid, \
+		   r2.grassDelta, \
+		   r2.delta, \
+		   r2.stamina, \
+		   r2.type, \
+		   r2.status, \
+		   r2.createTime, \
+		   r2.ext, \
+		   r3.roleId, \
+		   r3.pveUserId, \
+		   r3.roleName, \
+		   r3.roleType, \
+		   r3.roleStatus, \
+		   r3.rolePublicView, \
+		   r3.roleCreatorUid, \
+		   row_number() over(partition by r2.userid,r2.createTime order by r2.createTime-r3.dbUpdateTime asc) as rn \
+	from ( \
+		select logId, \
+               userid, \
+               grassDelta, \
+               delta, \
+               stamina, \
+               type, \
+               status, \
+               createTime, \
+               ext \
+        from grass_res1 \
+        where ext <> 'all' \
+	) r2 \
+	left join ( \
+		select userId, \
+			   if(length(cast (dbUpdateTime as string))>10,dbUpdateTime,dbUpdateTime*1000) as dbUpdateTime, \
+			   roleId, \
+			   pveUserId, \
+			   roleName, \
+			   roleType, \
+			   roleStatus, \
+			   rolePublicView, \
+			   roleCreatorUid \
+		from lofter.dwd_pve_user_chats_info_di \
+		where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+	) r3 \
+	on r2.userId = r3.userId and r2.createTime >= r3.dbUpdateTime \
+) r4 \
+where rn = 1 \
+union all \
+select logId, \
+	   userId, \
+	   grassDelta, \
+	   delta, \
+	   stamina, \
+	   type, \
+	   status, \
+	   createTime, \
+	   ext, \
+       roleId, \
+       pveUserId, \
+       roleName, \
+	   roleType, \
+	   roleStatus, \
+	   rolePublicView, \
+	   roleCreatorUid \
+from ( \
+	select r2.logId, \
+		   r2.userId, \
+		   r2.grassDelta, \
+		   r2.delta, \
+		   r2.stamina, \
+		   r2.type, \
+		   r2.status, \
+		   r2.createTime, \
+		   r2.ext, \
+		   r3.roleId, \
+		   r3.pveUserId, \
+		   r3.roleName, \
+		   r3.roleType, \
+		   r3.roleStatus, \
+		   r3.rolePublicView, \
+		   r3.roleCreatorUid, \
+		   row_number() over(partition by r2.userId,r2.createTime order by r3.memoryStartTime-r2.createTime asc) as rn \
+	from ( \
+		select logId, \
+               userId, \
+               grassDelta, \
+               delta, \
+               stamina, \
+               type, \
+               status, \
+               createTime, \
+               ext \
+        from grass_res1 \
+        where ext = 'all' \
+	) r2 \
+	left join ( \
+	    select t1.id, \
+	           t1.userId, \
+	           t1.memoryStartTime, \
+	           t2.roleId, \
+               t2.pveUserId, \
+               t2.roleName, \
+               t2.roleType, \
+               t2.roleStatus, \
+               t2.rolePublicView, \
+               t2.roleCreatorUid \
+	    from ( \
+            select id, \
+                   userId, \
+                   roleId, \
+                   memoryStartTime \
+            from lofter_db_dump.ods_db_pve_ugc_role_record_nd \
+            where memoryStartTime > 0 \
+            union all \
+            select id, \
+                   userId, \
+                   roleId, \
+                   memoryStartTime \
+            from lofter_db_dump.ods_db_pve_user_duplicate_nd \
+            where memoryStartTime > 0 \
+        ) t1 \
+        left join ( \
+            select id as roleId, \
+                   userId as pveUserId, \
+                   roleName, \
+                   type as roleType, \
+                   status as roleStatus, \
+                   publicView as rolePublicView, \
+                   creatorUid as roleCreatorUid \
+            from lofter_db_dump.ods_db_pve_role_info_nd \
+        ) t2 \
+        on t1.roleId = t2.roleId \
+	) r3 \
+	on r2.userId = r3.userId and r2.createTime <= r3.memoryStartTime \
+) r4 \
+where rn = 1
+dependencies=dwd_pve_user_chats_info_di

@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_reward_score_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       action, \
+       case when action = -1 then '兑换' when action in (-2,-3) then '过期' when action > 0 then '发放' else '其他' end as action_type, \
+       createTime as op_time, \
+       delta as score \
+from lofter_db_dump.ods_db_reward_user_score_log_nd \
+where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \

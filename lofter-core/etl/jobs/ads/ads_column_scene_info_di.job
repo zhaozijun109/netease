@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_scene_info_di` PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  columnId, \
+        scene, \
+        exposureCount, \
+        clickCount, \
+        NVL(clickCount/exposureCount, 0) AS clickRateCount \
+FROM ( \
+        SELECT  columnId, \
+                scene, \
+                SUM(NVL(exposureCount,0)) AS exposureCount, \
+                SUM(NVL(clickCount,0)) AS clickCount \
+        FROM ( \
+                SELECT  userId, \
+                        GET_JSON_OBJECT(algInfo,'$.colTaskId') AS colTaskId, \
+                        itemid                                 AS columnId, \
+                        scene, \
+                        COUNT(DISTINCT CASE WHEN eventId in ('b1-45','g1-40','f1-46','b5-24') THEN userId ELSE NULL END) AS exposureCount, \
+                        COUNT(DISTINCT CASE WHEN eventId in ('b1-46','g1-41','f1-33','b5-10') THEN userId ELSE NULL END) AS clickCount \
+                FROM lofter.ods_mda_app_partition_di \
+                WHERE dt = '${azkaban.flow.1.days.ago}' and actionType in ('cell_exposure', 'cell_click') AND itemType = 'COLUMN' AND \
+                      eventId IN ('b1-45','g1-40','f1-46','b5-24','b1-46','g1-41','f1-33','b5-10') AND GET_JSON_OBJECT(algInfo,'$.colTaskId') IS NOT NULL \
+                GROUP BY userId, \
+                        GET_JSON_OBJECT(algInfo,'$.colTaskId'), \
+                        itemid, \
+                        scene \
+      ) t1 \
+      GROUP BY  columnId, \
+                scene \
+) tmp1

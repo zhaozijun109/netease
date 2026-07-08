@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.dws_vc_user_active_retain_point_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+             select x2.device_udid,x2.user_id,  \
+             if(x1.device_udid is null,null,last1day),  \
+             if(x1.device_udid is null,null,last3day),  \
+             if(x1.device_udid is null,null,last7day),  \
+             if(x1.device_udid is null,null,last30day)  \
+             from  \
+             (select device_udid,user_id,max(d1) as last1day,max(d3) as last3day,max(d7) as last7day,max(d30) as last30day  \
+             from  \
+             (select device_udid,user_id,if(dt = date_sub('${azkaban.flow.1.days.ago}',1),'Y',null) as d1   \
+             ,if(dt = date_sub('${azkaban.flow.3.days.ago}',1),'Y',null) as d3   \
+             ,if(dt = date_sub('${azkaban.flow.7.days.ago}',1),'Y',null) as d7   \
+             ,if(dt = date_sub('${azkaban.flow.30.days.ago}',1),'Y',null) as d30   \
+             from vc.dwd_vc_user_active_i_d where dt BETWEEN '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}') a  \
+             group by device_udid,user_id) x1  \
+             right join   \
+             (select device_udid,user_id from vc.dwd_vc_user_active_i_d where dt = '${azkaban.flow.1.days.ago}') x2 on x1.device_udid=x2.device_udid and x1.user_id=x2.user_id;

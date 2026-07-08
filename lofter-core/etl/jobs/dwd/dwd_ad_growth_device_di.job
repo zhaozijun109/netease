@@ -1,0 +1,178 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_growth_device_di partition(dt='${azkaban.flow.1.days.ago}') \
+select dev.deviceudid, \
+    dev.deviceOs, \
+    dev.appVersion, \
+    dev.appChannel, \
+    case when clk.deviceudid is not null then '点击归因' else '渠道包归因' end as source, \
+    case when clk.deviceudid is not null then clk.matchType else null end as matchType, \
+    case when clk.deviceudid is not null then clk.proxy else dev.proxy end as proxy, \
+    case when clk.deviceudid is not null then clk.media else dev.media end as media, \
+    case when clk.deviceudid is not null then clk.advertiserId else dev.advertiserId end as advertiserId, \
+    case when clk.deviceudid is not null then clk.campaignId else null end as campaignId, \
+    case when clk.deviceudid is not null then clk.aid else null end as aid, \
+    case when clk.deviceudid is not null then clk.cid else null end as cid, \
+    nvl(nvl(clk.appid, dev.appid), dev.app_key) as appid, \
+    dev.device_type, \
+    1 as is_ad_attributed, \
+    clk.customUdid, \
+    clk.custom_ouid, \
+    clk.photoId \
+from ( \
+    select \
+        dev_src.app_key, \
+        dev_src.deviceudid, \
+        dev_src.deviceOs, \
+        dev_src.appVersion, \
+        dev_src.appChannel, \
+        cfg_pkg.channelPackage, \
+        cfg_pkg.advertiserId, \
+        cfg_pkg.proxy, \
+        cfg_pkg.media, \
+        cfg_pkg.appid, \
+        dev_src.device_type \
+    from ( \
+        select \
+            'lofter' as app_key, \
+            dn.deviceudid as deviceudid, \
+            dn.deviceOs as deviceOs, \
+            dn.appVersion as appVersion, \
+            dn.appChannel as appChannel, \
+            'new' as device_type \
+        from lofter.device_new dn \
+        where dn.dt = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select \
+            'lofter' as app_key, \
+            dr.deviceudid as deviceudid, \
+            dr.deviceOs as deviceOs, \
+            dr.appVersions[0] as appVersion, \
+            dr.appChannels[0] as appChannel, \
+            'return' as device_type \
+        from lofter.device_return dr \
+        where dr.dt = '${azkaban.flow.1.days.ago}' \
+          and dr.period = 30 \
+        union all \
+        select \
+            'virtualapp' as app_key, \
+            vr.deviceUdid as deviceUdid, \
+            vr.deviceOs as deviceOs, \
+            vr.appVersion as appVersion, \
+            vr.appChannel as appChannel, \
+            'return' as device_type \
+        from lofter.dwd_vc_device_return_di vr \
+        where vr.dt = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select \
+            'virtualapp' as app_key, \
+            vn.deviceUdid as deviceUdid, \
+            vn.deviceOs as deviceOs, \
+            vn.appVersion as appVersion, \
+            vn.appChannel as appChannel, \
+            'new' as device_type \
+        from lofter.dwd_vc_device_new_di vn \
+        where vn.dt = '${azkaban.flow.1.days.ago}' \
+    ) dev_src \
+    left join ( \
+        select \
+            channelPackage, \
+            advertiserId, \
+            proxy, \
+            media, \
+            appid \
+        from ( \
+            select \
+                channelPackage, \
+                advertiserId, \
+                proxy, \
+                media, \
+                appid, \
+                row_number() over (partition by appid, channelPackage order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+            where channelPackage is not null \
+              and channelPackage != '' \
+        ) cfg \
+        where cfg_rk = 1 \
+    ) cfg_pkg \
+      on dev_src.app_key = cfg_pkg.appid \
+     and dev_src.appChannel = cfg_pkg.channelPackage \
+) dev \
+left join ( \
+    select \
+        clk_src.appid as app_key, \
+        clk_src.deviceudid, \
+        clk_src.matchType, \
+        cfg_adv.proxy, \
+        case when cfg_adv.media is not null then cfg_adv.media else clk_src.media end as media, \
+        clk_src.advertiserId, \
+        clk_src.campaignId, \
+        clk_src.aid, \
+        clk_src.cid, \
+        cfg_adv.appid, \
+        clk_src.customUdid, \
+        clk_src.custom_ouid, \
+        clk_src.photoId, \
+        case when clk_src.newUserFlag = 'true' then 'new' else 'return' end as device_type \
+    from( \
+        select \
+            lk.appid, \
+            lk.daDeviceId as deviceudid, \
+            lk.dt, \
+            lk.newUserFlag, \
+            lk.matchType, \
+            lk.time, \
+            case \
+                when lk.channel = 'GDT'      then '广点通' \
+                when lk.channel = 'bilibili' then '哔哩哔哩' \
+                when lk.channel = 'music'    then '麦穗' \
+                else lk.channel \
+            end as media, \
+            case \
+                when lk.advertiserId is null and lk.channel = 'GDT' then lk.adid \
+                when lk.advertiserId is null                         then lk.subchannel \
+                else lk.advertiserId \
+            end as advertiserId, \
+            lk.campaignId, \
+            lk.aid, \
+            lk.cid, \
+            lk.deviceId as customUdid, \
+            lk.custom_ouid, \
+            lk.photoId, \
+            row_number() over ( \
+                partition by \
+                    lk.appid, \
+                    lk.daDeviceId, \
+                    lk.newUserFlag, \
+                    case when lk.newUserFlag = 'false' then lk.dt else '0' end \
+                order by lk.time \
+            ) as rnk \
+        from lofter.ods_log_ad_new_linkup_di lk \
+        where lk.dt >= '${azkaban.flow.1.days.ago}' \
+          and lk.dt <= '${azkaban.flow.current.date}' \
+    ) clk_src \
+    left join ( \
+        select distinct \
+            appid, \
+            advertiserId, \
+            proxy, \
+            media \
+        from ( \
+            select \
+                appid, \
+                advertiserId, \
+                proxy, \
+                media, \
+                row_number() over (partition by appid, advertiserId order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+        ) cfg \
+        where cfg_rk = 1 \
+    ) cfg_adv \
+      on cfg_adv.appid = clk_src.appid \
+     and cfg_adv.advertiserId = clk_src.advertiserId \
+    where clk_src.rnk = 1 \
+) clk \
+  on dev.deviceudid = clk.deviceudid \
+  and dev.device_type = clk.device_type \
+  and dev.app_key = clk.app_key \
+where (dev.channelPackage is not null or clk.deviceudid is not null)
+dependencies=device_new,device_return

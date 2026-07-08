@@ -1,0 +1,64 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_rec_reason_scene_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select  \
+    a.source,a.actiontype,a.eventid,a.userid,a.deviceudid,a.deviceOs,reason,scene,a.postId,b.blogId,b.contentType, \
+    if(scene in('collection','floatCollection') or params_add_item_type = 'COLLECTION',1,0) AS is_collection, \
+    detail_scene_level_1, \
+    detail_scene_level_2 \
+from( \
+    select \
+        '算法推荐' as source, \
+        case actiontype \
+            when 'cell_exposure' then 'expose' \
+            when 'cell_click' then 'click' \
+        end actiontype, \
+        deviceOs, \
+        eventid,userid,deviceudid, \
+        case regexp_replace(nvl(params['reason'], GET_JSON_OBJECT(alginfo,'$.recReasonType')), '\\\\d+', 'X') \
+            when 'X人觉得很虐' then 'XXX人觉得很虐' \
+            when '含X篇万热内容' then '含XXX篇万热内容' \
+            when '含X篇千热内容' then '含XXX篇千热内容' \
+            when 'X人觉得很甜' then 'XXX人觉得很甜' \
+            when 'X.X万用户看过' then 'XXX万用户看过' \
+            when 'X万浏览' then 'XXX万浏览' \
+            when '近X天X人订阅' then '近7天XXX人订阅' \
+            when 'X用户看过' then 'XXX用户看过' \
+            when 'X日内更新X篇' then '7日内更新XXX篇' \
+            else regexp_replace(nvl(params['reason'], GET_JSON_OBJECT(alginfo,'$.recReasonType')), '\\\\d+', 'X') \
+        end as reason, \
+        CASE WHEN actionType IN ('cell_exposure', 'cell_click') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') THEN cast(nvl(itemId,params['tid']) AS bigint) \
+	        ELSE cast(params['add_itemId'] as bigint) \
+	    END AS postId, \
+        nvl(params['add_itemType'],params['ext_itemType']) AS params_add_item_type, \
+        scene, \
+        CASE WHEN actionType IN ('cell_exposure', 'cell_click') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+            THEN \
+                CASE WHEN params['module'] = 'related_item' THEN 'related_article' \
+                    WHEN scene IN ('floatCollection','immerse_collection') OR scene = 'note' AND (scene = 'immerse_collection' OR (scene = 'note' AND params['module'] = 'note_collection')) THEN 'collection' \
+                    ELSE scene \
+                END \
+            ELSE 'talk' \
+        END AS detail_scene_level_1, \
+        CASE WHEN actionType IN ('cell_exposure', 'cell_click') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+            THEN \
+            CASE WHEN scene = 'tag' AND params['tab'] = '发现' THEN 'tag_discovery' \
+                WHEN scene = 'tag' AND params['tab'] IN ('最新发布','最新评论') THEN 'tag_new' \
+                WHEN scene = 'tag' AND params['tab'] IN ('最热全部','最热日榜','最热周榜','最热月榜','全部','日榜','周榜','月榜') THEN 'tag_hot' \
+                WHEN scene = 'floatCollection' THEN 'floatCollection' \
+                WHEN scene = 'immerse_collection' AND params['module'] = 'immerse_collection' THEN 'immerse_collection' \
+                WHEN scene = 'note' AND params['module'] = 'note_collection' THEN 'note_collection' \
+                WHEN scene = 'immerse_collection' AND params['module'] = 'sim_collection_article' THEN 'related_collection' \
+                ELSE NULL \
+            END \
+            ELSE \
+            CASE WHEN scene = 'tag' AND params['tab'] IN ('动态推荐','动态最新') THEN 'tag_talk' \
+                ELSE scene \
+            END \
+        END AS detail_scene_level_2 \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType in ('cell_exposure', 'cell_click') and itemType IN ('ARTICLE','TEXT', 'PHOTO','VIDEO') AND cast(nvl(itemId, params['tid']) AS bigint) > 0 \
+        and(COALESCE(GET_JSON_OBJECT(alginfo, '$.recReasonType'), '') REGEXP '”|“|连续更新|日内更新|无彩蛋|入坑神作|高甜HE|短篇热文|万字长文|高虐BE' or params['reason'] is not null ) \
+)a  \
+JOIN lofter.dim_post_article b \
+ON a.postId = b.id

@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_user_post_other_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       sum(if(opType='ti', 1, 0))        as ti_pv, \
+       sum(if(opType='luck_boy', 1, 0))  as luck_boy_pv, \
+       sum(if(opType='vote_blog', 1, 0)) as vote_blog_pv, \
+       sum(if(opType='vote_user', 1, 0)) as vote_user_pv \
+from ( \
+    select blogId as userId, 'ti' as opType \
+    from lofter.dwd_emote_dun_ti_record_di \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(tiTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select blogId as userId, 'luck_boy' as opType \
+    from lofter_db_dump.ods_db_lucky_boy_config_nd \
+    where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select blogId as userId, 'vote_blog' as opType \
+    from lofter_db_dump.ods_db_vote_info_nd \
+    where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, 'vote_user' as opType \
+    from lofter.dwd_vote_record_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t \
+group by userId

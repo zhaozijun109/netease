@@ -1,0 +1,21 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=20
+conf.spark.executor.cores=4
+hive.query.01= insert overwrite table lofter.dws_par_user_tag_create_dd partition(dt='${azkaban.flow.1.days.ago}')  \
+              select userId,tag,    \
+                  count(id) as post_count_acc,  \
+                  count(if(publishDate = '${azkaban.flow.1.days.ago}', id, null )) as post_count_1d, \
+                  count(if(publishDate >= '${azkaban.flow.7.days.ago}', id, null )) as post_count_7d, \
+                  count(if(publishDate >= '${azkaban.flow.30.days.ago}', id, null )) as post_count_30d, \
+                  count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 365, id, null)) as post_count_365d, \
+                  count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15, id, null )) as post_count_15d, \
+                  count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, id, null )) as post_count_90d, \
+                  count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180, id, null )) as post_count_180d \
+              from lofter.dim_post_article  \
+              lateral view explode(tags) t2 as tag  \
+              where  tag is not null and publishDate<='${azkaban.flow.1.days.ago}'  \
+              group by userId,tag   \
+          distribute by userId % 10

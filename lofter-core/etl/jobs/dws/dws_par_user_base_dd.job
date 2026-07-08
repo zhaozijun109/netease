@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+executor-memory=20g
+driver-memory=3g
+conf.spark.driver.memory=2g
+conf.spark.driver.memoryOverhead=1g
+conf.spark.executor.memory=12g
+conf.spark.executor.memoryOverhead=8g
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.executor.cores=4
+class=com.netease.lofter.etl.dws.UserBaseJob
+params= --date ${azkaban.flow.1.days.ago}
+dependencies=dws_evt_login_user_last_dd,dws_par_user_push_dd

@@ -1,0 +1,221 @@
+type=sparksql
+hive.query.01=\
+with user_crowd_source as ( \
+     select userId, \
+            tag, \
+            score, \
+            userType \
+     from lofter.dws_post_talk_user_crowd_dd where dt = '${azkaban.flow.1.days.ago}' \
+ ), \
+question_invite_source as ( \
+    select t1.userId, \
+           t1.tag, \
+           t1.score, \
+           t1.userType, \
+           t2.questionId, \
+           t2.questionType \
+    from user_crowd_source t1 \
+    join ( \
+        select talkId as questionId, \
+               case when cosplay = 2 then 'score_question' \
+                    when cosplay in (0, 1) then 'answer_question' \
+               end as questionType, \
+               tag \
+        from lofter.dws_post_talk_question_interaction_dd lateral view explode(tags) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and status = 1 and is_fans_question = 0 and ((cosplay = 2 and 7dScoreCount > 100) or (cosplay in (0,1) and 7dDiscussCount >= 50 and recomStatus = 1)) \
+    ) t2 \
+    on t1.tag = t2.tag \
+), \
+koc_question_source as ( \
+    select t1.questionId, t1.tag, t2.scoreCount \
+    from ( \
+        select talkId as questionId, \
+            tag \
+        from lofter.dim_post_talk lateral view explode(tags) as tag \
+        where lower(talkType) like '%question%' and status = 1 \
+    ) t1 \
+    join ( \
+        select questionId, scoreCount from lofter_db_dump.ods_db_ask_question_task_record_nd where cosplay = 2 \
+    ) t2 \
+    on t1.questionId = t2.questionId \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_question_invite_message_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+select t1.userId, \
+       t1.questionId, \
+       t1.tag, \
+       t1.type \
+from ( \
+    select userId, \
+           questionId, \
+           tag, \
+           type \
+    from ( \
+        select userId, \
+               questionId, \
+               tag, \
+               type, \
+               row_number() over(partition by userId order by rank) as rn \
+        from ( \
+            select userId, questionId, tag, 2 as rank, 0 as type \
+            from question_invite_source \
+            where questionType = 'score_question' and tag <> '嗑CP' and score >= 130 \
+            union all \
+            select userId, questionId, tag, 3 as rank, 2 as type \
+            from question_invite_source \
+            where questionType = 'score_question' and tag <> '嗑CP' and userType = '新用户' \
+            union all \
+            select userId, questionId, tag, 1 as rank, 1 as type \
+            from question_invite_source \
+            where questionType = 'answer_question' and score >= 100 \
+            union all \
+            select userId, questionId, tag, 5 as rank, 2 as type \
+            from question_invite_source \
+            where questionType = 'score_question' and tag = '嗑CP' and userType = '重度用户' \
+            union all \
+            select userId, questionId, tag, 4 as rank, 0 as type \
+            from ( \
+                select tmp2.userId, \
+                       tmp2.questionId, \
+                       tmp2.tag \
+                from ( \
+                    select tag \
+                    from ( \
+                        select t5.tag, \
+                               categoryName, \
+                               row_number() over(partition by categoryName order by nvl(post_count_7d,0) desc) as rn \
+                        from ( \
+                            select t1.ipId, \
+                                   t2.categoryName \
+                            from ( \
+                                select id as ipId, \
+                                       name as ip, \
+                                       categoryId \
+                                from lofter_db_dump.ods_db_cmb_ip_nd lateral view explode(split(categoryIds,';')) as categoryId \
+                            ) t1 \
+                            join ( \
+                                select id as categoryId, \
+                                       name as categoryName \
+                                from lofter_db_dump.ods_db_cmb_category_nd \
+                                where level = 1 and status = 0 and name in ('影视', '娱乐', '二次元', '游戏') \
+                                union all \
+                                select a.id as categoryId, b.name as categoryName \
+                                from lofter_db_dump.ods_db_cmb_category_nd a \
+                                join ( \
+                                    select * from lofter_db_dump.ods_db_cmb_category_nd where level = 1 and status = 0 and name in ('影视', '娱乐', '二次元', '游戏') \
+                                ) b \
+                                on a.parentId = b.id \
+                                where a.level = 2 and a.status = 0 and b.level = 1 and b.status = 0 \
+                                union all \
+                                select a.id as categoryId, \
+                                       c.name as categoryName \
+                                from lofter_db_dump.ods_db_cmb_category_nd a \
+                                join lofter_db_dump.ods_db_cmb_category_nd b \
+                                on a.parentId = b.id \
+                                join ( \
+                                    select * from lofter_db_dump.ods_db_cmb_category_nd where level = 1 and status = 0 and name in ('影视', '娱乐', '二次元', '游戏') \
+                                ) c \
+                                on b.parentId = c.id \
+                                where a.level = 3 and a.status = 0 and a.name <> '乙游' and b.level = 2 and b.status = 0 and c.level = 1 and c.status = 0 \
+                                union all \
+                                select a.id as categoryId, \
+                                       b.name as categoryName \
+                                from lofter_db_dump.ods_db_cmb_category_nd a \
+                                join ( \
+                                    select * from lofter_db_dump.ods_db_cmb_category_nd where level = 2 and status = 0 and name = '文学' \
+                                ) b \
+                                on a.parentId = b.id \
+                                where a.level = 3 and a.status = 0 and b.level = 2 and b.status = 0 \
+                                union all \
+                                select id as categoryId, name as categoryName \
+                                from lofter_db_dump.ods_db_cmb_category_nd \
+                                where level = 3 and status = 0 and name = '乙游' \
+                            ) t2 \
+                            on t1.categoryId = t2.categoryId \
+                        ) t3 \
+                        left join ( \
+                            select tagId, ipId from lofter_db_dump.ods_db_cmb_tag_ip_nd \
+                        ) t4 \
+                        on t3.ipId = t4.ipId \
+                        left join ( \
+                            select id as tagId, name as tag from lofter_db_dump.ods_db_cmb_tag_nd \
+                        ) t5 \
+                        on t4.tagId = t5.tagId \
+                        left join ( \
+                            select tag, post_count_7d from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' \
+                        ) t6 \
+                        on t5.tag = t6.tag \
+                        where t5.tag not in ('双男主','小说推荐','百合','gl','hp','随笔','推文','诡秘之主','gb','lofter原创小说','原创小说','短篇','古风') \
+                    ) t7 \
+                    where rn <= 10 \
+                    group by tag \
+                ) tmp1 \
+                join ( \
+                    select userId, questionId, tag \
+                    from question_invite_source \
+                    where questionType = 'score_question' and score >= 130 \
+                ) tmp2 \
+                on tmp1.tag = tmp2.tag \
+            ) tmp3 \
+            union all \
+            select userId, questionId, tag, 6 as rank, 2 as type \
+            from ( \
+                select userId, \
+                       questionId, \
+                       tag, \
+                       row_number() over(partition by userId order by type) as rn \
+                from ( \
+                    select userId, tag, questionId, type \
+                    from ( \
+                        select t1.userId, \
+                               t1.tag, \
+                               t2.questionId, \
+                               1 as type \
+                        from ( \
+                            select * from user_crowd_source where userType = '重度用户' \
+                        )t1 \
+                        join ( \
+                            select * from koc_question_source where scoreCount > 50 \
+                        ) t2 \
+                        on t1.tag = t2.tag \
+                        limit 5000 \
+                    ) t \
+                    union all \
+                    select userId, tag, questionId, type \
+                    from ( \
+                        select t1.userId, \
+                               t1.tag, \
+                               t2.questionId, \
+                               2 as type \
+                        from ( \
+                            select * from user_crowd_source where userType = '重度用户' \
+                        )t1 \
+                        join ( \
+                            select * from koc_question_source where scoreCount < 50 \
+                        ) t2 \
+                        on t1.tag = t2.tag \
+                        limit 1000 \
+                    ) t \
+                ) x1 \
+            ) x2 \
+            where rn = 1 \
+        ) r1 \
+    ) r2 \
+    where rn = 1 \
+) t1 \
+left join ( \
+    select userId \
+    from lofter_dm.ads_question_invite_message_dd \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}',2) and dt < '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) t2 \
+on t1.userId = t2.userId \
+left join ( \
+    select userId, \
+           questionId \
+    from lofter_dm.ads_question_invite_message_dd \
+    where dt < '${azkaban.flow.1.days.ago}' \
+    group by userId, questionId \
+) t3 \
+on t1.userId = t3.userId and t1.questionId = t3.questionId \
+where t2.userId is null and t3.questionId is null \
+limit 80000

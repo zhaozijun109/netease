@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_supply_consume_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.ip,categories,post_cnt_1d,post_cnt_7d,post_cnt_15d,post_cnt_30d,creator_cnt_1d,creator_cnt_7d,creator_cnt_15d,creator_cnt_30d,valid_creator_cnt_30d,premium_post_cnt,sum_realpv,newuser_realpv,returnuser_realpv,1to7_realpv,8to14_realpv,15to28_realpv,29to30_realpv,sum_realuv,newuser_realuv,returnuser_realuv,1to7_realuv,8to14_realuv,15to28_realuv,29to30_realuv,sum_valid_interaction_uv,sum_valid_interaction_pv,recommend_uv,recommend_pv,valid_comment_uv,valid_comment_pv,share_uv,share_pv,derivedflag \
+from \
+( \
+    select ip,categories,post_cnt_1d,post_cnt_7d,post_cnt_15d,post_cnt_30d,creator_cnt_1d,creator_cnt_7d,creator_cnt_15d,creator_cnt_30d,valid_creator_cnt_30d,premium_post_cnt,derivedflag \
+    from  lofter.dws_ip_supply_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join \
+( \
+    select ip,sum_realpv,newuser_realpv,returnuser_realpv,1to7_realpv,8to14_realpv,15to28_realpv,29to30_realpv,sum_realuv,newuser_realuv,returnuser_realuv,1to7_realuv,8to14_realuv,15to28_realuv,29to30_realuv \
+    from lofter.dws_ip_consume_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b \
+on a.ip=b.ip \
+left join \
+( \
+    select ips as ip ,sum_valid_interaction_uv,sum_valid_interaction_pv,recommend_uv,recommend_pv,valid_comment_uv,valid_comment_pv,share_uv,share_pv \
+    from lofter.dws_ip_interaction_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) c \
+on a.ip=c.ip \

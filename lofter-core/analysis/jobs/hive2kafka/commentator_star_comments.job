@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select userId, week_valid_commentator_comments as validStarComments, ((5 + dayofweek(dt)) % 7 + 1) as `dayOfWeek`, \
+       week_valid_base_comments as validBaseComments, 1 as taskType \
+from lofter_dm.ads_gift_commentator_week_task_di \
+where dt = '${azkaban.flow.1.days.ago}' and week_valid_commentator_comments > 0 \
+union all \
+select userId, 0 as validStarComments, ((5 + dayofweek(dt)) % 7 + 1) as `dayOfWeek`, \
+       week_valid_base_comments as validBaseComments, 0 as taskType \
+from lofter_dm.ads_gift_commentator_week_task_di \
+where dt = '${azkaban.flow.1.days.ago}' and week_valid_base_comments > 0 \
+"
+params= --topic LOFTER.COMMENTATOR_TASK --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

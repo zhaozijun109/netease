@@ -1,0 +1,45 @@
+syntax = "proto2";
+package com.netease.yuanqi.pojo.proto.ods;
+
+option java_package = "com.netease.yuanqi.common.pojo.proto.ods";
+option java_outer_classname = "ClientMdaLogProtoBuilder";
+
+message ClientMdaLogProto {
+  optional string eventId = 1;
+  optional string deviceUdid = 2;
+  optional int64 userId = 3;
+  optional string userName = 4;
+  optional string appVersion = 5;
+  optional string appChannel = 6;
+  optional int64 occurTime = 7;
+  optional string category = 8;
+  optional string label = 9;
+  optional string customUdId = 10;
+  optional string sessionUuid = 11;
+  optional string ip = 12;
+  optional string devicePlatform = 13;
+  optional string deviceOs = 14;
+  optional string deviceOsVersion = 15;
+  optional string deviceModel = 16;
+  optional string deviceAdId = 17;
+  optional string deviceIdFv = 18;
+  optional string deviceImei = 19;
+  optional string appKey = 20;
+  optional string city = 21;
+  optional int64 costTime = 22;
+  optional string source = 23;
+  optional string deviceAndroidId = 24;
+  optional string itemId = 25;
+  optional string itemType = 26;
+  optional string recId = 27;
+  optional string scene = 28;
+  optional string action = 29;
+  optional string tagName = 30;
+  optional string layout = 31;
+  optional string algInfo = 32;
+  map<string, string> attributes = 33;
+  optional int64 kafkaTime = 34;
+  optional string region = 35;
+  optional string country = 36;
+  optional string oaId = 37;
+}

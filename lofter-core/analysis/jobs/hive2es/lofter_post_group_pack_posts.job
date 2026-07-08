@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(job_id, '-', postId) as id, job_id as packId, postId, dt from lofter.dwd_post_group_post_list_di where dt = '${azkaban.flow.2.days.ago}' "
+params= --partition ${azkaban.flow.2.days.ago} --id --dest lofter_post_group_pack_posts --atom

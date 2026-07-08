@@ -1,0 +1,121 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.02=create temporary function bitmap_and as 'com.netease.wm.udf.bitmap.BitmapAndUDF';
+hive.query.03=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.04=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.05= \
+with tag_posts as ( \
+    select a.tag, a.postId, a.blogId, a.publishTime \
+    from ( \
+        select tag, id as postId, blogId, publishTime \
+        from lofter.dim_post \
+             lateral view explode(tags) as tag \
+        where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and valid in (0,12,15,16) and \
+              contentType in ('图片','文字','视频','长文章') and publishDate between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select ipName as tag from lofter_db_dump.ods_db_tag_rank_config_nd where status = 0 group by ipName \
+    ) b \
+    on a.tag = b.tag \
+    left join ( \
+        select ipName as tag, userId, 'black' as userType from lofter_db_dump.ods_db_tag_rank_black_nd where status = 0 group by ipName, userId \
+    ) c \
+    on a.tag = c.tag and a.blogId = c.userId \
+    where c.userType is null \
+    group by a.tag, a.postId, a.blogId, a.publishTime \
+) \
+insert overwrite table lofter_dm.ads_tag_blog_index_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select nvl(x.tag, y.tag) as tag, nvl(x.blogId, y.blogId) as blogId, \
+      nvl(x.hot,0) as hot, nvl(x.response,0) as response, \
+      nvl(y.browse_devices,0) as browse_devices, \
+      nvl(y.recurrent_devices, 0) as recurrent_devices, \
+      nvl(y.browse2hd_devices, 0) as hd_devices, \
+      z.hot_std, z.post_ids_std, z.first_publish_time, \
+      z2.repay_ratio, z3.support_score \
+from ( \
+    select b.tag, b.blogId, \
+           sum(hot_pv) hot, \
+           sum(valid_response_pv) response \
+    from ( \
+        select * \
+        from lofter.dws_post_interaction_di \
+        where dt >= '${azkaban.flow.7.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join tag_posts b on a.postId = b.postId \
+    group by b.tag, b.blogId \
+) x \
+join ( \
+    select tag, blogId, \
+           bitmap_count(bitmap_union(day_devices)) as browse_devices, \
+           bitmap_count(bitmap_union(bitmap_and(day_devices, other_day_devices))) as recurrent_devices, \
+           bitmap_count(bitmap_union(day_browse2hd_devices)) as browse2hd_devices \
+    from ( \
+        select b.tag, b.blogId, a.dt, \
+               bitmap_union(day_devices) as day_devices, \
+               bitmap_union(bitmap_or(prev_days_devices, next_days_devices)) as other_day_devices, \
+               bitmap_union(bitmap_and(day_devices, hd_devices)) as day_browse2hd_devices \
+        from ( \
+            select postId, dt, \
+                   real_browse_device_bitmap as day_devices, \
+                   bitmap_union(real_browse_device_bitmap) over (partition by postId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) prev_days_devices, \
+                   bitmap_union(real_browse_device_bitmap) over (partition by postId order by dt ROWS BETWEEN 1 FOLLOWING and UNBOUNDED FOLLOWING) next_days_devices \
+            from lofter.dws_post_traffic_di \
+            where dt >= '${azkaban.flow.7.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        ) a \
+        join tag_posts b on a.postId = b.postId \
+        left join ( \
+            select postId, dt, hd_device_bitmap as hd_devices \
+            from lofter.dws_post_interaction_di \
+            where dt >= '${azkaban.flow.7.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        ) c on a.postId = c.postId and a.dt = c.dt \
+        group by 1, 2, 3 \
+    ) t \
+    group by tag, blogId \
+) y on x.tag = y.tag and x.blogId = y.blogId \
+left join ( \
+    select a.tag, a.blogId, sum(b.hot) as hot_std, \
+           transform(sort_array(collect_set(if(b.hot >= 10, struct(-a.publishTime, a.postId), null)), true), x -> x.postId) as post_ids_std, \
+           min(publishTime) as first_publish_time \
+    from tag_posts a \
+    left join ( \
+        select blogId, postId, hot \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId and a.blogId = b.blogId \
+    group by a.tag, a.blogId \
+) z on x.tag = z.tag and x.blogId = z.blogId \
+left join ( \
+    select blogId \
+    from lofter_db_dump.ods_db_blog_settings_nd \
+    where securityRank in (9998, 9999) \
+    group by blogId \
+) z1 on x.blogId = z1.blogId \
+left join ( \
+    select tag, blogId, count(distinct if(pay_pv > 1, userId, null)) / count(distinct userId) as repay_ratio \
+    from ( \
+        select x.tag, x.blogid, y.userId, count(1) as pay_pv \
+        from tag_posts x \
+        join ( \
+            select sender as userId, postId \
+            from lofter.dwd_paid_post_detail_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                  from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                  datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+        ) y on x.postId = y.postId \
+        group by 1, 2, 3 \
+    ) t \
+    group by 1, 2 \
+) z2 on x.tag = z2.tag and x.blogId = z2.blogId \
+left join ( \
+   select x.tag, x.blogId, sum(y.score) as support_score \
+   from tag_posts x \
+   join ( \
+       select itemId as postId, score \
+       from lofter_db_dump.ods_db_trade_support_record_nd \
+       where itemType = 'POST' and \
+             from_unixtime(cast(`time` / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+             datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(`time` / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+   ) y on x.postId = y.postId \
+   group by 1, 2 \
+) z3 on x.tag = z3.tag and x.blogId = z3.blogId \
+where z1.blogId is null

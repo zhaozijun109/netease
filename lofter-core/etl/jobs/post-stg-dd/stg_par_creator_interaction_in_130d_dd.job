@@ -1,0 +1,37 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+insert overwrite table lofter.stg_par_creator_interaction_in_130d_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select  userId, \
+        hdUserId, \
+        op_dt, \
+        hot, \
+        like_cnt, \
+        reproduce_cnt, \
+        recommend_cnt, \
+        collect_cnt, \
+        comment_cnt, \
+        opTime, \
+        postId \
+from lofter.stg_par_creator_interaction_out_130d_wd \
+where dt >= date_sub('${azkaban.flow.1.days.ago}',7) AND dt <= '${azkaban.flow.1.days.ago}' \
+union all \
+select  blogId as userId, \
+        publisherUserId as hdUserId, \
+        from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') as op_dt, \
+        1 as hot, \
+        if(type = 1, 1, 0) as like_cnt, \
+        if(type = 2, 1, 0) as reproduce_cnt, \
+        if(type = 3, 1, 0) as recommend_cnt, \
+        if(type = 4, 1, 0) as collect_cnt, \
+        0 as comment_cnt, \
+        opTime, \
+        postId \
+from lofter.stg_post_hot_dynamic_in_130d_dd \
+where dt = '${azkaban.flow.1.days.ago}' and type in (1,2,3,4)

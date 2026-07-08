@@ -1,0 +1,84 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 质量分 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '质量分'      as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '质量分' as tag, 'DAY_7' as cat, \
+                                         case when quality_score < 150 then '0-150' \
+                                              when quality_score < 200 then '150-200' \
+                                              when quality_score < 300 then '200-300' \
+                                              else '300及以上' end as grp \
+                                  from ( \
+                                      select blogId as userId, max(quality_score) as quality_score \
+                                      from lofter_dm.ads_paid_post_level_scoring_dd \
+                                      where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+                                      group by blogId \
+                                  ) t \
+                                  where quality_score >= 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '质量分' as tag, 'DAY_15' as cat, \
+                                         case when quality_score < 150 then '0-150' \
+                                              when quality_score < 200 then '150-200' \
+                                              when quality_score < 300 then '200-300' \
+                                              else '300及以上' end as grp \
+                                  from ( \
+                                      select blogId as userId, max(quality_score) as quality_score \
+                                      from lofter_dm.ads_paid_post_level_scoring_dd \
+                                      where dt between date_sub('${azkaban.flow.1.days.ago}', 14) and '${azkaban.flow.1.days.ago}' \
+                                      group by blogId \
+                                  ) t \
+                                  where quality_score >= 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '质量分' as tag, 'DAY_30' as cat, \
+                                         case when quality_score < 150 then '0-150' \
+                                              when quality_score < 200 then '150-200' \
+                                              when quality_score < 300 then '200-300' \
+                                              else '300及以上' end as grp \
+                                  from ( \
+                                      select blogId as userId, max(quality_score) as quality_score \
+                                      from lofter_dm.ads_paid_post_level_scoring_dd \
+                                      where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+                                      group by blogId \
+                                  ) t \
+                                  where quality_score >= 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '质量分' as tag, 'DAY_90' as cat, \
+                                         case when quality_score < 150 then '0-150' \
+                                              when quality_score < 200 then '150-200' \
+                                              when quality_score < 300 then '200-300' \
+                                              else '300及以上' end as grp \
+                                  from ( \
+                                      select blogId as userId, max(quality_score) as quality_score \
+                                      from lofter_dm.ads_paid_post_level_scoring_dd \
+                                      where dt between date_sub('${azkaban.flow.1.days.ago}', 89) and '${azkaban.flow.1.days.ago}' \
+                                      group by blogId \
+                                  ) t \
+                                  where quality_score >= 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '质量分' as tag, 'DAY_180' as cat, \
+                                         case when quality_score < 150 then '0-150' \
+                                              when quality_score < 200 then '150-200' \
+                                              when quality_score < 300 then '200-300' \
+                                              else '300及以上' end as grp \
+                                  from ( \
+                                      select blogId as userId, max(quality_score) as quality_score \
+                                      from lofter_dm.ads_paid_post_level_scoring_dd \
+                                      where dt between date_sub('${azkaban.flow.1.days.ago}', 179) and '${azkaban.flow.1.days.ago}' \
+                                      group by blogId \
+                                  ) t \
+                                  where quality_score >= 0 ) "

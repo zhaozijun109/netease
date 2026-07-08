@@ -1,0 +1,239 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_user_consume_migrate_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  '30' as period, \
+  a.dt as base_dt, \
+  a.flg as flg0, \
+  a.pay_type, \
+  NVL(b.flg,'未付费') as flg1, \
+  count(distinct a.userid) as uv0, \
+  sum(a.trade_money) as trade_money0, \
+  sum(a.trade_num) as trade_num0, \
+  count(distinct b.userid) as uv1, \
+  sum(b.trade_money) as trade_money1, \
+  sum(b.trade_num) as trade_num1 \
+from \
+  ( \
+    select \
+      dt, \
+      userid, \
+      pay_type, \
+      CASE \
+        WHEN trade_money > 0 \
+        AND trade_money < 1 THEN '(0,1)' \
+        WHEN trade_money >= 1 \
+        AND trade_money < 5 THEN '[1,5)' \
+        WHEN trade_money >= 5 \
+        AND trade_money < 15 THEN '[5,15)' \
+        WHEN trade_money >= 15 \
+        AND trade_money < 25 THEN '[15,25)' \
+        WHEN trade_money >= 25 \
+        AND trade_money < 50 THEN '[25,50)' \
+        WHEN trade_money >= 50 \
+        AND trade_money < 100 THEN '[50,100)' \
+        WHEN trade_money >= 100 \
+        AND trade_money < 200 THEN '[100,200)' \
+        ELSE '[200,~)' \
+      END as flg, \
+      trade_money, \
+      trade_num \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = date_sub('${azkaban.flow.1.days.ago}', 30) \
+      and period = '30' \
+    union \
+    select \
+      a.dt, \
+      a.userid, \
+      a.pay_type, \
+      '新增付费' flg, \
+      trade_money, \
+      trade_num \
+    from \
+      ( \
+        select \
+          dt, \
+          userid, \
+          pay_type, \
+          trade_money, \
+          trade_num \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt = date_sub('${azkaban.flow.1.days.ago}', 30) \
+          and period = '30' \
+      ) a \
+      left join ( \
+        select \
+          dt, \
+          userid, \
+          pay_type \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt = date_sub('${azkaban.flow.1.days.ago}', 31) \
+          and period = 'history' \
+      ) b on a.pay_type = b.pay_type \
+      and a.userid = b.userid \
+      and b.dt = date_sub(a.dt, 1) \
+    where \
+      b.userid is null \
+  ) a \
+  left join ( \
+    select \
+      dt, \
+      userid, \
+      pay_type, \
+      CASE \
+        WHEN trade_money > 0 \
+        AND trade_money < 1 THEN '(0,1)' \
+        WHEN trade_money >= 1 \
+        AND trade_money < 5 THEN '[1,5)' \
+        WHEN trade_money >= 5 \
+        AND trade_money < 15 THEN '[5,15)' \
+        WHEN trade_money >= 15 \
+        AND trade_money < 25 THEN '[15,25)' \
+        WHEN trade_money >= 25 \
+        AND trade_money < 50 THEN '[25,50)' \
+        WHEN trade_money >= 50 \
+        AND trade_money < 100 THEN '[50,100)' \
+        WHEN trade_money >= 100 \
+        AND trade_money < 200 THEN '[100,200)' \
+        ELSE '[200,~)' \
+      END as flg, \
+      trade_money, \
+      trade_num \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and period = '30' \
+  ) b on a.userid = b.userid \
+  and a.pay_type = b.pay_type \
+  and b.dt = date_add(a.dt, 30) \
+group by \
+  a.dt, \
+  a.flg, \
+  a.pay_type, \
+  b.flg \
+union \
+select \
+  '7' as period, \
+  a.dt as base_dt, \
+  a.flg as flg0, \
+  a.pay_type, \
+  NVL(b.flg,'未付费') as flg1, \
+  count(distinct a.userid) as uv0, \
+  sum(a.trade_money) as trade_money0, \
+  sum(a.trade_num) as trade_num0, \
+  count(distinct b.userid) as uv1, \
+  sum(b.trade_money) as trade_money1, \
+  sum(b.trade_num) as trade_num1 \
+from \
+  ( \
+    select \
+      dt, \
+      userid, \
+      pay_type, \
+      CASE \
+        WHEN trade_money > 0 \
+        AND trade_money < 1 THEN '(0,1)' \
+        WHEN trade_money >= 1 \
+        AND trade_money < 5 THEN '[1,5)' \
+        WHEN trade_money >= 5 \
+        AND trade_money < 10 THEN '[5,10)' \
+        WHEN trade_money >= 10 \
+        AND trade_money < 15 THEN '[10,15)' \
+        WHEN trade_money >= 15 \
+        AND trade_money < 25 THEN '[15,25)' \
+        WHEN trade_money >= 25 \
+        AND trade_money < 50 THEN '[25,50)' \
+        WHEN trade_money >= 50 \
+        AND trade_money < 100 THEN '[50,100)' \
+        ELSE '[100,~)' \
+      END as flg, \
+      trade_money, \
+      trade_num \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = date_sub('${azkaban.flow.1.days.ago}', 7) \
+      and period = '7' \
+    union \
+    select \
+      a.dt, \
+      a.userid, \
+      a.pay_type, \
+      '新增付费' flg, \
+      trade_money, \
+      trade_num \
+    from \
+      ( \
+        select \
+          dt, \
+          userid, \
+          pay_type, \
+          trade_money, \
+          trade_num \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt = date_sub('${azkaban.flow.1.days.ago}', 7) \
+          and period = '7' \
+      ) a \
+      left join ( \
+        select \
+          dt, \
+          userid, \
+          pay_type \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt = date_sub('${azkaban.flow.1.days.ago}', 8) \
+          and period = 'history' \
+      ) b on a.pay_type = b.pay_type \
+      and a.userid = b.userid \
+      and b.dt = date_sub(a.dt, 1) \
+    where \
+      b.userid is null \
+  ) a \
+  left join ( \
+    select \
+      dt, \
+      userid, \
+      pay_type, \
+      CASE \
+        WHEN trade_money > 0 \
+        AND trade_money < 1 THEN '(0,1)' \
+        WHEN trade_money >= 1 \
+        AND trade_money < 5 THEN '[1,5)' \
+        WHEN trade_money >= 5 \
+        AND trade_money < 10 THEN '[5,10)' \
+        WHEN trade_money >= 10 \
+        AND trade_money < 15 THEN '[10,15)' \
+        WHEN trade_money >= 15 \
+        AND trade_money < 25 THEN '[15,25)' \
+        WHEN trade_money >= 25 \
+        AND trade_money < 50 THEN '[25,50)' \
+        WHEN trade_money >= 50 \
+        AND trade_money < 100 THEN '[50,100)' \
+        ELSE '[100,~)' \
+      END as flg, \
+      trade_money, \
+      trade_num \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and period = '7' \
+  ) b on a.userid = b.userid \
+  and a.pay_type = b.pay_type \
+  and b.dt = date_add(a.dt, 7) \
+group by \
+  a.dt, \
+  a.flg, \
+  a.pay_type, \
+  b.flg \
+
+dependencies=ads_post_paid_user_consume_detail_di

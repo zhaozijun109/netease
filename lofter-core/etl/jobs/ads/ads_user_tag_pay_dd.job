@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE `lofter_dm`.`ads_user_tag_pay_dd` PARTITION(`dt`='${azkaban.flow.1.days.ago}') \
+              SELECT \
+                    tmp1.`userid`, \
+                    tmp2.`tag`, \
+                    tmp1.`count_period` AS `count_period`, \
+                    SUM(tmp1.`money`) AS `total_money` \
+              FROM ( \
+                   SELECT \
+                       `userid`, \
+                       `postid`, \
+                       `money`, \
+                       'DAY_7' AS `count_period` \
+                   FROM \
+                       `lofter`.`dwd_user_order_dd` \
+                   WHERE \
+                       `dt` = '${azkaban.flow.1.days.ago}' AND `is_post_pay` = 1 AND `pay_date` <= '${azkaban.flow.1.days.ago}' AND `pay_date` > DATE_SUB('${azkaban.flow.1.days.ago}',7) \
+                   UNION ALL \
+                   SELECT \
+                       `userid`, \
+                       `postid`, \
+                       `money`, \
+                       'DAY_15' AS `count_period` \
+                   FROM \
+                       `lofter`.`dwd_user_order_dd` \
+                   WHERE \
+                       `dt` = '${azkaban.flow.1.days.ago}' AND `is_post_pay` = 1 AND `pay_date` <= '${azkaban.flow.1.days.ago}' AND `pay_date` > DATE_SUB('${azkaban.flow.1.days.ago}',15) \
+                   UNION ALL \
+                   SELECT \
+                        `userid`, \
+                        `postid`, \
+                        `money`, \
+                        'DAY_30' AS `count_period` \
+                   FROM \
+                        `lofter`.`dwd_user_order_dd` \
+                   WHERE \
+                       `dt` = '${azkaban.flow.1.days.ago}' AND `is_post_pay` = 1 AND `pay_date` <= '${azkaban.flow.1.days.ago}' AND `pay_date` > DATE_SUB('${azkaban.flow.1.days.ago}',30) \
+              ) tmp1 \
+              JOIN ( \
+                    SELECT \
+                          `id`,`tag` \
+                    FROM \
+                          `lofter`.`dim_post` LATERAL VIEW EXPLODE(`tags`) AS `tag` \
+                    GROUP BY `id`, `tag` \
+              ) tmp2 \
+              ON tmp1.`postid` = tmp2.`id` \
+              GROUP BY tmp1.`userid`, tmp2.`tag`, tmp1.`count_period`

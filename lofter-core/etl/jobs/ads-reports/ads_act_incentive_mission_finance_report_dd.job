@@ -1,0 +1,269 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_incentive_mission_finance_report_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.*, \
+  NVL(b.uv, 0) as uv, \
+  NVL(b.rewardamount, 0) as rewardamount \
+from \
+  ( \
+    select \
+      id, \
+      rewardType, \
+      name, \
+      rewardamount as config_rewardamount, \
+      globalType, \
+      operator \
+    from \
+      lofter_db_dump.ods_db_act_incentive_mission_nd \
+    where \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '2025-01-01' \
+      and id != 101406 \
+  ) a \
+  left join ( \
+    select \
+      id, \
+      count(distinct b.userid) as uv, \
+      sum(rewardamount) as rewardamount \
+    from \
+      ( \
+        select \
+          id, \
+          rewardamount \
+        from \
+          lofter_db_dump.ods_db_act_incentive_mission_nd \
+        where \
+          rewardType = 1 \
+          and rewardamount is not null \
+      ) a \
+      join ( \
+        select \
+          incentiveMissionId, \
+          userid \
+        from \
+          lofter_db_dump.ods_db_act_incentive_mission_user_nd \
+        where \
+          rewardStatus = 1 \
+      ) b on a.id = b.incentiveMissionId \
+    group by \
+      id \
+    union \
+    select \
+      a.id, \
+      count(distinct b.userid) as uv, \
+      sum(rewardamount) as rewardamount \
+    from \
+      ( \
+        select \
+          a.id, \
+          a.rewardType, \
+          get_json_object(concat('{', stepConfigss, '}'), '$.rewardAmount') as rewardamount, \
+          get_json_object(concat('{', stepConfigss, '}'), '$.step') as step, \
+          row_number() over( \
+            partition by a.id, \
+            a.rewardType \
+            order by \
+              get_json_object(concat('{', stepConfigss, '}'), '$.step') asc \
+          ) as rk \
+        from \
+          ( \
+            select \
+              id, \
+              rewardType, \
+              split( \
+                regexp_extract( \
+                  get_json_object(missionruleconfig, '$.stepConfigs'), \
+                  '\\\\[\\\\{(.*)\\\\}\\\\]', \
+                  1 \
+                ), \
+                '\\\\},\\\\{' \
+              ) stepConfigs, \
+              stepConfigss \
+            from \
+              lofter_db_dump.ods_db_act_incentive_mission_nd lateral view explode( \
+                split( \
+                  regexp_extract( \
+                    get_json_object(missionruleconfig, '$.stepConfigs'), \
+                    '\\\\[\\\\{(.*)\\\\}\\\\]', \
+                    1 \
+                  ), \
+                  '\\\\},\\\\{' \
+                ) \
+              ) myTable as stepConfigss \
+            where \
+              rewardType = 1 \
+              and rewardamount is null \
+          ) a \
+      ) a \
+      join ( \
+        select \
+          incentiveMissionId, \
+          userid, \
+          rewardStatus \
+        from \
+          lofter_db_dump.ods_db_act_incentive_mission_user_nd \
+        where \
+          rewardStatus > 0 \
+      ) b on a.id = b.incentiveMissionId \
+      and a.rk <= b.rewardStatus \
+    group by \
+      a.id \
+    union \
+    select \
+      id, \
+      count(distinct b.userid) as uv, \
+      sum(rewardamount / a.uv) as rewardamount \
+    from \
+      ( \
+        select \
+          id, \
+          rewardamount, \
+          count( \
+            distinct case \
+              when logictype in (0, 1) \
+              and sce_num > 0 then userid \
+              when logictype in (2) \
+              and sce_num = all_num then userid \
+              else null \
+            end \
+          ) as uv \
+        from \
+          ( \
+            select \
+              id, \
+              logictype, \
+              rewardamount, \
+              all_num, \
+              b.userid, \
+              count( \
+                distinct case \
+                  when progress >= metriccount then a.submissionid \
+                  else null \
+                end \
+              ) as sce_num \
+            from \
+              ( \
+                select \
+                  a.id, \
+                  a.rewardType, \
+                  rewardamount, \
+                  NVL( \
+                    get_json_object(concat('{', subRuleConfigss, '}'), '$.metricCount'), \
+                    0 \
+                  ) as metriccount, \
+                  get_json_object(concat('{', subRuleConfigss, '}'), '$.subMissionId') as submissionid, \
+                  get_json_object(missionruleconfig, '$.logicType') as logictype, \
+                  count(*) OVER (PARTITION BY a.id) AS all_num \
+                from \
+                  ( \
+                    select \
+                      id, \
+                      rewardType, \
+                      missionruleconfig, \
+                      rewardamount, \
+                      split( \
+                        regexp_extract( \
+                          get_json_object(missionruleconfig, '$.subRuleConfigs'), \
+                          '\\\\[\\\\{(.*)\\\\}\\\\]', \
+                          1 \
+                        ), \
+                        '\\\\},\\\\{' \
+                      ) subRuleConfigs, \
+                      subRuleConfigss \
+                    from \
+                      lofter_db_dump.ods_db_act_incentive_mission_nd lateral view explode( \
+                        split( \
+                          regexp_extract( \
+                            get_json_object(missionruleconfig, '$.subRuleConfigs'), \
+                            '\\\\[\\\\{(.*)\\\\}\\\\]', \
+                            1 \
+                          ), \
+                          '\\\\},\\\\{' \
+                        ) \
+                      ) myTable as subRuleConfigss \
+                    where \
+                      rewardType = 2 \
+                      and rewardamount is not null \
+                      and missionruleconfig is not null \
+                  ) a \
+              ) a \
+              join ( \
+                select \
+                  missionid, \
+                  userid, \
+                  progress, \
+                  submissionid \
+                from \
+                  lofter_db_dump.ods_db_act_incentive_mission_user_progress_nd \
+              ) b on a.id = b.missionid \
+              and b.submissionid = a.submissionid \
+            group by \
+              id, \
+              logictype, \
+              b.userid, \
+              all_num, \
+              rewardamount \
+          ) a \
+        group by \
+          id, \
+          rewardamount \
+      ) a \
+      join ( \
+        select \
+          incentiveMissionId, \
+          userid \
+        from \
+          lofter_db_dump.ods_db_act_incentive_mission_user_nd \
+        where \
+          rewardStatus = 1 \
+      ) b on a.id = b.incentiveMissionId \
+    group by \
+      id \
+    union \
+    select \
+      id, \
+      count(distinct b.userid) as uv, \
+      sum(rewardamount / a.uv) as rewardamount \
+    from \
+      ( \
+        select \
+          a.id, \
+          rewardamount, \
+          count(distinct b.userid) as uv \
+        from \
+          ( \
+            select \
+              id, \
+              rewardamount \
+            from \
+              lofter_db_dump.ods_db_act_incentive_mission_nd \
+            where \
+              rewardType = 2 \
+              and rewardamount is not null \
+              and missionruleconfig is null \
+          ) a \
+          join ( \
+            select \
+              incentiveMissionId, \
+              userid \
+            from \
+              lofter_db_dump.ods_db_act_incentive_mission_user_nd \
+            where \
+              missionStatus = 1 \
+          ) b on a.id = b.incentiveMissionId \
+        group by \
+          a.id, \
+          rewardamount \
+      ) a \
+      join ( \
+        select \
+          incentiveMissionId, \
+          userid \
+        from \
+          lofter_db_dump.ods_db_act_incentive_mission_user_nd \
+        where \
+          rewardStatus = 1 \
+      ) b on a.id = b.incentiveMissionId \
+    group by \
+      id \
+  ) b on a.id = b.id \
+

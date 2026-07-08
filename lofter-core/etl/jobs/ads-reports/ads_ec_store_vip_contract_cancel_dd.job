@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_store_vip_contract_cancel_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT b.amount AS price \
+	,b.platform \
+	,b.vipdays \
+	,a.platform AS paytype \
+	,count(CASE  \
+			WHEN a.STATUS = 1 \
+				THEN userid \
+			ELSE NULL \
+			END) AS pv_nocancel \
+	,count(CASE  \
+			WHEN a.STATUS = - 1 \
+				THEN userid \
+			ELSE NULL \
+			END) AS pv_cancel \
+	,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS day \
+FROM ( \
+	SELECT STATUS \
+		,userid \
+		,tradeid \
+		,'ios' AS platform \
+		,createtime \
+	FROM lofter_db_dump.ods_db_trade_apple_store_contract_nd \
+	WHERE STATUS IN ( \
+			- 1 \
+			,1 \
+			) \
+	 \
+	UNION \
+	 \
+	SELECT CASE  \
+			WHEN STATUS = 0 \
+				THEN - 1 \
+			ELSE STATUS \
+			END AS STATUS \
+		,userid \
+		,tradeid \
+		,CASE  \
+			WHEN platform = 0 \
+				THEN 'zfb' \
+			ELSE 'vx' \
+			END AS platform \
+		,createtime \
+	FROM lofter_db_dump.ods_db_trade_store_contract_nd \
+	WHERE STATUS IN ( \
+			- 1 \
+			,1 \
+			,0 \
+			) \
+	) a \
+JOIN ( \
+	SELECT tradeid \
+		,amount \
+		,platform \
+		,vipdays \
+	FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+	WHERE STATUS = 1 \
+	) b ON a.tradeid = b.tradeid \
+GROUP BY b.amount \
+	,b.platform \
+	,b.vipdays \
+	,a.platform \
+	,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+

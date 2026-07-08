@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_gift_positive_feedback_rank_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select blogId, score, rank \
+from ( \
+    select blogId, score, row_number() over (order by score desc) as rank \
+    from ( \
+        select a.blogId, \
+            nvl(200 * order_pv / order_uv, 0) + nvl(100 * positive_feedback_num / unlock_user_post_count, 0) as score \
+        from ( \
+            select blogId, \
+                sum(if(money > 0, if(content_type = '图片', 2, 1), null)) as order_pv, \
+                count(distinct if(money > 0,userId, null)) as order_uv, \
+                count(distinct if(return_gift_plantype in ('彩蛋', '隐藏结局', '甜剧场'), struct(userId, postId), null))  unlock_user_post_count \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt='${azkaban.flow.1.days.ago}' and \
+                from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+            group by 1 \
+        ) a \
+        left join ( \
+            select x.blogId, count(distinct y.id) as positive_feedback_num \
+            from lofter.dim_gift_post_return x \
+            join ( \
+                select returngiftid, id \
+                from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+                where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and type = 0 \
+            ) y on x.id = y.returngiftid \
+            where x.return_gift_plantype in ('彩蛋', '隐藏结局', '甜剧场') \
+            group by 1 \
+        ) b on a.blogId = b.blogId \
+    ) t \
+) tt \
+where rank <= 3000 \

@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_photo_frame_charge_detail_stat_di partition(dt='${azkaban.flow.1.days.ago}') \
+select b.name,b.id,a.uv,a.sales,a.orderNum,a.coins \
+from( \
+  select avatarboxid, \
+         count(distinct userid) as uv,sum(count) as sales, \
+         count(distinct id) as orderNum,sum(coin*count) as coins \
+  from lofter_db_dump.ods_db_avatar_box_order_nd \
+  where status=1 and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+  group by avatarboxid \
+) a \
+join ( \
+    select id,name from lofter_db_dump.ods_db_avatar_box_item_nd where groupType = 1 \
+) b on a.avatarboxid = b.id \
+distribute by 1

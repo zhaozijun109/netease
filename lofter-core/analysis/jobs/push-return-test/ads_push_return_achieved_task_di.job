@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_push_return_achieved_task_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId \
+from( \
+  select userId \
+  from lofter.ads_return_user_push_exp_di \
+  where dt = '${azkaban.flow.1.days.ago}' and exp_group = 'test1-c' \
+)a \
+join( \
+  select userId \
+  from lofter.ods_mda_app_raw_di \
+  where dt = '${azkaban.flow.current.date}' and eventid in ('g1-57','l3-1','g1-21') and costTime >= 3000  \
+    and occurtime < cast(UNIX_TIMESTAMP(concat('${azkaban.flow.current.date}',' ','16:00:00'))*1000 as bigint) \
+  group by userId \
+)b \
+on a.userId = b.userId
+dependencies=ads_return_user_push_exp_di

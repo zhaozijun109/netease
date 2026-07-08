@@ -1,0 +1,78 @@
+type=sparksql
+hive.query.01 = with daily_income_asset as (select id                                                                as income_id, \
+                                                   user_id, \
+                                                   order_id, \
+                                                   item_id, \
+                                                   GET_JSON_OBJECT(ext, '$.itemScene')                               as item_scene, \
+                                                   GET_JSON_OBJECT(ext, '$.incomeScene')                             as income_scene, \
+                                                   reward_type, \
+                                                   reward_id, \
+                                                   num, \
+                                                   left_num, \
+                                                   valid_type, \
+                                                   possession_id, \
+                                                   income_record_id, \
+                                                   valid_start_time, \
+                                                   if(valid_start_time < 0, '', \
+                                                      FROM_UNIXTIME(valid_start_time / 1000, 'yyyy-MM-dd HH:mm:ss')) as valid_start_time_r, \
+                                                   valid_end_time, \
+                                                   if(valid_end_time < 0, '', \
+                                                      FROM_UNIXTIME(valid_end_time / 1000, 'yyyy-MM-dd HH:mm:ss'))   as valid_end_time_r, \
+                                                   create_time, \
+                                                   FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd HH:mm:ss')          as create_time_r, \
+                                                   update_time, \
+                                                   FROM_UNIXTIME(update_time / 1000, 'yyyy-MM-dd HH:mm:ss')          as update_time_r, \
+                                                   FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd')                   as dt \
+                                            from vc.ods_db_vc_user_purchase_record_nd \
+                                            where FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'), \
+                     reward_type_info as (select x1.code                                                  as reward_type, \
+                                                 x1.description                                           as reward_desc, \
+                                                 COALESCE(x2.code, x3.code, x4.code)                      as reward_id, \
+                                                 COALESCE(x2.description, x3.description, x4.description) as reward_sub_desc \
+                                          from (select code, description, enumname \
+                                                from vc.ods_vc_enum_code_a_d \
+                                                where enumname = 'RewardTypeEnum') x1 \
+                                                   left join \
+                                               (select code, description, enumname \
+                                                from vc.ods_vc_enum_code_a_d \
+                                                where enumname = 'AssetTypeEnum') x2 \
+                                               on x1.code = 1 \
+                                                   left join \
+                                               (select code, description, enumname \
+                                                from vc.ods_vc_enum_code_a_d \
+                                                where enumname = 'BenefitTypeEnum') x3 \
+                                               on x1.code = 3 \
+                                                   left join \
+                                               (select 1 as code, '忘忧草' as description, '' as enumname \
+                                                union all \
+                                                select 2, '生日帽头像框', '' \
+                                                   ) x4 \
+                                               on x1.code = 2) \
+                insert OVERWRITE table vc.dwd_vc_user_asset_income_detail_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x1.income_id, \
+                       x1.user_id, \
+                       x1.order_id, \
+                       x1.item_id, \
+                       x1.item_scene, \
+                       x1.income_scene, \
+                       x4.description as income_desc, \
+                       x1.reward_type, \
+                       x2.reward_desc, \
+                       x1.reward_id, \
+                       x2.reward_sub_desc, \
+                       x1.num, \
+                       x1.left_num, \
+                       x1.valid_type, \
+                       x1.possession_id, \
+                       x1.income_record_id, \
+                       x1.valid_start_time, \
+                       x1.valid_start_time_r, \
+                       x1.valid_end_time, \
+                       x1.valid_end_time_r, \
+                       x1.create_time, \
+                       x1.create_time_r, \
+                       x1.update_time, \
+                       x1.update_time_r \
+                from daily_income_asset x1 \
+                         left join reward_type_info x2 on x1.reward_type = x2.reward_type and x1.reward_id = x2.reward_id \
+                         left join vc.ods_vc_enum_code_a_d x4 on x1.income_scene = x4.code and x4.enumname = 'IncomeSceneEnum'

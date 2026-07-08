@@ -1,0 +1,42 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 付费会员sku --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '付费会员sku' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (SELECT \
+                              	         `userid` AS `userId`, \
+                              	         '付费会员sku' AS `tag`, \
+                              	         CASE WHEN `productid` IN (54,56,57,58,42,1001,47) THEN '书城-连续包月' \
+                              	              WHEN `productid` = 55 OR `productid` = 44 THEN '书城-连续包季' \
+                                             WHEN `vipdays` = 3 THEN '书城-3天' \
+                                             WHEN `vipdays` = 7 THEN '书城-7天' \
+                                             WHEN `vipdays` = 31 THEN '书城-1个月' \
+                                             WHEN `vipdays` = 93 THEN '书城-3个月' \
+                                             WHEN `vipdays` = 365 THEN '书城-12个月' \
+                                             ELSE '书城-其他' END AS `grp` \
+                                  FROM \
+                              	        `lofter_db_dump`.`ods_db_trade_store_vip_order_nd` \
+                                  WHERE FROM_UNIXTIME(CAST(`finishtime` / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND `status` = 1 \
+                                  GROUP BY `userId`, `tag`, `grp` \
+                               \
+                                  UNION ALL \
+                               \
+                                  SELECT \
+                                        `userid` AS `userId`, \
+                                        '付费会员sku' AS `tag`, \
+                                        CASE WHEN `vipdays` = 31 THEN '粉丝-1个月' \
+                                             WHEN `vipdays` = 93 THEN '粉丝-3个月' \
+                                             WHEN `vipdays` = 186 THEN '粉丝-6个月' \
+                                             WHEN `vipdays` = 365 THEN '粉丝-12个月' \
+                                             ELSE '粉丝-其他' END AS grp \
+                                  FROM \
+                              	        `lofter_db_dump`.`ods_db_trade_fans_vip_order_nd` \
+                                  WHERE FROM_UNIXTIME(CAST(`finishtime` / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND `status` = 1 \
+                                  GROUP BY `userId`, `tag`, `grp` ) "

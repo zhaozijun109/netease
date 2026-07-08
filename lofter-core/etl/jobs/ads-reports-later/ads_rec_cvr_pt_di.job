@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare'
+hive.query.02=insert overwrite table lofter_dm.ads_rec_cvr_pt_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceOs, \
+       sum(case when eventid='b1-45' then 1 else 0 end) bg_pv, \
+       count(distinct case when eventid='b1-45' then deviceudid else null end) bg_uv, \
+       sum(case when eventid in('b1-46','b1-47','b1-49') then 1 else 0 end) click_pv, \
+       count(distinct case when eventid in('b1-46','b1-47','b1-49') then deviceudid else null end) click_uv, \
+       sum(case when eventid in('b1-46','b1-47','b1-49') then 1 else 0 end)/sum(case when eventid='b1-45' then 1 else 0 end) bg_click_rate, \
+       sum(case when eventid in('b1-46','b1-47','b1-49') then 1 else 0 end)/count(distinct case when eventid in('b1-46','b1-47','b1-49') then deviceudid else null end) per_click_pv, \
+       count(distinct case when eventid='b1-45' then concat_ws(',',deviceudid,params['tid'],itemId) else null end)/count(distinct case when eventid='b1-45' then deviceudid else null end) per_bg_postnum, \
+       count(distinct case when eventid in('b1-46','b1-47','b1-49') then concat_ws(',',deviceudid,params['tid'],itemId) else null end)/count(distinct case when eventid in('b1-46','b1-47','b1-49') then deviceudid else null end) per_click_postnum, \
+       sum(case when eventid in('b1-47','g1-22','g1-24','g1-25','g1-26') then 1 else 0 end) hd_click_pv, \
+       count(distinct case when eventid in('b1-47','g1-22','g1-24','g1-25','g1-26') then deviceudid else null end) hd_click_uv, \
+       sum(case when eventid in('b1-47','g1-22','g1-24','g1-25','g1-26') then 1 else 0 end)/sum(case when eventid='b1-45' then 1 else 0 end) hd_click_bg_rate, \
+       count(distinct case when eventid in('b1-47','g1-22','g1-24','g1-25','g1-26') then concat_ws(',',deviceudid,params['tid'],itemId) else null end)/count(distinct case when eventid in('b1-47','g1-22','g1-24','g1-25','g1-26') then deviceudid else null end) hd_per_click_postnum, \
+       sum(case when version_compare(appversion,'6.2.5') >= 0 and eventid in('b1-43','g1-21') and costtime>0 and costtime<1000*60*60*5 then costtime else 0 end)/1000/count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid in('b1-43','g1-21') and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end) per_time, \
+       count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid in('b1-43','g1-21') and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end)  time_uv, \
+       count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid='b1-45' then deviceudid else null end) card_bg_uv, \
+       sum(case when version_compare(appversion,'6.2.5') >= 0 and eventid='b1-43' and costtime>0 and costtime<1000*60*60*5 then costtime else 0 end)/1000/count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid='b1-43' and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end) per_discovery_staytime, \
+       count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid='b1-43' and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end) discovery_stayuv, \
+       sum(case when version_compare(appversion,'6.2.5') >= 0 and eventid='g1-21' and costtime>0 and costtime<1000*60*60*5 then costtime else 0 end)/1000/count(distinct case when version_compare(appversion, '6.2.5') >= 0 and eventid='g1-21' and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end) per_note_staytime, \
+       count(distinct case when version_compare(appversion,'6.2.5') >= 0 and eventid='g1-21' and costtime>0 and costtime<1000*60*60*5 then deviceudid else null end) note_stayuv, \
+       sum(case when eventid='b1-45' and recId is not null then 1 else 0 end) rec_bg_pv, \
+       count(distinct case when eventid='b1-45' and recId is not null then deviceudid else null end) rec_bg_uv, \
+       sum(case when eventid in('b1-46','b1-47','b1-49') and recId is not null then 1 else 0 end) rec_click_pv, \
+       count(distinct case when eventid in('b1-46','b1-47','b1-49') and recId is not null then deviceudid else null end) rec_click_uv \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' and \
+      version_compare(appversion,'6.2.2') >= 0 and \
+       ( \
+          (version_compare(appversion,'6.8.1') < 0 and eventid in('b1-45','b1-46','b1-47','b1-49') and (params['pagetype']='推荐流页' or params['pagetype'] is null)) \
+          or eventid in('b1-43','g1-21','g1-22','g1-24','g1-25','g1-26') \
+          or (version_compare(appversion,'6.8.1') >= 0 and eventid in('b1-45','b1-46','b1-47','b1-49') and scene='discovery') \
+       ) \
+group by deviceOs

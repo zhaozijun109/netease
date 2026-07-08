@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ads_vc_character_period_top100_n_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select period, \
+                       character_id, \
+                       character_name, \
+                       character_type, \
+                       talk_cnt, \
+                       t_rk, \
+                       peoples, \
+                       p_rk \
+                from (select x1.period, \
+                             x1.character_id, \
+                             x1.character_name, \
+                             x1.character_type, \
+                             x1.talk_cnt, \
+                             row_number() over (partition by x1.period,x1.character_type order by talk_cnt desc) as t_rk, \
+                             peoples, \
+                             row_number() over (partition by x1.period,x1.character_type order by peoples desc)  as p_rk \
+                      from (select period, \
+                                   character_id, \
+                                   character_name, \
+                                   character_type, \
+                                   sum(talk_cnt) as        talk_cnt, \
+                                   count(distinct user_id) peoples \
+                            from (select 'd1' as period, character_id, character_name, character_type, user_id, talk_cnt \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                                    and is_anonymity = 'N' \
+                                  union \
+                                  select 'd3', character_id, character_name, character_type, user_id, talk_cnt \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                  where dt >= '${azkaban.flow.3.days.ago}' \
+                                    and is_anonymity = 'N' \
+                                  union \
+                                  select 'd7', character_id, character_name, character_type, user_id, talk_cnt \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                  where dt >= '${azkaban.flow.7.days.ago}' \
+                                    and is_anonymity = 'N' \
+                                  union \
+                                  select 'd30', character_id, character_name, character_type, user_id, talk_cnt \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                  where dt >= '${azkaban.flow.30.days.ago}' \
+                                    and is_anonymity = 'N') \
+                            group by period, character_id, character_name, character_type) x1 \
+                               inner join \
+                           (select character_id, character_name, character_type \
+                            from vc.dws_vc_character_behavior_info_a_d \
+                            where dt = '${azkaban.flow.1.days.ago}' \
+                              and status = 1 \
+                              and public_scope = 1) x2 on x1.character_id = x2.character_id and x1.character_type = x2.character_type) \
+                where t_rk <= 100 or p_rk <= 100

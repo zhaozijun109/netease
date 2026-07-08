@@ -1,0 +1,67 @@
+type=sparksql
+hive.query.01=drop table if exists lofter_tmp.dws_act_tag_big_event
+
+hive.query.02=\
+create table lofter_tmp.dws_act_tag_big_event as \
+select tag, userid, reach_date, type \
+from lofter.dws_act_tag_big_event_di \
+where dt <= '${azkaban.flow.2.days.ago}' \
+group by tag, userid, reach_date, type
+
+hive.query.03=\
+with old_full_data as( \
+    select * \
+    from lofter_tmp.dws_act_tag_big_event \
+), \
+source_data as( \
+    select tag ,userId, type, sum(cnt) as cnt \
+    from lofter.dwd_act_tag_big_event_detail_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by tag ,userId, type \
+) \
+insert overwrite table lofter.dws_act_tag_big_event_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.tag, a.userId, '${azkaban.flow.1.days.ago}' as reach_date, a.type \
+from( \
+    select tag, userId, type \
+    from( \
+        select tag, userId,  \
+            case  \
+                when type = 'publish_post' and cnt >= 1 then 9 \
+                when type = 'send_hot' and cnt >= 1 then 5 \
+                when type = 'receive_hot' and cnt >= 1 then 1 \
+                when type = 'send_comment' and cnt >= 1 then 11 \
+            end as type \
+        from source_data \
+        union all \
+        select tag, userId,  \
+            case  \
+                when type = 'publish_post' and cnt >= 100 then 10 \
+                when type = 'send_hot' and cnt >= 100 then 6 \
+                when type = 'receive_hot' and cnt >= 100 then 2 \
+                when type = 'send_comment' and cnt >= 100 then 12 \
+            end as type \
+        from source_data \
+        union all \
+        select tag, userId,  \
+            case  \
+                when type = 'send_hot' and cnt >= 1000 then 7 \
+                when type = 'receive_hot' and cnt >= 1000 then 3 \
+            end as type \
+        from source_data \
+        union all \
+        select tag, userId,  \
+            case  \
+                when type = 'send_hot' and cnt >= 10000 then 8 \
+                when type = 'receive_hot' and cnt >= 10000 then 4 \
+            end as type \
+        from source_data \
+    ) \
+    where type is not null \
+)a \
+left join old_full_data b \
+on a.userId = b.userId and a.type = b.type and a.tag = b.tag \
+where b.type is null
+
+hive.query.04=drop table if exists lofter_tmp.dws_act_tag_big_event
+
+dependencies=

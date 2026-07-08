@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_cc_module_di partition(dt='${azkaban.flow.1.days.ago}') \
+select t1.eventId, \
+    t1.moduleName eventName, \
+    t1.name, \
+    t1.pv,t1.uv, \
+    case when t2.last_2week_pv>0 then t2.last_2week_pv else 0 end last_2week_pv, \
+    case when t2.last_2week_pv>0 then (t1.pv/t2.last_2week_pv -1) else 0 end pv_ratio, \
+    nvl(last_2week_median_pv,0) as last_2week_median_pv \
+from ( \
+    select eventId, moduleName, name, sum(1) pv, count(distinct deviceUdid) uv \
+    from lofter.dwd_cc_module_query_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId != 'ka1-11' \
+    group by eventId, moduleName, name \
+) t1 \
+left join ( \
+    select eventId, moduleName, name, sum(pv) / 14 last_2week_pv, percentile(pv,0.5) as last_2week_median_pv \
+    from ( \
+        select dt, eventId, moduleName, name, count(1) pv \
+        from lofter.dwd_cc_module_query_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt > '${azkaban.flow.30.days.ago}' and \
+              dt > date_sub('${azkaban.flow.1.days.ago}', 14) and eventId != 'ka1-11'\
+        group by dt, eventId, moduleName, name \
+   ) t \
+   group by eventId, moduleName, name \
+) t2 on t1.eventId = t2.eventId and t1.moduleName = t2.moduleName and t1.name = t2.name \
+union all \
+select eventId, '搜索词' eventName, search_keyword name, \
+   sum(1) pv,count(distinct deviceUdid) uv, \
+   0 last_2week_pv,0 pv_ratio,0 last_2week_median_pv \
+from lofter.dwd_cc_module_query_di \
+where dt='${azkaban.flow.1.days.ago}' and eventId = 'ka1-10' and length(search_keyword) > 0 \
+group by eventId, search_keyword

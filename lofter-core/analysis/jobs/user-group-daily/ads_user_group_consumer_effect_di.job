@@ -1,0 +1,86 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.02=insert overwrite table lofter_dm.ads_user_group_consumer_effect_di \
+select count(distinct a.userId) user_count, \
+       sum(b.post_count) as post_count, sum(b.video_count) video_count, \
+       sum(if(b.session_time > 24 * 3600 * 1000, 0, b.session_time)) session_time, \
+       sum(c.click_ad_count) as click_ad_count, \
+       sum(d.send_like_cnt) as praise_count, \
+       sum(d.send_comment_cnt) as comment_count, \
+       count(distinct if(send_hot > 0 or send_comment_cnt > 0, d.userId, null)) as interaction_uv, \
+       count(distinct if(e.gift_reward_amount > 0, e.userId, null)) as buy_uv, \
+       count(distinct if(e.send_gift_amount > 0, e.userId, null)) as gift_uv, \
+       count(distinct if(e.send_reward_amount > 0, e.userId, null)) as reward_uv, \
+       sum(e.gift_reward_amount) as buy_amount, \
+       sum(e.send_gift_amount) as gift_amount, \
+       sum(e.send_reward_amount) as reward_amount, \
+       sum(f.subscribe_tag_cnt) as subscribe_tag_cnt, \
+       sum(g.subscribe_collection_cnt) as subscribe_collection_cnt, \
+       sum(h.followCount) as followCount, \
+       count(distinct j.userId) as firstPostUv, \
+       count(distinct k.userId) as activeUv, \
+       count(distinct if(b.live_count > 0, b.userId, null)) as live_uv, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       a.job_id \
+from ( \
+    select * \
+    from lofter.dwd_user_group_user_list_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a left join ( \
+  select userId, sum(browse_text_photo_post_count) as post_count, \
+         sum(browse_video_count) as video_count, sum(session_time) as session_time, \
+         0 as live_count \
+  from lofter.dws_par_user_content_di where dt='${azkaban.flow.1.days.ago}' \
+  group by userId \
+) b on a.userId = b.userId \
+  left join ( \
+    select userId, click_ad_count \
+    from lofter.dws_par_user_ad_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) c on a.userId = c.userId \
+  left join ( \
+    select userId, send_like_cnt, send_comment_cnt, send_hot \
+    from lofter.dws_par_user_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  ) d on a.userId = d.userId \
+  left join ( \
+    select userId, nvl(send_gift_amount_1d,0) + nvl(send_reward_amount_1d,0) as gift_reward_amount, \
+            send_gift_amount_1d as send_gift_amount, send_reward_amount_1d as send_reward_amount \
+    from lofter.dws_par_user_revenue_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  ) e on a.userId = e.userId \
+  left join ( \
+      select userId, count(distinct tagName) subscribe_tag_cnt \
+      from lofter_db_dump.ods_db_favorite_tag_nd \
+      where from_unixtime(cast(addTagTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      group by userId \
+  ) f on a.userId = f.userId \
+  left join ( \
+    select userId, count(distinct collectionId) subscribe_collection_cnt \
+    from lofter_db_dump.ods_db_subscribe_collection_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+  ) g on a.userId = g.userId \
+  left join ( \
+    select userId, count(distinct blogId) followCount \
+    from lofter_db_dump.ods_db_user_following_nd \
+    where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+  ) h on a.userId = h.userId \
+  left join ( \
+    select userId \
+    from lofter.dws_par_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_first_publish > 0 \
+  ) j on a.userId = j.userId \
+  left join ( \
+    select userId \
+    from lofter.dws_par_user_active_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by userId \
+  ) k on a.userId = k.userId \
+group by a.job_id

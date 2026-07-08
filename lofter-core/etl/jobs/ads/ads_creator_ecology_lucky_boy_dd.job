@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_creator_ecology_lucky_boy_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId \
+from ( \
+    select blogid as userId \
+    from ( \
+        select blogid \
+        from lofter_dm.ads_creator_ecology_identity_rank_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and creatorstatus in (40,50,70) and fans_hd_uv_30d_exceed_ratio >= 0.95 \
+    ) tmp1 \
+    left join ( \
+        select userId \
+        from lofter_dm.ads_creator_ecology_lucky_boy_dd \
+        where dt >= date_sub('${azkaban.flow.1.days.ago}', 30) and dt < '${azkaban.flow.1.days.ago}' \
+    ) tmp2 \
+    on tmp1.blogid = tmp2.userId \
+    where tmp2.userId is null \
+) tmp3 \
+limit 100
+dependencies=ads_creator_ecology_identity_rank_dd

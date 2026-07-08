@@ -1,0 +1,92 @@
+type=sparksql
+hive.query.01=\
+with post_talk_source as ( \
+    select * from lofter.dim_post_talk \
+) \
+insert overwrite table lofter.dws_post_talk_answer_interaction_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.talkId, \
+       t1.talkType, \
+       t1.blogId, \
+       t1.questionId, \
+       t4.questionType, \
+       t4.questionStatus, \
+       t1.recomStatus, \
+       t1.forbidStatus, \
+       t1.valid, \
+       t1.allowView, \
+       t1.createTime, \
+       t1.createDate, \
+       t1.tags, \
+       t1.ips, \
+       t1.answerType, \
+       nvl(t2.like_cnt_1d, 0) as like_cnt_1d, \
+       nvl(t2.like_cnt_2d, 0) as like_cnt_2d, \
+       nvl(t2.like_cnt_3d, 0) as like_cnt_3d, \
+       nvl(t2.like_cnt_7d, 0) as like_cnt_7d, \
+       nvl(t2.like_cnt_30d, 0) as like_cnt_30d, \
+       nvl(t2.like_cnt_90d, 0) as like_cnt_90d, \
+       nvl(t3.comment_like_cnt_1d, 0) as comment_like_cnt_1d, \
+       nvl(t3.comment_like_cnt_2d, 0) as comment_like_cnt_2d, \
+       nvl(t3.comment_like_cnt_3d, 0) as comment_like_cnt_3d, \
+       nvl(t3.comment_like_cnt_7d, 0) as comment_like_cnt_7d, \
+       nvl(t3.comment_like_cnt_30d, 0) as comment_like_cnt_30d, \
+       nvl(t3.comment_like_cnt_90d, 0) as comment_like_cnt_90d \
+from ( \
+    select talkId, \
+           talkType, \
+           blogId, \
+           questionId, \
+           recomStatus, \
+           forbidStatus, \
+           valid, \
+           allowView, \
+           createTime, \
+           createDate, \
+           tags, \
+           ips, \
+           answerType \
+    from post_talk_source \
+    where lower(talkType) LIKE '%answer%' OR talkType = 'QUESTION_POST' \
+) t1 \
+left join ( \
+    select postId, \
+           sum(if(days = 0, 1, 0)) as like_cnt_1d, \
+           sum(if(days < 2, 1, 0)) as like_cnt_2d, \
+           sum(if(days < 3, 1, 0)) as like_cnt_3d, \
+           sum(if(days < 7, 1, 0)) as like_cnt_7d, \
+           sum(if(days < 30, 1, 0)) as like_cnt_30d, \
+           sum(if(days < 90, 1, 0)) as like_cnt_90d \
+    from ( \
+          select postId, \
+                 datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) as days \
+          from lofter.stg_post_hot_dynamic_in_130d_dd \
+          where dt = '${azkaban.flow.1.days.ago}' and type = 1 and \
+                from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by postId \
+) t2 \
+on t1.talkId = t2.postId \
+left join ( \
+    select postId, \
+           sum(if(days = 0, 1, 0)) as comment_like_cnt_1d, \
+           sum(if(days < 2, 1, 0)) as comment_like_cnt_2d, \
+           sum(if(days < 3, 1, 0)) as comment_like_cnt_3d, \
+           sum(if(days < 7, 1, 0)) as comment_like_cnt_7d, \
+           sum(if(days < 30, 1, 0)) as comment_like_cnt_30d, \
+           sum(if(days < 90, 1, 0)) as comment_like_cnt_90d \
+    from ( \
+          select postId, \
+                 datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) as days \
+          from lofter_db_dump.ods_db_comment_hot_nd \
+          where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by postId \
+) t3 \
+on t1.talkId = t3.postId \
+left join ( \
+    select talkId, \
+           questionType, \
+           status as questionStatus \
+    from post_talk_source where lower(talkType) like '%question%' \
+) t4 \
+on t1.questionId = t4.talkId

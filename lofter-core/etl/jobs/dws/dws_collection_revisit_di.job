@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_collection_revisit_di partition(dt='${azkaban.flow.1.days.ago}') \
+        select dt as baseDay, collectionId,is_collection_new_user,  \
+        	count(distinct deviceudid) realbrowse_uv,  \
+        	count(distinct deviceudid_revisit_7d) realbrowse_uv_revisit_7d,  \
+        	count(distinct case when sum_is_visit_mysubscription>0 then deviceudid end) realbrowse_uv_mysubscription,  \
+        	count(distinct case when sum_is_visit_mysubscription>0  and sum_is_visit_7d_mysubscription>0  then deviceudid_revisit_7d end) realbrowse_uv_mysubscription_revisit_7d,  \
+        	count(distinct case when sum_is_visit_subscribe>0 then deviceudid end) realbrowse_uv_subscribe,  \
+        	count(distinct case when sum_is_visit_subscribe>0  and sum_is_visit_7d_subscribe>0  then deviceudid_revisit_7d end) realbrowse_uv_subscribe_revisit_7d,  \
+        	is_collection_return_user  \
+        from  \
+            (      \
+                select a.dt,a.collectionId,is_collection_new_user,is_collection_return_user, a.deviceudid, b.deviceudid deviceudid_revisit_7d,  \
+                sum(a.is_visit_mysubscription) sum_is_visit_mysubscription,  \
+                sum(b.is_visit_mysubscription) sum_is_visit_7d_mysubscription,  \
+                sum(a.is_visit_subscribe) sum_is_visit_subscribe,  \
+                sum(b.is_visit_subscribe) sum_is_visit_7d_subscribe  \
+                from  \
+                (  \
+                    select dt,collectionId,deviceudid,is_collection_new_user,is_collection_return_user,  \
+                    case when (source1_scene='mysubscription' or (source1_scene='collection' and source2_scene='mysubscription')) then 1 else 0 end is_visit_mysubscription,  \
+                    case when (source1_scene='subscribe' or (source1_scene='collection' and source2_scene='subscribe')) then 1 else 0 end is_visit_subscribe  \
+                    from lofter.dwd_post_collection_di  \
+                    where dt=date_sub('${azkaban.flow.1.days.ago}',6)    \
+                    and action_type='browse' and is_real=1   \
+                    group by dt,collectionId,deviceudid,is_collection_new_user,is_visit_mysubscription,is_visit_subscribe,is_collection_return_user  \
+                ) a  \
+                left join  \
+                (  \
+                    select collectionId,deviceudid,  \
+                    case when (source1_scene='mysubscription' or (source1_scene='collection' and source2_scene='mysubscription')) then 1 else 0 end is_visit_mysubscription,  \
+                    case when (source1_scene='subscribe' or (source1_scene='collection' and source2_scene='subscribe')) then 1 else 0 end is_visit_subscribe  \
+                    from lofter.dwd_post_collection_di  \
+                    where dt between date_sub('${azkaban.flow.1.days.ago}',5) and '${azkaban.flow.1.days.ago}'    \
+                    and action_type='browse' and is_real=1   \
+                    group by collectionId,deviceudid,is_visit_mysubscription,is_visit_subscribe  \
+                ) b  \
+                on a.deviceudid=b.deviceudid and a.collectionId=b.collectionId  \
+                group by  a.dt,a.collectionId,is_collection_new_user,is_collection_return_user, a.deviceudid, b.deviceudid  \
+            )  \
+        group by dt,collectionId,is_collection_new_user,is_collection_return_user  \
+        distribute by collectionId % 5

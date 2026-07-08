@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select id, targetId, blogId, sortNo, `type`, firstLevel, secondLevel, rankName, dt, b.subscribe_uv_3d as subscribeUv \
+from ( \
+    select concat_ws('-', first_level, second_level, rankName, sortNo) as id, \
+           collectionId as targetId, blogId, sortNo, 0 as `type`, \
+           first_level as firstLevel, second_level as secondLevel, rankName, dt \
+    from lofter_dm.ads_collection_search_hot_list_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select collectionId, subscribe_uv_3d from lofter.dws_collection_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.targetId = b.collectionId \
+"
+params= --partition ${azkaban.flow.1.days.ago} --id --dest lofter_collection_search_hot_list --full --atom

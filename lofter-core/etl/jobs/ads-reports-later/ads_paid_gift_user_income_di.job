@@ -1,0 +1,379 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_paid_gift_user_income_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  tmp1.period, \
+                      tmp1.userid, \
+                      tmp1.accept_gift_flag, \
+                      tmp1.agree_day, \
+                      tmp1.blogname, \
+                      tmp1.blognickname, \
+                      tmp1.platform_type, \
+                      tmp1.clickpv, \
+                      tmp1.clickuv, \
+                      tmp1.exposurepv, \
+                      tmp1.exposureuv, \
+                      tmp1.poshotpv, \
+                      tmp1.poshotuv, \
+                      tmp1.hdpv, \
+                      tmp1.hduv, \
+                      tmp1.coin_num, \
+                      tmp1.gift_uv, \
+                      tmp1.num, \
+                      tmp1.new_sender_coin_num, \
+                      tmp1.return_gift_coin_num, \
+                      tmp1.new_sender_uv, \
+                      tmp1.return_gift_uv, \
+                      tmp2.new_fans, \
+                      tmp1.rk \
+              FROM \
+              ( \
+              	      SELECT  a.* \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  aa.*, \
+              	      	              ROW_NUMBER() OVER (PARTITION BY period,platform_type ORDER BY coin_num DESC,exposureuv ASC) AS rk \
+              	      	      FROM \
+              	      	      ( \
+              	      	      	      SELECT  'day'                     AS period, \
+              	      	      	              userid, \
+              	      	      	              accept_gift_flag, \
+              	      	      	              agree_day, \
+              	      	      	              blogname, \
+              	      	      	              blognickname, \
+              	      	      	              platform_type, \
+              	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	              SUM(num)                  AS num, \
+              	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      FROM \
+              	      	      	      ( \
+              	      	      	      	      SELECT  a.userid, \
+              	      	      	      	              a.accept_gift_flag, \
+              	      	      	      	              a.agree_day, \
+              	      	      	      	              a.blogname, \
+              	      	      	      	              a.blognickname, \
+              	      	      	      	              a.platform_type, \
+              	      	      	      	              b.dt, \
+              	      	      	      	              COUNT(DISTINCT b.postid)  AS exposure_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN clickpv > 0 THEN b.postid ELSE NULL END) AS click_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN poshotpv > 0 THEN b.postid ELSE NULL END) AS poshot_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN hdpv > 0 THEN b.postid ELSE NULL END) AS hdpv_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN coin_num > 0 THEN b.postid ELSE NULL END) AS gift_postnum, \
+              	      	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	      	              SUM(num)                  AS num, \
+              	      	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      	      FROM lofter.dim_gift_post a \
+              	      	      	      	      JOIN \
+              	      	      	      	      ( \
+              	      	      	      	      	      SELECT  * \
+              	      	      	      	      	      FROM lofter.dws_gift_post_di \
+              	      	      	      	      	      WHERE dt <= '${azkaban.flow.1.days.ago}' \
+              	      	      	      	      ) b \
+              	      	      	      	      ON a.postId = b.postId \
+              	      	      	      	      GROUP BY  a.userid, \
+              	      	      	      	                a.accept_gift_flag, \
+              	      	      	      	                a.agree_day, \
+              	      	      	      	                a.blogname, \
+              	      	      	      	                a.blognickname, \
+              	      	      	      	                a.platform_type, \
+              	      	      	      	                b.dt \
+              	      	      	      	      HAVING coin_num > 1 AND exposureuv > 10 \
+              	      	      	      ) \
+              	      	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND exposureuv > 0 \
+              	      	      	      GROUP BY  userid, \
+              	      	      	                accept_gift_flag, \
+              	      	      	                agree_day, \
+              	      	      	                blogname, \
+              	      	      	                blognickname, \
+              	      	      	                platform_type \
+              	      	      	      HAVING coin_num > 5 \
+              	      	      	      UNION ALL \
+              	      	      	      SELECT  'week'                    AS period, \
+              	      	      	              userid, \
+              	      	      	              accept_gift_flag, \
+              	      	      	              agree_day, \
+              	      	      	              blogname, \
+              	      	      	              blognickname, \
+              	      	      	              platform_type, \
+              	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	              SUM(num)                  AS num, \
+              	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      FROM \
+              	      	      	      ( \
+              	      	      	      	      SELECT  a.userid, \
+              	      	      	      	              a.accept_gift_flag, \
+              	      	      	      	              a.agree_day, \
+              	      	      	      	              a.blogname, \
+              	      	      	      	              a.blognickname, \
+              	      	      	      	              a.platform_type, \
+              	      	      	      	              b.dt, \
+              	      	      	      	              COUNT(DISTINCT b.postid)  AS exposure_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN clickpv > 0 THEN b.postid ELSE NULL END) AS click_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN poshotpv > 0 THEN b.postid ELSE NULL END) AS poshot_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN hdpv > 0 THEN b.postid ELSE NULL END) AS hdpv_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN coin_num > 0 THEN b.postid ELSE NULL END) AS gift_postnum, \
+              	      	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	      	              SUM(num)                  AS num, \
+              	      	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      	      FROM lofter.dim_gift_post a \
+              	      	      	      	      JOIN \
+              	      	      	      	      ( \
+              	      	      	      	      	      SELECT  * \
+              	      	      	      	      	      FROM lofter.dws_gift_post_di \
+              	      	      	      	      	      WHERE dt <= '${azkaban.flow.1.days.ago}' \
+              	      	      	      	      ) b \
+              	      	      	      	      ON a.postId = b.postId \
+              	      	      	      	      GROUP BY  a.userid, \
+              	      	      	      	                a.accept_gift_flag, \
+              	      	      	      	                a.agree_day, \
+              	      	      	      	                a.blogname, \
+              	      	      	      	                a.blognickname, \
+              	      	      	      	                a.platform_type, \
+              	      	      	      	                b.dt \
+              	      	      	      	      HAVING coin_num > 1 AND exposureuv > 10 \
+              	      	      	      ) \
+              	      	      	      WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND exposureuv > 0 \
+              	      	      	      GROUP BY  userid, \
+              	      	      	                accept_gift_flag, \
+              	      	      	                agree_day, \
+              	      	      	                blogname, \
+              	      	      	                blognickname, \
+              	      	      	                platform_type \
+              	      	      	      HAVING coin_num > 10 \
+              	      	      	      UNION ALL \
+              	      	      	      SELECT  'month'                   AS period, \
+              	      	      	              userid, \
+              	      	      	              accept_gift_flag, \
+              	      	      	              agree_day, \
+              	      	      	              blogname, \
+              	      	      	              blognickname, \
+              	      	      	              platform_type, \
+              	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	              SUM(num)                  AS num, \
+              	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      FROM \
+              	      	      	      ( \
+              	      	      	      	      SELECT  a.userid, \
+              	      	      	      	              a.accept_gift_flag, \
+              	      	      	      	              a.agree_day, \
+              	      	      	      	              a.blogname, \
+              	      	      	      	              a.blognickname, \
+              	      	      	      	              a.platform_type, \
+              	      	      	      	              b.dt, \
+              	      	      	      	              COUNT(DISTINCT b.postid)  AS exposure_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN clickpv > 0 THEN b.postid ELSE NULL END) AS click_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN poshotpv > 0 THEN b.postid ELSE NULL END) AS poshot_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN hdpv > 0 THEN b.postid ELSE NULL END) AS hdpv_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN coin_num > 0 THEN b.postid ELSE NULL END) AS gift_postnum, \
+              	      	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	      	              SUM(num)                  AS num, \
+              	      	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      	      FROM lofter.dim_gift_post a \
+              	      	      	      	      JOIN \
+              	      	      	      	      ( \
+              	      	      	      	      	      SELECT  * \
+              	      	      	      	      	      FROM lofter.dws_gift_post_di \
+              	      	      	      	      	      WHERE dt <= '${azkaban.flow.1.days.ago}' \
+              	      	      	      	      ) b \
+              	      	      	      	      ON a.postId = b.postId \
+              	      	      	      	      GROUP BY  a.userid, \
+              	      	      	      	                a.accept_gift_flag, \
+              	      	      	      	                a.agree_day, \
+              	      	      	      	                a.blogname, \
+              	      	      	      	                a.blognickname, \
+              	      	      	      	                a.platform_type, \
+              	      	      	      	                b.dt \
+              	      	      	      	      HAVING coin_num > 1 AND exposureuv > 10 \
+              	      	      	      ) \
+              	      	      	      WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' AND exposureuv > 0 \
+              	      	      	      GROUP BY  userid, \
+              	      	      	                accept_gift_flag, \
+              	      	      	                agree_day, \
+              	      	      	                blogname, \
+              	      	      	                blognickname, \
+              	      	      	                platform_type \
+              	      	      	      HAVING coin_num > 20 \
+              	      	      	      UNION ALL \
+              	      	      	      SELECT  'history'                 AS period, \
+              	      	      	              userid, \
+              	      	      	              accept_gift_flag, \
+              	      	      	              agree_day, \
+              	      	      	              blogname, \
+              	      	      	              blognickname, \
+              	      	      	              platform_type, \
+              	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	              SUM(num)                  AS num, \
+              	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      FROM \
+              	      	      	      ( \
+              	      	      	      	      SELECT  a.userid, \
+              	      	      	      	              a.accept_gift_flag, \
+              	      	      	      	              a.agree_day, \
+              	      	      	      	              a.blogname, \
+              	      	      	      	              a.blognickname, \
+              	      	      	      	              a.platform_type, \
+              	      	      	      	              b.dt, \
+              	      	      	      	              COUNT(DISTINCT b.postid)  AS exposure_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN clickpv > 0 THEN b.postid ELSE NULL END) AS click_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN poshotpv > 0 THEN b.postid ELSE NULL END) AS poshot_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN hdpv > 0 THEN b.postid ELSE NULL END) AS hdpv_postnum, \
+              	      	      	      	              COUNT(DISTINCT CASE WHEN coin_num > 0 THEN b.postid ELSE NULL END) AS gift_postnum, \
+              	      	      	      	              SUM(clickpv)              AS clickpv, \
+              	      	      	      	              SUM(clickuv)              AS clickuv, \
+              	      	      	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	      	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	      	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	      	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	      	      	              SUM(hdpv)                 AS hdpv, \
+              	      	      	      	              SUM(hduv)                 AS hduv, \
+              	      	      	      	              SUM(coin_num)             AS coin_num, \
+              	      	      	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	      	      	              SUM(num)                  AS num, \
+              	      	      	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	      	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	      	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	      	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      	      	      FROM lofter.dim_gift_post a \
+              	      	      	      	      JOIN \
+              	      	      	      	      ( \
+              	      	      	      	      	      SELECT  * \
+              	      	      	      	      	      FROM lofter.dws_gift_post_di \
+              	      	      	      	      	      WHERE dt <= '${azkaban.flow.1.days.ago}' \
+              	      	      	      	      ) b \
+              	      	      	      	      ON a.postId = b.postId \
+              	      	      	      	      GROUP BY  a.userid, \
+              	      	      	      	                a.accept_gift_flag, \
+              	      	      	      	                a.agree_day, \
+              	      	      	      	                a.blogname, \
+              	      	      	      	                a.blognickname, \
+              	      	      	      	                a.platform_type, \
+              	      	      	      	                b.dt \
+              	      	      	      	      HAVING coin_num > 1 AND exposureuv > 10 \
+              	      	      	      ) \
+              	      	      	      WHERE dt <= '${azkaban.flow.1.days.ago}' AND exposureuv > 0 \
+              	      	      	      GROUP BY  userid, \
+              	      	      	                accept_gift_flag, \
+              	      	      	                agree_day, \
+              	      	      	                blogname, \
+              	      	      	                blognickname, \
+              	      	      	                platform_type \
+              	      	      	      HAVING coin_num > 20 \
+              	      	      ) aa \
+              	      ) a \
+              	      WHERE a.rk <= 1000 \
+              ) tmp1 \
+              LEFT JOIN \
+              ( \
+              	      SELECT  'day'   AS period, \
+              	              userId  AS blogid, \
+              	              fans_1d AS new_fans \
+              	      FROM lofter.dws_par_user_fans_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              	      UNION ALL \
+              	      SELECT  'week'  AS period, \
+              	              userId  AS blogid, \
+              	              fans_7d AS new_fans \
+              	      FROM lofter.dws_par_user_fans_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              	      UNION ALL \
+              	      SELECT  'month'  AS period, \
+              	              userId   AS blogid, \
+              	              fans_30d AS new_fans \
+              	      FROM lofter.dws_par_user_fans_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              	      UNION ALL \
+              	      SELECT  'history'  AS period, \
+              	              userId     AS blogid, \
+              	              fans_total AS new_fans \
+              	      FROM lofter.dws_par_user_fans_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) tmp2 \
+              ON tmp1.userid = tmp2.blogid AND tmp1.period = tmp2.period
+

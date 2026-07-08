@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_maisui_advertisers_report_di partition(dt='${azkaban.flow.1.days.ago}')    \
+select  \
+sum(lofter_revenue) maisui_settle_money,  \
+count(distinct groupid) cnt_groupid,  \
+sum(switch_blog_count) switch_blog_count,  \
+sum(pool_blog_count) pool_blog_count,  \
+sum(pool_post_count) pool_post_count,  \
+sum(expose_uv) expose_uv,  \
+sum(expose_pv) expose_pv  \
+from lofter_dm.ads_ad_resource_group_di  \
+where dt='${azkaban.flow.1.days.ago}'  \

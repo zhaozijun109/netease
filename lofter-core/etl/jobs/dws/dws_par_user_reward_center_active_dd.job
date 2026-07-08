@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_par_user_reward_center_active_dd \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT userId, \
+       is_anonymous, \
+       active_days_1d, \
+       active_days_7d, \
+       active_days_15d, \
+       active_days_30d, \
+       active_days_90d, \
+       active_days_180d, \
+       last_active_date \
+FROM ( \
+    SELECT coalesce(today.userId, yesterday.userId) as userId, \
+           coalesce(today.is_anonymous, yesterday.is_anonymous) as is_anonymous, \
+           coalesce(today.active_days_1d, 0) as active_days_1d, \
+           coalesce(today.active_days_7d, 0) as active_days_7d, \
+           coalesce(today.active_days_15d, 0) as active_days_15d, \
+           coalesce(today.active_days_30d, 0) as active_days_30d, \
+           coalesce(today.active_days_90d, 0) as active_days_90d, \
+           coalesce(today.active_days_180d, 0) as active_days_180d, \
+           case when today.has_visit_today = 1 then '${azkaban.flow.1.days.ago}' \
+                else yesterday.last_active_date \
+           end as last_active_date \
+    FROM ( \
+        SELECT a.userId, \
+               nvl(u.isanonymous, 0) as is_anonymous, \
+               count(distinct if(dt = '${azkaban.flow.1.days.ago}', dt, null)) as active_days_1d, \
+               count(distinct if(dt >= '${azkaban.flow.7.days.ago}', dt, null)) as active_days_7d, \
+               count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as active_days_15d, \
+               count(distinct if(dt >= '${azkaban.flow.30.days.ago}', dt, null)) as active_days_30d, \
+               count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as active_days_90d, \
+               count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, dt, null)) as active_days_180d, \
+               max(if(dt = '${azkaban.flow.1.days.ago}', 1, 0)) as has_visit_today \
+        FROM ( \
+            SELECT distinct userid, dt \
+            FROM lofter.dwd_rewardcenter_visit_di \
+            WHERE dt <= '${azkaban.flow.1.days.ago}' \
+              AND dt > date_sub('${azkaban.flow.1.days.ago}', 180) \
+              AND userid > 0 \
+        ) a \
+        LEFT JOIN lofter.dim_user u ON a.userId = u.id \
+        GROUP BY a.userId, u.isanonymous \
+    ) today \
+    FULL OUTER JOIN ( \
+        SELECT userId, is_anonymous, last_active_date \
+        FROM lofter.dws_par_user_reward_center_active_dd \
+        WHERE dt = '${azkaban.flow.2.days.ago}' \
+          AND last_active_date is not null \
+    ) yesterday ON today.userId = yesterday.userId \
+) t \
+DISTRIBUTE BY 1

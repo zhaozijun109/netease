@@ -1,0 +1,80 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_support_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select isrec,level,lingyu_r1,count(distinct blogid) blog_sum,     \
+                    count(distinct case when publishpost_7d>0 then blogid end )publish_blog_7d,     \
+              	    count(distinct case when publishpost_15d>0 then blogid end )publish_blog_15d,   \
+              	    count(distinct case when publishpost_30d>0 then blogid end )publish_blog_30d,   \
+                    sum(publishpost_7d) publish_post_7d,sum(publishpost_15d) publish_post_15d,sum(publishpost_30d) publish_post_30d,    \
+                    sum ( realbrowsepv_7d)+sum ( realplaypv_7d) as realpv_7d,sum (realbrowsepv_7d) realbrowsepv_7d ,sum (realplaypv_7d)realplaypv_7d,sum (poshotpv_7d)poshotpv_7d,sum (hdpv_7d)hdpv_7d,     \
+                    sum (realbrowsepv_30d)+sum (realplaypv_30d) as realpv_30d,sum (realbrowsepv_30d) realbrowsepv_30d ,sum (realplaypv_30d)realplaypv_30d,sum (poshotpv_30d)poshotpv_30d,sum(hdpv_7d)hdpv_30d,  \
+                    sum(fans_7d)fans_7d,sum(fans_30d)fans_30d      \
+              from  \
+              (     \
+              select  a.blogid,case when b.blogid is not null  then 1 else 0  end isrec,    \
+              		nvl(h.level,'else') as level,nvl(h.lingyu_r1,'else') as lingyu_r1,  \
+              		publishpost_7d,publishpost_15d,publishpost_30d, \
+                      realbrowsepv_7d,realplaypv_7d,poshotpv_7d,hdpv_7d,realbrowsepv_30d,realplaypv_30d,poshotpv_30d,hdpv_30d,fans_7d,fans_30d  \
+              from  \
+              (     \
+              select  blogid    \
+              from  lofter.dim_post     \
+              where valid in (0,12,15,16) and ispublished=true and isforbidden=false and contenttype in ('图片','文字','长文章','视频')  \
+              	and publishdate between date_sub('${azkaban.flow.1.days.ago}',364) and '${azkaban.flow.1.days.ago}'     \
+              group by blogid   \
+              ) a   \
+              left join     \
+              (select conv(split(item_id,'_')[0], 16, 10)blogid     \
+              from rec.rec_lofter_life_i_level          \
+              where (level in('p1','p2','p3') or  (level in ('p1_fail','p2_fail','p3_old') and  level_update_day>='${azkaban.flow.7.days.ago}' ) )  \
+              and day='${azkaban.flow.1.days.ago}'  \
+              group by  1  \
+              )b    \
+              on a.blogid=b.blogid  \
+              left join     \
+              (     \
+              select userId as blogid, level, element_at(post_top_domains,1) as lingyu_r1    \
+              from lofter.dws_par_creator_dd   \
+              where dt='${azkaban.flow.1.days.ago}'     \
+              ) h   \
+              on a.blogid=h.blogid  \
+              left join     \
+              (select  blogid,  \
+              	count(distinct case when publishdate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then  id end ) publishpost_7d,       \
+              	count(distinct case when publishdate between date_sub('${azkaban.flow.1.days.ago}',14) and '${azkaban.flow.1.days.ago}' then  id end ) publishpost_15d,     \
+              	count(distinct case when publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then  id end ) publishpost_30d      \
+              from  lofter.dim_post \
+              where valid in (0,12,15,16) and ispublished=true and isforbidden=false and contenttype in ('图片','文字','长文章','视频')  \
+              	and publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+              group by blogid   \
+              )c    \
+              on a.blogid=c.blogid  \
+              left join     \
+              (select userid,       \
+              	sum (case when dt between  '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then realbrowsepv end ) realbrowsepv_7d,   \
+              	sum (case when dt between  '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then realplaypv end ) realplaypv_7d,       \
+              	sum (case when dt between  '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then poshotpv end ) poshotpv_7d,           \
+              	sum (case when dt between  '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then hdpv end ) hdpv_7d,                   \
+              	sum (case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then realbrowsepv end ) realbrowsepv_30d,  \
+              	sum (case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then realplaypv end ) realplaypv_30d,      \
+              	sum (case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then poshotpv end ) poshotpv_30d,          \
+              	sum (case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then hdpv end ) hdpv_30d                   \
+              from  lofter.dws_post_base_stats_di   \
+              where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'      \
+              group by userid       \
+              )d        \
+              on a.blogid=d.userid  \
+              left join     \
+              (      \
+              select blogid,    \
+              count(distinct case when from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') between  '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then  userid end ) fans_7d,   \
+              count(distinct case when from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'  then  userid end ) fans_30d  \
+              from lofter_db_dump.ods_db_user_following_nd  \
+              where from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') >='${azkaban.flow.30.days.ago}'     \
+              group by blogid   \
+              )e        \
+              on a.blogid=e.blogid  \
+              )     \
+              group by isrec,level,lingyu_r1    \
+              grouping sets((isrec,level,lingyu_r1),(isrec))    \
+              distribute by 1
+dependencies=

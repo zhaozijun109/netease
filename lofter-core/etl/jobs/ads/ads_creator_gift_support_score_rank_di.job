@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_gift_support_score_rank_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select blogId, support_score, row_number() over (order by support_score desc) as rank \
+    from ( \
+        select a.blogId, \
+           sum( \
+                case when d.premium_type = '低质' then 0 \
+                     when d.premium_type = '优质' or c.postId is not null or e.postId is not null then 1.5 * support_score \
+                     else support_score end \
+            ) as support_score \
+        from ( \
+            select postId, userId as blogId \
+            from lofter.dim_gift_post_dd \
+            where dt='${azkaban.flow.1.days.ago}' and length(return_gift_ids) > 0 and \
+                  publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' \
+        ) a \
+        join ( \
+            select itemId as postId, sum(score) as support_score \
+            from lofter_db_dump.ods_db_trade_support_record_nd \
+            where itemType = 'POST' \
+            group by 1 \
+        ) a1 on a.postId = a1.postId \
+        left join ( \
+            select userId as blogId \
+            from lofter_db_dump.ods_db_trade_pay_grade_nd \
+            where grade <= 2 \
+        ) b on a.blogId=b.blogId \
+        left join ( \
+            select postid \
+            from lofter.dim_gift_post_return_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and array_contains(mark_tags,'非截断') \
+            group by postid \
+        ) c on a.postid=c.postid \
+        left join ( \
+            select postId, type as premium_type \
+            from lofter.dws_gift_post_premium_scoring_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) d on a.postId = d.postId \
+        left join ( \
+            select postId \
+            from lofter.dws_post_premium_di \
+            where dt='${azkaban.flow.1.days.ago}' \
+        ) e on a.postId = e.postId \
+        where b.blogId is null \
+        group by 1 \
+    ) t \
+) tt \
+where rank <= 3000

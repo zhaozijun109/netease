@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_membership_rec_ip_index_di partition( dt = '${azkaban.flow.1.days.ago}') \
+select a.ip, tags, post_count_std, post_count_7d, vip_post_count_std, vip_post_count_7d \
+from ( \
+    select ip, \
+          sum(if(zone = 'pay', post_count_std, 0)) as post_count_std, \
+          sum(if(zone = 'pay', post_count_7d, 0)) as post_count_7d, \
+          sum(if(zone = 'vip', post_count_std, 0)) as vip_post_count_std, \
+          sum(if(zone = 'vip', post_count_7d, 0)) as vip_post_count_7d \
+    from lofter.dws_membership_ip_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select ip, concat_ws(',', collect_set(tag)) as tags \
+    from lofter.dwd_tag_ip_mapping_nd \
+    group by 1 \
+) b on a.ip = b.ip \

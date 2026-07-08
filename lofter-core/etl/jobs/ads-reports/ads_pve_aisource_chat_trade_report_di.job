@@ -1,0 +1,93 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_pve_aisource_chat_trade_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.aiSource, \
+       case when tradeFlg is null then '新用户' else tradeFlg end as userFlg, \
+       count(distinct a.userId) as chat_uv, \
+       sum(total_chats) as total_chats, \
+       count(distinct c.userId) as trade_uv, \
+       sum(c.total_amount) as total_amount, \
+       control_flg \
+from ( \
+    select a.userId, \
+           a.aiSource, \
+           case when b.aiSource is null then 0 else 1 end as control_flg \
+    from ( \
+        select userId, \
+               aiSource \
+        from lofter.dwd_pve_user_chats_info_di \
+        where dt = '${azkaban.flow.1.days.ago}' and aiSource is not null \
+        group by userId, aiSource \
+    ) a \
+    left join ( \
+        select userId, \
+               case when modelName = 'GLOW_AI' then 1 \
+                    when modelName = 'CHAT_BOT' then 2 \
+                    when modelName = 'PVE_GLOW_AI' then 3 \
+                    when modelName = 'PVE_FUXI_AI' then 4 \
+                    when modelName = 'PVE_CHAT_BOT' then 5 \
+                    when modelName = 'PVE_DOU_BAO' then 6 \
+                    when modelName = 'PVE_YU_YAN' then 7 \
+                    when modelName = 'PVE_AI_LAB' then 8 \
+                    when modelName = 'PVE_MM_CCV2' then 9 \
+                    when modelName = 'PVE_YUYAN_PLUS' then 10 \
+                    when modelName = 'DOU_BAO_1215' then 11 \
+                    when modelName = 'DOU_BAO_PRO_1215' then 12 \
+                    when modelName = 'TONGYI_XINGCHEN' then 13 \
+                    else 999 \
+               end as aiSource \
+        from lofter_db_dump.ods_db_pve_model_control_log_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and modelType = 0 \
+        group by userId, \
+                 case when modelName = 'GLOW_AI' then 1 \
+                      when modelName = 'CHAT_BOT' then 2 \
+                      when modelName = 'PVE_GLOW_AI' then 3 \
+                      when modelName = 'PVE_FUXI_AI' then 4 \
+                      when modelName = 'PVE_CHAT_BOT' then 5 \
+                      when modelName = 'PVE_DOU_BAO' then 6 \
+                      when modelName = 'PVE_YU_YAN' then 7 \
+                      when modelName = 'PVE_AI_LAB' then 8 \
+                      when modelName = 'PVE_MM_CCV2' then 9 \
+                      when modelName = 'PVE_YUYAN_PLUS' then 10 \
+                      when modelName = 'DOU_BAO_1215' then 11 \
+                      when modelName = 'DOU_BAO_PRO_1215' then 12 \
+                      when modelName = 'TONGYI_XINGCHEN' then 13 \
+                      else 999 end \
+    ) b \
+    on a.userId = b.userId and a.aiSource = b.aiSource \
+    group by a.userId, a.aiSource, case when b.aiSource is null then 0 else 1 end \
+    union \
+    select userId, \
+           -999 as aiSource, \
+           0 as control_flg \
+    from lofter.dwd_pve_user_chats_info_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) a \
+join ( \
+    select userId, \
+           sum(total_chats) as total_chats \
+    from lofter.dws_pve_user_role_chats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) b \
+on a.userId = b.userId \
+left join ( \
+    select userId, \
+           sum(total_amount) as total_amount \
+    from lofter.dws_pve_user_role_amount_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+)c \
+on a.userId = c.userId \
+left join ( \
+    select userId, \
+           case when first_trade_date is null then '未付费' else '老付费' end as tradeFlg \
+    from lofter.dim_pve_user_dd \
+    where dt = '${azkaban.flow.2.days.ago}' and userType in (0, 1) \
+    group by userId, case when first_trade_date is null then '未付费' else '老付费' end \
+) d \
+on a.userId = d.userId \
+group by a.aiSource, \
+         case when tradeFlg is null then '新用户' else tradeFlg end, \
+         control_flg

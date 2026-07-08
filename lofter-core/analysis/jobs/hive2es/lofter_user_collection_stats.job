@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select userid, collectionRank from lofter_dm.ads_user_collection_browse_di where dt='${azkaban.flow.1.days.ago}' "
+params= --id userid --dest lofter_user_collection_stats

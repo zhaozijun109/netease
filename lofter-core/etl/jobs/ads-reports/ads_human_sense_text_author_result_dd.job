@@ -1,0 +1,91 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_human_sense_text_author_result_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    blogid, \
+    publishdays, \
+    postnum, \
+    workhour_postnum, \
+    workday_postnum, \
+    self_response_postnum, \
+    self_response_commentnum, \
+    message_uv, \
+    answernum, \
+    fan_postnum, \
+    callbackpostnum, \
+    duobanben_postnum, \
+    versionnum, \
+    selfintro_flg, \
+    all_blog_fannum, \
+    follow_blognum, \
+    mention_count, \
+    mention_postnum, \
+    level, \
+    privilegelevel, \
+    user_label \
+FROM ( \
+ \
+    SELECT \
+        di.blogid, \
+        di.publishdays, \
+        di.postnum, \
+        di.workhour_postnum, \
+        di.workday_postnum, \
+        di.self_response_postnum, \
+        di.self_response_commentnum, \
+        di.message_uv, \
+        di.answernum, \
+        di.fan_postnum, \
+        di.callbackpostnum, \
+        di.duobanben_postnum, \
+        di.versionnum, \
+        di.selfintro_flg, \
+        di.all_blog_fannum, \
+        di.follow_blognum, \
+        di.mention_count, \
+        di.mention_postnum, \
+        di.level, \
+        di.privilegelevel, \
+        CASE \
+            WHEN di.user_label IN ('真人', '灰产') THEN di.user_label \
+            WHEN di.user_label = '待定' AND dd.user_label IN ('真人', '灰产') THEN dd.user_label \
+            ELSE '待定' \
+        END AS user_label \
+    FROM \
+        (SELECT * FROM lofter_dm.ads_human_sense_text_author_result_di WHERE dt = '${azkaban.flow.1.days.ago}') di \
+    LEFT JOIN \
+        (SELECT blogid, user_label FROM lofter_dm.ads_human_sense_text_author_result_dd WHERE dt = date_sub('${azkaban.flow.1.days.ago}',1)  ) dd \
+    ON di.blogid = dd.blogid \
+ \
+    UNION ALL \
+ \
+    SELECT \
+        dd.blogid, \
+        dd.publishdays, \
+        dd.postnum, \
+        dd.workhour_postnum, \
+        dd.workday_postnum, \
+        dd.self_response_postnum, \
+        dd.self_response_commentnum, \
+        dd.message_uv, \
+        dd.answernum, \
+        dd.fan_postnum, \
+        dd.callbackpostnum, \
+        dd.duobanben_postnum, \
+        dd.versionnum, \
+        dd.selfintro_flg, \
+        dd.all_blog_fannum, \
+        dd.follow_blognum, \
+        dd.mention_count, \
+        dd.mention_postnum, \
+        dd.level, \
+        dd.privilegelevel, \
+        dd.user_label \
+    FROM \
+        (SELECT * FROM lofter_dm.ads_human_sense_text_author_result_dd WHERE dt = date_sub('${azkaban.flow.1.days.ago}',1)) dd \
+    LEFT JOIN \
+        (SELECT blogid FROM lofter_dm.ads_human_sense_text_author_result_di WHERE dt = '${azkaban.flow.1.days.ago}') di \
+    ON dd.blogid = di.blogid \
+    WHERE di.blogid IS NULL   \
+) t \
+
+dependencies=ads_human_sense_text_author_result_di

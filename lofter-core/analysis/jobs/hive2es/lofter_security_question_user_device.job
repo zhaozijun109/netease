@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(userId, '_', customudid) as id, customudid as deviceId, userId, min(firstTime) as firstTime, max(lastTime) as lastTime from lofter.dwd_device_mapping_detail_di where dt = '${azkaban.flow.1.days.ago}' and userId > 0 and length(customudid) > 0 and isanonymous = 0 group by userId, customudid "
+params=--dest lofter_security_question_user_device_v2

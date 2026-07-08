@@ -1,0 +1,94 @@
+type=sparksql
+hive.query.01= \
+WITH creator_data AS ( \
+    SELECT userid, level, blog_url, blog_nickname \
+    FROM lofter.dws_par_creator_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) \
+, base_publish AS ( \
+    SELECT post_publish_date AS dt  \
+          ,userid AS author_userid  \
+          ,postid   \
+    FROM lofter.dwd_post_publish_di \
+    WHERE post_publish_date = '${azkaban.flow.1.days.ago}' \
+      AND post_content_type = '视频' \
+    GROUP BY post_publish_date, userid, postid \
+) \
+, base_browse AS ( \
+    SELECT b.dt  \
+          ,b.userid  \
+          ,b.postid  \
+          ,b.duration  \
+          ,b.is_real \
+          ,b.is_video_finish \
+    FROM lofter.dwd_post_browse_di b \
+    JOIN base_publish p ON b.dt = p.dt AND b.postid = p.postid \
+    WHERE b.dt = '${azkaban.flow.1.days.ago}' \
+      AND b.post_content_type = '视频' \
+      AND b.action_type = 'page_duration' \
+) \
+, browse_user_agg AS ( \
+    SELECT dt, postid, userid \
+          ,MAX(is_real) AS user_is_real \
+          ,MAX(is_video_finish) AS user_is_finish \
+    FROM base_browse \
+    GROUP BY dt, postid, userid \
+) \
+, browse_user_metrics AS ( \
+    SELECT dt, postid \
+          ,COUNT(1) AS cnt_pub_browse_userid    \
+          ,SUM(user_is_real) AS cnt_pub_valid_userid \
+          ,SUM(user_is_finish) AS cnt_pub_finish_userid \
+    FROM browse_user_agg \
+    GROUP BY dt, postid \
+) \
+, browse_vv_metrics AS ( \
+    SELECT dt, postid \
+          ,COUNT(1) AS cnt_pub_play_vv  \
+          ,SUM(CASE WHEN duration >= 5000 THEN 1 ELSE 0 END) AS cnt_pub_play_5s_vv \
+          ,SUM(CASE WHEN duration >= 3000 THEN 1 ELSE 0 END) AS cnt_pub_play_3s_vv \
+          ,SUM(CASE WHEN is_video_finish = 1 THEN 1 ELSE 0 END) AS cnt_pub_play_finish_vv \
+    FROM base_browse \
+    GROUP BY dt, postid \
+) \
+, post_stats_metrics AS ( \
+    SELECT s.dt, s.postid \
+          ,MAX(s.browsepv) AS pub_browsepv \
+          ,MAX(s.realbrowsepv) AS pub_realbrowsepv \
+          ,MAX(s.sharepv) AS pub_sharepv \
+          ,MAX(s.pospraisepv) AS pub_pospraisepv \
+          ,MAX(s.poscommentpv) AS pub_poscommentpv \
+          ,MAX(s.possubscribepv) AS pub_possubscribepv \
+          ,MAX(s.poshotpv) AS pub_poshotpv \
+    FROM lofter.dws_post_base_stats_di s \
+    JOIN base_publish p ON s.dt = p.dt AND s.postid = p.postid \
+    WHERE s.dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY s.dt, s.postid \
+) \
+insert overwrite table lofter_dm.ads_post_performance_video_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+ \
+      base.author_userid  as userid \
+      ,base.postid \
+      ,c.level          \
+      ,c.blog_url       \
+      ,c.blog_nickname  \
+      ,COALESCE(u.cnt_pub_browse_userid, 0) AS cnt_pub_browse_userid \
+      ,COALESCE(u.cnt_pub_valid_userid, 0) AS cnt_pub_valid_userid \
+      ,COALESCE(u.cnt_pub_finish_userid, 0) AS cnt_pub_finish_userid \
+      ,COALESCE(v.cnt_pub_play_vv, 0) AS cnt_pub_play_vv \
+      ,COALESCE(v.cnt_pub_play_5s_vv, 0) AS cnt_pub_play_5s_vv \
+      ,COALESCE(v.cnt_pub_play_3s_vv, 0) AS cnt_pub_play_3s_vv \
+      ,COALESCE(v.cnt_pub_play_finish_vv, 0) AS cnt_pub_play_finish_vv \
+      ,COALESCE(s.pub_browsepv, 0) AS pub_browsepv \
+      ,COALESCE(s.pub_realbrowsepv, 0) AS pub_realbrowsepv \
+      ,COALESCE(s.pub_sharepv, 0) AS pub_sharepv \
+      ,COALESCE(s.pub_pospraisepv, 0) AS pub_pospraisepv \
+      ,COALESCE(s.pub_poscommentpv, 0) AS pub_poscommentpv \
+      ,COALESCE(s.pub_possubscribepv, 0) AS pub_possubscribepv \
+      ,COALESCE(s.pub_poshotpv, 0) AS pub_poshotpv \
+FROM base_publish base \
+LEFT JOIN creator_data c        ON base.author_userid = c.userid \
+LEFT JOIN browse_user_metrics u ON base.dt = u.dt AND base.postid = u.postid  \
+LEFT JOIN browse_vv_metrics v   ON base.dt = v.dt AND base.postid = v.postid  \
+LEFT JOIN post_stats_metrics s  ON base.dt = s.dt AND base.postid = s.postid

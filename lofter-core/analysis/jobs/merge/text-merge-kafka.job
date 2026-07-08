@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+conf.spark.sql.shuffle.partitions=200
+conf.spark.task.maxFailures=1
+conf.spark.blacklist.enabled=false
+class=com.netease.lofter.data.common.spark.TextMerge
+params=--grandpa /user/da_lofter/kafka --exclude avro

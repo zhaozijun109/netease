@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.TaskDataSourceDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.TaskDataSourceDO">
+    <id column="id" jdbcType="BIGINT" property="id" />
+    <result column="data_source_id" jdbcType="BIGINT" property="dataSourceId" />
+    <result column="task_id" jdbcType="VARCHAR" property="taskId" />
+    <result column="product" jdbcType="VARCHAR" property="product" />
+    <result column="cluster" jdbcType="VARCHAR" property="cluster" />
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime" />
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, data_source_id, task_id, product, cluster, create_time, modify_time
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from task_datasource
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from task_datasource
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskDataSourceDO">
+    insert into task_datasource (id, data_source_id, task_id, 
+      product, cluster, create_time, 
+      modify_time)
+    values (#{id,jdbcType=BIGINT}, #{dataSourceId,jdbcType=BIGINT}, #{taskId,jdbcType=VARCHAR}, 
+      #{product,jdbcType=VARCHAR}, #{cluster,jdbcType=VARCHAR}, #{createTime,jdbcType=TIMESTAMP}, 
+      #{modifyTime,jdbcType=TIMESTAMP})
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskDataSourceDO">
+    insert into task_datasource
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="dataSourceId != null">
+        data_source_id,
+      </if>
+      <if test="taskId != null">
+        task_id,
+      </if>
+      <if test="product != null">
+        product,
+      </if>
+      <if test="cluster != null">
+        cluster,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="dataSourceId != null">
+        #{dataSourceId,jdbcType=BIGINT},
+      </if>
+      <if test="taskId != null">
+        #{taskId,jdbcType=VARCHAR},
+      </if>
+      <if test="product != null">
+        #{product,jdbcType=VARCHAR},
+      </if>
+      <if test="cluster != null">
+        #{cluster,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskDataSourceDO">
+    update task_datasource
+    <set>
+      <if test="dataSourceId != null">
+        data_source_id = #{dataSourceId,jdbcType=BIGINT},
+      </if>
+      <if test="taskId != null">
+        task_id = #{taskId,jdbcType=VARCHAR},
+      </if>
+      <if test="product != null">
+        product = #{product,jdbcType=VARCHAR},
+      </if>
+      <if test="cluster != null">
+        cluster = #{cluster,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskDataSourceDO">
+    update task_datasource
+    set data_source_id = #{dataSourceId,jdbcType=BIGINT},
+      task_id = #{taskId,jdbcType=VARCHAR},
+      product = #{product,jdbcType=VARCHAR},
+      cluster = #{cluster,jdbcType=VARCHAR},
+      create_time = #{createTime,jdbcType=TIMESTAMP},
+      modify_time = #{modifyTime,jdbcType=TIMESTAMP}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+
+  <select id="selectTaskListByDataSource" resultType="string">
+    select task_id from task_datasource
+    where data_source_id = #{dataSourceId,jdbcType=BIGINT}
+      and product = #{product,jdbcType=VARCHAR}
+      and cluster = #{cluster,jdbcType=VARCHAR}
+  </select>
+
+  <delete id="deleteByTaskId">
+    delete from task_datasource
+    where task_id = #{taskId,jdbcType=VARCHAR}
+      and product = #{product,jdbcType=VARCHAR}
+      and cluster = #{cluster,jdbcType=VARCHAR}
+  </delete>
+
+</mapper>

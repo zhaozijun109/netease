@@ -1,0 +1,94 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_evt_content_supply_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postid \
+	,a.publishdate \
+	,a.blog_channel \
+	,a.blogname \
+	,a.blogid \
+	,c.blognickname \
+	,a.url \
+	,b.id AS contentid \
+	,providerid \
+	,providerType \
+	,title As contenttitle \
+	,copyRightType \
+	,providername \
+	,contractid \
+	,kspubstatus \
+	,dypubstatus \
+	,categorytags \
+	,styletags \
+	,sharetype \
+	,editoremail \
+FROM ( \
+	SELECT postid \
+		,publishdate \
+		,blog_channel \
+		,blogname \
+		,blogid \
+		,CONCAT ( \
+			'https://' \
+			,blogname \
+			,'.lofter.com/post/' \
+			,conv(blogid, 10, 16) \
+			,'_' \
+			,conv(postid, 10, 16) \
+			) AS url \
+	FROM lofter.dim_gift_post_return_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid \
+		,publishdate \
+		,blog_channel \
+		,blogname \
+		,blogid \
+		,CONCAT ( \
+			'https://' \
+			,blogname \
+			,'.lofter.com/post/' \
+			,conv(blogid, 10, 16) \
+			,'_' \
+			,conv(postid, 10, 16) \
+			) \
+	) a \
+JOIN ( \
+	SELECT a.* \
+		,postid \
+		,blogid \
+		,b.type \
+		,c.sharetype \
+		,c.editoremail \
+	FROM ( \
+		SELECT id \
+			,providerid \
+			,providerType \
+			,title \
+			,copyRightType \
+			,providername \
+			,contractid \
+			,kspubstatus \
+			,dypubstatus \
+			,categorytags \
+			,styletags \
+		FROM lofter_db_dump.ods_db_pfb_content_nd \
+		WHERE STATUS = 0 \
+		) a \
+	JOIN ( \
+		SELECT contentid \
+			,type \
+			,postid \
+			,blogid \
+		FROM lofter_db_dump.ods_db_pfb_content_related_post_nd \
+		WHERE STATUS = 0 \
+		) b ON a.id = b.contentid \
+	JOIN ( \
+		SELECT id \
+			,sharetype \
+			,editoremail \
+		FROM lofter_db_dump.ods_db_pfb_contract_nd \
+		) c ON a.contractid = c.id \
+	) b ON a.postid = b.postid \
+JOIN ( \
+	SELECT id \
+		,blognickname \
+	FROM lofter.dim_blog \
+	) c ON a.blogid = c.id \

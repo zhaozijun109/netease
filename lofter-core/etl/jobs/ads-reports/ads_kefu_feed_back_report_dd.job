@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_kefu_feed_back_report_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  from_unixtime(cast(submittime / 1000 AS BIGINT), 'yyyy-MM-dd') as day, \
+  case \
+    when tag = '' then '无' \
+    else tag \
+  end as tag, \
+  product, \
+  case \
+    when clientInfo = '' then '无' \
+    else clientInfo \
+  end clientinfo, \
+  case \
+    when clientVersion = '' then '无' \
+    else clientVersion \
+  end clientversion, \
+  applystatus, \
+  case \
+    when tagLevel2 = '' then '无' \
+    else tagLevel2 \
+  end taglevel2, \
+  status, \
+  count(distinct userid) as uv, \
+  count(distinct id) as pv \
+from \
+  lofter_db_dump.ods_db_act_ke_fu_feed_back_nd \
+where \
+  from_unixtime(cast(submittime / 1000 AS BIGINT), 'yyyy-MM-dd') between '2025-07-01' and '${azkaban.flow.1.days.ago}' \
+group by \
+  from_unixtime(cast(submittime / 1000 AS BIGINT), 'yyyy-MM-dd'), \
+  case \
+    when tag = '' then '无' \
+    else tag \
+  end, \
+  product, \
+  case \
+    when clientInfo = '' then '无' \
+    else clientInfo \
+  end, \
+  case \
+    when clientVersion = '' then '无' \
+    else clientVersion \
+  end, \
+  applyStatus, \
+  case \
+    when tagLevel2 = '' then '无' \
+    else tagLevel2 \
+  end, \
+  status \

@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table vc.dwd_vc_user_simulator_chats_info_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select t1.message_id, \
+       t1.scene, \
+       t1.user_id, \
+       t1.character_id, \
+       t1.biz_id, \
+       t1.sender, \
+       t1.source, \
+       t1.create_time, \
+       t1.update_time, \
+       t1.create_date, \
+       t1.update_date, \
+       t2.simulator_id, \
+       t2.init_param, \
+       t2.init_user_identity, \
+       t3.simulator_category, \
+       t3.simulator_type, \
+       t3.simulator_name \
+from ( \
+    select id as message_id, \
+           scene, \
+           user_id, \
+           character_id, \
+           biz_id, \
+           sender, \
+           source, \
+           create_time, \
+           update_time, \
+           from_unixtime(create_time / 1000, 'yyyy-MM-dd') as create_date, \
+           from_unixtime(update_time / 1000, 'yyyy-MM-dd') as update_date \
+    from vc.ods_db_vc_user_dungeon_chat_record_nd \
+    where from_unixtime(create_time / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    and sender = 2 \
+    and scene <> 'USER_CRUSH' \
+) t1 \
+left join ( \
+    select id as biz_id, \
+           simulator_id, \
+           init_param, \
+           get_json_object(init_param, '$.userBaseInfo') as init_user_identity \
+    from vc.ods_db_vc_user_simulator_init_info_nd \
+) t2 \
+on t1.biz_id = t2.biz_id \
+left join ( \
+    select simulator_id, \
+           category as simulator_category, \
+           type as simulator_type, \
+           name as simulator_name \
+    from vc.ods_db_vc_simulator_info_nd \
+    where is_trial = 0 and status = 3 \
+) t3 \
+on t2.simulator_id = t3.simulator_id

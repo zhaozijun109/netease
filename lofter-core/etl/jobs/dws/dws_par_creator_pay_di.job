@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_creator_pay_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, \
+    count(distinct a.userId) as first_unlock_uv, \
+    sum(a.money) as first_unlock_money, \
+    count(distinct b.userId) as first_unlock_fans_uv, \
+    count(distinct c.userId) as first_unlock_collection_subscribe_uv, \
+    count(distinct if(b.userId is null and c.userId is null, a.userId, null)) as first_unlock_non_fans_collection_subscribe_uv, \
+    count(distinct if(a.unlock_date = '${azkaban.flow.1.days.ago}', a.userId, null)) as first_unlock_uv_1d, \
+    sum(if(a.unlock_date = '${azkaban.flow.1.days.ago}', a.money,0)) as first_unlock_money_1d \
+from ( \
+    select blogId, userId, money, unlock_time, \
+        from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as unlock_date, \
+        row_number() over (partition by userId order by unlock_time) as rk \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) a \
+left join lofter_db_dump.ods_db_user_following_nd b on a.userId = b.userId and a.blogId = b.blogId \
+left join ( \
+    select y.userId, x.blogId \
+    from lofter_db_dump.ods_db_post_collection_nd x \
+    join lofter_db_dump.ods_db_subscribe_collection_nd y on x.id = y.collectionId \
+    group by 1, 2 \
+) c on a.userId = c.userId and a.blogId = c.blogId \
+where a.rk = 1 \
+group by 1 \
+
+dependencies=

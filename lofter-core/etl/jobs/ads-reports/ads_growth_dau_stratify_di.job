@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_dau_stratify_di partition(dt='${azkaban.flow.1.days.ago}') \
+select count(distinct deviceUdid) dau,  \
+    count(distinct if(device_type='近30日新增', deviceUdid, null)) new_active,  \
+    count(distinct if(device_type='近30日回流', deviceUdid, null)) return_active,  \
+    count(distinct if(device_type='近30日新增' and origin_type='口令' and is_paid_subscribe=0, deviceUdid, null)) new_kouling_active,  \
+    count(distinct if(device_type='近30日新增' and origin_type='广告', deviceUdid, null)) new_channel_active,  \
+    count(distinct if(device_type='近30日新增' and origin_type='自然', deviceUdid, null)) new_natural_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='口令' and is_paid_subscribe=0,deviceUdid, null)) return_kouling_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='广告', deviceUdid, null)) return_channel_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='自然', deviceUdid, null)) return_natural_active,     \
+    count(distinct if(device_type='持续活跃', deviceUdid, null)) old_active,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 1, deviceUdid,null)) old_1d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 2, deviceUdid,null)) old_2d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 3, deviceUdid,null)) old_3d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 4, deviceUdid,null)) old_4d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 5, deviceUdid,null)) old_5d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 6, deviceUdid,null)) old_6d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 7, deviceUdid,null)) old_7d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 8, deviceUdid,null)) old_8d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 9, deviceUdid,null)) old_9d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 10,deviceUdid,null)) old_10d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 11, deviceUdid,null)) old_11d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 12, deviceUdid,null)) old_12d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 13, deviceUdid,null)) old_13d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 14, deviceUdid,null)) old_14d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 15, deviceUdid,null)) old_15d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 16, deviceUdid,null)) old_16d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 17, deviceUdid,null)) old_17d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 18, deviceUdid,null)) old_18d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 19, deviceUdid,null)) old_19d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 20, deviceUdid,null)) old_20d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 21, deviceUdid,null)) old_21d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 22, deviceUdid,null)) old_22d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 23, deviceUdid,null)) old_23d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 24, deviceUdid,null)) old_24d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 25, deviceUdid,null)) old_25d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 26, deviceUdid,null)) old_26d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 27, deviceUdid,null)) old_27d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 28, deviceUdid,null)) old_28d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 29, deviceUdid,null)) old_29d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 30, deviceUdid,null)) old_30d_device, \
+    count(distinct if(device_type='近30日新增' and origin_type='口令' and is_paid_subscribe=1, deviceUdid, null)) new_fufeikouling_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='口令' and is_paid_subscribe=1, deviceUdid, null)) return_fufeikouling_active  \
+from lofter.dws_device_growth_dau_stratify_di \
+where dt='${azkaban.flow.1.days.ago}'

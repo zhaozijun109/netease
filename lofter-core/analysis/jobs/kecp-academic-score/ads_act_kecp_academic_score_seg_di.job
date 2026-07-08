@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.backend.AcademicScoreSeg
+params=--date '${azkaban.flow.current.date}'
+dependencies=

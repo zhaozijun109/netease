@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ods_db_vc_user_asset_consume_flow_all_dd PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select id, \
+                       user_id, \
+                       asset_type, \
+                       amount, \
+                       scene, \
+                       scene_uniq_id, \
+                       consume_status, \
+                       detail, \
+                       create_time, \
+                       update_time, \
+                       ext_amount, \
+                       partition_date, \
+                       ext \
+                from (select id, \
+                             user_id, \
+                             asset_type, \
+                             amount, \
+                             scene, \
+                             scene_uniq_id, \
+                             consume_status, \
+                             detail, \
+                             create_time, \
+                             update_time, \
+                             ext_amount, \
+                             partition_date, \
+                             ext, \
+                             row_number() over (partition by id order by update_time desc) as rk \
+                      from (select id, \
+                                   user_id, \
+                                   asset_type, \
+                                   amount, \
+                                   scene, \
+                                   scene_uniq_id, \
+                                   consume_status, \
+                                   detail, \
+                                   create_time, \
+                                   update_time, \
+                                   ext_amount, \
+                                   partition_date, \
+                                   ext \
+                            from vc.ods_db_vc_user_asset_consume_flow_all_dd \
+                            where dt = '${azkaban.flow.2.days.ago}' \
+                            union ALL \
+                            select id, \
+                                   user_id, \
+                                   asset_type, \
+                                   amount, \
+                                   scene, \
+                                   scene_uniq_id, \
+                                   consume_status, \
+                                   detail, \
+                                   create_time, \
+                                   update_time, \
+                                   ext_amount, \
+                                   partition_date, \
+                                   ext \
+                            from vc.ods_db_vc_user_asset_consume_flow_nd)) \
+                where rk = 1

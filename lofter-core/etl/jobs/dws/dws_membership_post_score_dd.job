@@ -1,0 +1,120 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_membership_post_score_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.blogId, join_date, is_vip, \
+    if(hot_30d > 2000 and unlock_pv_30d > 200 and (c.postId is not null or d.blogId is not null) and e.postId is null, 1, 0) as is_premium, \
+    a.ips, a.tags, \
+    a1.settlement_post_score as settlement_post_score, \
+    b.gift_post_score, b.gift_rank_percentile, \
+    unlock_pv_30d, hot_30d, hot, \
+    if(hot_30d > 500 and unlock_pv_30d > 200 and (c.postId is not null or d.blogId is not null) and e.postId is null, 1, 0) as is_vip_premium, \
+    if(unlock_pv_30d > 100 and (c.postId is not null or d.blogId is not null) and e.postId is null, 1, 0) as is_ip_premium, \
+    a1.revenue_post_score as revenue_post_score \
+from ( \
+    select * from lofter.dim_membership_post_dd where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select a.postId, \
+           sum(post_score) as settlement_post_score, \
+           sum(if(b.postId is not null, revenue_post_score, 0)) as revenue_post_score \
+    from ( \
+        select postId, count(1) * 10 as post_score, count(1) * 10 as revenue_post_score \
+        from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+        where status = 1 and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+      union all \
+        select postId, count(1) * 10 as post_score, 0 as revenue_post_score  \
+        from lofter.dwd_paid_subscribe_order_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+              order_type = 3 and length(actpwd) > 0 and postId > 0 \
+        group by 1 \
+      union all \
+        select postId, count(1) * 10 as post_score, 0 as revenue_post_score \
+        from lofter.dwd_coupon_order_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and postId > 0 \
+        group by 1 \
+      union all \
+        select postId, count(distinct userId) as post_score, count(distinct userId) as revenue_post_score \
+        from lofter.dwd_membership_vip_post_browse_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+      union all \
+        select postId, count(1) * 3 as post_score, 0 as revenue_post_score \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+              unlock_method <> '粮票' \
+        group by 1 \
+    ) a \
+    left join (select postId from lofter.dim_membership_post_vip_dd where dt = '${azkaban.flow.1.days.ago}' group by 1) b on a.postId = b.postId \
+    group by 1 \
+) a1 on a.postId = a1.postId \
+left join ( \
+    select a.postId, \
+        case when b.unlock_pv_30d > 200 and c.hot_30d > 2000 and (bg_flg_rk < bg_flg_total * 0.05 or d.type = '优质') then 2 \
+            when d.type = '低质' then 0.5 \
+            else 1 end as post_score_factor, \
+        bg_flg_rk / bg_flg_total as gift_rank_percentile, \
+        zonghe_score as gift_post_score, \
+        unlock_pv_30d, hot_30d, hot \
+    from ( \
+        select postId, bg_flg, jiaquan_all_score as zonghe_score, yinliuflg, review_status, \
+            count(1) over (partition by bg_flg) as bg_flg_total, \
+            row_number() over (partition by bg_flg order by jiaquan_all_score desc) as bg_flg_rk \
+        from lofter_dm.ads_paid_post_premium_scoring_all_round_di \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) a \
+    left join ( \
+        select postId, count(1) unlock_pv_30d \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and unlock_method <> '粮票' and \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.postId = b.postId \
+    left join ( \
+        select postId, hot_30d, hot \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) c on a.postId = c.postId \
+    left join ( \
+        select postId, type from lofter.dws_gift_post_premium_scoring_di where dt='${azkaban.flow.1.days.ago}' \
+    ) d on a.postId = d.postId \
+) b on a.postId = b.postId \
+left join ( \
+    select postId \
+    from ( \
+        select postId \
+        from ( \
+            select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+            from rec.content_reg_payed_title_classify_output2 \
+            where day <= '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where rk = 1 and tag in ('文学型', '普通型', '长连载型') \
+    union all \
+        select postid \
+        from lofter.dws_post_premium_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+        group by postid \
+    union all \
+        select postId \
+        from lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+        where dt='${azkaban.flow.2.days.ago}' and quality_grade in ('S级', 'A级') \
+    ) t \
+    group by 1 \
+) c on a.postId = c.postId \
+left join ( \
+    select userId as blogId from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}' and level in ('S', 'A', 'B') \
+) d on a.blogId = d.blogId \
+left join ( \
+    select postId \
+    from ( \
+        select postId \
+        from ( \
+            select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+            from rec.content_reg_payed_title_classify_output2 \
+            where day <= '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where rk = 1 and tag in ('擦边型') \
+    ) t \
+) e on a.postId = e.postId \
+
+dependencies=dws_par_creator_level_scoring_dd,dws_post_premium_di,dws_gift_post_premium_scoring_di,dws_post_interaction_dd,dws_gift_post_premium_scoring_detail_dd

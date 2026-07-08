@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-shade</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.tensorflow</groupId>
+            <artifactId>tensorflow-core-platform-mkl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>com.google.protobuf</pattern>
+                                    <shadedPattern>shade.com.google.protobuf</shadedPattern>
+                                </relocation>
+<!--                                <relocation>-->
+<!--                                    <pattern>org.tensorflow</pattern>-->
+<!--                                    <shadedPattern>shade.org.tensorflow</shadedPattern>-->
+<!--                                </relocation>-->
+                                <relocation>
+                                    <pattern>google.protobuf</pattern>
+                                    <shadedPattern>shade.google.protobuf</shadedPattern>
+                                </relocation>
+                            </relocations>
+                            <transformers>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>
+                            </transformers>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.bytedeco:javacpp:jar:*</exclude>
+                                    <exclude>org.bytedeco:mkl-dnn:jar:*</exclude>
+                                    <exclude>org.tensorflow:tensorflow-core-api:jar:macosx*:</exclude>
+                                    <exclude>org.tensorflow:tensorflow-core-api:jar:windows*:</exclude>
+                                </excludes>
+                            </artifactSet>
+<!--                            <minimizeJar>true</minimizeJar>-->
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

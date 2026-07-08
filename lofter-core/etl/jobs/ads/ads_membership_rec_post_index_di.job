@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_membership_rec_post_index_di partition( dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.blogId, concat_ws(',', b.tags) as tag, b.title, b.publishTime, 1 as type, \
+       a.pay_gift_type as gift_type, \
+       d.hot, d.hot_7d, e.hot_1d \
+from ( \
+    select * \
+    from lofter.dim_membership_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join (select postId from lofter.ods_risk_limit where postId > 0 and status = 0) c on a.postId = c.postId \
+left join ( \
+    select postId, hot, hot_7d \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.postId = d.postId \
+left join ( \
+    select postId, hot_pv as hot_1d \
+    from lofter.dws_post_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) e on a.postId = e.postId \
+where b.allowView = 0 and b.valid = 0 and b.isCitedPost = false and c.postId is null \

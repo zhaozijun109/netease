@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_cc_search_feedback_di partition(dt='${azkaban.flow.1.days.ago}') \
+select search_keyword text, \
+   name, \
+   search_result_url url, \
+   sum(case when eventId = 'ka1-11' then 1 else 0 end) click_pv, \
+   count(distinct case when eventId = 'ka1-11' then deviceUdid else null end) click_uv \
+from lofter.dwd_cc_module_query_di \
+where dt = '${azkaban.flow.1.days.ago}' and eventId = 'ka1-11' and length(search_keyword) > 0 \
+group by name, search_keyword, search_result_url \
+distribute by 1

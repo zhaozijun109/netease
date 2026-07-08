@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_blog_revenue_di partition(dt='${azkaban.flow.1.days.ago}') \
+select  userid,sum(delta) as money \
+from \
+lofter_db_dump.ods_db_trade_inspire_money_log_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' and \
+ target like '%品牌推广%' \
+group by userid \

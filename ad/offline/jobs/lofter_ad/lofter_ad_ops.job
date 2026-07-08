@@ -1,0 +1,14 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.01=set hive.exec.dynamic.partition.mode=nonstrict;
+hive.query.02=insert overwrite table lofter_dm.ads_ad_event_domain_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select deviceOs as platform, params['domainName'] as domain, params['URL'] as url, eventId, count(1) pv, count(distinct deviceUdid) as uv \
+              from lofter.ods_mda_app_partition_di \
+              where dt='${azkaban.flow.1.days.ago}' and actionType = 'advertisement' and eventId like 'ad-%' and params['URL'] is not null and params['domainName'] is not null \
+              group by deviceOs, eventId, params['domainName'], params['URL'] \
+              having pv > 10

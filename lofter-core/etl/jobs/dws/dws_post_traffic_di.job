@@ -1,0 +1,162 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.04=insert overwrite table lofter.dws_post_traffic_di partition(dt='${azkaban.flow.1.days.ago}') \
+select p.id as postId, p.userId as post_userId, p.publishDate as post_publish_date, p.contentType as post_content_type, \
+       p.tags as post_tags, \
+       expose_pv, expose_uv, click_pv, click_uv, \
+       nvl(greatest(browse_pv, real_browse_pv),0) as browse_pv, \
+       nvl(greatest(browse_uv, real_browse_uv),0) as browse_uv, \
+       nvl(browse_duration,0) as browse_duration, \
+       nvl(real_browse_pv,0) as real_browse_pv, \
+       nvl(real_browse_uv,0) as real_browse_uv, \
+       nvl(real_browse_duration,0) as real_browse_duration, \
+       fans_expose_pv, fans_expose_uv, fans_click_pv, fans_click_uv, \
+       fans_real_browse_pv, fans_real_browse_uv, \
+       centralized_expose_pv, centralized_expose_uv, non_centralized_expose_pv, non_centralized_expose_uv, \
+       nvl(video_finish_pv,0) as video_finish_pv, \
+       nvl(video_finish_uv,0) as video_finish_uv, \
+       nvl(new_user_expose_pv,0) as new_user_expose_pv, \
+       nvl(new_user_expose_uv,0) as new_user_expose_uv, \
+       nvl(new_user_browse_pv,0) as new_user_browse_pv, \
+       nvl(new_user_browse_uv,0) as new_user_browse_uv, \
+       nvl(new_user_real_browse_pv,0) as new_user_real_browse_pv, \
+       nvl(new_user_real_browse_uv,0) as new_user_real_browse_uv, \
+       expose_device_bitmap, real_browse_device_bitmap, \
+       dislike_pv, dislike_uv, \
+       discovery_click_pv, \
+       related_article_click_pv, \
+       tag_discovery_click_pv, \
+       tag_new_click_pv, \
+       tag_hot_click_pv, \
+       collection_click_pv, \
+       attention_click_pv, \
+       public_expose_pv, public_expose_uv, \
+       non_public_expose_pv, non_public_expose_uv, \
+       non_public_browse_pv, bitmap_count(non_public_browse_device_bitmap) as non_public_browse_uv, non_public_browse_device_bitmap, \
+       public_browse_pv, bitmap_count(public_browse_device_bitmap) as public_browse_uv, public_browse_device_bitmap, \
+       click_device_bitmap, \
+       support_induced_pv, \
+       dislike_uv_bitmap, \
+       NVL(discovery_expose_pv, 0) as discovery_expose_pv, \
+       NVL(related_article_expose_pv, 0) as related_article_expose_pv, \
+       NVL(tag_discovery_expose_pv, 0) AS tag_discovery_expose_pv, \
+       NVL(tag_new_expose_pv, 0) AS tag_new_expose_pv, \
+       NVL(tag_hot_expose_pv, 0) AS tag_hot_expose_pv, \
+       NVL(collection_expose_pv, 0) AS collection_expose_pv, \
+       NVL(attention_expose_pv, 0) AS attention_expose_pv, \
+       NVL(discovery_real_browse_pv, 0) as discovery_real_browse_pv, \
+       NVL(related_article_real_browse_pv, 0) as related_article_real_browse_pv, \
+       NVL(tag_discovery_real_browse_pv, 0) AS tag_discovery_real_browse_pv, \
+       NVL(tag_new_real_browse_pv, 0) AS tag_new_real_browse_pv, \
+       NVL(tag_hot_real_browse_pv, 0) AS tag_hot_real_browse_pv, \
+       NVL(collection_real_browse_pv, 0) AS collection_real_browse_pv, \
+       NVL(attention_real_browse_pv, 0) AS attention_real_browse_pv, \
+       NVL(search_click_pv, 0) AS search_click_pv, \
+       NVL(videolist_click_pv, 0) AS videolist_click_pv, \
+       NVL(search_expose_pv, 0) AS search_expose_pv, \
+       NVL(videolist_expose_pv, 0) AS videolist_expose_pv, \
+       NVL(search_real_browse_pv, 0) AS search_real_browse_pv, \
+       NVL(videolist_real_browse_pv, 0) AS videolist_real_browse_pv \
+from lofter.dim_post_article p \
+left join ( \
+  select postId, \
+         sum(if(reaction is null, 1, 0)) as expose_pv, \
+         bitmap_count(to_bitmap(if(reaction is null, deviceId, null))) as expose_uv, \
+         sum(if(reaction = 'click', 1, 0)) as click_pv, \
+         bitmap_count(to_bitmap(if(reaction = 'click', deviceId, null))) as click_uv, \
+         sum(if(reaction is null and is_fans > 0, 1, 0)) as fans_expose_pv, \
+         bitmap_count(to_bitmap(if(reaction is null and is_fans > 0, deviceId, null))) as fans_expose_uv, \
+         sum(if(reaction = 'click' and is_fans > 0, 1, 0)) as fans_click_pv, \
+         bitmap_count(to_bitmap(if(reaction = 'click' and is_fans > 0, deviceId, null))) as fans_click_uv, \
+         count(if(scene in ('discovery','note') and reaction is null, deviceId, null)) as centralized_expose_pv, \
+         bitmap_count(to_bitmap(if(scene in ('discovery','note') and reaction is null, deviceId, null))) as centralized_expose_uv,	\
+         count(if(nvl(scene,'') not in ('discovery','note') and reaction is null, deviceId, null)) as non_centralized_expose_pv, \
+         bitmap_count(to_bitmap(if(nvl(scene,'') not in ('discovery','note') and reaction is null, deviceId, null))) as non_centralized_expose_uv, \
+         count(if(is_new_user > 0 and reaction is null, deviceId, null)) as new_user_expose_pv, \
+         bitmap_count(to_bitmap(if(is_new_user > 0 and reaction is null, deviceId, null))) as new_user_expose_uv, \
+         to_bitmap(if(reaction is null, deviceId, null)) as expose_device_bitmap, \
+         sum(if(reaction = 'dislike', 1, 0)) as dislike_pv, \
+         bitmap_count(to_bitmap(if(reaction = 'dislike', deviceId, null))) as dislike_uv, \
+         to_bitmap(if(reaction = 'dislike', deviceId, null)) as dislike_uv_bitmap, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'discovery',1,0)) AS discovery_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'related_article',1,0)) AS related_article_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_2 = 'tag_discovery',1,0)) AS tag_discovery_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_2 = 'tag_new',1,0)) AS tag_new_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_2 = 'tag_hot',1,0)) AS tag_hot_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'collection',1,0)) AS collection_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'attention',1,0)) AS attention_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'search',1,0)) AS search_click_pv, \
+         sum(if(reaction = 'click' and detail_scene_level_1 = 'videolist',1,0)) AS videolist_click_pv, \
+         count(if((is_rec = 1 and scene <> 'search') or scene = 'tag', null, deviceId)) as non_public_expose_pv, \
+         bitmap_count(to_bitmap(if((is_rec = 1 and scene <> 'search') or scene = 'tag', null, deviceId))) as non_public_expose_uv, \
+         count(if((is_rec = 1 and scene <> 'search') or scene = 'tag', deviceId, null)) as public_expose_pv, \
+         bitmap_count(to_bitmap(if((is_rec = 1 and scene <> 'search') or scene = 'tag', deviceId, null))) as public_expose_uv, \
+         to_bitmap(if(reaction = 'click', deviceId, null)) as click_device_bitmap, \
+         sum(if(reaction is null and detail_scene_level_1 = 'discovery',1,0)) AS discovery_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_1 = 'related_article',1,0)) AS related_article_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_2 = 'tag_discovery',1,0)) AS tag_discovery_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_2 = 'tag_new',1,0)) AS tag_new_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_2 = 'tag_hot',1,0)) AS tag_hot_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_1 = 'collection',1,0)) AS collection_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_1 = 'attention',1,0)) AS attention_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_1 = 'search',1,0)) AS search_expose_pv, \
+         sum(if(reaction is null and detail_scene_level_1 = 'videolist',1,0)) AS videolist_expose_pv \
+  from lofter.dwd_post_expose_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by postId \
+) a on p.id = a.postId \
+left join ( \
+  select postId, \
+         sum(if(action_type = 'page_view',1,0)) as browse_pv, \
+         bitmap_count(to_bitmap(if(action_type = 'page_view', deviceId,null))) as browse_uv, \
+         sum(if(action_type = 'page_duration', duration,0)) as browse_duration, \
+         sum(if(action_type = 'page_duration' and is_real > 0,1,0)) as real_browse_pv, \
+         bitmap_count(to_bitmap(if(action_type = 'page_duration' and is_real > 0,deviceId,null))) as real_browse_uv, \
+         sum(if(action_type = 'page_duration' and is_real > 0, duration,0)) as real_browse_duration, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and is_fans > 0,1,0)) as fans_real_browse_pv, \
+         bitmap_count(to_bitmap(if(action_type = 'page_duration' and is_real > 0 and is_fans > 0,deviceId,null))) as fans_real_browse_uv, \
+         count(if(is_video_finish > 0, deviceId, null)) as video_finish_pv, \
+         bitmap_count(to_bitmap(if(is_video_finish > 0, deviceId, null))) as video_finish_uv, \
+         count(if(is_new_user > 0 and action_type = 'page_view', deviceId, null)) as new_user_browse_pv, \
+         bitmap_count(to_bitmap(if(is_new_user > 0 and is_real > 0, deviceId, null))) as new_user_browse_uv, \
+         count(if(is_new_user > 0 and is_real > 0, deviceId, null)) as new_user_real_browse_pv, \
+         bitmap_count(to_bitmap(if(is_new_user > 0 and is_real > 0, deviceId, null))) as new_user_real_browse_uv, \
+         to_bitmap(if(action_type = 'page_duration' and is_real > 0, deviceId,null)) as real_browse_device_bitmap, \
+         sum(if(is_support_induced = 1, 1, 0)) as support_induced_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'discovery',1,0)) AS discovery_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'related_article',1,0)) AS related_article_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_2 = 'tag_discovery',1,0)) AS tag_discovery_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_2 = 'tag_new',1,0)) AS tag_new_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_2 = 'tag_hot',1,0)) AS tag_hot_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'collection',1,0)) AS collection_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'attention',1,0)) AS attention_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'search',1,0)) AS search_real_browse_pv, \
+         sum(if(action_type = 'page_duration' and is_real > 0 and detail_source1_scene_level_1 = 'videolist',1,0)) AS videolist_real_browse_pv \
+  from lofter.dwd_post_browse_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by postId \
+) b on p.id = b.postId \
+left join ( \
+    select a.postId, \
+           sum(if(b.postId is null, 1, 0)) as non_public_browse_pv, \
+           to_bitmap(if(b.postId is null, a.deviceId, null)) as non_public_browse_device_bitmap, \
+           sum(if(b.postId is not null, 1, 0)) as public_browse_pv, \
+           to_bitmap(if(b.postId is not null, a.deviceId, null)) as public_browse_device_bitmap \
+    from ( \
+        select * \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+    ) a \
+    left join ( \
+        select postId, userId \
+        from lofter.dwd_post_expose_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              ((is_rec = 1 and scene <> 'search') or scene = 'tag') and reaction = 'click' \
+        group by 1, 2 \
+    ) b on a.postId = b.postId and a.userId = b.userId \
+    group by 1 \
+) c on p.id = c.postId \
+where a.expose_pv > 0 or greatest(browse_pv, real_browse_pv) > 0

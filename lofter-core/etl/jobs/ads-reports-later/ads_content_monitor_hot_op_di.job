@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_content_monitor_hot_op_di partition(dt='${azkaban.flow.1.days.ago}') \
+                select contentType, hotSection, count(distinct postId) postCount \
+                from ( \
+                    select a.contentType, \
+                        case when hot <= 1000 then "below 1k" \
+                             when hot <= 5000 then "1kto5k" \
+                             when hot <= 10000 then "5kto1w" \
+                             when hot <= 30000 then "1wto3w" \
+                             when hot <= 50000 then "3wto5w" \
+                             when hot <= 100000 then "5wto10w" \
+                             when hot > 10000 then "大于10w" end as hotSection, a.postId \
+                    from \
+                    ( \
+                        select id postid,contentType \
+                        from  lofter.dim_post \
+                        where from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd')>='2021-01-01' \
+                        and valid=0 and allowview=0 \
+                    ) a join \
+                    ( \
+                        select postId, count(1) hot \
+                        from lofter_db_dump.ods_db_post_hot_nd \
+                        where from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd')>='2021-01-01' \
+                        group by postId \
+                    ) b on a.postId=b.postId \
+                ) t \
+                group by contentType, hotSection

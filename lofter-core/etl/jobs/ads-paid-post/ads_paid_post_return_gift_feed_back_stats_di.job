@@ -1,0 +1,102 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_return_gift_feed_back_stats_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  case \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) > 90 then 3 \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) < 90 \
+    and datediff('${azkaban.flow.1.days.ago}', publishdate) >= 60 then 2 \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) < 60 \
+    and datediff('${azkaban.flow.1.days.ago}', publishdate) >= 30 then 1 \
+    else 0 \
+  end new_flg, \
+  ispay_returngift, \
+  paid_flg, \
+  unlock_method, \
+  count(distinct c.userid) as jiesuo_uv, \
+  count(distinct c.userid, c.return_gift_id) as jiesuo_num, \
+  count( \
+    distinct case \
+      when type = 0 then c.userid \
+      else null \
+    end \
+  ) as zhengfankui_uv, \
+  count( \
+    distinct case \
+      when type = 0 then concat_ws(',', c.userid, c.return_gift_id) \
+      else null \
+    end \
+  ) as zhengfankui_num, \
+  count( \
+    distinct case \
+      when type = 1 then c.userid \
+      else null \
+    end \
+  ) as fufankui_uv, \
+  count( \
+    distinct case \
+      when type = 1 then concat_ws(',', c.userid, c.return_gift_id) \
+      else null \
+    end \
+  ) as fufankui_num \
+from \
+  lofter.dim_gift_post_return a \
+  join ( \
+    SELECT \
+      postid, \
+      blogid, \
+      userid, \
+      return_gift_id, \
+      case \
+        when money > 0 then 1 \
+        else 0 \
+      end as paid_flg, \
+      unlock_method \
+    FROM \
+      lofter.dwd_gift_post_unlock_dd \
+    WHERE \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    GROUP BY \
+      postid, \
+      blogid, \
+      userid, \
+      return_gift_id, \
+      case \
+        when money > 0 then 1 \
+        else 0 \
+      end, \
+      unlock_method \
+  ) c on a.id = c.return_gift_id \
+  left join ( \
+    SELECT \
+      returngiftid, \
+      type, \
+      userid \
+    FROM \
+      lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+    WHERE \
+      type in (0, 1) \
+      and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    GROUP BY \
+      returngiftid, \
+      type, \
+      userid \
+  ) b on a.id = b.returngiftid \
+  and c.userid = b.userid \
+where \
+  blog_channel = 0 \
+  and a.publishdate <= '${azkaban.flow.1.days.ago}' \
+  and plantype < 100001 \
+group by \
+  case \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) > 90 then 3 \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) < 90 \
+    and datediff('${azkaban.flow.1.days.ago}', publishdate) >= 60 then 2 \
+    when datediff('${azkaban.flow.1.days.ago}', publishdate) < 60 \
+    and datediff('${azkaban.flow.1.days.ago}', publishdate) >= 30 then 1 \
+    else 0 \
+  end, \
+  ispay_returngift, \
+  paid_flg, \
+  unlock_method \
+

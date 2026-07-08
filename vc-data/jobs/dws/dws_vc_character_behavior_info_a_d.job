@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01 = with today_free_characters as (select character_id,free_type,free_for_role \
+                                               from vc.dwd_vc_free_character_i_d \
+                                               where dt = '${azkaban.flow.1.days.ago}'), \
+                     character as (select * from vc.dim_vc_character_info_a_d where dt = '${azkaban.flow.1.days.ago}') \
+                insert overwrite table vc.dws_vc_character_behavior_info_a_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.character_id, \
+                       x1.character_name, \
+                       x1.creator_uid, \
+                       x1.birthday, \
+                       x1.type, \
+                       x1.weights, \
+                       x1.score, \
+                       x1.status, \
+                       x1.audience_type, \
+                       x1.valid_start_time, \
+                       x2.free_for_role, \
+                       x1.character_type, \
+                       x1.is_valid, \
+                       x2.free_type, \
+                       x1.public_scope, \
+                       x1.c_user_id, \
+                       x1.role_id \
+                from character x1 \
+                         left join today_free_characters x2 on x1.character_id = x2.character_id ;
+
+hive.query.02 = create or replace view vc.dws_vc_character_behavior_info_view as \
+                select * from vc.dws_vc_character_behavior_info_a_d where dt = '${azkaban.flow.1.days.ago}'

@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=with tmp1 as (select * \
+                            from (select device_udid, \
+                                         user_id, \
+                                         user_code, \
+                                         deviceOS, \
+                                         case when nums = 2 and user_id is null then 'Y' else 'N' end as is_del \
+                                  from (select deviceudid                              as device_udid, \
+                                               user_id, \
+                                               user_code, \
+                                               LOWER(deviceos)                         as deviceOS, \
+                                               count(*) over (partition by deviceudid) as nums \
+                                        from vc.ods_mda_app_di \
+                                        where dt = '${azkaban.flow.1.days.ago}' \
+                                          and length(deviceUdid) > 0 \
+                                        group by deviceudid, user_id, user_code, deviceos)) \
+                            where is_del = 'N' ), \
+                   tmp2 as (select device_udid, user_id, user_code, deviceOS \
+                            from tmp1 \
+                            where device_udid not in (select device_udid \
+                                                      from vc.dwd_vc_device_user_correlation_a_d \
+                                                      where dt = date_sub('${azkaban.flow.1.days.ago}', 1))), \
+                   tmp3 as (select device_udid, user_id, user_code, deviceOS \
+                            from tmp1 \
+                            where device_udid in (select device_udid \
+                                                  from vc.dwd_vc_device_user_correlation_a_d \
+                                                  where dt = date_sub('${azkaban.flow.1.days.ago}', 1)) \
+                              and user_id is not null) \
+              insert OVERWRITE TABLE `vc`.`dwd_vc_device_user_correlation_a_d` PARTITION (dt='${azkaban.flow.1.days.ago}') \
+              select device_udid, user_id, user_code, deviceOS \
+              from (select device_udid, user_id, user_code, deviceOS \
+                    from vc.dwd_vc_device_user_correlation_a_d \
+                    where dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+                    and device_udid not in (select device_udid from tmp3) \
+                    UNION all \
+                    select * from tmp2 \
+                    union ALL \
+                    select * from tmp3) x1 \
+              group by device_udid, user_id, user_code, deviceOS;

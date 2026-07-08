@@ -1,0 +1,568 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_pve_easy_fetch_role_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*,b.rolename,b.status , b.publicview,b.type \
+from  \
+(select  \
+nvl(a.dt, b.dt) as base_dt , \
+nvl(a.roleid, b.roleid) as roleid , \
+nvl(a.new_flg, b.new_flg) as new_flg , \
+cell_exposure_uv, \
+  cell_click_uv, \
+  chat_exposure_uv, \
+  chat_send_uv, \
+  interview_role_uv, \
+ chat_uv, \
+  total_chats, \
+  total_coststamina_uv, \
+  total_coststamina, \
+  amount_uv, \
+  amount, \
+  grass_coststamina_uv, \
+  grass_coststamina, \
+  props_coststamina_uv, \
+  props_coststamina, \
+  sweet_coststamina_uv, \
+  sweet_coststamina, \
+  coststamina_uv, \
+  coststamina, \
+  uv_1d, \
+  uv_2d, \
+  uv_3d, \
+  uv_5d, \
+  uv_7d, \
+  uv_15d, \
+  uv_30d \
+  from  \
+(select \
+  a.dt, \
+  NVL(a.roleid, 0) as roleid, \
+  NVL(new_flg, 2) as new_flg, \
+  cell_exposure_uv, \
+  cell_click_uv, \
+  chat_exposure_uv, \
+  chat_send_uv, \
+  interview_role_uv \
+from \
+  ( \
+    select \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end as new_flg, \
+      count( \
+        distinct case \
+          when action_type = 'cell_exposure' then a.userid \
+          else null \
+        end \
+      ) as cell_exposure_uv, \
+      count( \
+        distinct case \
+          when action_type = 'cell_click' then a.userid \
+          else null \
+        end \
+      ) as cell_click_uv, \
+      count( \
+        distinct case \
+          when action_type = 'chat_exposure' then a.userid \
+          else null \
+        end \
+      ) as chat_exposure_uv, \
+      count( \
+        distinct case \
+          when action_type = 'chat_send' then a.userid \
+          else null \
+        end \
+      ) as chat_send_uv, \
+      count( \
+        distinct case \
+          when action_type in ('chat_send', 'chat_exposure', 'cell_click') then a.userid \
+          else null \
+        end \
+      ) as interview_role_uv \
+    from \
+      ( \
+        SELECT \
+          dt, \
+          userid, \
+          roleid, \
+          action_type \
+        FROM \
+          ( \
+    select \
+      dt, \
+      userid, \
+      roleid, \
+      case \
+        when eventid in ('pve-21', 'pve-19') then 'cell_exposure' \
+        when eventid in ('pve-11', 'pve-20') then 'cell_click' \
+        when eventid in ('pve-2') then 'chat_send' \
+        when eventid in ('pve-1') then 'chat_exposure' \
+        else 'other' \
+      end as action_type \
+    from \
+      lofter.dwd_act_pve_action_di \
+    where \
+      dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      and roleid > 0 \
+    group by \
+      dt, \
+      userid, \
+      roleid, \
+      case \
+        when eventid in ('pve-21', 'pve-19') then 'cell_exposure' \
+        when eventid in ('pve-11', 'pve-20') then 'cell_click' \
+        when eventid in ('pve-2') then 'chat_send' \
+        when eventid in ('pve-1') then 'chat_exposure' \
+        else 'other' \
+      end \
+  ) a \
+      ) a \
+      left join ( \
+        select \
+          userid, \
+          dt \
+        from \
+          lofter.dwd_pve_user_interview_new_di \
+        where \
+          dt  BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      ) b on a.userid = b.userid \
+      and a.dt = b.dt \
+    WHERE \
+      datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0,1, 2, 4, 6, 14, 29) \
+    group by \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end grouping sets ( \
+        ( \
+          a.dt, \
+          a.roleid, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt, a.roleid), \
+        ( \
+          a.dt, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt) \
+      ) \
+  ) a \
+) a \
+ \
+full outer join \
+ \
+ \
+(select a.*, uv_1d, \
+  uv_2d, \
+  uv_3d, \
+  uv_5d, \
+  uv_7d, \
+  uv_15d, \
+  uv_30d \
+from  \
+ \
+(select \
+  a.dt, \
+  NVL(a.roleid, 0) as roleid, \
+  NVL(new_flg, 2) as new_flg, \
+  chat_uv, \
+  total_chats, \
+  total_coststamina_uv, \
+  total_coststamina, \
+  amount_uv, \
+  amount, \
+  grass_coststamina_uv, \
+  grass_coststamina, \
+  props_coststamina_uv, \
+  props_coststamina, \
+  sweet_coststamina_uv, \
+  sweet_coststamina, \
+  coststamina_uv, \
+  coststamina \
+from \
+  ( \
+    select \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end as new_flg, \
+      count( \
+        distinct case \
+          when action_type = 'chat' then a.userid \
+          else null \
+        end \
+      ) as chat_uv, \
+      sum( \
+        case \
+          when action_type = 'chat' then a.index \
+          else 0 \
+        end \
+      ) as total_chats, \
+      count( \
+        distinct case \
+          when action_type = 'coststamina' then a.userid \
+          else null \
+        end \
+      ) as total_coststamina_uv, \
+      sum( \
+        case \
+          when action_type = 'coststamina' then a.index \
+          else 0 \
+        end \
+      ) as total_coststamina, \
+      count( \
+        distinct case \
+          when action_type = 'amount' then a.userid \
+          else null \
+        end \
+      ) as amount_uv, \
+      sum( \
+        case \
+          when action_type = 'amount' then a.index \
+          else 0 \
+        end \
+      ) as amount, \
+      count( \
+        distinct case \
+          when action_type = 'grass' then a.userid \
+          else null \
+        end \
+      ) as grass_coststamina_uv, \
+      sum( \
+        case \
+          when action_type = 'grass' then a.index \
+          else 0 \
+        end \
+      ) as grass_coststamina, \
+      count( \
+        distinct case \
+          when action_type = 'props' then a.userid \
+          else null \
+        end \
+      ) as props_coststamina_uv, \
+      sum( \
+        case \
+          when action_type = 'props' then a.index \
+          else 0 \
+        end \
+      ) as props_coststamina, \
+      count( \
+        distinct case \
+          when action_type = 'sweet' then a.userid \
+          else null \
+        end \
+      ) as sweet_coststamina_uv, \
+      sum( \
+        case \
+          when action_type = 'sweet' then a.index \
+          else 0 \
+        end \
+      ) as sweet_coststamina, \
+      count( \
+        distinct case \
+          when action_type = 'stamina' then a.userid \
+          else null \
+        end \
+      ) as coststamina_uv, \
+      sum( \
+        case \
+          when action_type = 'stamina' then a.index \
+          else 0 \
+        end \
+      ) as coststamina \
+    from \
+      ( \
+        select \
+          dt, \
+          roleid, \
+          userid, \
+          total_chats as index, \
+          'chat' as action_type \
+        from \
+          lofter.dws_pve_user_role_chats_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        union \
+        select \
+          dt, \
+          roleid, \
+          userid, \
+          total_coststamina * -1 as index, \
+          'coststamina' as action_type \
+        from \
+          lofter.dws_pve_user_coststamina_role_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        union \
+        Select \
+          dt, \
+          roleid, \
+          userid, \
+          total_amount as index, \
+          'amount' as action_type \
+        from \
+          lofter.dws_pve_user_role_amount_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        union \
+        SELECT \
+          dt, \
+          roleId, \
+          userId, \
+          sum((stamina / delta * grassdelta) * -1) as index, \
+          'grass' as action_type \
+        FROM \
+          lofter.dwd_pve_user_grass_stamina_log_di \
+        WHERE \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        group by \
+          dt, \
+          userId, \
+          roleId \
+        union \
+        SELECT \
+          dt, \
+          roleId, \
+          userId, \
+          sum(costStamina) as index, \
+          'props' as action_type \
+        FROM \
+          lofter.dwd_pve_user_props_stamina_log_di \
+        WHERE \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        group by \
+          dt, \
+          userId, \
+          roleId \
+        union \
+        SELECT \
+          dt, \
+          roleId, \
+          userId, \
+          sum(stamina / sweetCnt) as index, \
+          'sweet' as action_type \
+        FROM \
+          lofter.dwd_pve_user_sweet_stamina_log_di \
+        WHERE \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+        group by \
+          dt, \
+          userId, \
+          roleId \
+        union \
+        SELECT \
+          dt, \
+          roleId, \
+          userId, \
+          sum(delta * -1) as index, \
+          'stamina' as action_type  \
+        FROM \
+          lofter.dwd_pve_user_stamina_log_di \
+        WHERE \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' and roleid>0 \
+          AND type not in (1, 2, 3, 4, 13, 14, 10) \
+        group by \
+          dt, \
+          userId, \
+          roleId \
+      ) a \
+      left join ( \
+        select \
+          userid, \
+          dt \
+        from \
+          lofter.dwd_pve_user_interview_new_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      ) b on a.userid = b.userid \
+      and a.dt = b.dt \
+    WHERE \
+      datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0,1, 2, 4, 6, 14, 29) \
+    group by \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end grouping sets ( \
+        ( \
+          a.dt, \
+          a.roleid, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt, a.roleid), \
+        ( \
+          a.dt, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt) \
+      ) \
+  ) a \
+) a \
+ \
+ \
+left join \
+ \
+(select \
+  a.dt, \
+  NVL(a.roleid, 0) as roleid, \
+  NVL(new_flg, 2) as new_flg, \
+  uv_1d, \
+  uv_2d, \
+  uv_3d, \
+  uv_5d, \
+  uv_7d, \
+  uv_15d, \
+  uv_30d \
+from \
+  ( \
+    select \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end as new_flg, \
+      count(distinct a.userid) as uv_1d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 1) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_2d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 2) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_3d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 4) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_5d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 6) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_7d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 14) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_15d, \
+      count( \
+        DISTINCT CASE \
+          WHEN c.dt = date_add(a.dt, 29) \
+          AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN c.userid \
+          ELSE NULL \
+        END \
+      ) AS uv_30d \
+    from \
+      ( \
+        select \
+          dt, \
+          userid, \
+          roleid \
+        from \
+          lofter.dws_pve_user_role_chats_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+          and roleid > 0 \
+      ) a \
+      left join ( \
+        select \
+          userid, \
+          dt \
+        from \
+          lofter.dwd_pve_user_interview_new_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      ) b on a.userid = b.userid \
+      and a.dt = b.dt \
+      left join ( \
+        select \
+          dt, \
+          userid, \
+          roleid \
+        from \
+          lofter.dws_pve_user_role_chats_di \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      ) c on a.userid = c.userid \
+      AND c.dt BETWEEN date_add(a.dt, 0) \
+      AND date_add(a.dt, 30) \
+      and a.roleid = c.roleid \
+    WHERE \
+      datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0,1, 2, 4, 6, 14, 29) \
+    group by \
+      a.dt, \
+      a.roleid, \
+      case \
+        when b.userid is null then 0 \
+        else 1 \
+      end grouping sets ( \
+        ( \
+          a.dt, \
+          a.roleid, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt, a.roleid), \
+        ( \
+          a.dt, \
+          case \
+            when b.userid is null then 0 \
+            else 1 \
+          end \
+        ), \
+        (a.dt) \
+      ) \
+  ) a \
+  ) b \
+   \
+on a.dt=b.dt and a.roleid=b.roleid and a.new_flg=b.new_flg \
+   \
+  ) b \
+  on a.dt=b.dt and a.roleid=b.roleid and a.new_flg=b.new_flg \
+ ) a \
+  \
+  \
+left join \
+ \
+(SELECT   \
+id ,  \
+rolename,  \
+status , publicview,type \
+FROM lofter_db_dump.ods_db_pve_role_info_nd ) b \
+ \
+on a.roleid=b.id \

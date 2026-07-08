@@ -1,0 +1,160 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_parise_easy_fetch_user_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.*, \
+    b.phone, \
+    c.createdate, \
+    c.createtime, \
+    c.isanonymous, \
+    c.istest, \
+    c.usertype, \
+    c.createfrom, \
+    c.email, \
+    c.white_flg, \
+    d.userstatus, \
+    e.normalpostidnum, \
+    f.nonormalpostidnum \
+from( \
+    select \
+        postId, \
+        blogId, \
+        blogName, \
+        contentType, \
+        publishDate, \
+        concat_ws(',', tags) as tags, \
+        url, \
+        hisPraise, \
+        publisheruserid, \
+        ip, \
+        praiseDay, \
+        praiseTime, \
+        praiseBlogName, \
+        createIp, \
+        ipUv, \
+        hotUv, \
+        hottimes, \
+        1minIpUv, \
+        10minIpUv, \
+        appUserId, \
+        appDeviceUdid, \
+        pcUserId, \
+        pcDeviceId, \
+        deviceNum, \
+        ipNum, \
+        cityNum, \
+        loginIpUv, \
+        loginIpDeviceUv, \
+        fans, \
+        followUsers, \
+        postNum, \
+        praisePv, \
+        praisePostPv, \
+        praisePostUv, \
+        reproducePv, \
+        reproducePostPv, \
+        reproducePostUv, \
+        recPv, \
+        recPostPv, \
+        recPostUv, \
+        subscribePv, \
+        subscribePostPv, \
+        subscribePostUv, \
+        commentPv, \
+        commentPostPv, \
+        commentPostUv, \
+        messagePv, \
+        messageUv, \
+        userLevel, \
+        userHot, \
+        isBlackPhoneFlag \
+    from lofter.dwd_risk_shuare_model_di  \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join( \
+    select \
+        a.userid, \
+        concat_ws(',',collect_set(a.phone)) as phone \
+    from( \
+        select  userid, phone   \
+        from( \
+            select distinct userid, cast(verifyphone as bigint) phone \
+            from lofter_db_dump.ods_db_verify_phone_account_nd \
+            where verifyphone is not null \
+            union all \
+            select distinct userid, cast(phone as bigint) phone \
+            from lofter_db_dump.ods_db_connect_phone_account_nd \
+            where phone is not null \
+            union all \
+            select distinct userid,cast(account as bigint) phone \
+            from lofter_dm.dwb_par_user_info_nd \
+            where accounttype='手机号'  and account is not null \
+        )t \
+        where phone is not null \
+        group by userid ,phone \
+    ) a \
+    group by a.userid \
+) b \
+on a.publisheruserid=b.userid \
+left join( \
+    select a.userid,a.createdate,a.createtime,a.isanonymous,a.istest,a.usertype,a.createfrom,a.email, \
+        case when  b.blogid is not null then '白名单' else '空' end as white_flg \
+    from ( \
+        select id as  userid,createdate,isanonymous,istest,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd HH:mm:ss') as createtime,email, \
+        case \
+        when email  like '%#%' and substring_index(email, '#', 1)='1' then '新浪微博' \
+            when email like '%#%' and substring_index(email, '#', 1)='2' then '网易微博' \
+            when email like '%#%' and substring_index(email, '#', 1)='3' then 'QQ' \
+            when email like '%#%' and substring_index(email, '#', 1)='4'then '豆瓣' \
+            when email like '%#%' and substring_index(email, '#', 1)='5' then '人人' \
+            when email like '%#%' and substring_index(email, '#', 1)='6' then 'TQQ' \
+            when email like '%#%' and substring_index(email, '#', 1)='7' then 'TWITTER' \
+            when email like '%#%' and substring_index(email, '#', 1)='8' then 'FACEBOOK' \
+            when email like '%#%' and substring_index(email, '#', 1)='9' then 'GOOGLE' \
+            when email like '%#%' and substring_index(email, '#', 1)='10' then 'FLICKR' \
+            when email like '%#%' and substring_index(email, '#', 1)='11' then '5OOPX' \
+            when email like '%#%' and substring_index(email, '#', 1)='12' then '微信' \
+            when email like '%#%' and substring_index(email, '#', 1)='13' then 'URS' \
+            when email like '%#%' and substring_index(email, '#', 1)='14' then '手机号' \
+            when email like '%#%' and substring_index(email, '#', 1)='100' then '匿名' \
+            else '邮箱'  \
+        end as usertype , \
+        case when createfrom like '%web%' then 'web' \
+            when createfrom like '%android%' then 'android' \
+            when createfrom like '%iphone%' then 'iphone' \
+            when createfrom like '%mobile%' then 'mobile' \
+            when createfrom like '%ipad%' then 'ipad' else 'other'  \
+        end as createfrom \
+    from lofter.dim_user \
+    ) a \
+    left  join( \
+        select blogid  \
+        from lofter_db_dump.ods_db_risk_antispam_white_user_nd  \
+        where status=1  \
+    ) b \
+    on a.userid=b.blogid \
+) c \
+on a.publisheruserid=c.userid \
+left join( \
+    select blogid as userid, \
+        case when securityrank in (9999,9998) then '非正常' \
+            else '正常' \
+        end as userstatus \
+    from  lofter_db_dump.ods_db_blog_settings_nd \
+    group by blogid,case when securityrank in (9999,9998)   then '非正常' \
+    else '正常'end  \
+) d \
+on a.publisheruserid=d.userid \
+left join( \
+    select count(distinct id ) as normalpostidnum ,userid \
+    from lofter.dim_post \
+    where valid=0 and allowview=0  and  contenttype!='问答'  and ispublished=true  and iscitedpost=false \
+    group by userid \
+) e \
+on a.publisheruserid=e.userid \
+left join( \
+    select count(distinct id ) as nonormalpostidnum ,userid \
+    from lofter.dim_post \
+    where (valid!=0 or allowview!=0)  and  contenttype!='问答'  and ispublished=true  and iscitedpost=false \
+    group by userid \
+) f \
+on a.publisheruserid=f.userid

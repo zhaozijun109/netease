@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_content_monitor_blog_fans_top_nd \
+                select a.blogId, \
+                       b.isAuthenticated as isDaren, \
+                       b.blogNickName, \
+                       concat('https://',b.blogName,'.lofter.com') blogUrl, \
+                       a.fans, c.dt1wfans \
+                from \
+                ( \
+                  select userId as blogId, fans_total as fans \
+                  from lofter.dws_par_user_fans_dd \
+                  where dt = '${azkaban.flow.1.days.ago}' \
+                ) a join lofter.dim_blog b on a.blogid=b.id \
+                    left join ( \
+                      select blogId, dt as dt1wfans,\
+                        sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as currentFans, \
+                        nvl(sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) as prevFans \
+                      from (\
+                        select blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') as dt, \
+                               count(distinct userId) fans  \
+                        from lofter_db_dump.ods_db_user_following_nd   \
+                        group by blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') \
+                      ) t \
+                    ) c on a.blogId = c.blogId \
+                where a.fans > 10000 and c.currentFans >= 10000 and c.prevFans < 10000

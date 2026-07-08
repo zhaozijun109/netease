@@ -1,0 +1,98 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_pay_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as userId, \
+       coin_consume_std,coin_consume_7d,coin_consume_15d,coin_consume_30d,coin_consume_90d,coin_consume_180d, \
+       grain_ticket_consume_std,grain_ticket_consume_7d,grain_ticket_consume_15d,grain_ticket_consume_30d,grain_ticket_consume_90d,grain_ticket_consume_180d, \
+       coin_recharge_std,coin_recharge_7d,coin_recharge_15d,coin_recharge_30d,coin_recharge_90d,coin_recharge_180d, \
+       fans_consume_std, fans_consume_30d, coupon_consume_std, coupon_consume_30d, \
+       coupon_unlock_money_std, coupon_unlock_money_30d, fans_consume_7d, coupon_consume_7d, coupon_unlock_money_7d, \
+       fans_consume_1d, fans_consume_15d, fans_consume_90d, fans_consume_180d, \
+       coin_consume_1d, \
+       coupon_consume_1d, coupon_consume_15d, coupon_consume_90d, coupon_consume_180d \
+from lofter.dim_user a \
+left join ( \
+    select userId, \
+           sum(coin) as coin_consume_std, \
+           sum(if('${azkaban.flow.1.days.ago}' = pay_date,coin,0)) as coin_consume_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 7,coin,0)) as coin_consume_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 15,coin,0)) as coin_consume_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 30,coin,0)) as coin_consume_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 90,coin,0)) as coin_consume_90d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 180,coin,0)) as coin_consume_180d, \
+           sum(grain_ticket) as grain_ticket_consume_std, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 7, grain_ticket,0)) as grain_ticket_consume_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 15, grain_ticket,0)) as grain_ticket_consume_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 30, grain_ticket,0)) as grain_ticket_consume_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 90, grain_ticket,0)) as grain_ticket_consume_90d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 180, grain_ticket,0)) as grain_ticket_consume_180d \
+    from ( \
+        select sender as userId, coin / 10.0 as coin, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as pay_date, \
+               if(giftId = 3001, count, 0) as grain_ticket \
+        from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+        where status = 0 \
+      union all \
+        select userId, price/10.0 as coin, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as pay_date, 0 as grain_ticket \
+        from lofter_db_dump.ods_db_dressing_suit_order_nd \
+        where status = 1 \
+      union all \
+        select userId, (coin * count)/10.0 as coin, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as pay_date, 0 as grain_ticket \
+        from lofter_db_dump.ods_db_avatar_box_order_nd \
+        where status = 1 \
+      union all \
+        select userId, coin/10.0, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as pay_date, 0 as grain_ticket \
+        from lofter_db_dump.ods_db_trade_coupon_coin_order_nd \
+        where status = 1 \
+    ) t \
+    where pay_date <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) b on a.id = b.userId \
+left join ( \
+    select userId, \
+           sum(amount) as coin_recharge_std, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7,amount,0)) as coin_recharge_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 15,amount,0)) as coin_recharge_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30,amount,0)) as coin_recharge_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 90,amount,0)) as coin_recharge_90d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 180,amount,0)) as coin_recharge_180d \
+    from lofter_db_dump.ods_db_trade_buy_coin_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) c on a.id = c.userId \
+left join ( \
+    select userId, sum(amount) as fans_consume_std, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) = 0,amount,0)) as fans_consume_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 7,amount,0)) as fans_consume_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 15,amount,0)) as fans_consume_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 30,amount,0)) as fans_consume_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 90,amount,0)) as fans_consume_90d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 180,amount,0)) as fans_consume_180d \
+    from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.id = d.userId \
+left join ( \
+    select userId, sum(amount) as coupon_consume_std, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) = 0,amount,0)) as coupon_consume_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 7,amount,0)) as coupon_consume_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 15,amount,0)) as coupon_consume_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 30,amount,0)) as coupon_consume_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 90,amount,0)) as coupon_consume_90d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd')) < 180,amount,0)) as coupon_consume_180d \
+    from lofter_db_dump.ods_db_trade_coupon_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) e on a.id = e.userId \
+left join ( \
+    select userId, \
+           sum(money) as coupon_unlock_money_std, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time/1000 as bigint),'yyyy-MM-dd')) < 7,money,0)) as coupon_unlock_money_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time/1000 as bigint),'yyyy-MM-dd')) < 30,money,0)) as coupon_unlock_money_30d \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and unlock_method = '券包' and \
+          from_unixtime(cast(unlock_time/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) f on a.id = f.userId \
+where nvl(b.userId, nvl(c.userId, nvl(d.userId, e.userId))) is not null

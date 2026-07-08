@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_wmyzy_post_publish_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid,blogid,blognickname,publishdate,contentType,url,title,tags,ips,concat_ws('|', categories) as categories \
+from \
+( \
+select a.postid,blogid,blognickname,publishdate,contentType,url,title,tags,ips,collect_set(category) categories \
+from \
+( \
+    select t1.postid,blogid,blognickname,publishdate,contentType,url,title,tags,ip \
+    from \
+    ( \
+        select id postid,blogid,blognickname,publishdate,ip,concat_ws('|',tags) as tags,contentType,url,title \
+        from lofter.dim_post \
+        lateral view explode(ips) t1 as ip \
+        where  ispublished=true and isforbidden=false and iscitedpost=false \
+        and allowview=0 \
+        and contenttype in ("图片","文字","视频") \
+        and publishdate = '${azkaban.flow.1.days.ago}' \
+        and isactivityautopost=0 and isimported=0 and ismoved=0 and is_book_store = 0 \
+    ) t1 \
+    left join \
+    ( \
+        select postId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) t2 \
+    on t1.postid=t2.postid \
+    where t2.postid is null     \
+) a \
+join \
+( \
+    select ip,category \
+    from lofter.dim_ip_dd \
+    lateral view explode(categories) t1 as category \
+    where dt='${azkaban.flow.1.days.ago}' and (split(category,'-')[0] in ('影视','游戏','二次元','娱乐') or (split(category,'-')[0]='人文艺术' and split(category,'-')[1]='文学' and derivedflag=1)) \
+    group by ip,category \
+) b \
+on a.ip=b.ip \
+left join \
+( \
+    select id postid,concat_ws('|',ips) as ips \
+    from lofter.dim_post \
+    where  ispublished=true and isforbidden=false and iscitedpost=false \
+    and allowview=0 \
+    and contenttype in ("图片","文字","视频") \
+    and publishdate = '${azkaban.flow.1.days.ago}' \
+    and isactivityautopost=0 and isimported=0 and ismoved=0 and is_book_store = 0 \
+) c \
+on a.postid=c.postid \
+group by a.postid,blogid,blognickname,publishdate,contentType,url,title,tags,ips \
+) \

@@ -1,0 +1,2 @@
+type=noop
+dependencies=ads_grain_ip_hot_list_di,ads_grain_cp_hot_list_di,ads_grain_category_hot_list_di,ads_grain_novel_hot_list_di,ads_grain_gift_sale_list_di,ads_grain_gift_rec_list_di,ads_grain_push_ip_hot_posts_di

@@ -1,0 +1,88 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_wmyzy_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*,creator_level,case when c.postid is not null then 1 else 0 end is_premium_post,recom_review_time, \
+exposurepv, clickpv, realpv, commentpv, hotpv, sharepv, gift_amount, \
+support_exposure_pv, support_induced_pv, centralized_exposure_pv, \
+sum_exposurepv, sum_clickpv, sum_realpv, sum_commentpv, sum_hotpv, sum_sharepv,  \
+sum_support_exposure_pv, sum_support_induced_pv,  \
+sum_centralized_exposure_pv, \
+sum_gift_amount,  \
+new_devices,prev_day_new_retain_devices \
+from \
+( \
+    select postid,blogid,blognickname,publishdate,contentType,url,title,tags,ips,categories \
+    from lofter_dm.ads_wmyzy_post_publish_di \
+    where dt<='${azkaban.flow.1.days.ago}' \
+) a   \
+left join \
+( \
+    select userid,level creator_level,dt \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b \
+on a.blogid=b.userid  \
+left join \
+( \
+    select dt,postid \
+    from lofter.dws_post_premium_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) c \
+on a.postid=c.postid \
+left join \
+( \
+	select postid,reviewtime recom_review_time \
+	from lofter_db_dump.ods_db_recommend_review_post_nd  \
+	where recomStatus=1 and from_unixtime(cast(reviewtime/1000 as bigint),'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+	group by postid,reviewtime \
+) d \
+on a.postid=d.postid \
+left join \
+( \
+	select postid,exposurepv,clickpv,realbrowsepv+realplaypv as realpv,  \
+	       if(poscommentpv-negcommentpv<=0,0,poscommentpv-negcommentpv) commentpv,  \
+	       if(poshotpv-neghotpv<=0,0,poshotpv-neghotpv) hotpv,sharepv,  \
+	       chargegiftamount as gift_amount,centralizedexposurepv centralized_exposure_pv \
+	from lofter.dws_post_base_stats_di  \
+	where dt = '${azkaban.flow.1.days.ago}' \
+) e \
+on a.postid=e.postid \
+left join \
+( \
+	select postid,exposurepv sum_exposurepv,clickpv sum_clickpv,realbrowsepv+realplaypv as sum_realpv,  \
+	       if(poscommentpv-negcommentpv<=0,0,poscommentpv-negcommentpv) sum_commentpv,  \
+	       if(poshotpv-neghotpv<=0,0,poshotpv-neghotpv) sum_hotpv,sharepv sum_sharepv,   \
+	       chargegiftamount as sum_gift_amount,  \
+	       centralizedExposurePv as sum_centralized_exposure_pv  \
+	from lofter.dws_post_base_stats_dd  \
+	where dt = '${azkaban.flow.1.days.ago}'  \
+) f \
+on a.postid=f.postid  \
+left join \
+( \
+    select postId, sum(support_exposure_pv) sum_support_exposure_pv, sum(support_induced_pv) as sum_support_induced_pv,  \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', support_exposure_pv,0)) as support_exposure_pv,  \
+            sum(if(dt = '${azkaban.flow.1.days.ago}', support_induced_pv,0)) as support_induced_pv  \
+    from lofter.dws_post_support_di  \
+    where dt <= '${azkaban.flow.1.days.ago}'  \
+    group by postId  \
+) h  \
+on a.postId = h.postId  \
+left join  \
+( \
+select x.postId, count(distinct if(x.dt = '${azkaban.flow.1.days.ago}', x.deviceUdid,null)) as new_devices, count(distinct if(x.dt = '${azkaban.flow.2.days.ago}', y.deviceUdid,null)) as prev_day_new_retain_devices  \
+from  \
+    ( \
+        select dt, land_nonrec_itemid as postId, deviceUdid  \
+        from lofter.dwd_device_growth_attribution_di  \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}'  \
+        and device_type = 'new' and land_nonrec_content_type = '单日志' and land_nonrec_itemid > 0  \
+    ) x  \
+    left join  \
+    (  \
+    select deviceUdid from lofter.device_active where dt = '${azkaban.flow.1.days.ago}'  \
+    ) y  \
+    on x.deviceUdid = y.deviceUdid  \
+  group by x.postId  \
+) k \
+on a.postId = k.postId
+dependencies=ads_wmyzy_post_publish_di

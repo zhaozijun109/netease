@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(replace(dt, '-') as int) as dt, postId, hot_7d as hot from lofter_dm.ads_post_hot_dd where dt='${azkaban.flow.1.days.ago}' and hot_7d_diff != 0"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_post_hot_7d --id postId --atom

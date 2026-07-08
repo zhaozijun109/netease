@@ -1,0 +1,84 @@
+type=sparksql
+conf.spark.executor.cores=6
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=300
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_ip_life_cycle_dd PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT  t1.ip, \
+        post_cnt_90d, \
+        post_cnt_180_90d, \
+        premium_post_cnt_90d, \
+        premium_post_cnt_180_90d, \
+        nvl(realuv_cnt_90d,0) realuv_cnt_90d, \
+        nvl(realuv_cnt_180_90d,0) realuv_cnt_180_90d, \
+        nvl(realpv_cnt_90d,0) realpv_cnt_90d, \
+        nvl(realpv_cnt_180_90d,0) realpv_cnt_180_90d, \
+        post_cnt_30d, \
+        post_cnt_60_30d, \
+        premium_post_cnt_30d, \
+        premium_post_cnt_60_30d, \
+        nvl(realuv_cnt_30d,0) realuv_cnt_30d, \
+        nvl(realuv_cnt_60_30d,0) realuv_cnt_60_30d, \
+        nvl(realpv_cnt_30d,0) realpv_cnt_30d, \
+        nvl(realpv_cnt_60_30d,0) realpv_cnt_60_30d \
+FROM \
+( \
+	SELECT  ip, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',30) AND '${azkaban.flow.1.days.ago}' THEN a.postid end),0) post_cnt_30d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' THEN a.postid end),0) post_cnt_90d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',60) AND date_sub('${azkaban.flow.1.days.ago}',30) THEN a.postid end),0) post_cnt_60_30d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',180) AND date_sub('${azkaban.flow.1.days.ago}',90) THEN a.postid end),0) post_cnt_180_90d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',30) AND '${azkaban.flow.1.days.ago}' AND b.premium_date BETWEEN date_sub('${azkaban.flow.1.days.ago}',30) AND '${azkaban.flow.1.days.ago}' THEN b.postid end),0) premium_post_cnt_30d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',60) AND date_sub('${azkaban.flow.1.days.ago}',30) AND b.premium_date BETWEEN date_sub('${azkaban.flow.1.days.ago}',60) AND date_sub('${azkaban.flow.1.days.ago}',30) THEN b.postid end),0) premium_post_cnt_60_30d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' AND b.premium_date BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' THEN b.postid end),0) premium_post_cnt_90d, \
+	        nvl(COUNT(DISTINCT CASE WHEN a.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',180) AND date_sub('${azkaban.flow.1.days.ago}',90) AND b.premium_date BETWEEN date_sub('${azkaban.flow.1.days.ago}',180) AND date_sub('${azkaban.flow.1.days.ago}',90) THEN b.postid end),0) premium_post_cnt_180_90d \
+	FROM \
+	( \
+		SELECT  ip, \
+		        postid, \
+		        dt \
+		FROM lofter.dwd_post_publish_di lateral view explode(post_ips) t1 AS ip \
+		WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 180) AND '${azkaban.flow.1.days.ago}' \
+		GROUP BY  ip, \
+		          postid, \
+		          dt \
+	) a \
+	LEFT JOIN \
+	( \
+		SELECT  premium_date, \
+		        postid \
+		FROM lofter.dws_post_premium_di \
+		WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 180) AND '${azkaban.flow.1.days.ago}' \
+		GROUP BY  premium_date, \
+		          postid \
+	) b \
+	ON a.postid = b.postid \
+	GROUP BY  ip \
+) t1 \
+LEFT JOIN \
+( \
+	SELECT  ip, \
+	        COUNT(DISTINCT CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' THEN userid end) realuv_cnt_90d, \
+	        SUM(CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' THEN realpv end) realpv_cnt_90d, \
+	        COUNT(DISTINCT CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',180) AND date_sub('${azkaban.flow.1.days.ago}',90) THEN userid end) realuv_cnt_180_90d, \
+	        SUM(CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',180) AND date_sub('${azkaban.flow.1.days.ago}',90) THEN realpv end) realpv_cnt_180_90d, \
+	        COUNT(DISTINCT CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',30) AND '${azkaban.flow.1.days.ago}' THEN userid end) realuv_cnt_30d, \
+	        SUM(CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',30) AND '${azkaban.flow.1.days.ago}' THEN realpv end) realpv_cnt_30d, \
+	        COUNT(DISTINCT CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',60) AND date_sub('${azkaban.flow.1.days.ago}',30) THEN userid end) realuv_cnt_60_30d, \
+	        SUM(CASE WHEN dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',60) AND date_sub('${azkaban.flow.1.days.ago}',30) THEN realpv end) realpv_cnt_60_30d \
+	FROM \
+	( \
+		SELECT  dt, \
+		        userid, \
+		        ip, \
+		        SUM(pv) realpv \
+		FROM lofter.dws_ip_user_consume_di \
+		WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 180) AND '${azkaban.flow.1.days.ago}' \
+		GROUP BY  dt, \
+		          userid, \
+		          ip \
+	) a1 \
+	GROUP BY  ip \
+) t2 \
+ON t1.ip = t2.ip
+dependencies=dws_post_premium_di,dws_ip_user_consume_di

@@ -1,0 +1,136 @@
+plugins {
+//  id "com.arenagod.gradle.MybatisGenerator" version "1.4"
+  id "java"
+}
+
+sourceCompatibility = 1.8
+
+repositories {
+  mavenCentral()
+  maven {
+    url "http://mvn.hz.netease.com/artifactory/repo"
+    allowInsecureProtocol = true
+  }
+  maven {
+    url "http://mvn.hz.netease.com/artifactory/libs-releases"
+    allowInsecureProtocol = true
+  }
+  maven {
+    url "http://mvn.hz.netease.com/artifactory/libs-snapshots"
+    allowInsecureProtocol = true
+  }
+}
+
+configurations {
+  mybatisGenerator
+  implementation.exclude module: "logback-classic"
+  implementation.exclude module: "logback-core"
+}
+
+dependencies {
+  implementation packages.slf4jLog4j
+  implementation packages.json4s
+  implementation packages.guava
+  implementation packages.springBootPlugin
+  implementation packages.springBootStarterAop
+  implementation packages.springBootDevtools
+  implementation(packages.springBootStarterWeb) {
+    exclude module: "logback-classic"
+    exclude module: "logback-core"
+  }
+
+  implementation "mysql:mysql-connector-java:5.1.40"
+  implementation packages.mybatisSpringBoot
+  implementation packages.mybatisGenerator
+  implementation packages.pagehelper
+
+  compileOnly packages.lombok
+  annotationProcessor packages.lombok
+  testCompileOnly packages.lombok
+  testAnnotationProcessor packages.lombok
+  implementation packages.jedis
+
+  implementation(packages.httpclient) {
+    exclude module: "commons-logging"
+  }
+
+  implementation packages.fastjson
+  implementation packages.wizardSDK
+
+  implementation("org.apache.spark:spark-sql_${versions.scalaBinary}:${versions.spark}") {
+    transitive = false
+  }
+  implementation "org.scala-lang:scala-library:${versions.scala}"
+  implementation "org.scala-lang:scala-reflect:${versions.scala}"
+  implementation("org.json4s:json4s-jackson_${versions.scalaBinary}:${versions.json4s}")
+  implementation("org.apache.spark:spark-core_${versions.scalaBinary}:${versions.spark}") {
+    transitive = false
+  }
+  implementation("org.apache.spark:spark-sql_${versions.scalaBinary}:${versions.spark}") {
+    transitive = false
+  }
+  implementation("org.apache.spark:spark-catalyst_${versions.scalaBinary}:${versions.spark}") {
+    transitive = false
+  }
+  implementation("org.apache.hadoop:hadoop-common:${versions.hadoop}") {
+    transitive = false
+  }
+  implementation("org.apache.spark:spark-network-common_${versions.scalaBinary}:${versions.spark}") {
+    transitive = false
+  }
+
+  implementation group: 'commons-collections', name: 'commons-collections', version: '3.2.2'
+
+  implementation packages.commonsLang
+  implementation packages.commonsLang3
+  implementation packages.antlr4
+
+  testImplementation packages.junit
+  testImplementation packages.springBootStarterTest
+}
+
+tasks.withType(JavaCompile) {
+  options.encoding = "UTF-8"
+}
+
+//mybatisGenerator {
+//  verbose = true
+//  configFile = '/Users/zy/files/work/mammut/netease-data-integration/ndi-service-web/src/main/resources/mybatisGenerator.xml'
+//}
+
+task createPackageDir {
+  file("build/package/ndi-service-web/conf").mkdirs()
+  file("build/package/ndi-service-web/lib").mkdirs()
+  file("build/package/ndi-service-web/bin").mkdirs()
+}
+
+task copyLib(type: Copy) {
+  dependsOn build, createPackageDir
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/ndi-service-web/lib")
+}
+
+task copyConf(type: Copy) {
+  dependsOn build, createPackageDir
+  def env = "develop"
+  if (project.hasProperty("env")) {
+    env = project.property("env")
+  }
+  from("src/main/conf/${env}")
+  into("build/package/ndi-service-web/conf/")
+}
+
+task createPackageTar(type: Tar) {
+  dependsOn copyLib, copyConf
+  compression Compression.GZIP
+  from("build/package/")
+  archiveBaseName = "ndi-service-web"
+  archiveExtension = "tar.gz"
+  archiveVersion = "${project.property("ndi-version")}"
+  destinationDirectory = file("build")
+
+  doFirst {
+    createVersionFile(file("build/package/ndi-service-web/VERSION"))
+  }
+}

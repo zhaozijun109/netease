@@ -1,0 +1,134 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=10
+hive.query.01=insert overwrite table lofter.dws_user_pay_type_info_dd partition(dt='${azkaban.flow.1.days.ago}') \
+        select distinct userId, \
+               case when producttype=3 then '市集' when producttype=5 and c.slotType=4 then '一番赏' else "抽赏" end as pay_type, \
+               first_value(paytime) over(partition by userId,productType order by payTime) as first_pay_time, \
+               first_value(productid) over(partition by userId,productType order by payTime) as first_pay_item_id, \
+               first_value(productname) over(partition by userId,productType order by payTime) as first_pay_item_name, \
+               first_value(paytime) over(partition by userId,productType order by payTime desc) as last_pay_time, \
+               first_value(productid) over(partition by userId,productType order by payTime desc) as last_pay_item_id, \
+               first_value(productname) over(partition by userId,productType order by payTime desc) as last_pay_item_name \
+        from  \
+        (select distinct tradeId,thirdPartyNum,productType,userId,trade_money,slotNum,payTime,status,tradeTime,productid,productname \
+         from lofter.dwd_benefit_trade_order_product_dd  \
+         where dt = '${azkaban.flow.1.days.ago}' and producttype in(3,5) and status in(1,3,4) ) a  \
+        left join  \
+        (select code,slotType,startTime,endTime \
+        from lofter_db_dump.ods_db_benefit_card_activity_nd \
+        ) c \
+        on a.thirdPartyNum=c.code and a.tradeTime between c.startTime and c.endTime \
+        union all \
+        select  distinct userId,case when giftType=1 then '礼物付费' end as pay_type, \
+                first_value(createtime) over(partition by userId,giftType order by createtime) as first_pay_time, \
+                first_value(postid) over(partition by userId,giftType order by createtime) as first_pay_item_id, \
+                first_value(title) over(partition by userId,giftType order by createtime) as first_pay_item_name, \
+                first_value(createtime) over(partition by userId,giftType order by createtime desc) as last_pay_time, \
+                first_value(postid) over(partition by userId,giftType order by createtime desc) as last_pay_item_id, \
+                first_value(title) over(partition by userId,giftType order by createtime desc) as last_pay_item_name \
+        from (select a.sender as userId,giftType,postId,a.createTime,b.title \
+              from lofter_db_dump.ods_db_trade_gift_present_record_nd a left join lofter.dim_post b on a.postId=b.id where giftType=1 \
+              ) a \
+        where giftType in(0,1) \
+        union all \
+        select distinct userId, '打赏' as pay_type, \
+               first_value(createtime*1000) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+               first_value(case when pay_type='打赏文章' then authorpostid else authorblogid end) over(partition by userId order by createtime) as first_pay_item_id, \
+               first_value(case when pay_type='打赏文章' then title else blogName end) over(partition by userId order by createtime) as first_pay_item_name, \
+               first_value(createtime*1000) over(partition by userId order by createtime desc) as last_pay_time, \
+               first_value(case when pay_type='打赏文章' then authorpostid else authorblogid end) over(partition by userId order by createtime desc) as last_pay_item_id, \
+               first_value(case when pay_type='打赏文章' then title else blogName end) over(partition by userId order by createtime desc) as last_pay_item_name \
+        from (select distinct a.userId,case when authorpostid>0 then '打赏文章' else '打赏博客' end as pay_type, \
+                    authorblogid,authorpostid,createtime,b.blogName,b.title \
+              from (select * from lofter_db_dump.ods_db_trade_reward_order_nd where status = 10) a \
+              left join lofter.dim_post b \
+              on a.authorblogid=b.blogid) aa \
+        union all \
+        select distinct userId,pay_type, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+               first_value(avatarboxid) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+               first_value(name) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+               first_value(avatarboxid) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+               first_value(name) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+            (select a.userId,'头像框' as pay_type, \
+                    avatarboxid, a.createtime,b.name \
+            from (select * from lofter_db_dump.ods_db_avatar_box_order_nd where status=1) a \
+            left join lofter_db_dump.ods_db_avatar_box_item_nd b on a.avatarboxid=b.id) aa \
+        union all \
+        select distinct userId,pay_type, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+               first_value(anchor) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+               first_value(blogName) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+               first_value(anchor) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+               first_value(blogName) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+            (select a.userId,case when giftType='pay' then '直播' end as pay_type, \
+                    anchor,a.createtime,b.blogName \
+             from lofter_db_dump.ods_db_live_gift_income_nd  a \
+             left join lofter.dim_blog b \
+             on a.anchor=b.id where gifttype='pay') aa \
+        union all \
+        select distinct userId,pay_type, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+                 first_value(vipblogid) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+                 first_value(blogName) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+                 first_value(vipblogid) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+                 first_value(blogName) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+        (select a.*,b.blogName,'博客订阅' as pay_type from \
+            (select userId,vipblogid,createtime from lofter_db_dump.ods_db_trade_blog_vip_order_nd where status=1) a \
+            left join lofter.dim_blog b on a.vipblogid=b.id \
+        ) aa    \
+        union all \
+        select distinct userId,pay_type, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+               first_value(suitid) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+               first_value(name) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+               first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+               first_value(suitid) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+               first_value(name) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+            (select a.userId,   \
+                    '皮肤套餐' as pay_type, \
+                    suitid, a.createtime,b.name \
+            from (select * from lofter_db_dump.ods_db_dressing_suit_order_nd where status=1) a \
+            left join lofter_db_dump.ods_db_dressing_suit_nd b on a.suitid=b.id) aa \
+        union all \
+        select distinct userId,pay_type, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+                 first_value(vipblogid) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+                 first_value(blogName) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+                 first_value(vipblogid) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+                 first_value(blogName) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+        (select a.*,b.blogName,if(c.userId is not null, '官方账号', '粉丝会员') as pay_type from \
+            (select userId,vipblogid,createtime from lofter_db_dump.ods_db_trade_fans_vip_order_nd  \
+            where status=1 and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')>='2023-01-01') a \
+            left join lofter.dim_blog b on a.vipBlogId=b.id \
+            left join  \
+            (select cast(userId as bigint) as userId     \
+            from lofter_db_dump.ods_db_admin_pub_data_nd LATERAL VIEW explode(split(content, ',')) t2 AS userId    \
+            where name='book_store_blogIds'     \
+            group by cast(userId as bigint)    \
+            ) c   \
+            on a.vipBlogId = c.userId  \
+        ) aa    \
+        union all \
+        select distinct userId,pay_type, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime) as first_pay_time, \
+                 first_value(bookstoreid) over(partition by userId,pay_type order by createtime) as first_pay_item_id, \
+                 first_value(bookstore_name) over(partition by userId,pay_type order by createtime) as first_pay_item_name, \
+                 first_value(createtime) over(partition by userId,pay_type order by createtime desc) as last_pay_time, \
+                 first_value(bookstoreid) over(partition by userId,pay_type order by createtime desc) as last_pay_item_id, \
+                 first_value(bookstore_name) over(partition by userId,pay_type order by createtime desc) as last_pay_item_name \
+        from \
+        (select userId,bookstoreid,createtime,'精选专区' as bookstore_name,'书城会员' as pay_type \
+        from lofter_db_dump.ods_db_trade_store_vip_order_nd  \
+        where status =1 ) aa  \
+        distribute by userId % 5 ;
+dependencies=

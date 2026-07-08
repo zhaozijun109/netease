@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_video_cover_edit_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    userId, \
+    deviceUdid, \
+    deviceOs, \
+    appVersion, \
+    eventId, \
+    occurTime, \
+    cast(get_json_object(params['ext'], '$.width')  as int)        as cover_width, \
+    cast(get_json_object(params['ext'], '$.height') as int)        as cover_height, \
+    case when eventId = 'c1-32' then params['optType'] else null end as opt_type \
+from lofter.ods_mda_app_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+  and eventId in ('c1-31','c1-32','c1-33') \
+  and length(deviceUdid) > 0 \
+distribute by hash(deviceUdid) % 5
+dependencies=

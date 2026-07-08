@@ -1,0 +1,3 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dim_vc_discardted_users_a_d \
+                select id as user_id from vc.ods_db_vc_user_account_nd where nvl(GET_JSON_OBJECT(ext, '$.isTest'),0) = 2

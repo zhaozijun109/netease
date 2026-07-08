@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_yidun_callback_copy_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.dt as copy_day, \
+  a.datatype, \
+  a.dspid, \
+  a.appid, \
+  NVL(b.resultType, -1) as resulttype, \
+  NVL(b.suggestion, -1) as suggestion, \
+  count(distinct a.uuid) as copy_num \
+from \
+  ( \
+    select \
+      dt, \
+      datatype, \
+      dspid, \
+      appid, \
+      uuid \
+    from \
+      lofter.ods_log_ad_yidun_request_di \
+    where \
+      dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+      and logtype = 'ad-yidun-request' \
+  ) a \
+  left join ( \
+    select \
+      uuid, \
+      resultType, \
+      suggestion \
+    from \
+      ( \
+        select \
+          uuid, \
+          createTime, \
+          get_json_object( \
+            get_json_object(content, '$.antispam'), \
+            '$.resultType' \
+          ) as resultType, \
+          get_json_object( \
+            get_json_object(content, '$.antispam'), \
+            '$.suggestion' \
+          ) as suggestion, \
+          row_number() over( \
+            partition by uuid \
+            order by \
+              createTime desc \
+          ) as rk \
+        from \
+          lofter.ods_log_ad_yidun_callback_di \
+        where \
+          dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+          and logtype = 'ad-yidun-callback' \
+      ) b \
+    where \
+      rk = 1 \
+  ) b on a.uuid = b.uuid \
+group by \
+  a.dt, \
+  a.datatype, \
+  a.dspid, \
+  a.appid, \
+  NVL(b.resultType, -1), \
+  NVL(b.suggestion, -1) \
+
+

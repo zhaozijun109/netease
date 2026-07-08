@@ -1,0 +1,99 @@
+type=sparksql
+hive.query.01=\
+with product_ip_series as ( \
+                          select distinct \
+                              cast(itemId as bigint) as productId, \
+                              case when ipName is null or trim(ipName) = '' then '未分类' else trim(ipName) end as ip, \
+                              case when seriesName is null or trim(seriesName) = '' then '未分类' else trim(seriesName) end as seriesName \
+                          from lofter_db_dump.ods_db_benefit_ip_series_relation_nd \
+                          where isDeleted = 0 and itemType = 0 \
+), \
+     product_event_stats as ( \
+                          select channel, \
+                                 productId, \
+                                 sum(if(metricType = 'expose', 1, 0)) as exposePv, \
+                                 count(distinct if(metricType = 'expose', userId, null)) as exposeUv, \
+                                 count(distinct if(metricType = 'view', userId, null)) as viewUserCount, \
+                                 sum(if(metricType = 'view', 1, 0)) as viewCount, \
+                                 count(distinct if(metricType = 'cart', userId, null)) as shoppingCartUserCount, \
+                                 sum(if(metricType = 'cart', 1, 0)) as shoppingCartCount \
+                          from ( \
+                               select \
+                                   case when a.eventId like 'WE%' then 'legu_mini' else 'market' end as channel, \
+                                   cast(a.productId as bigint) as productId, \
+                                   cast(a.userId as bigint) as userId, \
+                                   case \
+                                       when a.eventId in ('w1-18','w10-10','w3-15','w10-11','w3-21','w1-28','w2-13','w1-24','w1-77','w1-79','w1-76','WE1-6','WE1-8','WE1-18','WE1-21','WE1-29') then 'expose' \
+                                       when a.eventId in ('w3-2', 'WE1-23') then 'view' \
+                                       when a.eventId = 'w3-5' or (a.eventId = 'WE1-25' and a.params['type'] = 1) then 'cart' \
+                                       end as metricType \
+                               from lofter.dwd_evt_benefit_page_view_di a \
+                                    left join lofter.dim_user b on a.userId = b.id \
+                               where a.dt = '${azkaban.flow.1.days.ago}' \
+                                 and cast(a.productId as bigint) is not null \
+                                 and cast(a.productId as bigint) > 0 \
+                                 and ( \
+                                   (a.eventId in ('WE1-6','WE1-8','WE1-18','WE1-21','WE1-29','WE1-23','WE1-25') and a.userId is not null) \
+                                       or \
+                                   (a.eventId in ('w1-18','w10-10','w3-15','w10-11','w3-21','w1-28','w2-13','w1-24','w1-77','w1-79','w1-76','w3-2','w3-5') and b.isAnonymous = 0) \
+                                   ) \
+                               ) a \
+                          group by channel, productId \
+     ), \
+     product_trade_stats as ( \
+                          select channel, \
+                                 productId, \
+                                 count(distinct if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerId, null)) as orderUserCount, \
+                                 count(distinct if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', tradeId, null)) as orderCount, \
+                                 sum(if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', productNum, 0)) as orderProductNum, \
+                                 sum(if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', storePrice * productNum, 0)) as orderProductAmount, \
+                                 sum(if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', newCouponPreferential, 0)) as orderCoupon, \
+                                 count(distinct if(payTime > 0 and from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerId, null)) as payUserCount, \
+                                 count(distinct if(payTime > 0 and from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', tradeId, null)) as payCount, \
+                                 sum(if(payTime > 0 and from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', productNum, 0)) as payProductNum, \
+                                 sum(if(payTime > 0 and from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', storePrice * productNum, 0)) as payProductAmount, \
+                                 sum(if(payTime > 0 and from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', newCouponPreferential, 0)) as payCoupon \
+                          from ( \
+                               select \
+                                   case when c.orderfrom = 'legu_mini' then 'legu_mini' else 'market' end as channel, \
+                                   cast(b.productId as bigint) as productId, \
+                                   cast(b.buyerId as bigint) as buyerId, \
+                                   a.tradeId, \
+                                   b.productNum, \
+                                   b.storePrice, \
+                                   b.newCouponPreferential, \
+                                   a.payTime, \
+                                   a.createTime \
+                               from lofter_db_dump.ods_db_benefit_order_nd a \
+                                    join lofter_db_dump.ods_db_benefit_order_product_nd b on a.id = b.orderId \
+                                    join lofter_db_dump.ods_db_benefit_trade_nd c on a.tradeId = c.id \
+                               where b.type = 3 and a.originType = 0 \
+                               ) a \
+                          group by channel, productId \
+     ) \
+insert overwrite table lofter_dm.ads_ec_derivate_product_report_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select e.channel, \
+       nvl(p.ip, '未分类') as ip, \
+       nvl(p.seriesName, '未分类') as seriesName, \
+       nvl(sum(e.exposePv), 0) as exposePv, \
+       nvl(sum(e.exposeUv), 0) as exposeUv, \
+       nvl(sum(e.viewCount), 0) as viewCount, \
+       nvl(sum(e.viewUserCount), 0) as viewUserCount, \
+       nvl(sum(e.shoppingCartCount), 0) as shoppingCartCount, \
+       nvl(sum(e.shoppingCartUserCount), 0) as shoppingCartUserCount, \
+       nvl(sum(t.orderCount), 0) as orderCount, \
+       nvl(sum(t.orderUserCount), 0) as orderUserCount, \
+       nvl(sum(t.payCount), 0) as payCount, \
+       nvl(sum(t.payUserCount), 0) as payUserCount, \
+       nvl(sum(t.orderProductNum), 0) as orderProductNum, \
+       nvl(sum(t.orderProductAmount), 0) as orderProductAmount, \
+       nvl(sum(t.orderCoupon), 0) as orderCoupon, \
+       nvl(sum(t.payProductNum), 0) as payProductNum, \
+       nvl(sum(t.payProductAmount), 0) as payProductAmount, \
+       nvl(sum(t.payCoupon), 0) as payCoupon, \
+       nvl(sum(t.orderProductAmount), 0) as GMV, \
+       if(nvl(sum(t.payUserCount), 0) > 0, nvl(sum(t.orderProductAmount), 0) / nvl(sum(t.payUserCount), 0),0) as AOV \
+from product_event_stats e \
+     left join product_trade_stats t on e.channel = t.channel and e.productId = t.productId \
+     left join product_ip_series p on e.productId = p.productId \
+group by e.channel, nvl(p.ip, '未分类'), nvl(p.seriesName, '未分类')

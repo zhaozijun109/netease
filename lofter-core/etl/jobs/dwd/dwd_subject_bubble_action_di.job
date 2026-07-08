@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dwd_subject_bubble_action_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.* \
+from ( \
+    select itemId as subject_id, userId, \
+           case when eventId in ('g4-4', 'g4-5') then 'bubble' \
+                else 'message' end as show_type, \
+           case when eventId in ('g4-4', 'e11-5') then 'expose' \
+                else 'click' end as action \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          actionType in ('message', 'guide') and \
+          eventId in ('g4-4', 'g4-5', 'e11-5', 'e11-1') and \
+          userId > 0 and itemId > 0 \
+) a \
+join ( \
+    select id as subject_id \
+    from lofter_db_dump.ods_db_creator_create_subject_nd \
+) b on a.subject_id = b.subject_id \
+distribute by 1

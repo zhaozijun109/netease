@@ -1,0 +1,83 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_supply_weekly_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.*, \
+  b.*, \
+  c.* \
+from \
+  ( \
+    select \
+      count( \
+        distinct case \
+          when module = '激励广告' then postid \
+          else null \
+        end \
+      ) as pge_post_revenue_num, \
+      count( \
+        distinct case \
+          when module = '广告文' then postid \
+          else null \
+        end \
+      ) as ad_post_revenue_num, \
+      count( \
+        distinct case \
+          when module = '激励广告' then blogid \
+          else null \
+        end \
+      ) as pge_blog_revenue_num, \
+      count( \
+        distinct case \
+          when module = '广告文' then blogid \
+          else null \
+        end \
+      ) as ad_blog_revenue_num \
+    from \
+      lofter.dwd_ad_content_unlock_sdk_di \
+    where \
+      dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+      and bid_amount > 0 \
+  ) a \
+  full outer join ( \
+    select \
+      count(distinct userid) as pge_on_blog_history_num \
+    from \
+      lofter_db_dump.ods_db_trade_ad_unlock_user_setting_log_nd \
+    where \
+      settingvalue = 'ON' \
+  ) b \
+  full outer join ( \
+    select \
+      count( \
+        distinct case \
+          when giftname like '%广告%' then postid \
+          else null \
+        end \
+      ) as ad_post_publish_num, \
+      count( \
+        distinct case \
+          when giftname like '%粮票%' then postid \
+          else null \
+        end \
+      ) as grain_post_publish_num, \
+      count( \
+        distinct case \
+          when giftname like '%广告%' then blogid \
+          else null \
+        end \
+      ) as ad_blog_publish_num, \
+      count( \
+        distinct case \
+          when giftname like '%粮票%' then blogid \
+          else null \
+        end \
+      ) as grain_blog_publish_num \
+    from \
+      lofter.dim_gift_post_return_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and status = 1 \
+      and auditstatus = 1 \
+      and publishdate between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+      and contenttype in ('文字', '图片') \
+  ) c \
+

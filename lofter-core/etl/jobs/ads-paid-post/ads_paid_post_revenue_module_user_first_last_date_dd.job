@@ -1,0 +1,126 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_revenue_module_user_first_last_date_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  revenue_module, \
+  userid, \
+  min(pay_date) as first_pay_date, \
+  max(pay_date) as last_pay_date \
+from \
+  lofter.dwd_user_order_dd \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and revenue_module in ( \
+    '付费礼物', \
+    '券包', \
+    '粉丝会员', \
+    '小程序会员', \
+    '博客订阅', \
+    '书城会员', \
+    '官方账号', \
+    '图片商城' \
+    '大会员' \
+  ) \
+  and money > 0 \
+group by \
+  revenue_module, \
+  userid \
+union \
+select \
+  '广义内容付费全业务线' revenue_module, \
+  userid, \
+  min(pay_date) as first_pay_date, \
+  max(pay_date) as last_pay_date \
+from \
+  lofter.dwd_user_order_dd \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and revenue_module in ( \
+    '付费礼物', \
+    '券包', \
+    '粉丝会员', \
+    '小程序会员', \
+    '博客订阅', \
+    '书城会员', \
+    '官方账号', \
+    '图片商城' \
+    '大会员' \
+  ) \
+  and money > 0 \
+group by \
+  userid \
+union \
+select \
+  '礼物解锁' revenue_module, \
+  userid, \
+  min( \
+    from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+  ) as first_pay_date, \
+  max( \
+    from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+  ) as last_pay_date \
+from \
+  lofter.dwd_gift_post_unlock_dd \
+where \
+  money > 0 \
+  and dt = '${azkaban.flow.1.days.ago}' \
+group by \
+  userid \
+union \
+select \
+  '礼物解锁合并粉丝会员' revenue_module, \
+  userid, \
+  min(first_pay_date) as first_pay_date, \
+  max(last_pay_date) as last_pay_date \
+from \
+  ( \
+    Select \
+      userid, \
+      min( \
+        from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as first_pay_date, \
+      max( \
+        from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as last_pay_date \
+    from \
+      lofter.dwd_gift_post_unlock_dd \
+    where \
+      money > 0 \
+      and dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+      userid \
+    union \
+    select \
+      userid, \
+      min(pay_date) as first_pay_date, \
+      max(pay_date) as last_pay_date \
+    from \
+      lofter.dwd_user_order_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and revenue_module in ('粉丝会员') \
+      and money > 0 \
+    group by \
+      userid \
+  ) a \
+group by \
+  userid \
+union \
+select \
+  '广义书城大会员' revenue_module, \
+  userid, \
+  min(pay_date) as first_pay_date, \
+  max(pay_date) as last_pay_date \
+from \
+  lofter.dwd_user_order_dd \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and revenue_module in ( \
+    '博客订阅', \
+    '书城会员', \
+    '官方账号', \
+    '大会员' \
+  ) \
+  and money > 0 \
+group by \
+  userid \
+

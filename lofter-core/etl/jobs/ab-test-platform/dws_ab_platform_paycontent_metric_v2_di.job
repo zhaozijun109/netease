@@ -1,0 +1,180 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01=\
+with exp_users_30_days as ( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+    from lofter.dws_ab_platform_exp_user_agg_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+      and exp_state = 1 \
+    group by user_id, dt, appId, sceneId, exp_id, bucket_id \
+), \
+user_active_30days as( \
+    select dt,userid \
+    from lofter.dws_par_user_active_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+    group by 1,2 \
+), \
+paycontent_user_amount_30days as( \
+    select userid,order_date,sum(money) as paycontent_pay_money_0d,if(sum(money) > 0,1,0) as paycontent_pay_uv \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and order_date between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+    group by userid,order_date \
+), \
+coupon_user_amount_30days as( \
+    select userid,order_date, \
+        sum(money) as coupon_gmv_0d \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and order_date between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+      and revenue_module = '券包' \
+    group by userid,order_date \
+), \
+active_0d_30days as( \
+    select a.userId,a.exp_date as base_date,1 as visit_uv \
+    from exp_users_30_days a \
+    join user_active_30days b on a.userId = b.userid and a.exp_date = b.dt \
+    group by 1,2 \
+), \
+retain_uv_1d as( \
+    select a.base_date, a.userId,1 as retain_uv_1d \
+    from active_0d_30days a \
+    join (select * from user_active_30days where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') b on a.userId = b.userid and datediff(b.dt, a.base_date) = 1 \
+), \
+retain_uv_3d as( \
+    select a.base_date, a.userId,1 as retain_uv_3d \
+    from active_0d_30days a \
+    join (select * from user_active_30days where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') b on a.userId = b.userid and datediff(b.dt, a.base_date) = 2 \
+), \
+retain_uv_7d as( \
+    select a.base_date, a.userId,1 as retain_uv_7d \
+    from active_0d_30days a \
+    join (select * from user_active_30days where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') b on a.userId = b.userid and datediff(b.dt, a.base_date) = 6 \
+), \
+retain_uv_15d as( \
+    select a.base_date, a.userId,1 as retain_uv_15d \
+    from active_0d_30days a \
+    join (select * from user_active_30days where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') b on a.userId = b.userid and datediff(b.dt, a.base_date) = 14 \
+), \
+retain_uv_30d as( \
+    select a.base_date, a.userId,1 as retain_uv_30d \
+    from active_0d_30days a \
+    join (select * from user_active_30days where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') b on a.userId = b.userid and datediff(b.dt, a.base_date) = 29 \
+), \
+tag_expose_source as( \
+    select distinct dt, userId \
+    from lofter.dwd_post_expose_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+        and detail_scene_level_2 like 'tag%' \
+), \
+tag_active_0d_source as( \
+    select \
+        a.exp_date as base_date, \
+        a.userId, \
+        a.exp_id, \
+        a.bucket_id, \
+        1 as tag_active_0d \
+    from exp_users_30_days a \
+    join tag_expose_source b on a.userId = b.userId and a.exp_date = b.dt \
+), \
+user_tag_future_activity as( \
+    select  \
+        a.base_date, \
+        a.userId, \
+        a.exp_id, \
+        a.bucket_id, \
+        a.tag_active_0d, \
+        max(case when b.dt = date_add(a.base_date, 1) then 1 else 0 end) as tag_active_1d, \
+        max(case when b.dt = date_add(a.base_date, 2) then 1 else 0 end) as tag_active_3d, \
+        max(case when b.dt = date_add(a.base_date, 6) then 1 else 0 end) as tag_active_7d, \
+        max(case when b.dt = date_add(a.base_date, 14) then 1 else 0 end) as tag_active_15d \
+    from tag_active_0d_source a \
+    left join tag_expose_source b on a.userId = b.userId \
+        and b.dt in ( \
+            date_add(a.base_date, 1), \
+            date_add(a.base_date, 2), \
+            date_add(a.base_date, 6), \
+            date_add(a.base_date, 14) \
+        ) \
+    group by a.base_date, a.userId, a.exp_id, a.bucket_id, a.tag_active_0d \
+), \
+ad_atomic_metric1 as( \
+    select a.exp_id, a.exp_date as base_date, a.bucket_id, a.userId, \
+        max(nvl(c.retain_uv_1d,0)) retain_uv_1d, \
+        max(nvl(d.retain_uv_3d,0)) retain_uv_3d, \
+        max(nvl(e.retain_uv_7d,0)) retain_uv_7d, \
+        max(nvl(g.retain_uv_15d,0)) retain_uv_15d, \
+        max(nvl(h.retain_uv_30d,0)) retain_uv_30d, \
+        max(nvl(f.tag_active_0d, 0)) tag_active_0d, \
+        max(nvl(f.tag_active_1d, 0)) tag_active_1d, \
+        max(nvl(f.tag_active_3d, 0)) tag_active_3d, \
+        max(nvl(f.tag_active_7d, 0)) tag_active_7d, \
+        max(nvl(f.tag_active_15d, 0)) tag_active_15d \
+    from (select * from exp_users_30_days where exp_date between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') a \
+    left join retain_uv_1d c on a.exp_date = c.base_date and a.userId = c.userId \
+    left join retain_uv_3d d on a.exp_date = d.base_date and a.userId = d.userId \
+    left join retain_uv_7d e on a.exp_date = e.base_date and a.userId = e.userId \
+    left join retain_uv_15d g on a.exp_date = g.base_date and a.userId = g.userId \
+    left join retain_uv_30d h on a.exp_date = h.base_date and a.userId = h.userId \
+    left join user_tag_future_activity f on a.exp_date = f.base_date and a.userId = f.userId \
+    group by a.exp_id, a.exp_date, a.bucket_id, a.userId \
+), \
+ad_atomic_metric2 as( \
+    select a.exp_id, a.exp_date as base_date, a.bucket_id, a.userId, \
+        max(nvl(b.visit_uv,0)) visit_uv, \
+        max(nvl(g1.paycontent_pay_uv,0)) paycontent_pay_uv, \
+        max(nvl(g1.paycontent_pay_money_0d,0)) paycontent_pay_money_0d, \
+        max(nvl(g2.coupon_gmv_0d,0)) coupon_gmv_0d \
+    from exp_users_30_days a \
+    left join active_0d_30days b on a.exp_date = b.base_date and a.userId = b.userId \
+    left join paycontent_user_amount_30days g1 on a.exp_date = g1.order_date and a.userId = g1.userid \
+    left join coupon_user_amount_30days g2 on a.exp_date = g2.order_date and a.userId = g2.userid \
+    group by a.exp_id, a.exp_date, a.bucket_id, a.userId \
+) \
+insert overwrite table lofter.dws_ab_platform_paycontent_metric_v2_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select base_date,dim_flag,userid,metric,metric_value,bucket_id,exp_id \
+from( \
+    select base_date, 0 as dim_flag,userId,'visit_uv' as metric,cast(visit_uv as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric2 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'retain_uv_1d' as metric,cast(retain_uv_1d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'retain_uv_3d' as metric,cast(retain_uv_3d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'retain_uv_7d' as metric,cast(retain_uv_7d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'retain_uv_15d' as metric,cast(retain_uv_15d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'retain_uv_30d' as metric,cast(retain_uv_30d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'tag_active_0d' as metric,cast(tag_active_0d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'tag_active_3d' as metric,cast(tag_active_3d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'tag_active_7d' as metric,cast(tag_active_7d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'tag_active_15d' as metric,cast(tag_active_15d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'tag_active_1d' as metric,cast(tag_active_1d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric1 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'paycontent_pay_uv' as metric,cast(paycontent_pay_uv as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric2 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'paycontent_pay_money_0d' as metric,cast(paycontent_pay_money_0d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric2 \
+    union all \
+    select base_date, 0 as dim_flag,userId,'coupon_gmv_0d' as metric,cast(coupon_gmv_0d as double) as metric_value,bucket_id,exp_id \
+    from ad_atomic_metric2 \
+)
+dependencies=dws_ab_platform_exp_user_agg_di

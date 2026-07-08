@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+params= --source lofter_dm.ads_tag_noncp_hot_top_di --partition ${azkaban.flow.1.days.ago}  --dest lofter_hot_tag_daily_top500

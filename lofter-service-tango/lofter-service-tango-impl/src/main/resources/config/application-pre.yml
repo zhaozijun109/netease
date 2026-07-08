@@ -1,0 +1,14 @@
+spring:
+  redis:
+    cluster:
+      nodes: ${redis.cluster.nodes}
+    timeout: 3s
+
+clickhouse:
+  enable: true
+
+apollo:
+  meta: http://10.194.75.36
+  cluster: pre
+  accesskey:
+    secret: db5b272340a04e3fb2d14b0cc216c137

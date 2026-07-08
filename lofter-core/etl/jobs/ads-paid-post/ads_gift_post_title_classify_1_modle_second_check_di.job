@@ -1,0 +1,231 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_title_classify_1_modle_second_check_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end as status, \
+  '同质化套路场景型' as flg \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      post_id as postid \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and day = '${azkaban.flow.1.days.ago}' \
+      and result = '同质化套路场景型' \
+    group by \
+      blog_id, \
+      post_id \
+  ) a \
+  left join ( \
+    select \
+      blogid, \
+      postnum \
+    from \
+      lofter_dm.ads_gift_post_title_classify_blog_dd \
+    where \
+      period = '60日' and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid, \
+      postnum \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      blogid \
+    from \
+      lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+    where \
+      size(array_intersect(flgs, array('同质化套路', '同质化套路风险'))) > 0 and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid \
+  ) c on a.blogid = c.blogid \
+group by \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end \
+union \
+select \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end as status, \
+  '套路场景型' as flg \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      post_id as postid \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and day = '${azkaban.flow.1.days.ago}' \
+      and result = '套路场景型' \
+    group by \
+      blog_id, \
+      post_id \
+  ) a \
+  left join ( \
+    select \
+      blogid, \
+      postnum \
+    from \
+      lofter_dm.ads_gift_post_title_classify_blog_dd \
+    where \
+      period = '60日' and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid, \
+      postnum \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      blogid \
+    from \
+      lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+    where \
+      size( \
+        array_intersect(flgs, array('套路', '套路风险', '同质化套路', '同质化套路风险')) \
+      ) > 0 and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid \
+  ) c on a.blogid = c.blogid \
+group by \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end \
+union \
+select \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end as status, \
+  '擦边型' as flg \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      post_id as postid \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and day ='${azkaban.flow.1.days.ago}' \
+      and result = '擦边型' \
+    group by \
+      blog_id, \
+      post_id \
+  ) a \
+  left join ( \
+    select \
+      blogid, \
+      postnum \
+    from \
+      lofter_dm.ads_gift_post_title_classify_blog_dd \
+    where \
+      period = '60日' and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid, \
+      postnum \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      blogid \
+    from \
+      lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+    where \
+      size(array_intersect(flgs, array('擦边', '擦边意愿'))) > 0 and dt='${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid \
+  ) c on a.blogid = c.blogid \
+group by \
+  a.blogid, \
+  a.postid, \
+  case \
+    when c.blogid is not null then '二次核验打标' \
+    when c.blogid is null \
+    and ( \
+      b.postnum is null \
+      or b.postnum < 3 \
+    ) then 'ai打标' \
+    when c.blogid is null \
+    and (b.postnum >= 3) then '不打标' \
+    else 'other' \
+  end \
+union \
+select \
+  a.blogid, \
+  a.postid, \
+  'ai打标' as status, \
+  '观影型' as flg \
+from \
+  ( \
+    select \
+      blog_id as blogid, \
+      post_id as postid \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify in (1) \
+      and probability > 0.6999 \
+      and day ='${azkaban.flow.1.days.ago}' \
+      and result = '观影型' \
+    group by \
+      blog_id, \
+      post_id \
+  ) a \
+
+dependencies=ads_gift_post_title_classify_blog_dd,ads_gift_post_title_classify_1_modle_blog_priority_all_dd

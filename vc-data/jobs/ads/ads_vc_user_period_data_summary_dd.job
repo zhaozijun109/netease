@@ -1,0 +1,110 @@
+type=sparksql
+hive.query.01 = with active as (select user_id, \
+                                       count(distinct if(dt = '${azkaban.flow.1.days.ago}', dt, null))               as active_days_1d, \
+                                       count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 3), dt, null))  as active_days_3d, \
+                                       count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 7), dt, null))  as active_days_7d, \
+                                       count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 15), dt, null)) as active_days_15d, \
+                                       count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 30), dt, null)) as active_days_30d, \
+                                       count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 90), dt, null)) as active_days_90d \
+                                from vc.dwd_vc_user_active_i_d \
+                                where dt <= '${azkaban.flow.1.days.ago}' \
+                                  and dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                                group by user_id), \
+                     order as (select user_id, \
+                                      count(distinct if(dt = '${azkaban.flow.1.days.ago}', order_id, null))               as order_cnt_1d, \
+                                      count(distinct \
+                                            if(dt > date_sub('${azkaban.flow.1.days.ago}', 3), order_id, null))           as order_cnt_3d, \
+                                      count(distinct \
+                                            if(dt > date_sub('${azkaban.flow.1.days.ago}', 7), order_id, null))           as order_cnt_7d, \
+                                      count(distinct \
+                                            if(dt > date_sub('${azkaban.flow.1.days.ago}', 15), order_id, null))          as order_cnt_15d, \
+                                      count(distinct \
+                                            if(dt > date_sub('${azkaban.flow.1.days.ago}', 30), order_id, null))          as order_cnt_30d, \
+                                      count(distinct \
+                                            if(dt > date_sub('${azkaban.flow.1.days.ago}', 90), order_id, null))          as order_cnt_90d \
+                               from vc.dwd_vc_order_i_d \
+                               where dt <= '${azkaban.flow.1.days.ago}' \
+                                 and dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                               group by user_id), \
+                     consume as (select user_id, \
+                                        sum(if(dt = '${azkaban.flow.1.days.ago}', order_price, null))               as amount_1d, \
+                                        sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 3), order_price, null))  as amount_3d, \
+                                        sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 7), order_price, null))  as amount_7d, \
+                                        sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 15), order_price, null)) as amount_15d, \
+                                        sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 30), order_price, null)) as amount_30d, \
+                                        sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 90), order_price, null)) as amount_90d \
+                                 from vc.dwd_vc_order_i_d \
+                                 where dt <= '${azkaban.flow.1.days.ago}' \
+                                   and dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                                 group by user_id), \
+                     talk_character_nums as (select user_id, \
+                                                    count(distinct \
+                                                          if(dt = '${azkaban.flow.1.days.ago}', character_id, null))               as uc_charaters_1d, \
+                                                    count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 3), character_id, \
+                                                                      null))                                                       as uc_charaters_3d, \
+                                                    count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 7), character_id, \
+                                                                      null))                                                       as uc_charaters_7d, \
+                                                    count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 15), character_id, \
+                                                                      null))                                                       as uc_charaters_15d, \
+                                                    count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 30), character_id, \
+                                                                      null))                                                       as uc_charaters_30d, \
+                                                    count(distinct if(dt > date_sub('${azkaban.flow.1.days.ago}', 90), character_id, \
+                                                                      null))                                                       as uc_charaters_90d \
+                                             from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                             where dt <= '${azkaban.flow.1.days.ago}' \
+                                               and dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                                             group by user_id), \
+                     talk_cnt as (select user_id, \
+                                         sum(if(dt = '${azkaban.flow.1.days.ago}', talk_cnt, null))               as uc_cnt_1d, \
+                                         sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 3), talk_cnt, null))  as uc_cnt_3d, \
+                                         sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 7), talk_cnt, null))  as uc_cnt_7d, \
+                                         sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 15), talk_cnt, null)) as uc_cnt_15d, \
+                                         sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 30), talk_cnt, null)) as uc_cnt_30d, \
+                                         sum(if(dt > date_sub('${azkaban.flow.1.days.ago}', 90), talk_cnt, null)) as uc_cnt_90d \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                  where dt <= '${azkaban.flow.1.days.ago}' \
+                                    and dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                                  group by user_id), \
+                     user as (select user_id, is_test_user, is_anonymity \
+                              from vc.dws_vc_user_behavior_info_a_d \
+                              where dt = '${azkaban.flow.1.days.ago}') \
+                insert OVERWRITE table vc.ads_vc_user_period_data_summary_dd PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x1.user_id, \
+                       x1.is_test_user, \
+                       x1.is_anonymity, \
+                       nvl(x2.active_days_1d, 0)   as active_days_1d, \
+                       nvl(x3.order_cnt_1d, 0)     as order_cnt_1d, \
+                       nvl(x4.amount_1d, 0)        as amount_1d, \
+                       nvl(x5.uc_charaters_1d, 0)  as uc_charaters_1d, \
+                       nvl(x6.uc_cnt_1d, 0)        as uc_cnt_1d, \
+                       nvl(x2.active_days_3d, 0)   as active_days_3d, \
+                       nvl(x3.order_cnt_3d, 0)     as order_cnt_3d, \
+                       nvl(x4.amount_3d, 0)        as amount_3d, \
+                       nvl(x5.uc_charaters_3d, 0)  as uc_charaters_3d, \
+                       nvl(x6.uc_cnt_3d, 0)        as uc_cnt_3d, \
+                       nvl(x2.active_days_7d, 0)   as active_days_7d, \
+                       nvl(x3.order_cnt_7d, 0)     as order_cnt_7d, \
+                       nvl(x4.amount_7d, 0)        as amount_7d, \
+                       nvl(x5.uc_charaters_7d, 0)  as uc_charaters_7d, \
+                       nvl(x6.uc_cnt_7d, 0)        as uc_cnt_7d, \
+                       nvl(x2.active_days_15d, 0)  as active_days_15d, \
+                       nvl(x3.order_cnt_15d, 0)    as order_cnt_15d, \
+                       nvl(x4.amount_15d, 0)       as amount_15d, \
+                       nvl(x5.uc_charaters_15d, 0) as uc_charaters_15d, \
+                       nvl(x6.uc_cnt_15d, 0)       as uc_cnt_15d, \
+                       nvl(x2.active_days_30d, 0)  as active_days_30d, \
+                       nvl(x3.order_cnt_30d, 0)    as order_cnt_30d, \
+                       nvl(x4.amount_30d, 0)       as amount_30d, \
+                       nvl(x5.uc_charaters_30d, 0) as uc_charaters_30d, \
+                       nvl(x6.uc_cnt_30d, 0)       as uc_cnt_30d, \
+                       nvl(x2.active_days_90d, 0)  as active_days_90d, \
+                       nvl(x3.order_cnt_90d, 0)    as order_cnt_90d, \
+                       nvl(x4.amount_90d, 0)       as amount_90d, \
+                       nvl(x5.uc_charaters_90d, 0) as uc_charaters_90d, \
+                       nvl(x6.uc_cnt_90d, 0)       as uc_cnt_90d \
+                from user x1 \
+                         inner join active x2 on x1.user_id = x2.user_id and x2.active_days_1d = 1 \
+                         left join order x3 on x1.user_id = x3.user_id \
+                         left join consume x4 on x1.user_id = x4.user_id \
+                         left join talk_character_nums x5 on x1.user_id = x5.user_id \
+                         left join talk_cnt x6 on x1.user_id = x6.user_id ;

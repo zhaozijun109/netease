@@ -1,0 +1,23 @@
+{
+  "reader": {
+    "type": "basic",
+    "format": "csv",
+    "options": {
+      "header": "true",
+      "delimiter": ","
+    }
+  },
+  "component": {
+    "type": "CRFPredictor",
+    "path": "toy_dataset/crf/model.cvt",
+    "labelMapPath": "toy_dataset/crf/label_map.json",
+    "featuresCol": "full_address"
+  },
+
+  "test": "toy_dataset/crf/address.csv",
+  "writer": {
+    "type": "basic",
+    "format": "json",
+    "mode": "overwrite"
+  }
+}

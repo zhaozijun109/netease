@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_level_scoring_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId as blogId, \
+    post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score as score, \
+    low_postnum as warn_post_count, \
+    post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score as income_score, \
+    post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score as quality_score, \
+    post_num_score as active_score, \
+    post_top_money_avg_all_score as income_avg_30d, \
+    post_top_money_avg_10_score as income_avg_top10, \
+    post_gift_30_day_trade_money_score as income_total_30d, \
+    post_all_quality_percent_avg_score as quality_score_avg_30d, \
+    post_top_quality_percent_avg_10_score as quality_score_avg_top10, \
+    post_num_score as active_gift_post_count_30d, \
+    quality_postnum \
+from ( \
+    select a.* \
+    from lofter_dm.ads_paid_post_blog_level_detail_di a \
+    join lofter_db_dump.ods_db_trade_pay_grade_nd b on a.userId = b.userId and b.grade > 1 \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+) t \
+
+dependencies=ads_paid_post_blog_level_detail_di

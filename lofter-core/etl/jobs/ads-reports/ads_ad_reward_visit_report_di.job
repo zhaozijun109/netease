@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01= \
+with ad_reward_users as ( \
+    select userId, '访问用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, '新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_platform_new > 0 \
+    union all \
+    select userId, '回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_platform_return > 0 \
+    union all \
+    select userId, '权益中心新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_new_user > 0 \
+    union all \
+    select userId, '权益中心回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_return_user > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_reward_visit_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select a.user_type, a.uv, a.pv, b.sign_uv, to_json(c.sign_step_distr) as sign_step_distr \
+    from ( \
+        select '${azkaban.flow.1.days.ago}' as dt, b.user_type, count(distinct a.userId) as uv, sum(if(eventId = 'rewardcenter1-1', 1, 0)) as pv \
+        from lofter.dwd_rewardcenter_visit_di a \
+             join ad_reward_users b on a.userId = b.userId \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) a \
+    left join ( \
+        select '${azkaban.flow.1.days.ago}' as dt, b.user_type, count(distinct a.userId) as sign_uv \
+        from lofter_db_dump.ods_db_reward_particular_score_task_nd a \
+             join ad_reward_users b on a.userId = b.userId \
+        where a.`date` = cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) and a.`type` = 2 \
+        group by 1, 2 \
+    ) b on a.dt = b.dt and a.user_type = b.user_type \
+    left join ( \
+        select '${azkaban.flow.1.days.ago}' as dt, user_type, sort_array(collect_set(struct(steps, uv))) as sign_step_distr \
+        from ( \
+            select b.user_type, a.currentStep as steps,  count(distinct a.userId) as uv \
+            from lofter_db_dump.ods_db_reward_continue_score_task_nd a \
+                 join ad_reward_users b on a.userId = b.userId \
+            where a.`date` = cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) \
+            group by 1, 2 \
+        ) t \
+        group by 1, 2 \
+    ) c on a.dt = c.dt and a.user_type = c.user_type \
+) t \

@@ -1,0 +1,31 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter.dwd_evt_benefit_page_view_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select eventId, deviceUdid, userId, deviceOs, productId, \
+           if(size(params) = 0, null, params) as params, occurTime, \
+           params['currentUrl'] as url, params['adTrace'] as adTrace, \
+           if(itemType = 'CARD', itemId, null) as activityCode, itemId, itemType, scene, appKey, costTime, source \
+    from lofter.ods_mda_app_partition_di \
+        lateral view explode(split(nvl(nvl(params['goodId'], if(itemType = 'PRODUCT', itemId, null)), '0'), ',')) ps as productId \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType = 'benefit_market' and eventId rlike 'w\\\\d*-\\\\d+' \
+  union all \
+    select eventId, attributes['clienthubbledeviceid'] as deviceUdid, userId, deviceOs, \
+       parse_url(currentUrl, "QUERY", "productId") as productId, \
+       if(size(attributes) = 0, null, attributes) as params, \
+       occurTime, currentUrl as url, attributes['adtrace'] as adTrace, \
+       parse_url(currentUrl, "QUERY", "activityCode") as activityCode, \
+       attributes['itemid'] as itemId, attributes['itemtype'] as itemType, attributes['scene'] as scene, appKey, costTime, attributes['source'] as source \
+    from lofter.ods_mda_wap_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId rlike 'w\\\\d*-\\\\d+' \
+  union all \
+    select eventId, deviceUdid, if(userId = '' or userId is null, null, cast(userId as bigint)) as userId, deviceOs, if(attributes['itemtype'] = 'PRODUCT', attributes['itemid'], null) as productId, \
+           if(size(attributes) = 0, null, attributes) as params, \
+           occurTime, currentUrl as url, attributes['adtrace'] as adTrace, \
+           parse_url(currentUrl, "QUERY", "activityCode") as activityCode, \
+           attributes['itemid'] as itemId, attributes['itemtype'] as itemType, attributes['scene'] as scene, appKey, costTime, attributes['source'] as source \
+    from lofter.ods_mda_ruyuan_miniprogram_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId rlike 'WE\\\\d*-\\\\d+' \
+) t \
+distribute by 1

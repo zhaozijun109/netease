@@ -1,0 +1,308 @@
+type=sparksql
+executor-memory=14g
+conf.spark.executor.memoryOverhead=4g
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+conf.spark.sql.shuffle.partitions=800
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.executor.cores=4
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=drop table if exists lofter_tmp.postSource;
+hive.query.06=\
+create table lofter_tmp.postSource stored as parquet as \
+select id, blogId, publishDate, recomStatus as is_rec, tags, ips \
+from lofter.dim_post \
+where publishDate <= '${azkaban.flow.1.days.ago}' and is_book_store = 0 and \
+isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频");
+hive.query.07=drop table if exists lofter_tmp.postTop10IpsSource;
+hive.query.08=\
+create table lofter_tmp.postTop10IpsSource stored as parquet as \
+select blogId, ip, rank \
+from ( \
+    select blogId, ip, row_number() over (partition by blogId order by postCount desc) rank \
+    from ( \
+      select blogId, ip, count(distinct id) as postCount \
+      from lofter_tmp.postSource lateral view explode(ips) t as ip \
+      where length(ip) > 0 \
+      group by blogId, ip \
+    ) t \
+) tt \
+where rank <= 10;
+hive.query.09=drop table if exists lofter_tmp.postTop10TagsSource;
+hive.query.10=\
+create table lofter_tmp.postTop10TagsSource stored as parquet as \
+select blogId, tag, rank \
+from ( \
+    select blogId, tag, row_number() over (partition by blogId order by postCount desc) rank \
+    from ( \
+      select blogId, tag, count(distinct id) as postCount \
+      from lofter_tmp.postSource lateral view explode(tags) t as tag \
+      where length(tag) > 0 \
+      group by blogId, tag \
+    ) t \
+) tt \
+where rank <= 10;
+hive.query.11=\
+insert overwrite table lofter.dws_par_creator_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+       a.userId, a.level, concat('https://',b.blogName,'.lofter.com') as blog_url, b.blogNickName as blog_nickname, \
+       if(element_at(post_top_categories,1) like 'CP-%' or element_at(post_top_categories,2) like 'CP-%' or element_at(post_top_categories,3) like 'CP-%', 1, 0) as is_cp, \
+       a.is_imported, a.import_platform_type, if(z.blogId is null, 0, 1) as is_in_contract, \
+       c.post_count_std, c.post_count_180d, c.post_count_30d, c.post_first_date, c.post_last_date, \
+       post_top_categories,post_top_domains,post_top_ips,post_top_tags, \
+       fans_std, \
+       active_days_30d, active_last_date, \
+       gift_open_time, fans_vip_open_time, \
+       post_main_content_type, gift_income_std, \
+       post_count_365d, rec_post_count_30d, rec_post_count_365d, \
+       post_count_7d, post_count_90d, rec_post_count_7d, rec_post_count_90d, \
+       fans_receive_hot_cnt_7d,fans_receive_hot_cnt_30d,fans_receive_hot_cnt_90d, \
+       fans_hd_uv_7d,fans_hd_uv_30d,fans_hd_uv_90d, \
+       post_receive_hot_cnt_7d,post_receive_hot_cnt_30d,post_receive_hot_cnt_90d, \
+       post_hot_7d,post_hot_30d,post_hot_90d, \
+       fans_real_browse_uv_7d,fans_real_browse_uv_30d,fans_real_browse_uv_90d, \
+       discovery_click_pv_7d,discovery_click_pv_30d,discovery_click_pv_90d, \
+       related_article_click_pv_7d,related_article_click_pv_30d,related_article_click_pv_90d, \
+       tag_discovery_click_pv_7d,tag_discovery_click_pv_30d,tag_discovery_click_pv_90d, \
+       tag_new_click_pv_7d,tag_new_click_pv_30d,tag_new_click_pv_90d, \
+       tag_hot_click_pv_7d,tag_hot_click_pv_30d,tag_hot_click_pv_90d, \
+       collection_click_pv_7d,collection_click_pv_30d,collection_click_pv_90d, \
+       attention_click_pv_7d,attention_click_pv_30d,attention_click_pv_90d, \
+       collection_subscribe_uv_7d,collection_subscribe_uv_30d,collection_subscribe_uv_90d, \
+       collection_real_browse_uv_7d,collection_real_browse_uv_30d,collection_real_browse_uv_90d, \
+       collection_real_hd_uv_7d,collection_real_hd_uv_30d,collection_real_hd_uv_90d, \
+       fans_cnt_7d,fans_cnt_30d,fans_cnt_90d, \
+       infringe_post_cnt_7d,infringe_post_cnt_30d,infringe_post_cnt_90d, \
+       receive_hot_std, \
+       receive_comment_cnt,receive_comment_cnt_7d,receive_comment_cnt_15d,receive_comment_cnt_30d, \
+       collection_subscribe_uv, \
+       fans_cnt,fans_cnt_365d, \
+       hd_uv_7d,hd_uv_30d,hd_uv_90d, \
+       click_pv_7d,click_pv_30d,click_pv_90d, \
+       post_count_1d, \
+       post_top10_ips, post_top10_tags, \
+       post_expose_uv_7d, post_expose_uv_30d, post_expose_uv_90d, \
+       post_click_uv_7d, post_click_uv_30d, post_click_uv_90d, \
+       post_real_browse_uv_7d, post_real_browse_uv_30d, post_real_browse_uv_90d, \
+       post_support_induced_pv_7d, post_support_induced_pv_30d, post_support_induced_pv_90d \
+from ( \
+    select * from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join lofter.dim_blog b on a.userId = b.id \
+left join ( \
+    select x.blogId, \
+          count(distinct x.id) as post_count_std, \
+          count(distinct if(x.publishDate = '${azkaban.flow.1.days.ago}', x.id, null)) post_count_1d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 7, x.id, null)) post_count_7d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 30, x.id, null)) post_count_30d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 90, x.id, null)) post_count_90d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 180, x.id, null)) post_count_180d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 365, x.id, null)) post_count_365d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 7 and is_rec > 0, x.id, null)) rec_post_count_7d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 30 and is_rec > 0, x.id, null)) rec_post_count_30d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 90 and is_rec > 0, x.id, null)) rec_post_count_90d, \
+          count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 365 and is_rec > 0, x.id, null)) rec_post_count_365d, \
+          min(x.publishDate) as post_first_date, \
+          max(x.publishDate) as post_last_date \
+    from lofter_tmp.postSource x \
+    left join ( \
+        select postId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) y on x.id = y.postId \
+    left join (select postId from lofter.ods_risk_limit where type = 0 and status = 0) z on x.id = z.postId \
+    where y.postId is null and z.postId is null \
+    group by x.blogId \
+) c on a.userId = c.blogId \
+left join ( \
+    select userid, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, dt, null)) as active_days_30d, \
+           max(dt) as active_last_date \
+    from ( \
+        select userid, dt \
+        from lofter.dws_par_user_active_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 365) \
+    ) t \
+    group by userid \
+) h on a.userId = h.userid \
+left join ( \
+    select blogId, \
+           transform(sort_array(collect_list(struct(rank, category)), true), x -> x.category) as post_top_categories \
+    from ( \
+        select blogId, category, \
+               row_number() over (partition by blogId order by posts/totalPosts desc ) rank \
+        from( \
+          select blogId, category, posts, sum(posts) over(partition by blogId) as totalPosts \
+          from ( \
+              select blogId, concat_ws('-', category, category2, category3) as category, count(distinct blogId) posts \
+              from lofter.dim_post_category_set_dd \
+              where dt = '${azkaban.flow.1.days.ago}' \
+              group by blogId, concat_ws('-', category, category2, category3) \
+          ) t1 \
+        ) t2 \
+    ) t3 \
+    where rank <= 3 \
+    group by blogId \
+) k on a.userId = k.blogId \
+left join( \
+    select blogId, \
+           transform(sort_array(collect_list(struct(rank, domain)), true), x -> x.domain) as post_top_domains \
+    from ( \
+      select blogId, domain, row_number() over (partition by blogId order by posts/totalPosts desc) rank \
+      from ( \
+          select blogId, domain, posts, sum(posts) over(partition by blogId) as totalPosts \
+          from ( \
+              select blogId, domain, count(distinct blogId) as posts \
+              from lofter.dim_post_category_set_dd \
+              where dt = '${azkaban.flow.1.days.ago}' \
+              group by blogId, domain \
+          ) t1 \
+      ) t2 \
+    ) t3 \
+    where rank <= 3 \
+    group by blogId \
+) l on a.userId = l.blogId \
+left join ( \
+    select blogId, \
+           transform(sort_array(collect_list(struct(rank, ip)), true), x -> x.ip) as post_top_ips \
+    from lofter_tmp.postTop10IpsSource \
+    where rank <= 3 \
+    group by blogId \
+) m on a.userId = m.blogId \
+left join ( \
+    select blogId, \
+         transform(sort_array(collect_list(struct(rank, tag)), true), x -> x.tag) as post_top_tags \
+    from lofter_tmp.postTop10TagsSource \
+    where rank <= 3 \
+    group by blogId \
+) n on a.userId = n.blogId \
+left join ( \
+    select userid as blogId \
+    from lofter_db_dump.ods_db_cmb_business_introduction_nd \
+    where status=0 and level is not null \
+    group by userid \
+) z on a.userId = z.blogId \
+left join ( \
+    select userid, min(agreeTime) as gift_open_time \
+    from ( \
+       select userid,agreeTime \
+       from lofter_db_dump.ods_db_trade_gift_account_nd \
+       where status in (2) \
+    union all \
+       select userid, agreeTime \
+       from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+       where status in (2) \
+    ) t \
+    where from_unixtime(cast(agreeTime / 1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by userid \
+) zz on a.userId = zz.userId \
+left join (select userId, is_new_user, is_first_publish, is_active_creator from lofter.dws_par_creator_di where dt = '${azkaban.flow.1.days.ago}') x on a.userId = x.userId \
+left join ( \
+    select userid, max(agreeTime) as fans_vip_open_time \
+    from lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+    where status = 2 \
+    group by 1 \
+) x1 on a.userId = x1.userId \
+left join ( \
+    select blogId as userId, sum(money) as gift_income_std \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and order_type = 'gift_present' \
+    group by blogId \
+) x2 on a.userId = x2.userId \
+left join ( \
+    select userId, \
+           post_receive_hot_cnt_7d,post_receive_hot_cnt_30d,post_receive_hot_cnt_90d, \
+           post_hot_7d,post_hot_30d,post_hot_90d, \
+           fans_receive_hot_cnt_7d,fans_receive_hot_cnt_30d,fans_receive_hot_cnt_90d, \
+           fans_hd_uv_7d,fans_hd_uv_30d,fans_hd_uv_90d, \
+           receive_hot_std, \
+           receive_comment_cnt,receive_comment_cnt_7d,receive_comment_cnt_15d,receive_comment_cnt_30d, \
+           hd_uv_7d,hd_uv_30d,hd_uv_90d \
+    from lofter.dws_par_creator_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) x3 on a.userId = x3.userId \
+left join ( \
+  select blogId as userId, \
+         bitmap_count(bitmap_union(subscribe_bitmap_7d)) as collection_subscribe_uv_7d, \
+         bitmap_count(bitmap_union(subscribe_bitmap_30d)) as collection_subscribe_uv_30d, \
+         bitmap_count(bitmap_union(subscribe_bitmap_90d)) as collection_subscribe_uv_90d, \
+         bitmap_count(bitmap_union(subscribe_real_browse_bitmap_7d)) as collection_real_browse_uv_7d, \
+         bitmap_count(bitmap_union(subscribe_real_browse_bitmap_30d)) as collection_real_browse_uv_30d, \
+         bitmap_count(bitmap_union(subscribe_real_browse_bitmap_90d)) as collection_real_browse_uv_90d, \
+         bitmap_count(bitmap_union(subscribe_real_hd_bitmap_7d)) as collection_real_hd_uv_7d, \
+         bitmap_count(bitmap_union(subscribe_real_hd_bitmap_30d)) as collection_real_hd_uv_30d, \
+         bitmap_count(bitmap_union(subscribe_real_hd_bitmap_90d)) as collection_real_hd_uv_90d, \
+         bitmap_count(bitmap_union(subscribe_bitmap_std)) as collection_subscribe_uv \
+  from lofter.dws_collection_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by blogId \
+) x4 \
+on a.userId = x4.userId \
+left join ( \
+  select userId, \
+         fans_7d as fans_cnt_7d, \
+         fans_30d as fans_cnt_30d, \
+         fans_90d as fans_cnt_90d, \
+         fans_total as fans_cnt, \
+         fans_365d as fans_cnt_365d \
+  from lofter.dws_par_user_fans_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) x5 \
+on a.userId = x5.userId \
+left join ( \
+    select blogId as userId, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd'))<7 and status = 1, 1, 0)) as infringe_post_cnt_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd'))<30 and status = 1, 1, 0)) as infringe_post_cnt_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd'))<90 and status = 1, 1, 0)) as infringe_post_cnt_90d \
+    from lofter_db_dump.ods_db_infringe_post_nd \
+    group by blogId \
+) x6 \
+on a.userId = x6.userId \
+left join ( \
+    select post_userid as userId, \
+           bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7 and is_fans = 1 and is_real = 1, userId, null))) as fans_real_browse_uv_7d, \
+           bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30 and is_fans = 1 and is_real = 1, userId, null))) as fans_real_browse_uv_30d, \
+           bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90 and is_fans = 1 and is_real = 1, userId, null))) as fans_real_browse_uv_90d \
+    from lofter.dwd_post_browse_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',90) \
+    group by post_userid \
+) x7 \
+on a.userId = x7.userId \
+left join ( \
+    select userId, \
+           discovery_click_pv_7d,discovery_click_pv_30d,discovery_click_pv_90d, \
+           related_article_click_pv_7d,related_article_click_pv_30d,related_article_click_pv_90d, \
+           tag_discovery_click_pv_7d,tag_discovery_click_pv_30d,tag_discovery_click_pv_90d, \
+           tag_new_click_pv_7d,tag_new_click_pv_30d,tag_new_click_pv_90d, \
+           tag_hot_click_pv_7d,tag_hot_click_pv_30d,tag_hot_click_pv_90d, \
+           collection_click_pv_7d,collection_click_pv_30d,collection_click_pv_90d, \
+           attention_click_pv_7d,attention_click_pv_30d,attention_click_pv_90d, \
+           click_pv_7d,click_pv_30d,click_pv_90d, \
+           post_expose_uv_7d, post_expose_uv_30d, post_expose_uv_90d, \
+           post_click_uv_7d, post_click_uv_30d, post_click_uv_90d, \
+           post_real_browse_uv_7d, post_real_browse_uv_30d, post_real_browse_uv_90d, \
+           post_support_induced_pv_7d, post_support_induced_pv_30d, post_support_induced_pv_90d \
+    from lofter.dws_par_creator_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) x8 \
+on a.userId = x8.userId \
+left join ( \
+    select blogId, \
+           transform(sort_array(collect_list(struct(rank, ip)), true), x -> x.ip) as post_top10_ips \
+    from lofter_tmp.postTop10IpsSource \
+    where rank <= 10 \
+    group by blogId \
+) x9 on a.userId = x9.blogId \
+left join ( \
+    select blogId, \
+         transform(sort_array(collect_list(struct(rank, tag)), true), x -> x.tag) as post_top10_tags \
+    from lofter_tmp.postTop10TagsSource \
+    where rank <= 10 \
+    group by blogId \
+) x10 on a.userId = x10.blogId \
+distribute by userId % 10;
+hive.query.12=drop table if exists lofter_tmp.postSource;
+hive.query.13=drop table if exists lofter_tmp.postTop10IpsSource;
+hive.query.14=drop table if exists lofter_tmp.postTop10TagsSource;
+dependencies=dws_par_creator_level_scoring_dd,dws_par_creator_di,dws_par_user_active_di,dws_par_creator_interaction_dd,dws_collection_dd,dws_par_user_fans_dd,dws_par_creator_traffic_dd

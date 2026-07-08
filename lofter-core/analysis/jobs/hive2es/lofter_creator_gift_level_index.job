@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select userId as blogId, grade, if(creatorType=1, '画手', '文手') as flg from lofter_db_dump.ods_db_trade_pay_grade_nd "
+params= --partition ${azkaban.flow.1.days.ago} --id blogId --dest lofter_creator_gift_level_index --full --atom

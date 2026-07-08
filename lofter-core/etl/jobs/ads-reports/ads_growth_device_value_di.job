@@ -1,0 +1,64 @@
+type=sparksql
+hive.query.01=with new_device_active_days_30d \
+as \
+( \
+select a.dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,a.deviceudid,count(b.dt) activedays_30d \
+from \
+( \
+    select dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,deviceudid \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',119) and '${azkaban.flow.1.days.ago}' \
+    and device_type='new' \
+    group by dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,deviceudid \
+) a \
+left join \
+( \
+    select dt,deviceudid \
+    from lofter.device_active \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+    group by dt,deviceudid     \
+) b \
+on a.deviceudid=b.deviceudid  \
+group by a.dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,a.deviceudid \
+) \
+insert overwrite table lofter_dm.ads_growth_device_value_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select dt as base_date,is_paid_subscribe,origin_type,origin_channel,origin_actpwd, \
+count(deviceudid) device_count, \
+count(case when activedays_30d>=5 then deviceudid end) middle_high_active_cnt, \
+count(case when activedays_30d>=10 then deviceudid end) high_active_cnt, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=29 and trade_money_30d>0 then deviceudid end) trade_cnt_30d, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=29 and activedays_30d>=5 or trade_money_30d>0 then deviceudid end) middle_high_value_cnt_30d, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=29 and activedays_30d>=10 or trade_money_30d>0 then deviceudid end) high_value_cnt_30d, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=119 and activedays_30d>=5 or trade_money_120d>0 then deviceudid end) middle_high_value_cnt_120d, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=119 and activedays_30d>=10 or trade_money_120d>0 then deviceudid end) high_value_cnt_120d, \
+count(case when datediff('${azkaban.flow.1.days.ago}',dt)=119 and trade_money_120d>0 then deviceudid end) trade_cnt_120d \
+from \
+( \
+select a.dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,a.deviceudid,activedays_30d, \
+sum(case when datediff('${azkaban.flow.1.days.ago}',a.dt)=119 and datediff(trade_date,a.dt) between 0 and 119 then trade_money end) trade_money_120d, \
+sum(case when datediff('${azkaban.flow.1.days.ago}',a.dt)=29 and datediff(trade_date,a.dt) between 0 and 29 then trade_money end) trade_money_30d \
+from new_device_active_days_30d a \
+left join  \
+(  \
+    select dt, deviceUdid, userIds[0] as userId  \
+    from lofter.device_active  \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',119) and '${azkaban.flow.1.days.ago}' \
+) b  \
+on a.deviceUdid = b.deviceUdid and a.dt = b.dt  \
+left join  \
+(  \
+    select userId, trade_date, \
+           sum(trade_money) as trade_money \
+    from  \
+    (  \
+       select userId, pay_date as trade_date, money as trade_money \
+       from lofter.dwd_user_order_dd \
+       where dt = '${azkaban.flow.1.days.ago}' and pay_date  between date_sub('${azkaban.flow.1.days.ago}',119) and '${azkaban.flow.1.days.ago}' \
+    ) t  \
+    group by userId, trade_date  \
+) c  \
+on b.userId = c.userId \
+where datediff('${azkaban.flow.1.days.ago}',a.dt) in (29,119) \
+group by a.dt,is_paid_subscribe,origin_type,origin_channel,origin_actpwd,a.deviceudid,activedays_30d \
+) \
+group by base_date,is_paid_subscribe,origin_type,origin_channel,origin_actpwd

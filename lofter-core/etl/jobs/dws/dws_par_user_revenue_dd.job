@@ -1,0 +1,100 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=40
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dws_par_user_revenue_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select u.id as userId, \
+       nvl(receive_gift_amount_std, 0), nvl(receive_gift_amount_1d, 0), nvl(receive_gift_amount_7d, 0), nvl(receive_gift_amount_15d,0), nvl(receive_gift_amount_30d,0), nvl(receive_gift_amount_90d,0), nvl(receive_gift_amount_180d,0), \
+       nvl(receive_reward_amount_std,0), nvl(receive_reward_amount_1d,0), nvl(receive_reward_amount_7d,0), nvl(receive_reward_amount_15d,0), nvl(receive_reward_amount_30d,0), nvl(receive_reward_amount_90d,0), nvl(receive_reward_amount_180d,0), \
+       nvl(send_gift_amount_std,0), nvl(send_gift_amount_1d,0), nvl(send_gift_amount_7d,0), nvl(send_gift_amount_15d,0), nvl(send_gift_amount_30d,0), nvl(send_gift_amount_90d,0), nvl(send_gift_amount_180d,0), \
+       nvl(send_reward_amount_std,0), nvl(send_reward_amount_1d,0), nvl(send_reward_amount_7d,0), nvl(send_reward_amount_15d,0), nvl(send_reward_amount_30d,0), nvl(send_reward_amount_90d,0), nvl(send_reward_amount_180d,0), \
+       nvl(receive_gift_amount_deduct_std,0), nvl(receive_gift_amount_deduct_1d,0), nvl(receive_gift_amount_deduct_7d,0), nvl(receive_gift_amount_deduct_30d,0),    \
+       nvl(receive_reward_amount_deduct_std,0), nvl(receive_reward_amount_deduct_1d,0), nvl(receive_reward_amount_deduct_7d,0), nvl(receive_reward_amount_deduct_30d,0),    \
+       nvl(send_gift_amount_deduct_std,0), nvl(send_gift_amount_deduct_1d,0), nvl(send_gift_amount_deduct_7d,0), nvl(send_gift_amount_deduct_30d,0),    \
+       nvl(send_reward_amount_deduct_std,0), nvl(send_reward_amount_deduct_1d,0), nvl(send_reward_amount_deduct_7d,0), nvl(send_reward_amount_deduct_30d,0)   \
+from lofter.dim_blog u \
+     left join ( \
+        select blogId as userId, \
+               sum(gift_amount) as receive_gift_amount_std, \
+               sum(if('${azkaban.flow.1.days.ago}' = dt, gift_amount, 0)) as receive_gift_amount_1d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, gift_amount, 0)) as receive_gift_amount_7d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, gift_amount, 0)) as receive_gift_amount_15d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, gift_amount, 0)) as receive_gift_amount_30d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, gift_amount, 0)) as receive_gift_amount_90d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, gift_amount, 0)) as receive_gift_amount_180d, \
+               sum(reward_amount) as receive_reward_amount_std, \
+               sum(if('${azkaban.flow.1.days.ago}' = dt, reward_amount, 0)) as receive_reward_amount_1d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, reward_amount, 0)) as receive_reward_amount_7d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, reward_amount, 0)) as receive_reward_amount_15d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, reward_amount, 0)) as receive_reward_amount_30d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, reward_amount, 0)) as receive_reward_amount_90d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, reward_amount, 0)) as receive_reward_amount_180d, \
+               cast(sum(gift_amount_deduct) as decimal(10,2)) as receive_gift_amount_deduct_std, \
+               cast(sum(if('${azkaban.flow.1.days.ago}' = dt, gift_amount_deduct, 0)) as decimal(10,2)) as receive_gift_amount_deduct_1d, \
+               cast(sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, gift_amount_deduct, 0)) as decimal(10,2)) as receive_gift_amount_deduct_7d, \
+               cast(sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, gift_amount_deduct, 0)) as decimal(10,2)) as receive_gift_amount_deduct_30d, \
+               sum(reward_amount_deduct) as receive_reward_amount_deduct_std, \
+               sum(if('${azkaban.flow.1.days.ago}' = dt, reward_amount_deduct, 0)) as receive_reward_amount_deduct_1d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, reward_amount_deduct, 0)) as receive_reward_amount_deduct_7d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, reward_amount_deduct, 0)) as receive_reward_amount_deduct_30d \
+        from ( \
+          select from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, blogid, coin * 0.1 as gift_amount, 0 as reward_amount,   \
+                (case when from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') < '2023-01-01' then 0.95 \
+                      when from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') < '2024-01-01' then 0.8 \
+                      else 0.75 end) * 0.1 * coin as gift_amount_deduct, \
+                0 as reward_amount_deduct  \
+          from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+          where coin > 0 and from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+        union all \
+          select from_unixtime(createTime, 'yyyy-MM-dd') as dt, authorblogid as blogid, 0 as gift_amount, rewardamount as reward_amount, \
+                0 as gift_amount_deduct, rewardincomeamount as reward_amount_deduct     \
+          from lofter_db_dump.ods_db_trade_reward_order_nd \
+          where status=10 and from_unixtime(createTime , 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+        ) t \
+        group by blogId \
+    ) a on u.id = a.userId \
+    left join ( \
+        select userId, \
+              sum(gift_amount) as send_gift_amount_std, \
+              sum(if('${azkaban.flow.1.days.ago}' = dt, gift_amount, 0)) as send_gift_amount_1d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, gift_amount, 0)) as send_gift_amount_7d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, gift_amount, 0)) as send_gift_amount_15d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, gift_amount, 0)) as send_gift_amount_30d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, gift_amount, 0)) as send_gift_amount_90d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, gift_amount, 0)) as send_gift_amount_180d, \
+              sum(reward_amount) as send_reward_amount_std, \
+              sum(if('${azkaban.flow.1.days.ago}' = dt, reward_amount, 0)) as send_reward_amount_1d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, reward_amount, 0)) as send_reward_amount_7d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, reward_amount, 0)) as send_reward_amount_15d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, reward_amount, 0)) as send_reward_amount_30d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, reward_amount, 0)) as send_reward_amount_90d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, reward_amount, 0)) as send_reward_amount_180d, \
+              cast(sum(gift_amount_deduct) as decimal(10,2)) as send_gift_amount_deduct_std, \
+              cast(sum(if('${azkaban.flow.1.days.ago}' = dt, gift_amount_deduct, 0)) as decimal(10,2)) as send_gift_amount_deduct_1d, \
+              cast(sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, gift_amount_deduct, 0)) as decimal(10,2)) as send_gift_amount_deduct_7d, \
+              cast(sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, gift_amount_deduct, 0)) as decimal(10,2)) as send_gift_amount_deduct_30d, \
+              sum(reward_amount_deduct) as send_reward_amount_deduct_std, \
+              sum(if('${azkaban.flow.1.days.ago}' = dt, reward_amount_deduct, 0)) as send_reward_amount_deduct_1d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, reward_amount_deduct, 0)) as send_reward_amount_deduct_7d, \
+              sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, reward_amount_deduct, 0)) as send_reward_amount_deduct_30d \
+        from ( \
+          select from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, sender as userId, coin * 0.1 as gift_amount, 0 as reward_amount, \
+                (case when from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') < '2023-01-01' then 0.95 \
+                                      when from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') < '2024-01-01' then 0.8 \
+                                      else 0.75 end) * 0.1 * coin as gift_amount_deduct, \
+                0 as reward_amount_deduct  \
+          from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+          where coin > 0 and from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+        union all \
+          select from_unixtime(createTime, 'yyyy-MM-dd') as dt, userId, 0 as gift_amount, rewardamount as reward_amount, \
+                0 as gift_amount_deduct, rewardincomeamount as reward_amount_deduct     \
+          from lofter_db_dump.ods_db_trade_reward_order_nd \
+          where status=10 and from_unixtime(createTime, 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+        ) t \
+        group by userId \
+    ) b on u.id = b.userId \
+    where (a.receive_gift_amount_std > 0 or a.receive_reward_amount_std > 0 or b.send_gift_amount_std > 0 or b.send_reward_amount_std > 0) \
+    distribute by 1

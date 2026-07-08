@@ -1,0 +1,80 @@
+type=sparksql
+hive.query.01=\
+with log_exp_layer_source as( \
+    select a.*,b.appId,c.hashtype \
+    from ( \
+        select ablogversion, appversion, deviceid, expid, groupid, os, sceneid, time, traceid, userid \
+        from vc.ods_log_ab_platform_sdk_log_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select ablogversion, appversion, deviceid, expid, groupid, os, sceneid, time, traceid, userid \
+        from lofter.ods_log_ab_platform_sdk_log_di \
+        where dt = '${azkaban.flow.1.days.ago}' and expId in (55, 59) \
+    ) a \
+    join vc.ods_db_ab_exp_nd b on a.expid = b.id \
+    left join vc.ods_db_ab_flow_layer_nd c \
+    on b.layerid = c.id \
+) \
+insert overwrite table vc.dwd_ab_platform_exp_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select user_id, appId, appversion, os, deviceid, traceid, sceneid, expid, groupid, modify_time, exp_ver, exp_type, ablogversion, time, backend_deviceid \
+from( \
+    select COALESCE(a.user_id,d.user_id,abs(cast(hash(c.deviceUdid) as bigint))) as user_id, appId, \
+           appversion, os, c.deviceUdid as deviceid, traceid, sceneid, expid, groupid, modify_time,exp_ver, exp_type, ablogversion, time, a.deviceid as backend_deviceid \
+    from ( \
+        select  if(userid = 0, null, cast(userid as bigint)) as user_id , \
+               appversion, \
+               os, \
+               deviceid, \
+               traceid, \
+               sceneid, \
+               expid, \
+               groupid, \
+               time as modify_time, \
+               null as exp_ver, \
+               null as exp_type, \
+               ablogversion, \
+               time, \
+               appId \
+        from log_exp_layer_source \
+        where hashtype = 1 \
+    ) a \
+    left join ( \
+        select device_id, get_json_object(ext, '$.dadeviceId') as deviceUdid \
+        from vc.ods_db_vc_device_report_record_nd \
+    ) c on a.deviceid = c.device_id \
+    left join ( \
+      select deviceUdid, user_id \
+      from ( \
+        select deviceUdid, user_id, \
+            row_number() over (partition by deviceUdid order by occurTime) as rk, \
+            row_number() over (partition by user_id order by occurTime) as rk2 \
+        from vc.ods_mda_app_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(deviceUdid) > 0 and \
+        user_id > 0 \
+      ) t \
+      where rk = 1 and rk2 = 1 \
+    ) d on c.deviceUdid = d.deviceUdid \
+) \
+union all \
+select user_id, appId, appversion, os, c.deviceUdid as deviceid, traceid, sceneid, expid, groupid, modify_time, exp_ver, exp_type, ablogversion, time, a.deviceid  as backend_deviceid \
+from ( \
+    select cast(userid as bigint) as user_id, \
+        appversion, \
+        os, \
+        deviceid, \
+        traceid, \
+        sceneid, \
+        expid, \
+        groupid, \
+        time as modify_time, \
+        null as exp_ver, \
+        null as exp_type, \
+        ablogversion, \
+        time, \
+        appId \
+    from log_exp_layer_source where hashtype = 0 \
+)a \
+left join ( \
+    select device_id, get_json_object(ext, '$.dadeviceId') as deviceUdid \
+    from vc.ods_db_vc_device_report_record_nd \
+) c on a.deviceid = c.device_id

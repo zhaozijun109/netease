@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.04=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.05=insert overwrite table lofter_dm.ads_creator_private_zone_conversion_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.ip, x.blogId, \
+    z.ip_post_count, y.unlock_pv, \
+    x.private_browse_uv, x.public_browse_uv, x.private_browse_pv, \
+    y.private_unlock_uv, y.public_unlock_uv, y.private_unlock_money, \
+    case when z.ip_post_count >= 5000 then '5k' \
+        when z.ip_post_count >= 1000 then '5k-1k' \
+        when z.ip_post_count >= 100 then '1k-100' \
+        end as ip_post_seg, \
+    case when y.unlock_pv >= 1000 then '1k' \
+         when y.unlock_pv >= 500 then '1k-500' \
+         else '500' end unlock_seg, \
+    x.private_browse_uv / x.public_browse_uv as private_public_browse_ratio, \
+    y.private_unlock_uv / y.public_unlock_uv as private_public_unlock_ratio, \
+    x.private_browse_pv / x.private_browse_uv as avg_private_browse_post_count, \
+    y.private_unlock_money / y.private_unlock_uv as avg_private_unlock_arpu, \
+    y.public_unlock_money \
+from ( \
+    select post_userid as blogId, ip, \
+        bitmap_count(bitmap_union(non_public_browse_device_bitmap)) as private_browse_uv, \
+        bitmap_count(bitmap_union(public_browse_device_bitmap)) as public_browse_uv, \
+        sum(bitmap_count(non_public_browse_device_bitmap)) as private_browse_pv \
+    from lofter.dws_post_traffic_di \
+        lateral view explode(resolve_tag_ip(post_tags)) t as ip \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1, 2 \
+    having private_browse_uv >= 100 \
+) x \
+join ( \
+    select blogId, ip, \
+        nvl(sum(non_public_unlock_pv),0) + nvl(sum(public_unlock_pv), 0) as unlock_pv, \
+        bitmap_count(bitmap_union(non_public_unlock_user_bitmap)) as private_unlock_uv, \
+        bitmap_count(bitmap_union(public_unlock_user_bitmap)) as public_unlock_uv, \
+        sum(non_public_unlock_money) as private_unlock_money, \
+        sum(public_unlock_money) as public_unlock_money \
+    from ( \
+        select a.*, b.ips \
+        from ( \
+            select * \
+            from lofter.dws_post_pay_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        ) a join lofter.dim_post b on a.postId = b.id \
+    ) t \
+    lateral view explode(ips) x as ip \
+    group by 1, 2 \
+    having private_unlock_uv >= 10 \
+) y on x.blogId = y.blogId and x.ip = y.ip \
+join ( \
+    select ip, creator_cnt_30d as ip_post_count \
+    from lofter.dws_ip_supply_di \
+    where dt='${azkaban.flow.1.days.ago}' and creator_cnt_30d >= 100 \
+) z on  x.ip = z.ip \
+distribute by 1

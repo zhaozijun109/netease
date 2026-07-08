@@ -1,0 +1,123 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=100
+conf.spark.sql.shuffle.partitions=1000
+conf.spark.executor.cores=4
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+insert overwrite table lofter.dws_par_creator_interaction_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       receive_hot_std, receive_like_cnt, receive_reproduce_cnt, receive_recommend_cnt, receive_collect_cnt, \
+       receive_comment_cnt, hd_uv_std, hd_uv_1d, hd_uv_7d, hd_uv_30d, hd_uv_90d, \
+       receive_like_cnt_7d,receive_like_cnt_30d,receive_reproduce_cnt_7d,receive_reproduce_cnt_30d, \
+       receive_recommend_cnt_7d,receive_recommend_cnt_30d,receive_collect_cnt_7d,receive_collect_cnt_30d, \
+       receive_comment_cnt_7d,receive_comment_cnt_30d, \
+       receive_like_uv_30d, receive_recommend_uv_30d, receive_reproduce_uv_30d, receive_collect_uv_30d, \
+       last_like_userid_180d, receive_comment_cnt_15d, receive_like_cnt_15d, \
+       receive_reproduce_cnt_15d, receive_recommend_cnt_15d, receive_collect_cnt_15d, \
+       fans_receive_hot_cnt_7d, fans_receive_hot_cnt_30d, fans_receive_hot_cnt_90d, \
+       fans_hd_uv_7d, fans_hd_uv_30d, fans_hd_uv_90d, \
+       post_receive_hot_cnt_7d,post_receive_hot_cnt_30d,post_receive_hot_cnt_90d, \
+       post_hot_7d, post_hot_30d, post_hot_90d \
+from ( \
+    select u.id as userId, \
+        receive_hot_std, receive_like_cnt, receive_reproduce_cnt, receive_recommend_cnt, receive_collect_cnt, \
+        receive_comment_cnt, hd_uv_std, hd_uv_1d, hd_uv_7d, hd_uv_30d, hd_uv_90d, \
+        receive_like_cnt_7d,receive_like_cnt_30d,receive_reproduce_cnt_7d,receive_reproduce_cnt_30d, \
+        receive_recommend_cnt_7d,receive_recommend_cnt_30d,receive_collect_cnt_7d,receive_collect_cnt_30d, \
+        receive_comment_cnt_7d,receive_comment_cnt_30d, \
+        receive_like_uv_30d, receive_recommend_uv_30d, receive_reproduce_uv_30d, receive_collect_uv_30d, \
+        last_like_userid_180d, receive_comment_cnt_15d, receive_like_cnt_15d, \
+        receive_reproduce_cnt_15d, receive_recommend_cnt_15d, receive_collect_cnt_15d, \
+        fans_receive_hot_cnt_7d, fans_receive_hot_cnt_30d, fans_receive_hot_cnt_90d, \
+        fans_hd_uv_7d, fans_hd_uv_30d, fans_hd_uv_90d, \
+        post_receive_hot_cnt_7d,post_receive_hot_cnt_30d,post_receive_hot_cnt_90d \
+    from ( \
+        select userId, \
+                bitmap_count(to_bitmap(hdUserId)) as hd_uv_std, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 1, hdUserId, null))) as hd_uv_1d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, hdUserId, null))) as hd_uv_7d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, hdUserId, null))) as hd_uv_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 90, hdUserId, null))) as hd_uv_90d, \
+                sum(hot) as receive_hot_std, sum(like_cnt) as receive_like_cnt, sum(reproduce_cnt) as receive_reproduce_cnt, \
+                sum(recommend_cnt) as receive_recommend_cnt, sum(collect_cnt) as receive_collect_cnt, \
+                sum(comment_cnt) as receive_comment_cnt, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, comment_cnt, 0)) as receive_comment_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, comment_cnt, 0)) as receive_comment_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, like_cnt, 0)) as receive_like_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, like_cnt, 0)) as receive_like_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, reproduce_cnt, 0)) as receive_reproduce_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, reproduce_cnt, 0)) as receive_reproduce_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, recommend_cnt, 0)) as receive_recommend_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, recommend_cnt, 0)) as receive_recommend_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, collect_cnt, 0)) as receive_collect_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, collect_cnt, 0)) as receive_collect_cnt_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and like_cnt > 0, hdUserId, null))) as receive_like_uv_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and recommend_cnt > 0, hdUserId, null))) as receive_recommend_uv_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and reproduce_cnt > 0, hdUserId, null))) as receive_reproduce_uv_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and collect_cnt > 0, hdUserId, null))) as receive_collect_uv_30d, \
+                max_by(hdUserId, if(like_cnt > 0 and datediff('${azkaban.flow.1.days.ago}', op_dt) < 180, opTime, null)) as last_like_userid_180d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 15, comment_cnt, 0)) as receive_comment_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 15, like_cnt, 0)) as receive_like_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 15, reproduce_cnt, 0)) as receive_reproduce_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 15, recommend_cnt, 0)) as receive_recommend_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 15, collect_cnt, 0)) as receive_collect_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7 and is_fans = 1, hot, 0)) as fans_receive_hot_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and is_fans = 1, hot, 0)) as fans_receive_hot_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 90 and is_fans = 1, hot, 0)) as fans_receive_hot_cnt_90d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7 and is_fans = 1, hdUserId, null))) as fans_hd_uv_7d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30 and is_fans = 1, hdUserId, null))) as fans_hd_uv_30d, \
+                bitmap_count(to_bitmap(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 90 and is_fans = 1, hdUserId, null))) as fans_hd_uv_90d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 7, hot, 0)) as post_receive_hot_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 30, hot, 0)) as post_receive_hot_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', op_dt) < 90, hot, 0)) as post_receive_hot_cnt_90d \
+        from ( \
+            select \
+                t1.userId,t1.hdUserId,t1.op_dt,t1.hot,t1.like_cnt,t1.reproduce_cnt,t1.recommend_cnt,t1.collect_cnt,t1.comment_cnt,t1.opTime, \
+                if(t2.userId is not null and t2.blogId is not null, 1, 0) as is_fans \
+            from ( \
+                select blogId as userId, publisherUserId as hdUserId, from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') as op_dt, \
+                        0 as hot, 0 as like_cnt, 0 as reproduce_cnt, 0 as recommend_cnt, 0 as collect_cnt, 1 as comment_cnt, publishTime as opTime, \
+                        postId \
+                from lofter_db_dump.ods_db_post_response_nd \
+                where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                union all \
+                select  userId, \
+                        hdUserId, \
+                        op_dt, \
+                        hot, \
+                        like_cnt, \
+                        reproduce_cnt, \
+                        recommend_cnt, \
+                        collect_cnt, \
+                        comment_cnt, \
+                        opTime, \
+                        postId \
+                from lofter.stg_par_creator_interaction_in_130d_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            join lofter.dim_post_article x on t1.postId = x.id \
+            left join ( \
+                select userId,blogId from lofter_db_dump.ods_db_user_following_nd \
+                where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            ) t2 \
+            on t1.hdUserId = t2.userId and t1.userId = t2.blogId \
+        ) tt \
+        group by userId \
+    ) a \
+    join lofter.dim_user u on a.userId = u.id \
+    where u.isAnonymous = 0 \
+) tmp1 \
+left join ( \
+    select blogId, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7, hot_7d, 0)) as post_hot_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30, hot_30d, 0)) as post_hot_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, hot_90d, 0)) as post_hot_90d \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 \
+    group by blogId \
+) tmp2 \
+on tmp1.userId = tmp2.blogId
+dependencies=dws_post_interaction_dd

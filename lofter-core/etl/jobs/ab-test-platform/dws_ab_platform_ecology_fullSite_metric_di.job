@@ -1,0 +1,335 @@
+type=sparksql
+hive.query.01=\
+with source_data as( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id, count(1) as pv \
+    from lofter.dwd_ab_platform_exp_user_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by user_id, dt, appId, sceneId, exp_id, bucket_id \
+), \
+follow_binlog_snapshot AS ( \
+    SELECT CAST(userid AS BIGINT) AS userId, CAST(blogid AS BIGINT) AS blogid, \
+        CAST(_bin_op AS INT) AS _bin_op, \
+        ROW_NUMBER() OVER(PARTITION BY userid, blogid ORDER BY _bin_op_time DESC) AS rn \
+    FROM lofter.ods_binlog_user_following_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userid IS NOT NULL AND userid > 0 \
+      AND blogid IS NOT NULL AND blogid > 0 \
+), \
+follow_atomic_metric AS ( \
+    SELECT userId, \
+        SUM(CASE WHEN _bin_op = 0 THEN 1 ELSE 0 END) AS follow_all_pv, \
+        MAX(CASE WHEN _bin_op = 0 THEN 1 ELSE 0 END) AS follow_all_uv, \
+        SUM(CASE WHEN rn = 1 AND _bin_op = 0 THEN 1 ELSE 0 END) AS follow_net_pv, \
+        MAX(CASE WHEN rn = 1 AND _bin_op = 0 THEN 1 ELSE 0 END) AS follow_net_uv \
+    FROM follow_binlog_snapshot \
+    GROUP BY userId \
+), \
+like_binlog_snapshot AS ( \
+    SELECT CAST(publisheruserid AS BIGINT) AS userId, CAST(postid AS BIGINT) AS postid, \
+        CAST(_bin_op AS INT) AS _bin_op, \
+        ROW_NUMBER() OVER(PARTITION BY publisheruserid, postid ORDER BY _bin_op_time DESC) AS rn \
+    FROM lofter.ods_binlog_post_hot_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND type = 1 \
+      AND publisheruserid IS NOT NULL AND publisheruserid > 0 \
+      AND postid IS NOT NULL AND postid > 0 \
+), \
+like_atomic_metric AS ( \
+    SELECT userId, \
+        SUM(CASE WHEN _bin_op = 0 THEN 1 ELSE 0 END) AS like_all_pv, \
+        MAX(CASE WHEN _bin_op = 0 THEN 1 ELSE 0 END) AS like_all_uv, \
+        SUM(CASE WHEN rn = 1 AND _bin_op = 0 THEN 1 ELSE 0 END) AS like_net_pv, \
+        MAX(CASE WHEN rn = 1 AND _bin_op = 0 THEN 1 ELSE 0 END) AS like_net_uv \
+    FROM like_binlog_snapshot \
+    GROUP BY userId \
+), \
+metric_source1 as( \
+    select a.*, post_content_type, aggregateId, browse_pv, browse_uv, real_browse_pv, real_browse_uv, real_browse_post_cnt \
+    from source_data a \
+    left join( \
+        select userId, post_content_type, grouping__id as aggregateId, \
+            count(if(action_type = 'page_view' and is_real = 0,1,null)) as browse_pv, \
+            max(if(action_type = 'page_view' and is_real = 0,1,0)) as browse_uv, \
+            count(if(action_type = 'page_duration' and is_real > 0,1,null)) as real_browse_pv, \
+            max(if(action_type = 'page_duration' and is_real > 0,1,0)) as real_browse_uv, \
+            count(distinct(if(action_type = 'page_duration' and is_real > 0, postId, null))) as real_browse_post_cnt \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and post_content_type in ('文字','图片') \
+        group by userId,post_content_type \
+        grouping sets((userId),(userId,post_content_type)) \
+    )b on a.userId = b.userId \
+), \
+metric_source2 as( \
+    select a.*, post_content_type, aggregateId, \
+        nvl(comment_cnt, 0) comment_cnt, \
+        if(comment_cnt > 0, 1, 0) as comment_uv, \
+        nvl(share_cnt, 0) share_cnt, \
+        nvl(hot_pv, 0) hot_pv, \
+        nvl(praise_cnts, 0) praise_cnts, \
+        nvl(recommend_cnts, 0) recommend_cnts, \
+        nvl(underscore_comment_cnts, 0) underscore_comment_cnts \
+    from source_data a \
+    left join( \
+        select userId, post_content_type, aggregateId, \
+            sum(comment_cnt) comment_cnt, \
+            sum(share_cnt) share_cnt, \
+            sum(hot_pv) hot_pv, \
+            sum(praise_cnts) praise_cnts, \
+            sum(recommend_cnts) recommend_cnts, \
+            sum(underscore_comment_cnts) underscore_comment_cnts \
+        from( \
+            select userId, post_content_type, grouping__id as aggregateId, count(1) as comment_cnt, 0 as share_cnt, 0 as hot_pv, \
+                0 as praise_cnts, 0 as recommend_cnts, \
+                count(case when is_underscore  = 1 then commentId end) as underscore_comment_cnts \
+            from lofter.dwd_post_response_di \
+            where dt = '${azkaban.flow.1.days.ago}' and blogId <> userId and post_content_type in ('文字','图片') \
+            group by userId,post_content_type \
+            grouping sets((userId),(userId,post_content_type)) \
+            union all  \
+            select userId, post_content_type, grouping__id as aggregateId, 0 as comment_cnt, count(1) as share_cnt, 0 as hot_pv, \
+                0 as praise_cnts, 0 as recommend_cnts, \
+                0 as underscore_comment_cnts \
+            from lofter.dwd_post_share_di \
+            where dt = '${azkaban.flow.1.days.ago}' and blogId <> userId and post_content_type in ('文字','图片') \
+            group by userId,post_content_type \
+            grouping sets((userId),(userId,post_content_type)) \
+            union all  \
+            select userId, post_content_type, grouping__id as aggregateId, 0 as comment_cnt, 0 as share_cnt, count(1) as hot_pv, \
+                count(case when optype = 'praise' then 1 end) as praise_cnts, \
+                count(case when optype = 'recommend' then 1 end) as recommend_cnts, \
+                0 as underscore_comment_cnts \
+            from lofter.dwd_post_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and blogId <> userId and post_content_type in ('文字','图片') \
+            group by userId,post_content_type \
+            grouping sets((userId),(userId,post_content_type)) \
+        ) \
+        group by userId, post_content_type, aggregateId \
+    ) b on a.userId = b.userId \
+), \
+metric_source3 as( \
+    select a.*, active_days_7d_forward, session_total_time, \
+        nvl(choosed_interest_cnts,0) + nvl(choosed_ip_cnts, 0) as choosed_ip_interest_cnts, \
+        nvl(interaction_pv, 0) as interaction_pv, \
+        nvl(h.page_stay_time, 0) as page_stay_time, \
+        if(i.userId is not null, 1, 0) as follow_uv, \
+        nvl(reply1_comment_cnt, 0) as reply1_comment_cnt, \
+        nvl(reply2_comment_cnt, 0) as reply2_comment_cnt, \
+        nvl(comment_level_1_hot, 0) as comment_level_1_hot, \
+        nvl(comment_level_2_hot, 0) as comment_level_2_hot, \
+        nvl(underscore_comment_hot, 0) as underscore_comment_hot, \
+        nvl(l.follow_all_pv, 0) as follow_all_pv, \
+        nvl(l.follow_all_uv, 0) as follow_all_uv, \
+        nvl(l.follow_net_pv, 0) as follow_net_pv, \
+        nvl(l.follow_net_uv, 0) as follow_net_uv, \
+        nvl(m.like_all_pv, 0) as like_all_pv, \
+        nvl(m.like_all_uv, 0) as like_all_uv, \
+        nvl(m.like_net_pv, 0) as like_net_pv, \
+        nvl(m.like_net_uv, 0) as like_net_uv \
+    from source_data a \
+    left join( \
+        select userId, active_days_7d as active_days_7d_forward \
+        from lofter.dws_par_user_active_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )d on a.userId = d.userId \
+    left join( \
+        select userId, session_total_time \
+        from lofter.dws_par_user_session_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )e on a.userId = e.userId \
+    left join( \
+        SELECT \
+            distinct blogId, \
+                size(split(nvl(get_json_object(interests, '$.interestNames'), ''),',')) as choosed_interest_cnts, \
+                size(split(nvl(get_json_object(interests, '$.ipNames'), ''),',')) as choosed_ip_cnts \
+        FROM lofter_db_dump.ods_db_blog_settings_nd \
+    )f on a.userId = f.blogId \
+    left join( \
+        select \
+            dt \
+            ,userId \
+            ,sum(interact_pv) as interaction_pv \
+        from   \
+            (select \
+                dt ,userid ,interact_pv \
+            from   \
+                (select  \
+                    dt  \
+                    ,userid \
+                    ,nvl(hot_pv,0)+nvl(comment_pv,0)+nvl(comment_like_pv,0)+nvl(sweet_marks,0)+nvl(bitter_marks,0) \
+                    +nvl(tag_subscribe_pv,0)+nvl(collection_subscribe_pv,0)+nvl(follow_uv,0)+nvl(free_gift_present_pv,0)+nvl(share_pv,0) as interact_pv \
+                from lofter.dws_user_post_interaction_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                )t  \
+            where interact_pv>0 \
+        union all  \
+            select   \
+                dt ,blogid as userid ,count(distinct id) interact_pv \
+            from  \
+                (select  \
+                    a.* \
+                    ,case when b.blogid is not null and questiontype=0 then 1 else 0 end 1v1_official_blogid  \
+                from lofter.dwd_post_talk_publish_di a  \
+                left join lofter_db_dump.ods_db_blog_official_blog_nd b \
+                on a.blogid=b.blogid \
+                where dt ='${azkaban.flow.1.days.ago}' \
+                )t \
+            where  1v1_official_blogid=0 \
+            group by  dt ,blogid  \
+        union all  \
+            select \
+                dt ,userid ,interact_pv \
+            from   \
+                (select  \
+                    dt  \
+                    ,userid  \
+                    ,nvl(praise_pv,0)+nvl(comment_pv,0)+nvl(comment_like_pv,0)+nvl(share_pv,0)+nvl(cp_score_pv,0) as interact_pv \
+                from lofter.dws_user_post_talk_interaction_di \
+                where dt ='${azkaban.flow.1.days.ago}' \
+                )t  \
+            where interact_pv>0 \
+        union all  \
+            select  \
+                dt ,userid  \
+                ,(ti_pv + luck_boy_pv + vote_blog_pv + vote_user_pv) as interaction_pv \
+            from lofter.dws_user_post_other_interaction_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            )T  \
+        group by dt, userId \
+    )g \
+    on a.exp_date = g.dt and a.userId = g.userId \
+    left join( \
+    	select dt, userId, sum(duration) as page_stay_time \
+    	from lofter.dwd_post_browse_di \
+    	where dt = '${azkaban.flow.1.days.ago}' and action_type = 'page_duration' \
+    	group by dt, userId \
+    )h \
+    on a.exp_date = h.dt and a.userId = h.userId \
+    left join( \
+    	select distinct dt, userId \
+    	from lofter.dwd_blog_follow_di \
+    	where dt = '${azkaban.flow.1.days.ago}' and userId > 0 and blogId > 0 \
+    )i \
+    on a.exp_date = i.dt and a.userId = i.userId \
+    left join( \
+    	select dt, userId, \
+    		count(distinct(case when replyl2_commentid > 0 then commentid end)) as reply2_comment_cnt, \
+    		count(distinct(case when replyl1_commentid > 0 and replyl2_commentid = 0 then commentid end)) as reply1_comment_cnt \
+    	from lofter.dwd_post_response_di \
+    	where dt = '${azkaban.flow.1.days.ago}' and userId > 0 \
+    	group by dt, userId \
+    )j \
+    on a.exp_date = j.dt and a.userId = j.userId \
+    left join( \
+    	select a.userId,  \
+    		count(distinct(case when b.level = 1 then a.commentId end)) as comment_level_1_hot, \
+    		count(distinct(case when b.level = 2 then a.commentId end)) as comment_level_2_hot, \
+    		count(distinct(case when b.is_underscore = 1 then a.commentId end)) as underscore_comment_hot \
+    	from( \
+    		select distinct userId, postId, commentId \
+    		from lofter_db_dump.ods_db_comment_hot_nd \
+    		where from_unixtime(optime/1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    	)a \
+    	join( \
+    		select postid, id as commentId, \
+    			case \
+    				when replyl1commentid > 0 or replyl2commentid > 0 then 2 \
+    				when replyl1commentid = 0 and replyl1commentid = 0 then 1 \
+    			end as level, \
+                case when (LENGTH(pid) > 0 and imgId is null) then 1 else 0 end as is_underscore \
+    		from lofter_db_dump.ods_db_post_response_nd \
+    	)b \
+    	on a.commentId = b.commentId and a.postId = b.postId \
+        group by a.userId \
+    )k \
+    on a.userId = k.userId \
+    left join follow_atomic_metric l on a.userId = l.userId \
+    left join like_atomic_metric m on a.userId = m.userId \
+) \
+insert overwrite table lofter.dws_ab_platform_ecology_fullsite_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when 1 then '全部' \
+        when 0 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 1 then 'ALL' \
+        when 0 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end ) \
+    end as dimension_value \
+from metric_source1 \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('full_browse_pv' AS metric, CAST(browse_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_browse_uv' AS metric, CAST(browse_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_real_browse_pv' AS metric, CAST(real_browse_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_real_browse_uv' AS metric, CAST(real_browse_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_real_browse_post_cnt' AS metric, CAST(real_browse_post_cnt AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all  \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when 1 then '全部' \
+        when 0 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 1 then 'ALL' \
+        when 0 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end ) \
+    end as dimension_value \
+from metric_source2 \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('full_comment_cnt' AS metric, CAST(comment_cnt AS BIGINT) AS metric_value), \
+        STRUCT('full_share_cnt' AS metric, CAST(share_cnt AS BIGINT) AS metric_value), \
+        STRUCT('full_comment_uv' AS metric, CAST(comment_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_praise_cnts' AS metric, CAST(praise_cnts AS BIGINT) AS metric_value), \
+        STRUCT('full_recommend_cnts' AS metric, CAST(recommend_cnts AS BIGINT) AS metric_value), \
+        STRUCT('full_underscore_comment_cnts' AS metric, CAST(underscore_comment_cnts AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    '全部' as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    'ALL' as dimension_value \
+from metric_source3 \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('full_active_days_7d_forward' AS metric, CAST(active_days_7d_forward AS BIGINT) AS metric_value), \
+        STRUCT('full_session_total_time' AS metric, CAST(session_total_time AS BIGINT) AS metric_value), \
+        STRUCT('full_choosed_ip_interest_cnts' AS metric, CAST(choosed_ip_interest_cnts AS BIGINT) AS metric_value), \
+        STRUCT('full_interaction_pv' AS metric, CAST(interaction_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_page_stay_time' AS metric, CAST(page_stay_time AS BIGINT) AS metric_value), \
+        STRUCT('full_follow_uv' AS metric, CAST(follow_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_reply1_comment_cnt' AS metric, CAST(reply1_comment_cnt AS BIGINT) AS metric_value), \
+        STRUCT('full_reply2_comment_cnt' AS metric, CAST(reply2_comment_cnt AS BIGINT) AS metric_value), \
+        STRUCT('full_comment_level_1_hot' AS metric, CAST(comment_level_1_hot AS BIGINT) AS metric_value), \
+        STRUCT('full_comment_level_2_hot' AS metric, CAST(comment_level_2_hot AS BIGINT) AS metric_value), \
+        STRUCT('full_underscore_comment_hot' AS metric, CAST(underscore_comment_hot AS BIGINT) AS metric_value), \
+        STRUCT('full_follow_all_pv' AS metric, CAST(follow_all_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_follow_all_uv' AS metric, CAST(follow_all_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_follow_net_pv' AS metric, CAST(follow_net_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_follow_net_uv' AS metric, CAST(follow_net_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_like_all_pv' AS metric, CAST(like_all_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_like_all_uv' AS metric, CAST(like_all_uv AS BIGINT) AS metric_value), \
+        STRUCT('full_like_net_pv' AS metric, CAST(like_net_pv AS BIGINT) AS metric_value), \
+        STRUCT('full_like_net_uv' AS metric, CAST(like_net_uv AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info
+dependencies=dwd_ab_platform_exp_user_di

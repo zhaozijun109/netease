@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select nvl(pay_type,'all') as pay_type, '1' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, '7' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<7    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, '30' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<30    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, 'history' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, 'month' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    	and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')>=trunc('${azkaban.flow.1.days.ago}' ,'MM')    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, 'quarter' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    	and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')>=trunc('${azkaban.flow.1.days.ago}' ,'quarter')    \
+    group by pay_type with rollup    \
+        \
+    union all    \
+    select nvl(pay_type,'all') as pay_type, 'year' as period,    \
+    	sum(money) as trade_money, count(1) as trade_num,    \
+    	count(distinct postId) as post_num,count(distinct blogId) as blog_num,    \
+    	count(distinct userId) as trade_uv,count(distinct concat_ws('-',userId,postId)) as post_user_num,    \
+    	count(distinct concat_ws('-',userId,blogId)) as blog_user_num    \
+    from lofter.dwd_evt_post_paid_detail_dd      \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+    	and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')>=trunc('${azkaban.flow.1.days.ago}' ,'YY')     \
+    group by pay_type with rollup   \
+    distribute by 1

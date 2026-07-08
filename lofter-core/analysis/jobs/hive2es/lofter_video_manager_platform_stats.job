@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id, postId, blogId, publishTime, platformType,hotPv, praisePv, reproducePv, recommendPv, subscribePv, viewPv, viewUv, playPv, playUv, realPlayPv, realPlayUv, finishPlayPv,finishPlayUv, realPlayTime, playTime, commentPv, hdUv, hdRatio from lofter_dm.ads_video_post_dd where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_video_manager_platform_stats --full --atom

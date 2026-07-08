@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('-', postId, userId) as id, postId, userId, nvl(reg_ip,'') as regIp, nvl(ip, '') as ip, ip_switch_count_30d as swichCount from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di where dt='${azkaban.flow.1.days.ago}' "
+params= --parallel 2 --update --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --dest post_brush_hot_item_v2

@@ -1,0 +1,11 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "PveManUserReplyAggregate",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "roleId", "type": "long"},
+    {"name": "type", "type": "int"},
+    {"name": "dialogueCount", "type": "long"}
+  ]
+}

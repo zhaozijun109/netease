@@ -1,0 +1,530 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_blog_circle_protected_di partition(dt = '${azkaban.flow.1.days.ago}') \
+Select  cast(blog_id as bigint) blogid,'优质付费真人市场向' as type1 ,'精选用户人工维护' as type2  from  \
+rec.rec_active_blog_2026 \
+union all  \
+select blogid , '优质付费真人市场向' as type1,'真人' as type2   from  \
+(select blogid \
+from  \
+(Select  blogid  \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where (jinfufei_postnum+fufei_mianfei_postnum)<=15 \
+and  ((`30_all_postnum`-jinfufei_postnum-fufei_mianfei_postnum)>=1 or fufei_mianfei_postnum/`30_all_postnum`>=0.8) \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and (post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score \
+) >=280 and post_top_money_avg_all_score>=50 \
+group by userid ) b  \
+on a.blogid=b.userid \
+group by blogid) a  \
+union all \
+select blogid , '优质付费真人市场向' as type1, '市场' as type2 from  \
+(select a.blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where `30_all_postnum`>0 and (jinfufei_postnum+fufei_mianfei_postnum)<=32 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and (post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score) >=300 and post_top_money_avg_all_score>=70 \
+group by userid ) b  \
+on a.blogid=b.userid \
+left join  \
+(select blogid from  \
+(select blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where (jinfufei_postnum+fufei_mianfei_postnum)<=15 \
+and  ((`30_all_postnum`-jinfufei_postnum-fufei_mianfei_postnum)>=1 or fufei_mianfei_postnum/`30_all_postnum`>=0.8) \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and (post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score \
+) >=280 and post_top_money_avg_all_score>=50 \
+group by userid ) b  \
+on a.blogid=b.userid \
+group by blogid) a  \
+group by blogid  \
+UNION  \
+Select  cast(blog_id as bigint) as blogid from   rec.rec_active_blog_2026 group by  cast(blog_id as bigint))  c  \
+on a.blogid=c.blogid   \
+where c.blogid is null  \
+group by a.blogid) a  \
+union all  \
+select blogid ,  '优质付费古典向' as type1,'古典' as type2 from  \
+(select a.blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where `30_all_postnum`>0 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and (post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score) >=280 and post_top_money_avg_all_score>=50 \
+group by userid ) b  \
+on a.blogid=b.userid \
+join  \
+( \
+    Select blogid \
+    from  \
+    lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+    where  dt='${azkaban.flow.1.days.ago}'  \
+    and size(array_intersect(flgs, array('文学', '普通','长连载','文学普通'))) > 0  \
+    and size(array_intersect(flgs, array('观影', '套路','观影意愿','套路风险','同质化套路','同质化套路风险'))) <=0 \
+group by blogid \
+)  c  \
+on a.blogid=c.blogid   \
+group by a.blogid) a  \
+union all \
+select blogid , '优质付费古典向' as type1,'生态sab' as type2 from  \
+(select  blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where `30_all_postnum`>0 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and level in ('S','A','B') \
+group by userid) b  \
+on a.blogid=b.userid \
+group  by blogid) a  \
+ \
+union all \
+ \
+select a.blogid ,  '劣质风险向' as type1, '嫌疑ai' as type2  from  \
+(select a.blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where (jinfufei_postnum+fufei_mianfei_postnum)>=28 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and post_top_money_avg_all_score<35 \
+group by userid ) b  \
+on a.blogid=b.userid \
+group by a.blogid \
+ \
+union  \
+Select  userid as blogid \
+FROM \
+lofter_db_dump.ods_db_trade_user_black_home_nd  \
+where \
+ from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >=  '2025-11-01' \
+and  accounttype=2 \
+and  (punishdays in (30,90) or giftreturnstatus=3) \
+group by  userid \
+ \
+union   \
+ \
+select c.userid as blogid \
+from  \
+(Select  userid \
+FROM \
+lofter_db_dump.ods_db_trade_user_black_home_nd  \
+where \
+ from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >=  '2025-11-01' \
+and  accounttype=2 \
+group by  userid) a \
+join  \
+(select userid,phone \
+from  \
+lofter.dws_par_user_base_dd \
+    		LATERAL VIEW explode(phones) t2 AS phone      \
+where dt='${azkaban.flow.1.days.ago}'  and phone is not null  \
+group by userid,phone) b  \
+on a.userid=b.userid  \
+join  \
+(select userid,phone \
+from  \
+lofter.dws_par_user_base_dd \
+    		LATERAL VIEW explode(phones) t2 AS phone      \
+where dt='${azkaban.flow.1.days.ago}'  and phone is not null  \
+group by userid,phone) c \
+on b.phone=c.phone \
+group by c.userid \
+ \
+) a  \
+ \
+left join  \
+ \
+(select userid as blogid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and level in ('S','A') \
+group by userid \
+union \
+select  userid as blogid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and new_grade >=5 \
+group by userid \
+union \
+select targetid as blogid  \
+from lofter_db_dump.ods_db_mh_exemption_nd  \
+where targettype = 'USER' and status = 1 \
+union  \
+select cast(blog_id as bigint) as blogid \
+from  \
+rec.rec_active_blog_2026 \
+group by cast(blog_id as bigint)) b  \
+ \
+on a.blogid=b.blogid \
+ \
+where b.blogid is null  \
+ \
+ \
+union all  \
+ \
+ select a.blogid ,  '劣质风险向' as type1 ,'人工审核ai' as type2 from  \
+(select targetid as blogid  \
+from lofter_db_dump.ods_db_mh_control_record_nd where targettype = 'USER'  \
+and businesstype = 'RESTRICT' and scene = 'DISTRIBUTE_SEARCH' and lastreason = 'AI_CREATOR' and status = 1 \
+group by targetid) a \
+ \
+ \
+union all  \
+ \
+select a.blogid , '劣质风险向' as type1 ,'高拉黑' as type2 from  \
+(select a.blogid \
+from  \
+(Select  blogid,`30_day_trade_money` \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where `30_all_postnum`>0 and `30_day_trade_money`>0 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid,`30_day_trade_money`) a \
+ join \
+(select blogid, \
+count(distinct case when fufei_flg =0     then userid else null end ) as feifufei_uv_30, \
+count(distinct case when fufei_flg =1     then userid else null end ) as fufei_uv_30 \
+from  \
+(Select a.userid,a.blogid, \
+case when b.userid is not null then 1 else 0 end as fufei_flg \
+from  \
+ \
+( \
+select userid,blacklistblogid blogid \
+from  \
+ lofter_db_dump.ods_db_blacklist_user_nd \
+ where  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between date_sub('${azkaban.flow.1.days.ago}' ,29) and '${azkaban.flow.1.days.ago}'  \
+group by userid,blacklistblogid \
+) a \
+ \
+left  join   \
+ \
+(select userid,blogid \
+from  \
+lofter.dwd_user_order_dd \
+where dt='${azkaban.flow.1.days.ago}'  \
+and mbo_lv1_module='内容付费' \
+and money>0 \
+and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between date_sub('${azkaban.flow.1.days.ago}' ,29) and '${azkaban.flow.1.days.ago}'   \
+group by userid,blogid \
+UNION  \
+select userid,blogid \
+from  \
+lofter.dwd_gift_post_unlock_dd \
+where dt='${azkaban.flow.1.days.ago}'  \
+and money>0 \
+and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between date_sub('${azkaban.flow.1.days.ago}' ,29) and '${azkaban.flow.1.days.ago}'   \
+group by userid,blogid \
+) b  \
+on a.userid=b.userid and a.blogid=b.blogid \
+) b  \
+group by blogid) b  \
+on a.blogid=b.blogid \
+where fufei_uv_30>=100 or (feifufei_uv_30+fufei_uv_30)>500 or ((feifufei_uv_30+fufei_uv_30)>=20 and (feifufei_uv_30+fufei_uv_30)/`30_day_trade_money`>=0.1) \
+group by a.blogid) a  \
+ \
+left join  \
+ \
+(select userid as blogid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and level in ('S','A') \
+group by userid \
+union \
+select  userid as blogid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and new_grade >=5 \
+group by userid \
+union \
+select targetid as blogid  \
+from lofter_db_dump.ods_db_mh_exemption_nd  \
+where targettype = 'USER' and status = 1 \
+union  \
+select cast(blog_id as bigint) as blogid \
+from  \
+rec.rec_active_blog_2026 \
+group by cast(blog_id as bigint)) b  \
+ \
+on a.blogid=b.blogid \
+ \
+where b.blogid is null  \
+ \
+union all \
+ \
+SELECT  \
+blogid,'劣质风险向' as type1 ,'ai判断被处置' as type2   \
+from   \
+lofter_db_dump.ods_db_infringe_post_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between '2025-04-01' and '${azkaban.flow.1.days.ago}'  \
+and reporttype in (3) \
+and  status in (1)  \
+group by blogid  \
+ \
+union all \
+ \
+SELECT  \
+blogid,'劣质风险向' as type1 ,'ai高频投诉' as type2   \
+from   \
+(SELECT  \
+ blogid, \
+count(distinct userid ) as uv \
+from   \
+lofter_db_dump.ods_db_infringe_post_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between '2025-10-01' and '${azkaban.flow.1.days.ago}'  \
+and reporttype in (2,3) \
+group by blogid  \
+) a  \
+where uv>=3 \
+group by blogid \
+ \
+union all \
+ \
+SELECT  \
+blogid,'劣质风险向' as type1 ,'ai低频投诉' as type2   \
+from   \
+(SELECT  \
+ blogid, \
+count(distinct userid ) as uv \
+from   \
+lofter_db_dump.ods_db_infringe_post_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between '2025-10-01' and '${azkaban.flow.1.days.ago}'  \
+and reporttype in (2,3) \
+group by blogid  \
+) a  \
+where uv<3 \
+group by blogid \
+ \
+union all \
+ \
+SELECT  \
+ cast(blog_id as bigint)  as blogid,'劣质风险向' as type1 ,'人工审核降权' as type2   \
+from   \
+rec.rec_ai_demotion_blogs \
+group by  cast(blog_id as bigint) \
+ \
+union all \
+ \
+select a.blogid , '劣质风险向' as type1, '低质付费' as type2 from  \
+(select blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where (jinfufei_postnum+fufei_mianfei_postnum)>=20  \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and ((post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score \
+) <=180 or post_top_money_avg_all_score<35) \
+group by userid ) b  \
+on a.blogid=b.userid \
+group by blogid \
+ \
+union  \
+ \
+select a.blogid \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where  (jinfufei_postnum+fufei_mianfei_postnum)>=10 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join \
+( \
+    Select blogid \
+    from  \
+    lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+    where  dt='${azkaban.flow.1.days.ago}'  \
+    and size(array_intersect(flgs, array('文学', '普通','长连载','文学普通'))) <= 0  \
+    and size(array_intersect(flgs, array('观影', '套路','观影意愿','套路风险','同质化套路','同质化套路风险'))) >0 \
+group by blogid \
+)  b  \
+on a.blogid=b.blogid \
+join  \
+(select userid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and ((post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score \
+) <=200 or post_top_money_avg_all_score<35) \
+group by userid ) c \
+on a.blogid=c.userid \
+group by a.blogid \
+ \
+union  \
+ \
+select blogid  \
+from  \
+(Select  blogid \
+from  \
+lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+where (jinfufei_postnum+fufei_mianfei_postnum)>2 \
+and  dt='${azkaban.flow.1.days.ago}'  \
+group by blogid) a \
+join  \
+(select userid  \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+and ((post_top_quality_percent_avg_10_score+post_all_quality_percent_avg_score \
+) <=140 ) \
+group by userid) b  \
+on a.blogid=b.userid \
+group by blogid) a  \
+ \
+left join  \
+ \
+(select userid as blogid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and level in ('S','A','B') \
+group by userid \
+union \
+select  userid as blogid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and new_grade >=4 \
+group by userid \
+union \
+select targetid as blogid  \
+from lofter_db_dump.ods_db_mh_exemption_nd  \
+where targettype = 'USER' and status = 1 \
+union  \
+select cast(blog_id as bigint) as blogid \
+from  \
+rec.rec_active_blog_2026 \
+group by cast(blog_id as bigint)) b  \
+ \
+on a.blogid=b.blogid \
+ \
+where b.blogid is null  \
+ \
+union all \
+ \
+select blogid ,'生态' as type1,'生态' as type2  from  \
+(select a.userid as blogid  \
+from  \
+(select userid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and ((post_count_90d>=3 and hd_uv_30d>=50) or  (fans_std>=1000 and gift_income_std<=200)) \
+group by userid ) a \
+ \
+left join  \
+ \
+(select blogid \
+from  \
+lofter.dim_gift_post_return \
+where publishdate between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+group by blogid) b \
+ \
+on a.userid =b.blogid  \
+ \
+left  join  \
+ \
+(select userid \
+from  \
+lofter_dm.ads_post_paid_user_consume_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and period='30' \
+group by userid) c  \
+on a.userid =c.userid \
+ \
+where b.blogid is null and c.userid is null  \
+ \
+group by a.userid) a  \
+ \
+union all \
+ \
+select blogid ,'豁免' as type1,'豁免' as type2  from  \
+(select userid as blogid \
+from  \
+lofter.dws_par_creator_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+and level in ('S','A') \
+group by userid \
+union \
+select  userid as blogid \
+from  \
+lofter_dm.ads_paid_post_blog_level_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and new_grade >=5 \
+group by userid \
+union \
+select targetid as blogid  \
+from lofter_db_dump.ods_db_mh_exemption_nd  \
+where targettype = 'USER' and status = 1 \
+union  \
+select  cast(blog_id as bigint)  as blogid \
+from  \
+rec.rec_active_blog_2026 \
+group by cast(blog_id as bigint) \
+ \
+) a  \

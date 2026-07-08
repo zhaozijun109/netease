@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_miniprogram_order_di partition(dt='${azkaban.flow.1.days.ago}') \
+select miniId, userId, platform, postId, finishTime as pay_time, amount \
+from lofter_db_dump.ods_db_trade_mini_program_order_nd \
+where from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+      status = 1 \

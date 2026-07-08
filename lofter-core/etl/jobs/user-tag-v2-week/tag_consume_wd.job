@@ -1,0 +1,62 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2ClickhouseWD
+driver-memory=8g
+conf.spark.dynamicAllocation.maxExecutors=60
+conf.spark.dynamicAllocation.minExecutors=10
+conf.spark.dynamicAllocation.initialExecutors=20
+conf.spark.sql.shuffle.partitions=600
+conf.spark.executor.cores=4
+conf.spark.executor.memory=10g
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag tag_consume --bitmap
+retries=0
+conf.spark.execute.sql = "select userid               as userId, \
+                                'tag_consume' as tag_name, \
+                                cat                  as dim1, \
+                                grp               as dim2, \
+                                ''                   as dim3, \
+                                ''                   as dim4, \
+                                subcat                  as grp, \
+                                ''                   as value \
+                         from (select userId, cat, subcat, grp \
+                               from ( \
+                                        select userId, \
+                                               'DAY_90'                as cat, \
+                                               case \
+                                                   when post_count < 10 then 'COUNT_1_10' \
+                                                   when post_count < 100 then 'COUNT_10_100' \
+                                                   when post_count < 500 then 'COUNT_100_500' \
+                                                   when post_count < 1000 then 'COUNT_500_1k' \
+                                                   else 'COUNT_1k' end as subcat, \
+                                               tag                     as grp, \
+                                               post_count              as pc \
+                                        from ( \
+                                                 select tag, userId, bitmap_count(bitmap_union(post_bitmap)) as post_count \
+                                                 from lofter.dws_tag_user_consume_di \
+                                                 where dt <= '${azkaban.flow.1.days.ago}' \
+                                                   and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 90) \
+                                                 group by tag, userId \
+                                                 ) tt \
+                                        where post_count > 3 \
+                                \
+                                        union all \
+                                \
+                                        select userId, \
+                                               'DAY_180'               as cat, \
+                                               case \
+                                                   when post_count < 10 then 'COUNT_1_10' \
+                                                   when post_count < 100 then 'COUNT_10_100' \
+                                                   when post_count < 500 then 'COUNT_100_500' \
+                                                   when post_count < 1000 then 'COUNT_500_1k' \
+                                                   else 'COUNT_1k' end as subcat, \
+                                               tag                     as grp, \
+                                               post_count              as pc \
+                                        from ( \
+                                                 select tag, userId, bitmap_count(bitmap_union(post_bitmap)) as post_count \
+                                                 from lofter.dws_tag_user_consume_di \
+                                                 where dt <= '${azkaban.flow.1.days.ago}' \
+                                                   and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 180) \
+                                                 group by tag, userId \
+                                                 ) tt \
+                                        where post_count > 3 \
+                                        ) t \
+                               where userId > 0 )"

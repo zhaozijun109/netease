@@ -1,0 +1,55 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 活跃情况 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '活跃情况'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select b.userId, '活跃情况' as tag, 'DAY_7' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_post_dd \
+                                          where dt='${azkaban.flow.1.days.ago}' and last_publish_time > 0 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(last_publish_time/1000 as bigint), 'yyyy-MM-dd')) < 7 \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '活跃情况' as tag, 'DAY_15' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_post_dd \
+                                          where dt='${azkaban.flow.1.days.ago}' and last_publish_time > 0 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(last_publish_time/1000 as bigint), 'yyyy-MM-dd')) < 15 \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '活跃情况' as tag, 'DAY_30' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_post_dd \
+                                          where dt='${azkaban.flow.1.days.ago}' and last_publish_time > 0 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(last_publish_time/1000 as bigint), 'yyyy-MM-dd')) < 30 \
+                                  ) b \
+                               \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '活跃情况' as tag, 'DAY_90' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_post_dd \
+                                          where dt='${azkaban.flow.1.days.ago}' and last_publish_time > 0 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(last_publish_time/1000 as bigint), 'yyyy-MM-dd')) < 90 \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '活跃情况' as tag, 'DAY_180' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_post_dd \
+                                          where dt='${azkaban.flow.1.days.ago}' and last_publish_time > 0 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(last_publish_time/1000 as bigint), 'yyyy-MM-dd')) < 180 \
+                                  ) b ) "

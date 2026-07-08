@@ -1,0 +1,80 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_trace_cvr_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.adTrace, \
+       nvl(a.activityCode, nvl(cast(a.productId as string), cms)) as item_id, \
+       nvl(c.activityName, d.productName) as item_name, \
+       if(a.link_type = '抽赏' and c.slotType = 4, '一番赏', a.link_type) as item_type, \
+       if(b.adtrace_name like '%-%', split(b.adtrace_name, '-')[0], null) as ad_position, \
+       b.adtrace_name, \
+       a.expose_pv, a.expose_uv, \
+       a.view_pv, a.view_uv, \
+       a.order_count, a.order_uv, \
+       a.pay_count, a.pay_uv, \
+       a.pay_money \
+from ( \
+    select nvl(m.adTrace, n.adTrace) as adTrace, \
+        nvl(m.link_type, 'CMS活动') as link_type, \
+        nvl(m.activityCode, m.activityCode) as activityCode, \
+        cast(nvl(m.productId, n.productId) as bigint) as productId, \
+        m.cms, \
+        m.expose_pv, m.expose_uv, \
+        m.view_pv, m.view_uv, \
+        n.order_count, n.order_uv, \
+        n.pay_count, pay_uv, \
+        n.pay_money \
+    from ( \
+        select nvl(a.adTrace, b.adTrace) as adTrace, \
+            nvl(a.link_type, b.link_type) as link_type, \
+            nvl(a.activityCode, b.activityCode) as activityCode, \
+            nvl(a.productId, b.productId) as productId, \
+            nvl(a.cms, b.cms) as cms, \
+            a.expose_pv, a.expose_uv, \
+            b.view_pv, b.view_uv \
+        from ( \
+            select adTrace, \
+                    case when activityCode is not null then '抽赏' \
+                        when productId > 0 then '市集商品' else 'CMS活动' end as link_type, \
+                    activityCode, productId, \
+                    if(activityCode is not null or productId > 0, null, parse_url(url, "PATH")) as cms, \
+                    count(1) as expose_pv, count(distinct deviceUdid) as expose_uv \
+            from lofter.dwd_ec_trace_product_expose_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            group by 1, 2, 3,4,5 \
+        ) a \
+        full outer join ( \
+            select adTrace, \
+                    case when activityCode is not null then '抽赏' \
+                        when productId > 0 then '市集商品' else 'CMS活动' end as link_type, \
+                    activityCode, productId, \
+                    if(activityCode is not null or productId > 0, null, parse_url(url, "PATH")) as cms, \
+                    count(1) as view_pv, count(distinct deviceUdid) as view_uv \
+            from lofter.dwd_ec_trace_product_view_di \
+            where dt = '${azkaban.flow.1.days.ago}' and length(adTrace) > 0 \
+            group by 1, 2, 3,4,5 \
+            order by view_pv desc \
+        ) b on a.adTrace = b.adTrace and a.link_type = b.link_type and \
+            nvl(a.activityCode,'') = nvl(b.activityCode,'')  and \
+            nvl(a.productId, '') = nvl(b.productId,'') and \
+            nvl(a.cms, '') = nvl(b.cms, '') \
+    ) m \
+    left join ( \
+            select adtrace, cardActivityCode as activityCode, \
+                   if(type = 3, cast(productId as string), null) as productId, \
+                   sum(if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as order_count, \
+                   count(distinct if(from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerid, null)) as order_uv, \
+                   sum(if(from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as pay_count, \
+                   count(distinct if(from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerid, null)) as pay_uv, \
+                   sum(if(from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', storeprice * productnum - newcouponpreferential, 0)) pay_money \
+            from lofter_db_dump.ods_db_benefit_order_product_nd x \
+            join (select id, payTime from lofter_db_dump.ods_db_benefit_order_nd) y on x.orderId = y.id \
+            where length(adTrace) > 0 \
+                  and (from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' or \
+                   from_unixtime(cast(payTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') \
+            group by 1, 2, 3 \
+    ) n on m.adTrace = n.adTrace and nvl(m.activityCode,'') = nvl(n.activityCode, '') and nvl(m.productId,'') = nvl(n.productId, '') \
+) a \
+left join (select parse_url(traceUrl, "QUERY", "adTrace") adtrace, name as adtrace_name, originUrl as trace_origin_url from lofter_db_dump.ods_db_benefit_ad_trace_config_nd ) b on a.adtrace = b.adtrace \
+left join (select code, name as activityName, slotType from lofter_db_dump.ods_db_benefit_card_activity_nd) c on a.activityCode = c.code \
+left join (select productId, productName from lofter.dim_benefit_product) d on a.productId = d.productId \
+where nvl(a.activityCode, nvl(cast(a.productId as string), cms)) is not null and \
+      (trace_origin_url is null or instr(trace_origin_url, nvl(a.activityCode, nvl(cast(a.productId as string), cms))) > 0) \

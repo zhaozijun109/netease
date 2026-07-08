@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select blogId, userId, if(is_above_condition > 0, 2, 1) as `type`, nvl(private_post_count,0) as privatePostCount, nvl(private_friends,0) as privateUserCount from lofter_dm.ads_creator_vip_notice_di where dt='${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.FANS_PRIVATE_INVITE_USER --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

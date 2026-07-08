@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_interaction_wd partition(dt='${azkaban.flow.7.days.ago}') \
+    select nvl(a.postId, b.postId) as id, \
+           nvl(a.blogId, b.blogId) as blogId, \
+           nvl(a.postId, b.postId) as postId, \
+           a.favoriteCount, a.recommendCount, a.reproduceCount, a.subscribeCount, a.hot, \
+           b.commentCount \
+    from ( \
+        select postId, \
+               post_userid as blogId, \
+               sum(if(opType = 'praise', 1, 0)) as favoriteCount, \
+               sum(if(opType = 'recommend', 1, 0)) as recommendCount, \
+               sum(if(opType = 'reproduce', 1, 0)) as reproduceCount, \
+               sum(if(opType = 'subscribe', 1, 0)) as subscribeCount, \
+               count(1) as hot \
+        from lofter.dwd_post_hot_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by postId, post_userid \
+    ) a full join ( \
+        select post_userid as blogId, postId, count(1) commentCount \
+        from lofter.dwd_post_response_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by post_userid, postId \
+    ) b on a.blogId = b.blogId and a.postId = b.postId \
+    where nvl(a.postId, b.postId) is not null and dayofweek('${azkaban.flow.7.days.ago}') = 1 \
+    distribute by 1

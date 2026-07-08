@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_post_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.postId, userId, blogName as blog_name, title as post_title, \
+       tags as post_tags, ips as post_ips, domains as post_domains, \
+       contentType as post_content_type, \
+       publishDate as post_publish_date, publishTime as post_publish_time, \
+       blogNickName as blog_nickname, \
+       if(rk = 1, 1, 0) as is_user_first_post, \
+       b.clientType as platform, \
+       case when d.postId is not null then 1 else 0 end as is_pay_gift \
+from ( \
+    select id as postId, userId, blogName, blogNickName, title, contentType, valid, \
+           isForbidden, publishDate, publishTime, userCreateDate, url, tags, ips, domains, \
+           row_number() over (partition by userId order by publishTime ) rk \
+    from lofter.dim_post \
+    where publishDate = '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and \
+          allowView = 0 and contentType in ("图片","文字","视频") and \
+          isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+) a \
+left join ( \
+   select postId, clientType \
+   from ( \
+       select postId, clientType, row_number() over (partition by postId order by time desc) as rk \
+       from lofter.ods_log_publishpost_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+   ) t \
+   where rk = 1 \
+) b on a.postId = b.postId \
+left join ( \
+    select postId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+) c on a.postId = c.postId \
+left join  ( \
+    select postId \
+    from lofter.dim_gift_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and publishDate = '${azkaban.flow.1.days.ago}' and \
+          is_pay_return_gift in ('2','3','4','5','6','7') \
+    group by postId \
+) d on a.postId = d.postId \
+left join (select postId from lofter.ods_risk_limit where type = 0 and status = 0) e on a.postId = e.postId \
+left join lofter_db_dump.ods_db_robot_blog_info_nd f on a.userId = f.blogId \
+where c.postId is null and e.postId is null and f.blogId is null and a.userId not in (2178121696,2178132867,2178132866,1970925569,2178144818,1950132188,2090916785,2178135152,1997136652,2178144729,2178133018,2138008165,2178132868,2178135146,2178134859,1952073460,2178133023,2178144739,2178121634,1971578508,2000498586,2160163909,2178121599,2178121698,2178132826,2178135106)
+dependencies=

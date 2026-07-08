@@ -1,0 +1,82 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_content_ecology_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select all_post_cnt_1d,core_ip_post_cnt_1d,new_ip_post_cnt_1d,film_tv_star_ip_post_cnt_1d,game_cartoon_ip_post_cnt_1d, \
+       kecp_post_cnt_1d, all_valid_creator,film_tv_star_ip_valid_creator,game_cartoon_ip_valid_creator,kecp_valid_creator, \
+       benchmark_creator, all_premium_posts,core_ip_premium_post,new_ip_premium_post, \
+       premium_posts_7d/all_posts_7d as premium_posts_7d_ratio, \
+       all_premium_posts/all_posts_30d as premium_posts_30d_ratio, \
+       premium_posts_30d_realpv/posts_30d_realpv as premium_posts_30d_realpv_ratio, \
+       premium_posts_7d_realpv/posts_7d_realpv as premium_posts_7d_realpv_ratio \
+from ( \
+    select dt,sum(post_cnt) as all_post_cnt_1d \
+    from lofter_dm.ads_post_publish_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) a \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+        count(distinct case when is_core=1 and b.publishdate='${azkaban.flow.1.days.ago}' then postid end) core_ip_post_cnt_1d, \
+        count(distinct case when is_new=1 and b.publishdate='${azkaban.flow.1.days.ago}' then postid end) new_ip_post_cnt_1d, \
+        count(distinct case when is_film_tv_star=1 and b.publishdate='${azkaban.flow.1.days.ago}' then postid end) film_tv_star_ip_post_cnt_1d, \
+        count(distinct case when is_game_cartoon=1 and b.publishdate='${azkaban.flow.1.days.ago}' then postid end) game_cartoon_ip_post_cnt_1d, \
+        count(distinct case when is_core=1 and is_valid_creator_30d=1 then userid end) core_ip_valid_creator, \
+        count(distinct case when is_new=1 and is_valid_creator_30d=1 then userid end) new_ip_valid_creator, \
+        count(distinct case when is_film_tv_star=1 and is_valid_creator_30d=1 then userid end) film_tv_star_ip_valid_creator, \
+        count(distinct case when is_game_cartoon=1 and is_valid_creator_30d=1 then userid end) game_cartoon_ip_valid_creator, \
+        count(distinct case when is_core=1 and is_premium_post=1 then postid end) core_ip_premium_post, \
+        count(distinct case when is_new=1 and is_premium_post=1 then postid end) new_ip_premium_post, \
+        count(distinct case when is_film_tv_star=1 and is_premium_post=1 then postid end) film_tv_star_ip_premium_post, \
+        count(distinct case when is_game_cartoon=1 and is_premium_post=1 then postid end) game_cartoon_ip_premium_post \
+    from ( \
+        select ip,is_core,is_new,is_film_tv_star,is_game_cartoon \
+        from lofter.dim_ip_extend_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select ip,t1.dt publishdate,t1.userid,t1.postid,case when t2.userid is not null then 1 else 0 end is_valid_creator_30d,case when t3.postid is not null then 1 else 0 end is_premium_post \
+        from ( \
+            select dt,postid,userid,ip \
+            from lofter.dwd_post_publish_di \
+            lateral view explode(post_ips) t1 as ip \
+            where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+            group by dt,postid,userid,ip \
+        ) t1 \
+        left join ( \
+            select userid \
+            from lofter.dws_creator_valid_detail_di \
+            where  dt='${azkaban.flow.1.days.ago}' \
+            and is_valid_creator_30d=1 \
+            group by userid \
+        ) t2 on t1.userid=t2.userid \
+        left join ( \
+            select postid \
+            from lofter.dws_post_premium_di \
+            where dt='${azkaban.flow.1.days.ago}' \
+            group by postid \
+        ) t3 on t1.postid=t3.postid \
+    ) b on a.ip=b.ip \
+) b on a.dt=b.dt \
+left join ( \
+    select dt,all_premium_posts,all_posts_30d,premium_posts_7d,all_posts_7d, \
+           premium_posts_30d_realpv,posts_30d_realpv,premium_posts_7d_realpv,posts_7d_realpv \
+    from lofter_dm.ads_post_premium_monitor_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.dt=c.dt \
+left join ( \
+    select dt,count(distinct userid) benchmark_creator \
+    from lofter_dm.ads_creator_benchmark_detail_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) d on a.dt=d.dt \
+left join ( \
+    select dt,posts_1d as kecp_post_cnt_1d,valid_creator as kecp_valid_creator \
+    from lofter_dm.ads_specialty_categories_post_1level_di \
+    where dt='${azkaban.flow.1.days.ago}' and level1='磕cp' \
+) e on a.dt=e.dt \
+left join ( \
+    select dt,count(userid) all_valid_creator \
+    from lofter.dws_creator_valid_detail_di \
+    where is_valid_creator_30d = 1  and dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) f on a.dt=f.dt
+dependencies=ads_post_premium_monitor_di,ads_post_publish_di,ads_creator_benchmark_detail_di

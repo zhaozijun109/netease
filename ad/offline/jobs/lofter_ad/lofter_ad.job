@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.wm.ad.LofterClientAdData
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=lofter_ad_dp_report,lofter_ad_ops

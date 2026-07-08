@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.bridge_c2c_product_post_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select cast(productId as bigint) as productId, postId, blogId, min(createTime) as create_time \
+    from lofter_db_dump.ods_db_c2_c_product_post_map_info_nd \
+        lateral view explode(split(productIds, ',')) as productId \
+    where length(productIds) > 0 \
+    group by 1,2,3 \
+) t \
+where productId > 0 \

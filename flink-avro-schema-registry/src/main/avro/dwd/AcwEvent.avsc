@@ -1,0 +1,13 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "AcwEvent",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "actPwd", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "channel", "type": ["null", "string"], "default": null},
+    {"name": "settlementType", "type": ["null", "string"], "default": null},
+    {"name": "customid", "type":  ["null","string"], ",default":  null}
+  ]
+}

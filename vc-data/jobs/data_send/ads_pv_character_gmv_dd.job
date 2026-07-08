@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ads_pv_character_gmv_dd PARTITION (dt='${azkaban.flow.1.days.ago}')  \
+                select character_id,sum(order_price) as gmv,'vc' as channel \
+                from vc.dwd_vc_ucr_order_amount_i_d  \
+                group by character_id \
+                union all \
+                select roleid as character_id,sum(total_amount) as gmv,'pve' as channel \
+                from lofter.dws_pve_user_role_amount_di \
+                group by roleid
+

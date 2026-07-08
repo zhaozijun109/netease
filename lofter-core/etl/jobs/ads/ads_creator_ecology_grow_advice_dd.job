@@ -1,0 +1,83 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_grow_advice_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.userId AS blogId, \
+        CAST(split(concat_ws(',',if(grow_type1 = 1,1,null),if(grow_type2 = 1,2,null),if(grow_type3 = 1,3,null),if(grow_type4 = 1,4,null),if(grow_type5 = 1,5,null),if(grow_type6 = 1,6,null),if(grow_type7 = 1,7,null),if(tmp2.userId is not null,8,null)),',')[0] AS INT) AS growAdviceType, \
+        tmp3.createFrequencyRate, \
+        tmp3.followInteractNumRate, \
+        tmp3.totalHotRate, \
+        tmp3.createFrequencyRateLevel, \
+        tmp3.followInteractNumRateLevel, \
+        tmp3.totalHotRateLevel, \
+        concat_ws(',',if(achievement_type1 = 1,1,null),if(achievement_type2 = 1,2,null),if(achievement_type3 = 1,3,null),if(achievement_type4 = 1,4,null),if(achievement_type7 = 1,7,null),if(achievement_type8 = 1,8,null),if(achievement_type9 = 1,9,null),if(achievement_type10 = 1,10,null),if(achievement_type11 = 1,11,null),if(achievement_type15 = 1,15,null)) AS easterEggAchieveType, \
+        concat_ws(',',if(achievement_type1 = 1,tmp4.accumulated_update_days,null),if(achievement_type2 = 1,tmp4.max_continuous_days,null),if(achievement_type3 = 1,tmp4.max_continuous_days,null),if(achievement_type4 = 1,tmp4.receive_comment_cnt,null),if(achievement_type7 = 1,tmp4.fans_cnt,null),if(achievement_type8 = 1,tmp4.collection_subscribe_uv,null),if(achievement_type9 = 1,tmp4.lottery_cnt,null),if(achievement_type10 = 1,tmp4.underscore_comment_pv_cnt,null),if(achievement_type11 = 1,tmp4.circle_comment_cnt,null),if(achievement_type15 = 1,tmp4.vote_cnt,null)) AS easterEggAchieveNum, \
+        tmp3.createPostNums, \
+        tmp3.followInteractNums, \
+        tmp3.totalHotNums, \
+        tmp3.nextLevelFollowNums, \
+        tmp3.hotChallengeTarget \
+FROM \
+( \
+	SELECT  userId, \
+	        if(post_first_date = '${azkaban.flow.1.days.ago}',1,0) AS grow_type1, \
+	        if(fans_cnt_7d+collection_subscribe_uv_7d >= 100,1,0) AS grow_type2, \
+	        if(post_count_30d = 1 AND post_last_date = '${azkaban.flow.1.days.ago}',1,0) AS grow_type3, \
+	        if(post_count_30d < 1,1,0) AS grow_type4, \
+	        if(post_count_7d < 1,1,0) AS grow_type5, \
+	        if(infringe_post_cnt_30d >= 3,1,0) AS grow_type6, \
+	        if(post_count_1d >= 5 AND (level is null OR level IN ('D*','D')) AND (fans_hd_uv_30d <= 1000 OR collection_subscribe_uv_30d <= 1000) AND (post_hot_90d/post_count_90d <= 100),1,0) AS grow_type7 \
+	FROM lofter.dws_par_creator_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1 \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT userId \
+	FROM lofter.dim_post \
+	WHERE DATEDIFF('${azkaban.flow.1.days.ago}', publishdate) < 7 AND tags is null \
+	GROUP BY userId \
+	HAVING COUNT(1) >= 2 \
+) tmp2 \
+ON tmp1.userId = tmp2.userId \
+LEFT JOIN ( \
+   SELECT blogId, \
+   	      createPostNums, \
+          followInteractNums, \
+          totalHotNums, \
+   	      nextLevelFollowNums, \
+          hotChallengeTarget, \
+          post_count_30d_exceed_ratio AS createFrequencyRate, \
+    	  fans_hd_uv_30d_exceed_ratio AS followInteractNumRate, \
+    	  post_hot_30d_exceed_ratio AS totalHotRate, \
+          post_count_30d_exceed_ratio_level AS createFrequencyRateLevel, \
+          fans_hd_uv_30d_exceed_ratio_level AS followInteractNumRateLevel, \
+          post_hot_30d_exceed_ratio_level AS totalHotRateLevel \
+   FROM lofter_dm.ads_creator_ecology_identity_rank_dd \
+   WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp3 \
+ON tmp1.userId = tmp3.blogId \
+LEFT JOIN ( \
+   SELECT blogId, \
+          max_continuous_days, \
+          accumulated_update_days, \
+          lottery_cnt, \
+          underscore_comment_pv_cnt, \
+          circle_comment_cnt, \
+          receive_comment_cnt, \
+          fans_cnt, \
+          collection_subscribe_uv, \
+          vote_cnt, \
+          if(accumulated_update_days>=10,1,0) as achievement_type1, \
+          if(max_continuous_days>=3,1,0) as achievement_type2, \
+          if(max_continuous_days>=7,1,0) as achievement_type3, \
+          if(receive_comment_cnt>=100,1,0) as achievement_type4, \
+          if(fans_cnt>=50,1,0) as achievement_type7, \
+          if(collection_subscribe_uv>=100,1,0) as achievement_type8, \
+          if(lottery_cnt>=2,1,0) as achievement_type9, \
+          if(underscore_comment_pv_cnt>=10,1,0) as achievement_type10, \
+          if(circle_comment_cnt>=10,1,0) as achievement_type11, \
+          if(vote_cnt>=2,1,0) as achievement_type15 \
+   FROM lofter_dm.ads_creator_ecology_achievement_dd \
+   WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp4 \
+ON tmp1.userId = tmp4.blogId
+dependencies=ads_creator_ecology_identity_rank_dd,ads_creator_ecology_achievement_dd

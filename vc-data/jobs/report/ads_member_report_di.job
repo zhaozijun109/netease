@@ -1,0 +1,155 @@
+type = sparksql
+hive.query.01 =      \
+WITH vc_member_detail AS (    \
+select     \
+a.dt,   \
+a.user_id,   \
+b.register_date,   \
+b.origin_type,   \
+b.device_os,   \
+b.origin,   \
+case when c.user_id is not null then  1 else 0 end is_menber,   \
+cnt_order,   \
+order_price,   \
+cnt_order_no_member,   \
+order_price_no_member ,  \
+talk_cnt  \
+   \
+from (   \
+select dt,user_id    \
+from vc.dwd_vc_user_active_i_d     \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'   \
+group by dt,user_id     \
+) a    \
+join    \
+(   \
+select user_id,	register_date ,origin_type,device_os,   \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'   \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'   \
+     else '非LOFTER' end origin   \
+ from vc.dws_vc_user_behavior_info_a_d    \
+ where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )    \
+ and is_anonymity='N'   \
+ and is_test_user='N'   \
+ group by 1,2,3,4,5   \
+   \
+) b on a.user_id=b.user_id   \
+left join    \
+(   \
+SELECT    \
+    user_id,   \
+    date_add(valid_start_dt, pos) AS continuous_date   \
+FROM    \
+    (     \
+    SELECT   \
+    user_id,from_unixtime(CAST(valid_start_time AS BIGINT), 'yyyy-MM-dd')valid_start_time ,   \
+    to_date(from_unixtime(GREATEST(income_time,(CAST(valid_end_time AS BIGINT) - amount * 60)))) AS valid_start_dt,   \
+    from_unixtime(CAST(valid_end_time AS BIGINT), 'yyyy-MM-dd') AS valid_end_dt   \
+  FROM vc.ods_db_vc_user_income_record_nd   \
+  WHERE  reward_type = 3   \
+    AND reward_id IN ( 1,15)   \
+  GROUP BY 1,2,3,4   \
+  )   \
+LATERAL VIEW    \
+    posexplode(sequence(0, datediff(valid_end_dt, valid_start_dt))) AS pos, val   \
+group by 1,2   \
+) c on a.user_id=c.user_id  and a.dt=c.continuous_date    \
+   \
+left join    \
+(   \
+  SELECT   \
+    dt,   \
+    user_id,   \
+   count(distinct order_id) cnt_order,   \
+   sum(order_price) order_price,   \
+   count(distinct case when coalesce(category_level1,0)  not in ('充能卡','VIP')   then  order_id end   ) cnt_order_no_member,   \
+   sum(case when coalesce(category_level1,0)  not in ('充能卡','VIP')   then order_price end) order_price_no_member   \
+   \
+  FROM vc.dwd_vc_order_i_d   \
+  WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'   \
+     \
+  and order_status=2    \
+  GROUP BY dt, user_id   \
+) d on a.dt=d.dt and a.user_id=d.user_id   \
+left join   \
+(  \
+select dt,user_id ,	  \
+count(distinct message_id)    as talk_cnt  \
+from vc.dwd_vc_uc_talk_info_i_d   \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'   \
+and sender in (2, 4)   \
+and type = 1   \
+group by 1,2  \
+) e on a.dt=e.dt  and a.user_id=e.user_id   \
+  \
+group by 1,2,3,4,5,6,7,8,9,10,11 ,12  \
+)    \
+   \
+   \
+insert overwrite table vc_dm.ads_member_report_di partition(dt ='${azkaban.flow.1.days.ago}')        \
+select     \
+origin_type,   \
+device_os,   \
+origin,   \
+   \
+count(distinct case when dt='${azkaban.flow.1.days.ago}' and is_menber=1 then user_id end) day_active_member_user_cnt,   \
+count(distinct case when dt='${azkaban.flow.1.days.ago}'  then user_id end) day_active_user_cnt,   \
+   \
+count(distinct case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then user_id end) week_active_member_user_cnt,   \
+count(distinct case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}') then user_id end) week_active_user_cnt,   \
+count( case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then dt end) week_active_member_days_cnt,   \
+count( case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}') then dt end) week_active_days_cnt,   \
+   \
+count(distinct case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then user_id end) month_active_member_user_cnt,   \
+count(distinct case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}') then user_id end) month_active_user_cnt,   \
+count( case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then dt end) month_active_member_days_cnt,   \
+count( case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}') then dt end) month_active_days_cnt,   \
+   \
+sum(case when dt='${azkaban.flow.1.days.ago}' then  cnt_order end) day_cnt_order,   \
+sum(case when dt='${azkaban.flow.1.days.ago}' then  order_price end) day_order_price,   \
+count(distinct case when cnt_order>0 and dt='${azkaban.flow.1.days.ago}'  then user_id end) day_user_order_cnt,   \
+   \
+sum(case when is_menber=1   and dt='${azkaban.flow.1.days.ago}' then  cnt_order end)  day_member_cnt_order,   \
+sum(case when is_menber=1 and dt='${azkaban.flow.1.days.ago}'   then  order_price end) day_member_order_price,   \
+count(distinct case when cnt_order>0 and is_menber=1 and dt='${azkaban.flow.1.days.ago}'  then user_id end) day_member_user_order_cnt,   \
+   \
+sum(case when is_menber=1   and dt='${azkaban.flow.1.days.ago}' then  cnt_order_no_member end)  day_member_no_member_cnt_order,   \
+sum(case when is_menber=1 and dt='${azkaban.flow.1.days.ago}'   then  order_price_no_member end) day_member_no_member_order_price,   \
+count(distinct case when cnt_order_no_member>0 and is_menber=1 and dt='${azkaban.flow.1.days.ago}'  then user_id end) day_member_no_member_user_order_cnt,   \
+CASE         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) = 0 THEN 'd0'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 1 AND 7 THEN 'd1_d7'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 8 AND 15 THEN 'd8_d15'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 16 AND 31 THEN 'd16_d31'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 32 AND 60 THEN 'd32_d60'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 61 AND 90 THEN 'd61_d90'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 91 AND 180 THEN 'd91_d180'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 181 AND 360 THEN 'd181_d360'         \
+ELSE 'd361_plus'         \
+END as new_register_level  ,  \
+sum(case when dt='${azkaban.flow.1.days.ago}' and is_menber=1 then talk_cnt end) day_member_talk_cnt,  \
+count(distinct case when dt='${azkaban.flow.1.days.ago}' and is_menber=1 and talk_cnt>0  then   user_id  end) day_member_talk_user_cnt,  \
+sum(case when dt='${azkaban.flow.1.days.ago}'  then talk_cnt end) day_active_talk_cnt,  \
+count(distinct case when dt='${azkaban.flow.1.days.ago}'  and talk_cnt>0  then   user_id  end) day_active_talk_user_cnt,  \
+  \
+count(case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then dt end ) week_active_member_activesdays_cnt,  \
+count(case when (dt between '${azkaban.flow.7.days.ago}'   and   '${azkaban.flow.1.days.ago}')  then dt end ) week_active_activesdays_cnt,  \
+  \
+count(case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}') and is_menber=1 then dt end ) month_active_member_activesdays_cnt,  \
+count(case when (dt between '${azkaban.flow.30.days.ago}'   and   '${azkaban.flow.1.days.ago}')  then dt end ) month_active_activesdays_cnt  \
+   \
+from  vc_member_detail    \
+group by origin_type,   \
+device_os,   \
+origin,   \
+CASE         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) = 0 THEN 'd0'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 1 AND 7 THEN 'd1_d7'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 8 AND 15 THEN 'd8_d15'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 16 AND 31 THEN 'd16_d31'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 32 AND 60 THEN 'd32_d60'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 61 AND 90 THEN 'd61_d90'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 91 AND 180 THEN 'd91_d180'         \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 181 AND 360 THEN 'd181_d360'         \
+ELSE 'd361_plus'     \
+END

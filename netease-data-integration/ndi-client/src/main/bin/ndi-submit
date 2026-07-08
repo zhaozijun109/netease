@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+if [ -z "${NDI_HOME}" ]; then
+    export NDI_HOME=$(cd $(dirname $0)/..; pwd)
+fi
+
+# Find the java binary
+if [ -n "${JAVA_HOME}" ]; then
+  RUNNER="${JAVA_HOME}/bin/java"
+else
+  if [ "$(command -v java)" ]; then
+    RUNNER="java"
+  else
+    echo "JAVA_HOME is not set" >&2
+    exit 1
+  fi
+fi
+
+LAUNCH_CLASSPATH=${HADOOP_CONF_DIR}:${NDI_HOME}/conf:${NDI_HOME}/lib/*
+
+NDI_OPTS="-Xmx128m ${NDI_OPTS}"
+
+exec ${RUNNER} ${NDI_OPTS} -cp ${LAUNCH_CLASSPATH} com.netease.bdms.ndi.client.NDIClient $@

@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01= \
+    with week_posts as ( \
+       select id,blogId,userId,tags,publishTime,publishDate \
+       from lofter.dim_post \
+       where publishDate >= '${azkaban.flow.7.days.ago}' and publishDate <= '${azkaban.flow.1.days.ago}' and \
+             isPublished = true and allowView = 0 and valid in (0,12) and size(tags) > 0 \
+    ), \
+    tag_latest as ( \
+        select userId,tagName,blogId,postId \
+        from ( \
+            select b.userId,b.tagName,d.blogId,d.postId,d.publishTime, \
+                   row_number() over (partition by b.userId,b.tagName order by publishTime desc) as rk \
+            from lofter_db_dump.ods_db_favorite_tag_nd b \
+            join ( \
+                select a.userId, a.blogId, c1.postId, c1.tags, c1.publishTime \
+                from lofter_db_dump.ods_db_user_following_nd a \
+                join ( \
+                   select id as postId, blogId,tags, publishTime from week_posts \
+                ) c1 on a.blogId=c1.blogId \
+            ) d on b.userId=d.userId and array_contains(d.tags,b.tagName) \
+        ) e \
+        where rk=1 \
+    ), \
+    tag_week as ( \
+        select b.userId,b.tagName,count(d.postId) as postNum,count(distinct d.publishUserId) as postUv \
+        from lofter_db_dump.ods_db_favorite_tag_nd b \
+        join ( \
+           select a.userId,c1.postId, c1.tags,c1.userId as publishUserId \
+           from lofter_db_dump.ods_db_user_following_nd a \
+           join ( \
+              select id as postId,blogId,userId,tags,publishTime from week_posts \
+           ) c1 on a.blogId = c1.blogId \
+        ) d on b.userId=d.userId and array_contains(d.tags,b.tagName) \
+        group by b.userId,b.tagName \
+    ), \
+    tag_prev as ( \
+        select b.userId,b.tagName,count(d.postId) as postNum,count(distinct d.publishUserId) as postUv \
+        from lofter_db_dump.ods_db_favorite_tag_nd b \
+        join ( \
+           select a.userId,c1.postId, c1.tags,c1.userId as publishUserId \
+           from lofter_db_dump.ods_db_user_following_nd a \
+           join ( \
+               select id as postId,blogId,userId,tags,publishTime \
+               from week_posts \
+               where publishDate = '${azkaban.flow.1.days.ago}' \
+           ) c1 on a.blogId = c1.blogId \
+        ) d on b.userId=d.userId and \
+               array_contains(d.tags, b.tagName) \
+        group by b.userId, b.tagName \
+    ) \
+    insert overwrite table lofter_dm.ads_par_user_subscribed_tags_postinfo_di partition (dt='${azkaban.flow.1.days.ago}') \
+    select userId,collect_list(tagPostInfo) as tagPostInfos \
+    from ( \
+      select userId,named_struct('tagName',tagName,'dailyPostNum',postNum1,'weekPostNum',postNum7,'postUv',postUv1, \
+             'latestBlogId',latestBlogId,'latestPostId',latestPostId) as tagPostInfo \
+      from ( \
+         select a.userId,a.tagName,blogId as latestBlogId,postId as latestPostId, \
+                nvl(c.postNum,0) as postNum1, b.postNum as postNum7,nvl(c.postUv,0) as postUv1 \
+         from tag_latest a \
+         join tag_week b on a.userId = b.userId and a.tagName = b.tagName \
+         left join tag_prev c on a.userId = c.userId and a.tagName = c.tagName \
+      ) t1 \
+    ) t2 \
+    group by userId
+

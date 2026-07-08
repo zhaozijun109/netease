@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_user_chat_base_data_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select t1.new_chat_flag, \
+t1.chat_uv, \
+t1.chat_characters_drop_duplicate, \
+t1.total_chat_rounds, \
+t1.chat_characters, \
+t1.total_consume_nums, \
+t1.total_free_energy, \
+t1.total_buy_energy, \
+t1.total_reward_energy, \
+t1.is_anonymity \
+from \
+( \
+select a.dt, \
+COALESCE(case \
+    when b.user_id is null then 0 \
+    else 1 \
+  end,2) AS new_chat_flag, \
+  a.is_anonymity, \
+count(distinct a.user_id) as chat_uv,   \
+count(distinct a.character_id)  as chat_characters_drop_duplicate,  \
+count(a.character_id)  as chat_characters,  \
+sum(a.message_cnt) as total_chat_rounds, \
+sum(a.energy_consume) as total_consume_nums, \
+sum(a.free_energy) as total_free_energy, \
+sum(a.buy_energy) as total_buy_energy, \
+sum(a.reward_energy) as total_reward_energy \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d a \
+left join \
+( \
+select  \
+user_id, \
+first_talk_date as dt \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+)b on a.user_id=b.user_id and a.dt = b.dt \
+where a.dt = '${azkaban.flow.1.days.ago}' \
+group by a.dt, \
+case \
+    when b.user_id is null then 0 \
+    else 1 \
+  end, \
+a.is_anonymity \
+grouping sets( \
+(a.dt,is_anonymity), \
+(a.dt,case when b.user_id is null then 0 else 1 end,is_anonymity) \
+) \
+) t1 \

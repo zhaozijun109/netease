@@ -1,0 +1,81 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=\
+insert overwrite table lofter.dws_user_tag_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select t1.userId, \
+       t2.tag, \
+       text_send_like_cnt, \
+       photo_send_like_cnt, \
+       video_send_like_cnt, \
+       article_send_like_cnt, \
+       music_send_like_cnt, \
+       text_send_reproduce_cnt, \
+       photo_send_reproduce_cnt, \
+       video_send_reproduce_cnt, \
+       article_send_reproduce_cnt, \
+       music_send_reproduce_cnt, \
+       text_send_recommend_cnt, \
+       photo_send_recommend_cnt, \
+       video_send_recommend_cnt, \
+       article_send_recommend_cnt, \
+       music_send_recommend_cnt, \
+       text_send_collect_cnt, \
+       photo_send_collect_cnt, \
+       video_send_collect_cnt, \
+       article_send_collect_cnt, \
+       music_send_collect_cnt, \
+       send_hot_std, \
+       send_like_cnt, \
+       send_reproduce_cnt, \
+       send_recommend_cnt, \
+       send_collect_cnt, \
+       like_pv, \
+       reproduce_pv, \
+       recommend_pv, \
+       collect_pv \
+from ( \
+    select id as userId from lofter.dim_user where isAnonymous = 0 \
+) t1 \
+join ( \
+    select userId, \
+           tag, \
+           count(distinct if(post_content_type = '文字' and opType = 'praise', postId, null)) as text_send_like_cnt, \
+           count(distinct if(post_content_type = '图片' and opType = 'praise', postId, null)) as photo_send_like_cnt, \
+           count(distinct if(post_content_type = '视频' and opType = 'praise', postId, null)) as video_send_like_cnt, \
+           count(distinct if(post_content_type = '长文章' and opType = 'praise', postId, null)) as article_send_like_cnt, \
+           count(distinct if(post_content_type = '音乐' and opType = 'praise', postId, null)) as music_send_like_cnt, \
+           count(distinct if(post_content_type = '文字' and opType = 'reproduce', postId, null)) as text_send_reproduce_cnt, \
+           count(distinct if(post_content_type = '图片' and opType = 'reproduce', postId, null)) as photo_send_reproduce_cnt, \
+           count(distinct if(post_content_type = '视频' and opType = 'reproduce', postId, null)) as video_send_reproduce_cnt, \
+           count(distinct if(post_content_type = '长文章' and opType = 'reproduce', postId, null)) as article_send_reproduce_cnt, \
+           count(distinct if(post_content_type = '音乐' and opType = 'reproduce', postId, null)) as music_send_reproduce_cnt, \
+           count(distinct if(post_content_type = '文字' and opType = 'recommend', postId, null)) as text_send_recommend_cnt, \
+           count(distinct if(post_content_type = '图片' and opType = 'recommend', postId, null)) as photo_send_recommend_cnt, \
+           count(distinct if(post_content_type = '视频' and opType = 'recommend', postId, null)) as video_send_recommend_cnt, \
+           count(distinct if(post_content_type = '长文章' and opType = 'recommend', postId, null)) as article_send_recommend_cnt, \
+           count(distinct if(post_content_type = '音乐' and opType = 'recommend', postId, null)) as music_send_recommend_cnt, \
+           count(distinct if(post_content_type = '文字' and opType = 'subscribe', postId, null)) as text_send_collect_cnt, \
+           count(distinct if(post_content_type = '图片' and opType = 'subscribe', postId, null)) as photo_send_collect_cnt, \
+           count(distinct if(post_content_type = '视频' and opType = 'subscribe', postId, null)) as video_send_collect_cnt, \
+           count(distinct if(post_content_type = '长文章' and opType = 'subscribe', postId, null)) as article_send_collect_cnt, \
+           count(distinct if(post_content_type = '音乐' and opType = 'subscribe', postId, null)) as music_send_collect_cnt, \
+           count(1) as send_hot_std, \
+           count(distinct if(opType = 'praise', postId, null)) as send_like_cnt, \
+           count(distinct if(opType = 'reproduce', postId, null)) as send_reproduce_cnt, \
+           count(distinct if(opType = 'recommend', postId, null)) as send_recommend_cnt, \
+           count(distinct if(opType = 'subscribe', postId, null))  as send_collect_cnt, \
+           sum(if(opType = 'praise', 1, 0)) as like_pv, \
+           sum(if(opType = 'reproduce', 1, 0)) as reproduce_pv, \
+           sum(if(opType = 'recommend', 1, 0)) as recommend_pv, \
+           sum(if(opType = 'subscribe', 1, 0)) as collect_pv \
+    from lofter.dwd_post_hot_di lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId, tag \
+) t2 \
+on t1.userId = t2.userId \
+left join ( \
+    select tag from lofter.dim_black_tag \
+) t3 \
+on t2.tag = t3.tag \
+where t3.tag is null

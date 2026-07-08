@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_potential_user_retain_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select t1.dt as base_date, \
+  datediff('${azkaban.flow.1.days.ago}', t1.dt) as period,  \
+  t1.ip, \
+  t1.user_type, \
+  count(distinct t1.userid) as uv, \
+  count(  \
+    DISTINCT CASE  \
+      WHEN t2.dt = date_add(t1.dt, 1)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1) THEN t2.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS uv_2d,  \
+    count(  \
+    DISTINCT CASE  \
+      WHEN t2.dt = date_add(t1.dt, 6)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (6) THEN t2.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS uv_7d \
+FROM \
+  ( \
+    select a1.dt , \
+      a1.ip, \
+      a1.user_type, \
+      a1.userid \
+    from \
+      ( \
+        select \
+          dt, \
+          ip, \
+          user_type, \
+          userid \
+        from \
+          lofter.dws_ip_user_life_cycle_dd \
+        where \
+          dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+          and user_type in ('新用户', '潜力用户') \
+      ) a1 \
+      join ( \
+        select \
+          dt, \
+          userid \
+        from \
+          lofter.dwd_user_active_di \
+        where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+      ) a2 on a1.userid = a2.userid and a1.dt=a2.dt \
+  ) t1 \
+  left join ( \
+        select \
+          dt, \
+          userid \
+        from \
+          lofter.dwd_user_active_di \
+        where  dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+      ) t2 on t1.userid = t2.userid \
+	  AND t2.dt BETWEEN date_add(t1.dt, 0)  \
+  AND date_add(t1.dt, 30) \
+  WHERE \
+  datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1, 6) \
+group by \
+  t1.dt, \
+  t1.ip, \
+  t1.user_type  \
+grouping sets((t1.dt, t1.ip), (t1.dt, t1.ip, t1.user_type)) \

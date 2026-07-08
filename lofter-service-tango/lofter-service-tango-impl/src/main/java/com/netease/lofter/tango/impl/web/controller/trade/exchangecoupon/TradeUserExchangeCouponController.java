@@ -1,0 +1,38 @@
+package com.netease.lofter.tango.impl.web.controller.trade.exchangecoupon;
+
+import com.netease.lofter.acl.sdk.annotation.ACLResource;
+import com.netease.lofter.tango.impl.service.trade.exchangecoupon.TradeCouponOrderService;
+import com.netease.lofter.tango.impl.service.trade.exchangecoupon.TradeUserExchangeCouponService;
+import com.netease.lofter.tango.impl.web.query.trade.exchangecoupon.TradeCouponOrderQuery;
+import com.netease.lofter.tango.impl.web.query.trade.exchangecoupon.TradeUserExchangeCouponQuery;
+import com.netease.lofter.tango.impl.web.vo.PageResult;
+import com.netease.lofter.tango.impl.web.vo.Result;
+import com.netease.lofter.tango.impl.web.vo.trade.exchangecoupon.TradeCouponOrderVO;
+import com.netease.lofter.tango.impl.web.vo.trade.exchangecoupon.TradeUserExchangeCouponVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+
+@RestController
+@RequestMapping("/tango/userExchangeCoupon")
+@ACLResource(roles = "EXCHANGE_COUPON")
+public class TradeUserExchangeCouponController {
+
+    @Autowired
+    private TradeUserExchangeCouponService tradeUserExchangeCouponService;
+
+    @PostMapping("/list")
+    public Result<PageResult<TradeUserExchangeCouponVO>> listByQuery(@RequestBody @Validated TradeUserExchangeCouponQuery query) {
+        return Result.success(tradeUserExchangeCouponService.listByQuery(query));
+    }
+}
+
+
+
+
+
+

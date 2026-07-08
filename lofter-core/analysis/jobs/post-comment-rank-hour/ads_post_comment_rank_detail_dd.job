@@ -1,0 +1,306 @@
+type=sparksql
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+with postFeatureSource as ( \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           feedbackType, \
+           timeWeight, \
+           creatorHotType, \
+           l2UvBitmap, \
+           contentUnderstandWeight \
+    from lofter_dm.ads_post_comment_rank_feature_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+currentCreatorHot as ( \
+    select t1.commentId, \
+           t1.postId, \
+           t1.blogId \
+    from ( \
+        select commentId, \
+               postId, \
+               userId as blogId, \
+               status, \
+               _bin_op, \
+               row_number() over(partition by id, commentId, postId, userId order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_comment_hot_di \
+        where dt = '${azkaban.flow.current.date}' \
+    ) t1 \
+    join ( \
+        select postId from postFeatureSource group by postId \
+    ) t2 \
+    on t1.postId = t2.postId \
+    where rk = 1 and _bin_op = 0 and status = 1 \
+), \
+currentCommentSource as ( \
+    select commentId, \
+           t1.postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           if(get_json_object(ext, '$.feedbackType') is not null and get_json_object(ext, '$.feedbackType') > 0, 1, 0) as feedbackType, \
+           case when length(regexp_replace(content, '[\\\\ud800-\\\\udfff]|\\\\[\\\\{(.*)\\\\}\\\\]|[更新求踢]', '')) >= 5 then 2 \
+                when length(regexp_replace(content, '[\\\\ud800-\\\\udfff]|\\\\[\\\\{(.*)\\\\}\\\\]|[更新求踢]', '')) > 0 then 1 \
+                else 0 \
+           end as contentFlag, \
+           case when from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.current.date}' then 1 \
+                else 0 \
+           end as commentTimeFlag \
+    from ( \
+        select id as commentId, \
+               postId, \
+               blogId, \
+               publisherUserId, \
+               content, \
+               publishTime, \
+               commentHot, \
+               replyL1commentId, \
+               ext, \
+               _bin_op, \
+               row_number() over(partition by id, postId, publisherUserid order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_post_response_di \
+        where dt = '${azkaban.flow.current.date}' \
+    ) t1 \
+    join ( \
+        select postId from postFeatureSource group by postId \
+    ) t2 \
+    on t1.postId = t2.postId \
+    where rk = 1 and _bin_op in (0, 2) \
+), \
+currentCommentRank as ( \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           creatorWeight, \
+           timeWeight, \
+           l2CommentWeight, \
+           contentUnderstandWeight, \
+           commentWeightValue, \
+           rn \
+    from ( \
+        select commentId, \
+               postId, \
+               blogId, \
+               publisherUserId, \
+               publishTime, \
+               commentHot, \
+               replyL1commentId, \
+               -1 as creatorWeight, \
+               -1 as timeWeight, \
+               -1 as l2CommentWeight, \
+               -1 as contentUnderstandWeight, \
+               -1 as commentWeightValue, \
+               row_number() over(partition by postId order by commentHot desc) as rn \
+        from currentCommentSource \
+        where commentTimeFlag = 1 and contentFlag = 2 and replyL1commentId = 0 \
+    ) t \
+    where rn = 1 \
+), \
+currentL2UvSource as ( \
+    select replyL1commentId, \
+           to_bitmap(publisherUserId) as l2UvBitmap \
+    from currentCommentSource \
+    where replyL1commentId > 0 and contentFlag = 1 \
+    group by replyL1commentId \
+), \
+historyCommentSource as ( \
+    select t1.commentId, \
+           t1.postId, \
+           t1.blogId, \
+           t1.publisherUserId, \
+           t1.publishTime, \
+           t1.commentHot, \
+           t1.replyL1commentId, \
+           t1.feedbackType, \
+           case when from_unixtime(cast(t1.publishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' then 1.7 \
+                when from_unixtime(cast(t1.publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 6) and from_unixtime(cast(t1.publishTime / 1000 as bigint), 'yyyy-MM-dd') < '${azkaban.flow.1.days.ago}' then 1.5 \
+                when from_unixtime(cast(t1.publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 15) then 1.2 \
+                when from_unixtime(cast(t1.publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 30) then 1.1 \
+                else 1 \
+           end as timeWeight, \
+           contentFlag, \
+           commentTimeFlag, \
+           if(t2.commentId is not null, 1, 0) as creatorHotType, \
+           t3.l2UvBitmap, \
+           -1 as contentUnderstandWeight \
+    from currentCommentSource t1 \
+    left join currentCreatorHot t2 \
+    on t1.commentId = t2.commentId and t1.postId = t2.postId and t1.blogId = t2.blogId \
+    left join currentL2UvSource t3 \
+    on t1.commentId = t3.replyL1commentId \
+    where t1.replyL1commentId = 0 and t1.commentTimeFlag = 0 \
+), \
+historyCommentSourceAgg as ( \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           max(publishTime) as publishTime, \
+           max(commentHot) as commentHot, \
+           max(replyL1commentId) as replyL1commentId, \
+           max(feedbackType) as feedbackType, \
+           max(timeWeight) as timeWeight, \
+           max(creatorHotType) as creatorHotType, \
+           bitmap_count(bitmap_union(l2UvBitmap)) as l2Uv, \
+           max(contentUnderstandWeight) as contentUnderstandWeight \
+    from ( \
+        select commentId, \
+               postId, \
+               blogId, \
+               publisherUserId, \
+               publishTime, \
+               commentHot, \
+               replyL1commentId, \
+               feedbackType, \
+               timeWeight, \
+               creatorHotType, \
+               l2UvBitmap, \
+               contentUnderstandWeight \
+        from historyCommentSource \
+        union all \
+        select commentId, \
+               postId, \
+               blogId, \
+               publisherUserId, \
+               publishTime, \
+               commentHot, \
+               replyL1commentId, \
+               feedbackType, \
+               timeWeight, \
+               creatorHotType, \
+               l2UvBitmap, \
+               contentUnderstandWeight \
+        from postFeatureSource \
+    ) t \
+    group by commentId, postId, blogId, publisherUserId \
+), \
+historyCommentRank as ( \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           creatorWeight, \
+           timeWeight, \
+           l2CommentWeight, \
+           contentUnderstandWeight, \
+           commentWeightValue, \
+           rn \
+    from ( \
+        select commentId, \
+               postId, \
+               blogId, \
+               publisherUserId, \
+               publishTime, \
+               commentHot, \
+               replyL1commentId, \
+               creatorWeight, \
+               timeWeight, \
+               l2CommentWeight, \
+               contentUnderstandWeight, \
+               commentWeightValue, \
+               row_number() over(partition by postId order by commentWeightValue desc, commentHot desc) as rn \
+        from ( \
+            select commentId, \
+                   postId, \
+                   blogId, \
+                   publisherUserId, \
+                   publishTime, \
+                   commentHot, \
+                   replyL1commentId, \
+                   creatorWeight, \
+                   timeWeight, \
+                   l2CommentWeight, \
+                   contentUnderstandWeight, \
+                   ln(commentHot) * (timeWeight +  creatorWeight + l2CommentWeight + contentUnderstandWeight) as commentWeightValue \
+            from ( \
+                select commentId, \
+                       postId, \
+                       blogId, \
+                       publisherUserId, \
+                       publishTime, \
+                       commentHot, \
+                       replyL1commentId, \
+                      case when feedbackType <> 0 or creatorHotType <> 0 then 1.1 \
+                           else 1 \
+                      end as creatorWeight, \
+                      timeWeight, \
+                      case when l2Uv > 100 then 1.65 \
+                           when l2Uv > 50 then 1.6 \
+                           when l2Uv > 20 then 1.5 \
+                           when l2Uv > 10 then 1.35 \
+                           when l2Uv > 5 then 1.3 \
+                           when l2Uv > 2 then 1.2 \
+                           else 1 \
+                      end as l2CommentWeight, \
+                      case when contentUnderstandWeight = -1 then 0 \
+                           else contentUnderstandWeight \
+                      end as contentUnderstandWeight \
+                from historyCommentSourceAgg \
+            ) t \
+        ) tt \
+    ) ttt \
+    where rn <= 30 \
+) \
+insert overwrite table lofter_dm.ads_post_comment_rank_detail_dd partition(dt = '${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select commentId, \
+       postId, \
+       blogId, \
+       publisherUserId, \
+       publishTime, \
+       commentHot, \
+       replyL1commentId, \
+       creatorWeight, \
+       timeWeight, \
+       l2CommentWeight, \
+       commentWeightValue, \
+       row_number() over(partition by postId order by rn) as rank, \
+       contentUnderstandWeight \
+from ( \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           creatorWeight, \
+           timeWeight, \
+           l2CommentWeight, \
+           contentUnderstandWeight, \
+           commentWeightValue, \
+           rn \
+    from historyCommentRank \
+    union all \
+    select commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           publishTime, \
+           commentHot, \
+           replyL1commentId, \
+           creatorWeight, \
+           timeWeight, \
+           l2CommentWeight, \
+           contentUnderstandWeight, \
+           commentWeightValue, \
+           2.5 as rn \
+    from currentCommentRank \
+) t

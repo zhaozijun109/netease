@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+conf.spark.sql.broadcastTimeout=1800
+class=com.netease.lofter.etl.ads.UserSecurityLevelHigh
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=

@@ -1,0 +1,193 @@
+type=sparksql
+hive.query.01=\
+with sum_metric_source as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+        metric, \
+        dimension,dimension_value, sum(metric_value) as metric_value \
+    from vc.dws_ab_platform_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not in ('vc_arppu','vc_arpu','vc_visit2chat_rate_uv','vc_visit2pay_rate_uv','vc_chat2pay_rate_uv','vc_visit_retain_1d','vc_visit_retain_6d') \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+avg_metric_source as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+        concat(metric, '_avg') as metric, \
+        dimension,dimension_value, avg(metric_value) as metric_value \
+    from vc.dws_ab_platform_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not in ('vc_arppu','vc_arpu','vc_visit2chat_rate_uv','vc_visit2pay_rate_uv','vc_chat2pay_rate_uv','vc_visit_retain_1d','vc_visit_retain_6d','vc_chat_rounds') \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+atomic_metric_source1 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'exp_uv' then metric_value end) as exp_uv, \
+        max(case when metric = 'vc_visit_uv' then metric_value end) as vc_visit_uv, \
+        max(case when metric = 'vc_retain_visit_uv' then metric_value end) as vc_retain_visit_uv, \
+        max(case when metric = 'vc_new_device_cnt' then metric_value end) as vc_new_device_cnt, \
+        max(case when metric = 'vc_chat_uv' then metric_value end) as vc_chat_uv, \
+        max(case when metric = 'vc_pay_uv' then metric_value end) as vc_pay_uv, \
+        max(case when metric = 'vc_chat_rounds' then metric_value end) as vc_chat_rounds, \
+        max(case when metric = 'vc_roles_cnt' then metric_value end) as vc_roles_cnt, \
+        max(case when metric = 'vc_register_uv' then metric_value end) as vc_register_uv, \
+        max(case when metric = 'vc_chat_30_uv' then metric_value end) as vc_chat_30_uv, \
+        max(case when metric = 'vc_retain_uv' then metric_value end) as vc_retain_uv, \
+        max(case when metric = 'vc_visit_chat_uv' then metric_value end) as vc_visit_chat_uv, \
+        max(case when metric = 'vc_pay_money' then metric_value end) as vc_pay_money, \
+        max(case when metric = 'vc_chat_10_uv' then metric_value end) as vc_chat_10_uv, \
+        max(case when metric = 'new_exp_uv' then metric_value end) as new_exp_uv, \
+        max(case when metric = 'new_vc_visit_uv' then metric_value end) as new_vc_visit_uv, \
+        max(case when metric = 'new_vc_retain_visit_uv' then metric_value end) as new_vc_retain_visit_uv, \
+        max(case when metric = 'new_vc_new_device_cnt' then metric_value end) as new_vc_new_device_cnt, \
+        max(case when metric = 'new_vc_chat_uv' then metric_value end) as new_vc_chat_uv, \
+        max(case when metric = 'new_vc_pay_uv' then metric_value end) as new_vc_pay_uv, \
+        max(case when metric = 'new_vc_chat_rounds' then metric_value end) as new_vc_chat_rounds, \
+        max(case when metric = 'new_vc_roles_cnt' then metric_value end) as new_vc_roles_cnt, \
+        max(case when metric = 'new_vc_register_uv' then metric_value end) as new_vc_register_uv, \
+        max(case when metric = 'new_vc_chat_30_uv' then metric_value end) as new_vc_chat_30_uv, \
+        max(case when metric = 'new_vc_retain_uv' then metric_value end) as new_vc_retain_uv, \
+        max(case when metric = 'new_vc_visit_chat_uv' then metric_value end) as new_vc_visit_chat_uv, \
+        max(case when metric = 'new_vc_pay_money' then metric_value end) as new_vc_pay_money, \
+        max(case when metric = 'new_vc_chat_10_uv' then metric_value end) as new_vc_chat_10_uv \
+    from sum_metric_source \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+composite_metric_source1 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(vc_pay_money/vc_pay_uv,0) as double) as vc_arppu, \
+        cast(nvl(vc_chat_30_uv/vc_chat_uv,0) as double) as vc_30_chat_rate, \
+        cast(nvl(vc_pay_uv/vc_chat_uv,0) as double) as vc_chat2pay_rate_uv, \
+        cast(nvl(vc_register_uv/vc_new_device_cnt,0) as double) as vc_register_rate, \
+        cast(nvl(vc_pay_money/exp_uv,0) as double) as vc_arpu, \
+        cast(nvl(vc_visit_chat_uv/exp_uv,0)as double) as vc_visit_chat_rate, \
+        cast(nvl(vc_chat_uv/exp_uv,0) as double) as vc_01_chat_date, \
+        cast(nvl(vc_chat_10_uv/vc_chat_uv,0) as double) as vc_1_10_chat_rate, \
+        cast(nvl(vc_chat_30_uv/vc_chat_10_uv,0) as double) as vc_10_30_chat_rate, \
+        cast(nvl(vc_chat_rounds/exp_uv,0) as double) as vc_chat_rounds_avg, \
+        cast(nvl(vc_pay_uv/exp_uv,0) as double) as vc_pay_rate, \
+        cast(nvl(vc_retain_uv/vc_retain_visit_uv,0) as double) as vc_retain_rate, \
+        cast(nvl(vc_pay_uv/vc_visit_uv,0) as double) as vc_visit2pay_rate_uv, \
+        cast(nvl(vc_chat_uv/vc_visit_uv,0) as double) as vc_visit2chat_rate_uv, \
+        cast(nvl(new_vc_pay_money/new_vc_pay_uv,0) as double) as new_vc_arppu, \
+        cast(nvl(new_vc_chat_30_uv/new_vc_chat_uv,0) as double) as new_vc_30_chat_rate, \
+        cast(nvl(new_vc_pay_uv/new_vc_chat_uv,0) as double) as new_vc_chat2pay_rate_uv, \
+        cast(nvl(new_vc_register_uv/new_vc_new_device_cnt,0) as double) as new_vc_register_rate, \
+        cast(nvl(new_vc_pay_money/new_exp_uv,0) as double) as new_vc_arpu, \
+        cast(nvl(new_vc_visit_chat_uv/new_exp_uv,0)as double) as new_vc_visit_chat_rate, \
+        cast(nvl(new_vc_chat_uv/new_exp_uv,0) as double) as new_vc_01_chat_date, \
+        cast(nvl(new_vc_chat_10_uv/new_vc_chat_uv,0) as double) as new_vc_1_10_chat_rate, \
+        cast(nvl(new_vc_chat_30_uv/new_vc_chat_10_uv,0) as double) as new_vc_10_30_chat_rate, \
+        cast(nvl(new_vc_chat_rounds/new_exp_uv,0) as double) as new_vc_chat_rounds_avg, \
+        cast(nvl(new_vc_pay_uv/new_exp_uv,0) as double) as new_vc_pay_rate, \
+        cast(nvl(new_vc_retain_uv/new_vc_retain_visit_uv,0) as double) as new_vc_retain_rate, \
+        cast(nvl(new_vc_pay_uv/new_vc_visit_uv,0) as double) as new_vc_visit2pay_rate_uv, \
+        cast(nvl(new_vc_chat_uv/new_vc_visit_uv,0) as double) as new_vc_visit2chat_rate_uv \
+    from atomic_metric_source1 \
+), \
+composite_metric_source as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_arppu' as metric,dimension,dimension_value,vc_arppu as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_30_chat_rate' as metric,dimension,dimension_value,vc_30_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_chat2pay_rate_uv' as metric,dimension,dimension_value,vc_chat2pay_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_register_rate' as metric,dimension,dimension_value,vc_register_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_arpu' as metric,dimension,dimension_value,vc_arpu as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_visit_chat_rate' as metric,dimension,dimension_value,vc_visit_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_01_chat_date' as metric,dimension,dimension_value,vc_01_chat_date as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_chat_rounds_avg' as metric,dimension,dimension_value,vc_chat_rounds_avg as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_pay_rate' as metric,dimension,dimension_value,vc_pay_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_retain_rate' as metric,dimension,dimension_value,vc_retain_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_visit2pay_rate_uv' as metric,dimension,dimension_value,vc_visit2pay_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_visit2chat_rate_uv' as metric,dimension,dimension_value,vc_visit2chat_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_1_10_chat_rate' as metric,dimension,dimension_value,vc_1_10_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'vc_10_30_chat_rate' as metric,dimension,dimension_value,vc_10_30_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_arppu' as metric,dimension,dimension_value,new_vc_arppu as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_30_chat_rate' as metric,dimension,dimension_value,new_vc_30_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_chat2pay_rate_uv' as metric,dimension,dimension_value,new_vc_chat2pay_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_register_rate' as metric,dimension,dimension_value,new_vc_register_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_arpu' as metric,dimension,dimension_value,new_vc_arpu as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_visit_chat_rate' as metric,dimension,dimension_value,new_vc_visit_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_01_chat_date' as metric,dimension,dimension_value,new_vc_01_chat_date as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_chat_rounds_avg' as metric,dimension,dimension_value,new_vc_chat_rounds_avg as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_pay_rate' as metric,dimension,dimension_value,new_vc_pay_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_retain_rate' as metric,dimension,dimension_value,new_vc_retain_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_visit2pay_rate_uv' as metric,dimension,dimension_value,new_vc_visit2pay_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_visit2chat_rate_uv' as metric,dimension,dimension_value,new_vc_visit2chat_rate_uv as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_1_10_chat_rate' as metric,dimension,dimension_value,new_vc_1_10_chat_rate as metric_value \
+    from composite_metric_source1 \
+    union all  \
+    select exp_date,appid,sceneid,exp_id,bucket_id,'new_vc_10_30_chat_rate' as metric,dimension,dimension_value,new_vc_10_30_chat_rate as metric_value \
+    from composite_metric_source1 \
+) \
+insert overwrite table vc.dws_ab_platform_experiment_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, \
+    b.metricDetailId, \
+    c.metricDimId \
+from ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value,metric_value \
+    from( \
+        select * from sum_metric_source \
+        union all  \
+        select * from avg_metric_source \
+        union all  \
+        select * from composite_metric_source \
+    ) \
+) a \
+join ( \
+    select metricCode, id as metricDetailId \
+    from vc.ods_db_ab_metric_detail_nd \
+    where status = 1 \
+) b on a.metric = b.metricCode \
+join ( \
+    select id as metricDimId, metricId, dimName, dimCode \
+    from vc.ods_db_ab_metric_dim_nd \
+) c on b.metricDetailId = c.metricId and a.dimension_value = c.dimCode
+
+dependencies=dws_ab_platform_user_metric_di

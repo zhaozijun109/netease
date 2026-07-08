@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_seven_group_mau_cp_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select category_res, \
+       count(distinct deviceUdid) as mau \
+from ( \
+    select a.deviceUdid, \
+           c.category_res, \
+           sum(a.month_valid_pv) as month_valid_pv \
+    from ( \
+        select tag, \
+               deviceUdid, \
+               count(1) as month_valid_pv \
+        from lofter.dwd_post_browse_di lateral view explode(post_tags) t1 as tag \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and is_real = 1 \
+        group by tag, deviceUdid \
+    ) a \
+    join ( \
+        select tag, cpProps, ip \
+        from lofter.dim_tag_dd lateral view explode(split(ips, ',')) t1 as ip \
+        where dt = '${azkaban.flow.1.days.ago}' and cpProps = '同性cp' \
+        group by tag, cpProps, ip \
+    ) b \
+    on a.tag = b.tag \
+    join ( \
+        select ip, \
+               category_res \
+        from lofter.dim_seven_group_ip_category_res_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) c \
+    on b.ip = c.ip \
+    group by a.deviceUdid, c.category_res \
+) t \
+where month_valid_pv > 5 \
+group by category_res

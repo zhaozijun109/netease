@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.ads.VirtualRankingListOM5280CT
+
+dependencies=dwd_vc_character_package_i_d,ods_db_rt1h_vc_rank_config_nd
+

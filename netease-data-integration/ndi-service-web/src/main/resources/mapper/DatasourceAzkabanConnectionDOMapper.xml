@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.DatasourceAzkabanConnectionDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.DatasourceAzkabanConnectionDO">
+    <id column="id" jdbcType="BIGINT" property="id"/>
+    <result column="datasource_id" jdbcType="BIGINT" property="datasourceId"/>
+    <result column="product_id" jdbcType="BIGINT" property="productId"/>
+    <result column="cluster_id" jdbcType="VARCHAR" property="clusterId"/>
+    <result column="exec_status" jdbcType="TINYINT" property="execStatus"/>
+    <result column="exec_result" jdbcType="TINYINT" property="execResult"/>
+    <result column="exec_message" jdbcType="OTHER" property="execMessage"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler"/>
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime"/>
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime"/>
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, datasource_id, product_id, cluster_id, exec_status, exec_result, exec_message, 
+    create_time, modify_time
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from datasource_azkaban_connection
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete
+    from datasource_azkaban_connection
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.DatasourceAzkabanConnectionDO">
+    insert into datasource_azkaban_connection (id, datasource_id, product_id,
+                                               cluster_id, exec_status, exec_result,
+                                               exec_message, create_time, modify_time)
+    values (#{id,jdbcType=BIGINT}, #{datasourceId,jdbcType=BIGINT}, #{productId,jdbcType=BIGINT},
+            #{clusterId,jdbcType=VARCHAR}, #{execStatus,jdbcType=TINYINT}, #{execResult,jdbcType=TINYINT},
+            #{execMessage,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+            #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP})
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.DatasourceAzkabanConnectionDO">
+    insert into datasource_azkaban_connection
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="datasourceId != null">
+        datasource_id,
+      </if>
+      <if test="productId != null">
+        product_id,
+      </if>
+      <if test="clusterId != null">
+        cluster_id,
+      </if>
+      <if test="execStatus != null">
+        exec_status,
+      </if>
+      <if test="execResult != null">
+        exec_result,
+      </if>
+      <if test="execMessage != null">
+        exec_message,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="datasourceId != null">
+        #{datasourceId,jdbcType=BIGINT},
+      </if>
+      <if test="productId != null">
+        #{productId,jdbcType=BIGINT},
+      </if>
+      <if test="clusterId != null">
+        #{clusterId,jdbcType=VARCHAR},
+      </if>
+      <if test="execStatus != null">
+        #{execStatus,jdbcType=TINYINT},
+      </if>
+      <if test="execResult != null">
+        #{execResult,jdbcType=TINYINT},
+      </if>
+      <if test="execMessage != null">
+        #{execMessage,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective"
+          parameterType="com.netease.bdms.ndi.service.web.pojo.DatasourceAzkabanConnectionDO">
+    update datasource_azkaban_connection
+    <set>
+      <if test="datasourceId != null">
+        datasource_id = #{datasourceId,jdbcType=BIGINT},
+      </if>
+      <if test="productId != null">
+        product_id = #{productId,jdbcType=BIGINT},
+      </if>
+      <if test="clusterId != null">
+        cluster_id = #{clusterId,jdbcType=VARCHAR},
+      </if>
+      <if test="execStatus != null">
+        exec_status = #{execStatus,jdbcType=TINYINT},
+      </if>
+      <if test="execResult != null">
+        exec_result = #{execResult,jdbcType=TINYINT},
+      </if>
+      <if test="execMessage != null">
+        exec_message =
+        #{execMessage,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.DatasourceAzkabanConnectionDO">
+    update datasource_azkaban_connection
+    set datasource_id = #{datasourceId,jdbcType=BIGINT},
+        product_id    = #{productId,jdbcType=BIGINT},
+        cluster_id    = #{clusterId,jdbcType=VARCHAR},
+        exec_status   = #{execStatus,jdbcType=TINYINT},
+        exec_result   = #{execResult,jdbcType=TINYINT},
+        exec_message  = #{execMessage,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+        create_time   = #{createTime,jdbcType=TIMESTAMP},
+        modify_time   = #{modifyTime,jdbcType=TIMESTAMP}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+
+  <insert id="updateCheckingStatus">
+    REPLACE INTO
+    datasource_azkaban_connection(exec_status, datasource_id, product_id, cluster_id)
+    VALUES
+    <foreach collection="clusterIds" item="clusterId" separator=",">
+      (3, #{datasourceId,jdbcType=BIGINT}, #{productId,jdbcType=BIGINT}, #{clusterId,jdbcType=VARCHAR})
+    </foreach>
+  </insert>
+
+  <insert id="updateFinishedStatus">
+    REPLACE INTO datasource_azkaban_connection(exec_status, datasource_id, product_id, cluster_id)
+    <foreach collection="clusterIds" item="clusterId" separator=",">
+      (5, #{datasourceId,jdbcType=BIGINT}, #{productId,jdbcType=BIGINT}, #{clusterId,jdbcType=VARCHAR})
+    </foreach>
+  </insert>
+
+  <update id="updateResult">
+    update datasource_azkaban_connection
+    set exec_status  = 1,
+        exec_result  = #{execResult,jdbcType=TINYINT},
+        exec_message = #{execMessage,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler}
+    where datasource_id = #{datasourceId,jdbcType=BIGINT}
+      and product_id = #{productId,jdbcType=BIGINT}
+      and cluster_id = #{clusterId,jdbcType=VARCHAR}
+  </update>
+
+  <delete id="deleteByDataSourceAndProductId">
+    delete
+    from datasource_azkaban_connection
+    where datasource_id = #{datasourceId,jdbcType=BIGINT}
+    and product_id = #{productId,jdbcType=BIGINT}
+  </delete>
+
+  <select id="selectByDatasourceIdsAndProduct" resultMap="BaseResultMap">
+    SELECT *
+    FROM datasource_azkaban_connection
+    WHERE datasource_id IN
+    <foreach collection="datasourceIds" item="datasourceId" separator="," open="(" close=")">
+      #{datasourceId,jdbcType=BIGINT}
+    </foreach>
+    and product_id = #{productId,jdbcType=BIGINT}
+  </select>
+
+  <select id="selectByDatasourceAndProduct" resultMap="BaseResultMap">
+    select *
+    from datasource_azkaban_connection
+    where datasource_id = #{datasourceId,jdbcType=BIGINT}
+      and product_id = #{productId,jdbcType=BIGINT}
+  </select>
+</mapper>

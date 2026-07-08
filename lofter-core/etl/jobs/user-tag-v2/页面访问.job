@@ -1,0 +1,39 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 页面访问 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '页面访问'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '页面访问' as tag, 'DAY_7' as cat, \
+                                         case when eventId = 'z1-4' then '买周边' \
+                                              when eventId = 'z1-3' then '发布器' \
+                                              end as grp \
+                                  from lofter.dwd_user_events_di \
+                                  where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',7) and eventId in ('z1-4', 'z1-3') \
+                                  group by userId, eventId \
+                               \
+                                  union all \
+                               \
+                                  select userId, '页面访问' as tag, 'DAY_15' as cat, \
+                                         case when eventId = 'z1-4' then '买周边' \
+                                              when eventId = 'z1-3' then '发布器' \
+                                              end as grp \
+                                  from lofter.dwd_user_events_di \
+                                  where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',15) and eventId in ('z1-4', 'z1-3') \
+                                  group by userId, eventId \
+                               \
+                                  union all \
+                               \
+                                      select userId, '页面访问' as tag, 'DAY_30' as cat, \
+                                         case when eventId = 'z1-4' then '买周边' \
+                                              when eventId = 'z1-3' then '发布器' \
+                                              end as grp \
+                                  from lofter.dwd_user_events_di \
+                                  where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',30) and eventId in ('z1-4', 'z1-3') \
+                                  group by userId, eventId ) "

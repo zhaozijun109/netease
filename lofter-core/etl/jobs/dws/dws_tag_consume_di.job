@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_tag_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag,is_cmb_tag,ips,categories, \
+ifnull(sum(realpv),0) sum_realpv, \
+ifnull(sum(case when device_type='近30日新增' then realpv end),0) newuser_realpv, \
+ifnull(sum(case when device_type='近30日回流' then realpv end),0) returnuser_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 1 and 7 then realpv end),0) 1to7_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 8 and 14 then realpv end),0) 8to14_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 15 and 28 then realpv end),0) 15to28_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 29 and 30 then realpv end),0) 29to30_realpv, \
+count(distinct a.deviceudid) sum_realuv, \
+count(distinct case when device_type='近30日新增' then a.deviceudid end) newuser_realuv, \
+count(distinct case when device_type='近30日回流' then a.deviceudid end) returnuser_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 1 and 7 then a.deviceudid end) 1to7_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 8 and 14 then a.deviceudid end) 8to14_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 15 and 28 then a.deviceudid end) 15to28_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 29 and 30 then a.deviceudid end) 29to30_realuv \
+from \
+( \
+    select deviceudid,tag,count(postid) realpv \
+    from lofter.dwd_post_browse_di  \
+    lateral view explode(post_tags) t1 as tag  \
+    where dt ='${azkaban.flow.1.days.ago}' and is_real > 0  \
+    group by deviceudid,tag  \
+) a \
+join \
+( \
+    select deviceudid,device_type,active_days_30d \
+    from lofter.dws_device_growth_dau_stratify_di  \
+    where dt ='${azkaban.flow.1.days.ago}'  \
+) b \
+on a.deviceudid=b.deviceudid \
+left join \
+( \
+    select tag,is_cmb_tag,ips,categories \
+    from lofter.dim_tag \
+) c \
+on a.tag=c.tag \
+group by a.tag,is_cmb_tag,ips,categories
+dependencies=dws_device_growth_dau_stratify_di

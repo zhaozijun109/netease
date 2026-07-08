@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dws_vc_uc_talk_summary_single_a_d partition (dt = '${azkaban.flow.1.days.ago}') \
+              select user_id, \
+                     character_id, \
+                     max(character_name)               as character_name, \
+                     max(fetter_nums)                  as fetter_nums, \
+                     min(dt)                           as first_talk_date, \
+                     max(dt)                           as last_talk_date, \
+                     sum(talk_cnt)                     as talk_cnt, \
+                     sum(energy_consume)               as energy_consume, \
+                     DATEDIFF(CURRENT_DATE(), min(dt)) as first_talk_intervals, \
+                     DATEDIFF(CURRENT_DATE(), max(dt)) as last_talk_intervals, \
+                     nvl(character_type,'ogc')         as character_type, \
+                     nvl(is_anonymity,'N')             as is_anonymity \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+              group by user_id, character_id, nvl(character_type,'ogc'), nvl(is_anonymity,'N');
+
+dependencies=dws_vc_uc_talk_day_cnt_single_i_d

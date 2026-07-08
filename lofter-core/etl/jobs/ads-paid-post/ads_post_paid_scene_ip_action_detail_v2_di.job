@@ -1,0 +1,256 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_scene_ip_action_detail_v2_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  NVL(scene, '汇总') as scene, \
+  NVL(ip, '汇总') as ip, \
+  is_from_rec, \
+  blog_channel, \
+  post_content_type, \
+  quality_type, \
+  expose_postidnum, \
+  expose_uv, \
+  expose_pv, \
+  click_postidnum, \
+  click_uv, \
+  click_pv, \
+  browse_postidnum, \
+  browse_uv, \
+  browse_pv, \
+  realbrowse_postidnum, \
+  realbrowse_uv, \
+  realbrowse_pv \
+from \
+  ( \
+    select \
+      a.scene, \
+      a.is_from_rec, \
+      blog_channel, \
+      post_content_type, \
+      NVL(c.ip, '其他') as ip, \
+      NVL(d.type, '其他') as quality_type, \
+      count( \
+        distinct case \
+          when action_type = 'expose' then a.postid \
+          else null \
+        end \
+      ) as expose_postidnum, \
+      count( \
+        distinct case \
+          when action_type = 'expose' then a.userid \
+          else null \
+        end \
+      ) as expose_uv, \
+      count( \
+        distinct case \
+          when action_type = 'expose' then concat_ws(',', a.userid, a.postid) \
+          else null \
+        end \
+      ) as expose_pv, \
+      count( \
+        distinct case \
+          when action_type = 'click' then a.postid \
+          else null \
+        end \
+      ) as click_postidnum, \
+      count( \
+        distinct case \
+          when action_type = 'click' then a.userid \
+          else null \
+        end \
+      ) as click_uv, \
+      count( \
+        distinct case \
+          when action_type = 'click' then concat_ws(',', a.userid, a.postid) \
+          else null \
+        end \
+      ) as click_pv, \
+      count( \
+        distinct case \
+          when action_type = 'page_view' then a.postid \
+          else null \
+        end \
+      ) as browse_postidnum, \
+      count( \
+        distinct case \
+          when action_type = 'page_view' then a.userid \
+          else null \
+        end \
+      ) as browse_uv, \
+      count( \
+        distinct case \
+          when action_type = 'page_view' then concat_ws(',', a.userid, a.postid) \
+          else null \
+        end \
+      ) as browse_pv, \
+      count( \
+        distinct case \
+          when action_type = 'page_duration' then a.postid \
+          else null \
+        end \
+      ) as realbrowse_postidnum, \
+      count( \
+        distinct case \
+          when action_type = 'page_duration' then a.userid \
+          else null \
+        end \
+      ) as realbrowse_uv, \
+      count( \
+        distinct case \
+          when action_type = 'page_duration' then concat_ws(',', a.userid, a.postid) \
+          else null \
+        end \
+      ) as realbrowse_pv \
+    from \
+      ( \
+        select \
+          action_type, \
+          post_content_type, \
+          userid, \
+          postid, \
+          dt, \
+          occurtime, \
+          NVL(scene, '未知') as scene, \
+          ip, \
+          is_from_rec \
+        from \
+          lofter.dwd_post_browse_di LATERAL VIEW explode( \
+            case \
+              when size(post_ips) < 1 then array('其他') \
+              else post_ips \
+            end \
+          ) t2 AS ip \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and ( \
+            ( \
+              action_type = 'page_view' \
+              and scene != '' \
+            ) \
+            or ( \
+              action_type = 'page_duration' \
+              and scene != '' \
+              and is_real = 1 \
+            ) \
+          ) \
+        union \
+        select \
+          case \
+            when reaction is null then 'expose' \
+            else 'click' \
+          end as action_type, \
+          post_content_type, \
+          a.userid, \
+          a.postid, \
+          dt, \
+          occurtime, \
+          NVL(scene, '未知') as scene, \
+          ip, \
+          is_rec as is_from_rec \
+        from \
+          ( \
+            select \
+              reaction, \
+              post_content_type, \
+              userid, \
+              postid, \
+              dt, \
+              occurtime, \
+              scene, \
+              is_rec \
+            from \
+              lofter.dwd_post_expose_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and ( \
+                reaction is null \
+                or reaction = 'click' \
+              ) \
+              and scene != '' \
+              and postid > 0 \
+          ) a \
+          join lofter.dim_post b on a.postid = b.id LATERAL VIEW explode( \
+            case \
+              when size(ips) < 1 then array('其他') \
+              else ips \
+            end \
+          ) t2 AS ip \
+      ) a \
+      join ( \
+        select \
+          postid, \
+          blogid, \
+          blog_channel \
+        from \
+          lofter.dim_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and blog_channel in (0, 1) \
+          and ispay_returngift in (0, 1) \
+        group by \
+          postid, \
+          blogid, \
+          blog_channel \
+      ) b on a.postid = b.postid \
+      left join ( \
+        select \
+          ip \
+        from \
+          lofter_dm.ads_paid_post_quality_score_value_di \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          ip \
+      ) c on a.ip = c.ip \
+      left join ( \
+        select \
+          postid, \
+          type \
+        from \
+          lofter.dws_gift_post_premium_scoring_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          postid, \
+          type \
+      ) d on a.postid = d.postid \
+    group by \
+      a.scene, \
+      a.is_from_rec, \
+      blog_channel, \
+      post_content_type, \
+      NVL(c.ip, '其他'), \
+      NVL(d.type, '其他') grouping sets ( \
+        ( \
+          a.scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(c.ip, '其他'), \
+          NVL(d.type, '其他') \
+        ), \
+        ( \
+          a.scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(d.type, '其他') \
+        ), \
+        ( \
+          NVL(c.ip, '其他'), \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(d.type, '其他') \
+        ), \
+        ( \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(d.type, '其他') \
+        ) \
+      ) \
+  ) a \
+
+dependencies=ads_paid_post_quality_score_value_di

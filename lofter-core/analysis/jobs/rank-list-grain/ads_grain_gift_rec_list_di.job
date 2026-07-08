@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listSource = 6) \
+select listType, listName, \
+       a.postId, a.blogId, b.publishDate, b.blogName, indexValue, listRank, \
+       distinctId, \
+       md5(concat(distinctId, '${azkaban.flow.1.days.ago}')) as uniqId \
+from ( \
+    select postId, blogId, \
+           10 as listType, \
+           concat(if(ip is not null, concat('#', ip, ' '), ''), rule, '榜') as listName, \
+           pattern_id as distinctId, \
+           count(1) over (partition by pattern_id) as rule_post_count, \
+           row_number() over (partition by pattern_id order by pattern_score, postId) as listRank, \
+           0 - pattern_score as indexValue \
+    from ( \
+        select *, \
+               if(size(split(pattern_id, '###')) > 1, split(pattern_id, '###')[0], null) as ip, \
+               if(size(split(pattern_id, '###')) > 1, split(pattern_id, '###')[1], pattern_id) as rule \
+        from rec.return_gift_tag_boost_artilce_pool \
+        where day <= '${azkaban.flow.1.days.ago}' \
+    ) x \
+    join ( \
+        select max(day) as day from rec.return_gift_tag_boost_artilce_pool where day <= '${azkaban.flow.1.days.ago}' \
+    ) y on x.day = y.day \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+where a.rule_post_count >= 10

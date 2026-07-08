@@ -1,0 +1,202 @@
+type = sparksql
+hive.query.01 =  \
+with device_active as  \
+( \
+select t1.dt, \
+t1.deviceos, \
+t1.last_appchannel as appchannel, \
+t1.last_appversion as appversion, \
+t2.origin_type, \
+t1.device_udid \
+from  \
+( \
+select dt,deviceudid as device_udid, \
+deviceos, \
+last_appchannel, \
+last_appversion \
+from vc.dwd_device_active_di   \
+) t1   \
+left join   \
+( \
+select device_udid,origin_type \
+from  \
+( \
+select device_udid,origin_type, \
+ROW_NUMBER() OVER (PARTITION BY device_udid ORDER BY dt ASC) as rn \
+from vc.dwd_vc_device_growth_attribution_i_d   \
+) \
+where rn=1 \
+) t2  on t1.device_udid = t2.device_udid  \
+group by  t1.dt, \
+t1.deviceos, \
+t1.last_appchannel, \
+t1.last_appversion, \
+t2.origin_type, \
+t1.device_udid \
+), \
+device_new as  \
+( \
+select dt, \
+device_udid, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type \
+from vc.dwd_vc_device_growth_attribution_i_d \
+where device_type='new' \
+group by dt, \
+device_udid, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type \
+), \
+device_return as  \
+( \
+select t1.dt, \
+t1.deviceos, \
+t1.last_appchannel as appchannel, \
+t1.last_appversion as appversion, \
+t2.origin_type, \
+t1.device_udid \
+from  \
+( \
+select dt,deviceudid as device_udid, \
+deviceos, \
+last_appchannel, \
+last_appversion \
+from vc.dwd_device_return_di   \
+) t1   \
+left join   \
+( \
+select device_udid,origin_type \
+from  \
+( \
+select device_udid,origin_type, \
+ROW_NUMBER() OVER (PARTITION BY device_udid ORDER BY dt ASC) as rn \
+from vc.dwd_vc_device_growth_attribution_i_d   \
+) \
+where rn=1 \
+) t2  on t1.device_udid = t2.device_udid  \
+group by  t1.dt, \
+t1.deviceos, \
+t1.last_appchannel, \
+t1.last_appversion, \
+t2.origin_type, \
+t1.device_udid \
+), \
+device_total as  \
+( \
+select dt, \
+'active' as device_type, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type, \
+device_udid \
+from device_active \
+ \
+union all  \
+ \
+select dt, \
+'new' as device_type, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type, \
+device_udid \
+from device_new  \
+ \
+union all \
+ \
+select dt, \
+'return' as device_type, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type, \
+device_udid \
+from device_return \
+) \
+ \
+insert overwrite table vc_dm.ads_vc_device_retain_new_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+t1.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+t1.device_type, \
+t1.deviceos, \
+t1.appchannel, \
+t1.appversion, \
+t1.origin_type, \
+count(distinct t1.deviceudid) as active_device, \
+count( \
+distinct case \
+when t2.dt = date_add(t1.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t2.deviceudid \
+end \
+) as active_device_1d, \
+count( \
+distinct case \
+when t2.dt = date_add(t1.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t2.deviceudid \
+end \
+) as active_device_2d, \
+count( \
+distinct case \
+when t2.dt = date_add(t1.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t2.deviceudid \
+end \
+) as active_device_7d, \
+count( \
+distinct case \
+when t2.dt = date_add(t1.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t2.deviceudid \
+end \
+) as active_device_15d, \
+count( \
+distinct case \
+when t2.dt = date_add(t1.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t2.deviceudid \
+end \
+) as active_device_30d \
+from \
+( \
+select \
+dt, \
+device_type, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type, \
+device_udid as deviceudid \
+from \
+device_total \
+where \
+dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+select \
+dt, \
+deviceos, \
+appchannel, \
+appversion, \
+origin_type, \
+device_udid as deviceudid \
+from \
+device_active \
+where \
+dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+) t2 on t1.deviceudid = t2.deviceudid \
+AND t2.dt BETWEEN date_add(t1.dt, 0) \
+AND date_add(t1.dt, 30) \
+WHERE \
+datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 6, 14, 29) \
+group by \
+t1.dt, \
+t1.deviceos, \
+t1.device_type, \
+t1.appchannel, \
+t1.appversion, \
+t1.origin_type \

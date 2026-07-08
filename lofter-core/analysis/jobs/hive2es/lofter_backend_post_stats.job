@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select dt,postUserCount,postCount,registerCount from lofter_dm.ads_backend_post_publish_di where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --id dt --dest lofter_backend_post_stats

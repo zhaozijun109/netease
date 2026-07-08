@@ -1,0 +1,21 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=10
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dwd_tag_ip_mapping_nd \
+              select a.tag, b.ip, min(nvl(a.ip_rank,0)) + 1 as ip_rank \
+              from ( \
+                select name as tag, ipId, ip_rank \
+                from lofter_db_dump.ods_db_cmb_tag_nd \
+                     lateral view posexplode(split(ipids, ';')) t2 AS ip_rank, ipId \
+              ) a join ( \
+                 select id,name as ip from lofter_db_dump.ods_db_cmb_ip_nd \
+                 where status=0 \
+              ) b on a.ipId = b.id \
+              where length(a.tag) > 0 and length(b.ip) > 0 \
+              group by a.tag, b.ip \
+              distribute by 1
+dependencies=

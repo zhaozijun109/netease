@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_video_quality_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    deviceOs, \
+    device_tier, \
+    appVersion, \
+    dominant_quality, \
+    play_session_count, \
+    play_session_uv, \
+    buffer_session_count, \
+    buffer_session_uv, \
+    buffer_time_ms, \
+    played_time_ms, \
+    ttfp_ms_sum, \
+    ttfp_ms_count, \
+    ttfp_ms_p50_input_count, \
+    ttfr_ms_sum, \
+    ttfr_ms_count, \
+    play_started_count, \
+    play_failed_count, \
+    play_heartbeat_count_sum, \
+    play_attempt_count, \
+    quality_switch_count_sum, \
+    speedrate_uv \
+from lofter.dws_video_quality_dd \
+where dt = '${azkaban.flow.1.days.ago}'
+dependencies=

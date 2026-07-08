@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dws.UserLifeCircleV2Stats
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=dws_par_user_content_di,dws_evt_login_user_last_dd,dws_par_user_interaction_dd

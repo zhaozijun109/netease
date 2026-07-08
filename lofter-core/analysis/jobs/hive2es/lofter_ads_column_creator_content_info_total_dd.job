@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('_', a.columnId, a.columnType, a.blogid) as id, a.`columnId`, a.`columnType`, a.`blogid`, a.`exposureCount`, a.`clickCount`, a.`clickRateCount`, a.`fansNumber`, a.`dt` from (select * from `lofter_dm`.`ads_column_creator_content_info_total_dd` where dt='${azkaban.flow.1.days.ago}') a join (select columnId from `lofter_dm`.`ads_column_delivery_task_info_di` where dt = '${azkaban.flow.1.days.ago}' group by columnId) b on a.columnId = b.columnId"
+params= --partition ${azkaban.flow.1.days.ago} --id id --dest lofter_ads_column_creator_content_info_total_dd --postfixsep --atom

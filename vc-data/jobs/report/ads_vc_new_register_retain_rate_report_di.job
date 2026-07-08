@@ -1,0 +1,55 @@
+type = sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_new_register_retain_rate_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select   \
+a.register_date,origin_type,device_os,origin,  \
+datediff('${azkaban.flow.1.days.ago}', a.register_date) as period,   \
+count(distinct a.user_id) register_user_cnt,  \
+count(distinct case when  register_date=date_sub(b.dt,1) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =1 then b.user_id end)  active_uv_2d,  \
+count(distinct case when  register_date=date_sub(b.dt,2) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =2 then b.user_id end)  active_uv_3d,  \
+count(distinct case when  register_date=date_sub(b.dt,3) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =3 then b.user_id end)  active_uv_4d,  \
+count(distinct case when  register_date=date_sub(b.dt,4) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =4 then b.user_id end)  active_uv_5d,  \
+count(distinct case when  register_date=date_sub(b.dt,5) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =5 then b.user_id end)  active_uv_6d,  \
+count(distinct case when  register_date=date_sub(b.dt,6) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =6 then b.user_id end)  active_uv_7d,  \
+count(distinct case when  register_date=date_sub(b.dt,7) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =7 then b.user_id end)  active_uv_8d,  \
+count(distinct case when  register_date=date_sub(b.dt,8) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =8 then b.user_id end)  active_uv_9d,  \
+count(distinct case when  register_date=date_sub(b.dt,9) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =9 then b.user_id end)  active_uv_10d,  \
+count(distinct case when  register_date=date_sub(b.dt,10) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =10 then b.user_id end)  active_uv_11d,  \
+count(distinct case when  register_date=date_sub(b.dt,11) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =11 then b.user_id end)  active_uv_12d,  \
+count(distinct case when  register_date=date_sub(b.dt,12) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =12 then b.user_id end)  active_uv_13d,  \
+count(distinct case when  register_date=date_sub(b.dt,13) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =13 then b.user_id end)  active_uv_14d,  \
+count(distinct case when  register_date=date_sub(b.dt,14) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =14 then b.user_id end)  active_uv_15d,  \
+count(distinct case when  register_date=date_sub(b.dt,15) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =15 then b.user_id end)  active_uv_16d,  \
+count(distinct case when  register_date=date_sub(b.dt,16) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =16 then b.user_id end)  active_uv_17d,  \
+count(distinct case when  register_date=date_sub(b.dt,17) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =17 then b.user_id end)  active_uv_18d,  \
+count(distinct case when  register_date=date_sub(b.dt,18) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =18 then b.user_id end)  active_uv_19d,  \
+count(distinct case when  register_date=date_sub(b.dt,19) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =19 then b.user_id end)  active_uv_20d,  \
+count(distinct case when  register_date=date_sub(b.dt,20) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =20 then b.user_id end)  active_uv_21d,  \
+count(distinct case when  register_date=date_sub(b.dt,21) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =21 then b.user_id end)  active_uv_22d,  \
+count(distinct case when  register_date=date_sub(b.dt,22) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =22 then b.user_id end)  active_uv_23d,  \
+count(distinct case when  register_date=date_sub(b.dt,23) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =23 then b.user_id end)  active_uv_24d,  \
+count(distinct case when  register_date=date_sub(b.dt,24) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =24 then b.user_id end)  active_uv_25d,  \
+count(distinct case when  register_date=date_sub(b.dt,25) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =25 then b.user_id end)  active_uv_26d,  \
+count(distinct case when  register_date=date_sub(b.dt,26) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =26 then b.user_id end)  active_uv_27d,  \
+count(distinct case when  register_date=date_sub(b.dt,27) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =27 then b.user_id end)  active_uv_28d,  \
+count(distinct case when  register_date=date_sub(b.dt,28) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =28 then b.user_id end)  active_uv_29d,  \
+count(distinct case when  register_date=date_sub(b.dt,29) and  datediff('${azkaban.flow.1.days.ago}', a.register_date) =29 then b.user_id end)  active_uv_30d  \
+from(  \
+ select user_id,	register_date ,origin_type,device_os,  \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'  \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'  \
+     else '非LOFTER' end origin  \
+ from vc.dws_vc_user_behavior_info_a_d   \
+ where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )  \
+ and register_date BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+ and is_anonymity='N'  \
+ and is_test_user='N'  \
+) a   \
+left join   \
+(  \
+select dt,user_id   \
+from vc.dwd_vc_user_active_i_d    \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+group by dt,user_id    \
+) b on a.user_id=b.user_id   \
+group by 1,2,3,4,5  \
+  \

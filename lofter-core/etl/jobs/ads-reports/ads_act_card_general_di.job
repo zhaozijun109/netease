@@ -1,0 +1,71 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select aa.cardactivitycode,name,payers,orders,money,first_total,first_money_total,first_acti,first_money_acti,new_payers,   \
+       money_new,return_payers,money_return,orders_one_card,orders_ten_card,order_cards,order_payers_one_card,order_payers_ten_card,    \
+       order_amount_one_card,order_amount_ten_card,orders_five_card,order_payers_five_card,order_amount_five_card,  \
+       bb.visit_uv, creator, activity_code_type \
+from ( \
+    select dt,nvl(cardactivitycode,'all') as cardactivitycode, \
+           nvl(activity_code_type,'all') as activity_code_type, \
+           nvl(name,'all') as name, nvl(creator, 'all') as creator, \
+           count(distinct buyerid) payers, \
+           count(distinct orderid) as orders, \
+           sum(money) money, \
+           count(distinct case when rk_total=1 then buyerid end) first_total, \
+           sum(case when rk_total=1 then money end) first_money_total, \
+           count(distinct if(rk_acti=1, buyerid,null)) first_acti, sum(case when rk_acti=1 then money end) first_money_acti, \
+           count(distinct b.id) new_payers, sum(if(b.id is not null,money,0)) money_new, \
+           count(distinct c.userid) return_payers, sum(if(c.userid is not null, money,0)) money_return, \
+           count(distinct if(money_type=1, orderid,null)) orders_one_card, \
+           count(distinct if(money_type=10, orderid,null)) orders_ten_card, \
+           count(distinct if(money_type=1, orderid,null)) + 5 * count(distinct if(money_type = 5, orderid,null)) + 10 * count(distinct if(money_type=10, orderid,null)) order_cards, \
+           count(distinct if(money_type=1, buyerid,null)) order_payers_one_card, \
+           count(distinct if(money_type=10, buyerid,null)) order_payers_ten_card, \
+           sum(if(money_type=1, money, null)) order_amount_one_card, \
+           sum(if(money_type=10, money, null)) order_amount_ten_card, \
+           count(distinct if(money_type=5, orderid,null)) orders_five_card, \
+           count(distinct if(money_type=5, buyerid,null)) order_payers_five_card, \
+           sum(if(money_type=5, money, null)) order_amount_five_card \
+    from ( \
+        select dt, \
+               cardactivitycode, activity_code_type, name, creator, buyerid, orderid, money_type, \
+               dense_rank() over (partition by buyerid order by dt asc) rk_total, \
+               dense_rank() over (partition by buyerid,cardactivitycode order by dt asc) rk_acti,money \
+        from ( \
+          select from_unixtime(cast(a.createtime/1000 as bigint),'yyyy-MM-dd') as dt, \
+                cardactivitycode, case when b.slotType=4 then '一番赏' else '抽赏' end as activity_code_type, \
+                b.name name, b.creator, \
+                a.buyerid buyerid,orderid, \
+                cast(get_json_object(get_json_object(attrgroupext,'$.ext'), '$.slotNum') as bigint) as money_type, \
+                sum(storeprice*productnum-newcouponpreferential) money \
+          from lofter_db_dump.ods_db_benefit_order_product_nd  a \
+          left outer join lofter_db_dump.ods_db_benefit_card_activity_nd b \
+          on a.cardactivitycode = b.code and a.createTime between b.startTime and b.endTime \
+          where a.status in (1,3,4) and type = 5 \
+          group by from_unixtime(cast(a.createtime/1000 as bigint),'yyyy-MM-dd'), cardactivitycode, \
+                   case when b.slotType=4 then '一番赏' else '抽赏' end, \
+                   b.name,b.creator,a.buyerid,orderid,cast(get_json_object(get_json_object(attrgroupext,'$.ext'), '$.slotNum') as bigint) \
+        ) t \
+    ) a left outer join ( \
+          select id \
+          from lofter.dim_user \
+          where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+       ) b on a.buyerid = b.id \
+       left outer join ( \
+          select userid \
+          from lofter.device_return lateral view explode(userids) t1 as userid \
+          where dt = '${azkaban.flow.1.days.ago}' and period = 30 \
+          group by userid \
+       ) c on a.buyerid=c.userid \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+    group by dt,cardactivitycode,activity_code_type,name,creator     \
+    grouping sets((dt,cardactivitycode,activity_code_type,name,creator),(dt))    \
+) aa \
+left outer join (    \
+  select dt,nvl(activityid,'all') as activityid, count(distinct userId) as visit_uv  \
+  from lofter.dws_act_card_cvr_di    \
+  where dt = '${azkaban.flow.1.days.ago}' and  activityid is not null  \
+  group by dt,activityid     \
+  grouping sets((dt,activityid),(dt))   \
+) bb on aa.cardactivitycode=bb.activityid  and aa.dt=bb.dt

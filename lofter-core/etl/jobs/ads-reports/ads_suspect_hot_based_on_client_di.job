@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_suspect_hot_based_on_client_di partition(dt='${azkaban.flow.1.days.ago}')  \
+              select \
+              	  a.dt as baseDate,b.clienttype as client_type, \
+              	  a.type as hot_type, \
+              	  count(distinct a.postid) as shuare_post_num, \
+              	  count(distinct a.publisheruserid) as shuare_uv, \
+              	  count(distinct a.id) as shuare_pv \
+              from \
+                ( \
+                  select \
+              		b.dt,b.type,b.publisheruserid,b.id,b.postid,b.optime \
+                  from \
+                    ( \
+                      select \
+              			dt, publisheruserid,postid \
+                      from \
+              			lofter.dwd_suspect_shuare_model_di \
+                      where \
+              			dt ='${azkaban.flow.1.days.ago}' \
+                      group by \
+              			dt,publisheruserid,postid \
+                    ) a \
+                    join ( \
+                      select \
+              			id,postid,blogid,type,publisheruserid,optime, \
+              			from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+                      from \
+                        lofter_db_dump.ods_db_post_hot_nd \
+                      where \
+              			type in (1, 2, 3, 4) and  \
+              			from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                    ) b on a.postid = b.postid \
+                    and a.publisheruserid = b.publisheruserid \
+                ) a \
+                left join ( \
+                  select \
+              		userid,postid,dt,nvl(platform,'else') as clienttype,optime \
+                  from \
+              		lofter.dwd_post_hot_di \
+                  where \
+              		dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+              		opType = 'praise' \
+                ) b  \
+                on a.dt = b.dt and a.publisheruserid = b.userid and a.postid = b.postid \
+                and abs(b.optime - a.optime) <= 30000 and a.type = 1 \
+              group by \
+              	a.dt,b.clienttype,a.type \
+              grouping sets((a.dt,b.clienttype,a.type),(a.dt,a.type))

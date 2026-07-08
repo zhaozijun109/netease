@@ -1,0 +1,10 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select userId, is_push_on as flag \
+from lofter.dws_par_user_push_dd \
+where dt = '${azkaban.flow.1.days.ago}' and \
+      from_unixtime(cast(update_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic lofter.push.notice.switch --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+

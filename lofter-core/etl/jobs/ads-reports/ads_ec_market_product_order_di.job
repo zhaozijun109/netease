@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_market_product_order_di partition (dt='${azkaban.flow.1.days.ago}') \
+select a.productId, b.productName, null as categoryType, \
+   b.category1_name, b.category2_name, b.category3_name, \
+   b.supplyName, \
+   a.uv, a.money, a.preSaleType, b.productType, concat_ws(',',b.ips) as ips \
+from ( \
+  select productId, preSaleType, \
+         count(distinct buyerId) uv, \
+         sum(storePrice*productNum - newCouponPreferential) money \
+  from lofter_db_dump.ods_db_benefit_order_product_nd \
+  where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status in(1,3,4) \
+  group by productId, preSaleType \
+) a join lofter.dim_benefit_product b on a.productId = b.productId \
+distribute by 1

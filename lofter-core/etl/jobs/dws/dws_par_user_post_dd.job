@@ -1,0 +1,129 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=40
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dws_par_user_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId, post_count_std, valid_post_count_std, post_count_since_2020, first_publish_time, first_valid_publish_time, last_publish_time, last_valid_publish_time,  \
+       content_types, post_count_1d, post_count_7d, post_count_30d, core_post_count_std, core_post_text_std, core_post_photo_std, core_post_video_std, core_post_longtext_std,  \
+       core_post_answer_std, core_post_chat_std, creator_post_count_std, creator_post_count_1d, creator_post_count_7d, creator_post_count_15d, creator_post_count_30d,  \
+       creator_post_count_90d, creator_post_count_180d, \
+       b.rec_pool_post_std, b.rec_pool_todo_post_std, b.rec_pool_accept_post_std, b.rec_pool_reject_post_std, b.rec_pool_post_180d, b.rec_pool_review_post_180d, \
+       c.cp_post_count, c.non_cp_post_count,  \
+       a.risk_normal_post_count_std, risk_normal_post_count_1d, risk_normal_post_count_7d, risk_normal_post_count_30d,  \
+         risk_delete_post_count_std, risk_delete_post_count_1d, risk_delete_post_count_7d, risk_delete_post_count_30d,  \
+         risk_mask_post_count_std, risk_mask_post_count_1d, risk_mask_post_count_7d, risk_mask_post_count_30d, \
+         risk_audit_view_self_post_count_std, risk_audit_view_self_post_count_1d, risk_audit_view_self_post_count_7d, risk_audit_view_self_post_count_30d, \
+         post_count_365d, \
+         core_post_text_7d,core_post_photo_7d,core_post_video_7d,core_post_longtext_7d,core_post_answer_7d,core_post_chat_7d, \
+         core_post_text_15d,core_post_photo_15d,core_post_video_15d,core_post_longtext_15d,core_post_answer_15d,core_post_chat_15d, \
+         core_post_text_30d,core_post_photo_30d,core_post_video_30d,core_post_longtext_30d,core_post_answer_30d,core_post_chat_30d, \
+         core_post_text_90d,core_post_photo_90d,core_post_video_90d,core_post_longtext_90d,core_post_answer_90d,core_post_chat_90d, \
+         core_post_text_180d,core_post_photo_180d,core_post_video_180d,core_post_longtext_180d,core_post_answer_180d,core_post_chat_180d, \
+         post_count_90d, post_count_180d, post_count_15d \
+from ( \
+    select userId, \
+         count(1) as post_count_std, \
+         sum(if(isForbidden = false and allowView = 0, 1, 0)) as valid_post_count_std, \
+         sum(if(publishDate >= '2020-01-01', 1, 0)) as post_count_since_2020, \
+         min(publishTime) as first_publish_time, \
+         min(if(isForbidden = false and allowView = 0 and valid in (0,12,15,16), publishTime, null)) as first_valid_publish_time, \
+         max(publishTime) as last_publish_time, \
+         max(if(isForbidden = false and allowView = 0 and valid in (0,12,15,16), publishTime, null)) as last_valid_publish_time, \
+         collect_set(contentType) as content_types, \
+         count(if(publishDate = '${azkaban.flow.1.days.ago}', id, null )) as post_count_1d, \
+         count(if(publishDate >= '${azkaban.flow.7.days.ago}', id, null )) as post_count_7d, \
+         count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15, id, null )) as post_count_15d, \
+         count(if(publishDate >= '${azkaban.flow.30.days.ago}', id, null )) as post_count_30d, \
+         count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, id, null )) as post_count_90d, \
+         count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180, id, null )) as post_count_180d, \
+         count(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 365, id, null)) as post_count_365d, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0, 1, 0)) as core_post_count_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_std, \
+         sum(if(isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_std, \
+         sum(if(publishDate = '${azkaban.flow.1.days.ago}' and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_1d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 0 and contentType <> '问答', 1, 0)) as creator_post_count_180d, \
+         sum(if(valid = 0 and allowView = 0 and contentType <> '问答', 1, 0)) as risk_normal_post_count_std, \
+         sum(if(valid = 0 and allowView = 0 and contentType <> '问答' and publishDate = '${azkaban.flow.1.days.ago}', 1, 0)) as risk_normal_post_count_1d, \
+         sum(if(valid = 0 and allowView = 0 and contentType <> '问答' and publishDate >= '${azkaban.flow.7.days.ago}', 1, 0)) as risk_normal_post_count_7d, \
+         sum(if(valid = 0 and allowView = 0 and contentType <> '问答' and publishDate >= '${azkaban.flow.30.days.ago}', 1, 0)) as risk_normal_post_count_30d, \
+         sum(if(valid = 32 and contentType <> '问答', 1, 0)) as risk_delete_post_count_std, \
+         sum(if(valid = 32 and contentType <> '问答' and publishDate = '${azkaban.flow.1.days.ago}', 1, 0)) as risk_delete_post_count_1d, \
+         sum(if(valid = 32 and contentType <> '问答' and publishDate >= '${azkaban.flow.7.days.ago}', 1, 0)) as risk_delete_post_count_7d, \
+         sum(if(valid = 32 and contentType <> '问答' and publishDate >= '${azkaban.flow.30.days.ago}', 1, 0)) as risk_delete_post_count_30d, \
+         sum(if(valid = 25 and contentType <> '问答', 1, 0)) as risk_mask_post_count_std, \
+         sum(if(valid = 25 and contentType <> '问答' and publishDate = '${azkaban.flow.1.days.ago}', 1, 0)) as risk_mask_post_count_1d, \
+         sum(if(valid = 25 and contentType <> '问答' and publishDate >= '${azkaban.flow.7.days.ago}', 1, 0)) as risk_mask_post_count_7d, \
+         sum(if(valid = 25 and contentType <> '问答' and publishDate >= '${azkaban.flow.30.days.ago}', 1, 0)) as risk_mask_post_count_30d, \
+         sum(if(valid = 0 and allowView in(50,100) and contentType <> '问答', 1, 0)) as risk_audit_view_self_post_count_std, \
+         sum(if(valid = 0 and allowView in(50,100) and contentType <> '问答' and publishDate = '${azkaban.flow.1.days.ago}', 1, 0)) as risk_audit_view_self_post_count_1d, \
+         sum(if(valid = 0 and allowView in(50,100) and contentType <> '问答' and publishDate >= '${azkaban.flow.7.days.ago}', 1, 0)) as risk_audit_view_self_post_count_7d, \
+         sum(if(valid = 0 and allowView in(50,100) and contentType <> '问答' and publishDate >= '${azkaban.flow.30.days.ago}', 1, 0)) as risk_audit_view_self_post_count_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_7d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_15d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_30d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_90d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='文字' and isChat = 0, 1, 0)) as core_post_text_180d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='图片' and isChat = 0, 1, 0)) as core_post_photo_180d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='视频' and isChat = 0, 1, 0)) as core_post_video_180d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='长文章' and isChat = 0, 1, 0)) as core_post_longtext_180d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and contentType='问答' and isChat = 0, 1, 0)) as core_post_answer_180d, \
+         sum(if(datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 and isForbidden=false and allowView = 0 and isCitedPost = false and isMoved = 0 and isImported = 0 and isChat = 1, 1, 0)) as core_post_chat_180d \
+    from lofter.dim_post \
+    where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          isPublished = true and isCitedPost = false and isForbidden = false and \
+          allowview=0 and contentType in ("图片","文字","视频") and \
+          isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+    group by userId \
+) a left join ( \
+    select blogId, \
+        count(distinct postid) rec_pool_post_std, \
+        count(distinct case when recomStatus='0' then postid end) rec_pool_todo_post_std, \
+        count(distinct case when recomStatus='1' then postid end) rec_pool_accept_post_std, \
+        count(distinct case when recomStatus='-1' then postid end) rec_pool_reject_post_std, \
+        count(distinct case when datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 180 then postid end ) rec_pool_post_180d, \
+        count(distinct case when datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(reviewTime/1000 as bigint),'yyyy-MM-dd')) < 180 then postid end ) rec_pool_review_post_180d \
+    from lofter_db_dump.ods_db_recommend_review_post_nd \
+    where type in (1,2,4) \
+    group by blogId \
+) b on a.userId = b.blogId \
+  left join ( \
+       select blogId, \
+          count(if(domain = '同人CP', postid, null)) cp_post_count, \
+          count(if(domain = '同人CP', null, postid)) non_cp_post_count \
+       from lofter.dim_post_category_dd \
+       where dt = '${azkaban.flow.1.days.ago}' \
+       group by blogId \
+) c on a.userId = c.blogId \
+distribute by a.userId % 10

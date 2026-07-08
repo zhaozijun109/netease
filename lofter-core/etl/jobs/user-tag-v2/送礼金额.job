@@ -1,0 +1,93 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 送礼金额 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '送礼金额'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '送礼金额' as tag, 'DAY_7' as cat, \
+                                         case when send_gift_amount_7d < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_7d < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_7d < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_7d < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_7d < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_7d < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_7d < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_7d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '送礼金额' as tag, 'DAY_15' as cat, \
+                                         case when send_gift_amount_15d < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_15d < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_15d < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_15d < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_15d < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_15d < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_15d < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_15d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '送礼金额' as tag, 'DAY_30' as cat, \
+                                         case when send_gift_amount_30d < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_30d < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_30d < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_30d < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_30d < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_30d < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_30d < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_30d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '送礼金额' as tag, 'DAY_90' as cat, \
+                                         case when send_gift_amount_90d < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_90d < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_90d < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_90d < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_90d < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_90d < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_90d < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_90d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '送礼金额' as tag, 'DAY_180' as cat, \
+                                         case when send_gift_amount_180d < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_180d < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_180d < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_180d < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_180d < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_180d < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_180d < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_180d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '送礼金额' as tag, 'DAY_ALL' as cat, \
+                                         case when send_gift_amount_std < 10 then 'COUNT_1_10' \
+                                              when send_gift_amount_std < 50 then 'COUNT_10_50' \
+                                              when send_gift_amount_std < 100 then 'COUNT_50_100' \
+                                              when send_gift_amount_std < 500 then 'COUNT_100_500' \
+                                              when send_gift_amount_std < 1000 then 'COUNT_500_1K' \
+                                              when send_gift_amount_std < 5000 then 'COUNT_1K_5K' \
+                                              when send_gift_amount_std < 10000 then 'COUNT_5K_1W' \
+                                              else 'COUNT_1W' end as grp \
+                                  from lofter.dws_par_user_revenue_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and send_gift_amount_std > 0 ) "

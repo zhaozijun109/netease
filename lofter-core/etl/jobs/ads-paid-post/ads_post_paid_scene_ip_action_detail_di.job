@@ -1,0 +1,329 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_scene_ip_action_detail_di partition(dt='${azkaban.flow.1.days.ago}')  \
+SELECT \
+  a.source_scene, \
+  a.ip, \
+  a.is_from_rec, \
+  a.blog_channel, \
+  a.post_content_type, \
+  a.quality_type, \
+  a.postidnum AS pageview_postidnum, \
+  a.uv AS pageview_uv, \
+  a.pv AS pageview_pv, \
+  CASE \
+    WHEN b.postidnum IS NULL THEN 0 \
+    ELSE b.postidnum \
+  END AS paid_postidnum, \
+  CASE \
+    WHEN b.uv IS NULL THEN 0 \
+    ELSE b.uv \
+  END AS paid_uv, \
+  CASE \
+    WHEN b.pv IS NULL THEN 0 \
+    ELSE b.pv \
+  END AS paid_pv, \
+  CASE \
+    WHEN b.MONEY IS NULL THEN 0 \
+    ELSE b.MONEY \
+  END AS paid_money \
+FROM \
+  ( \
+    select \
+      NVL(source_scene, '汇总') as source_scene, \
+      NVL(ip, '汇总') as ip, \
+      is_from_rec, \
+      blog_channel, \
+      post_content_type, \
+      quality_type, \
+      postidnum, \
+      uv, \
+      pv \
+    from \
+      ( \
+        select \
+          a.source_scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(c.ip, '其他') as ip, \
+          NVL(d.type, '其他') as quality_type, \
+          count(distinct a.postid) as postidnum, \
+          count(distinct a.userid) as uv, \
+          count(distinct a.userid, a.postid) as pv \
+        from \
+          ( \
+            SELECT \
+              post_content_type, \
+              userid, \
+              postid, \
+              dt, \
+              occurtime, \
+              NVL(source1_scene, '未知') AS source_scene, \
+              is_from_rec, \
+              ip \
+            FROM \
+              lofter.dwd_post_browse_di LATERAL VIEW explode( \
+                CASE \
+                  WHEN size(post_ips) < 1 THEN array('其他') \
+                  ELSE post_ips \
+                END \
+              ) t2 AS ip \
+            WHERE \
+              dt = '${azkaban.flow.1.days.ago}' \
+              AND action_type = 'page_view' \
+              AND source1_scene != '' \
+          ) a \
+          join ( \
+            select \
+              postid, \
+              blogid, \
+              blog_channel \
+            from \
+              lofter.dim_gift_post_return_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and blog_channel in (0, 1) \
+              and ispay_returngift in (0, 1) \
+            group by \
+              postid, \
+              blogid, \
+              blog_channel \
+          ) b on a.postid = b.postid \
+          left join ( \
+            select \
+              ip \
+            from \
+              lofter_dm.ads_paid_post_quality_score_value_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              ip \
+          ) c on a.ip = c.ip \
+          left join ( \
+            select \
+              postid, \
+              type \
+            from \
+              lofter.dws_gift_post_premium_scoring_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              postid, \
+              type \
+          ) d on a.postid = d.postid \
+        group by \
+          a.source_scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          NVL(c.ip, '其他'), \
+          NVL(d.type, '其他') grouping sets ( \
+            ( \
+              a.source_scene, \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              NVL(c.ip, '其他'), \
+              NVL(d.type, '其他') \
+            ), \
+            ( \
+              a.source_scene, \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              NVL(d.type, '其他') \
+            ), \
+            ( \
+              NVL(c.ip, '其他'), \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              NVL(d.type, '其他') \
+            ), \
+            ( \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              NVL(d.type, '其他') \
+            ) \
+          ) \
+      ) a \
+  ) a \
+  left join ( \
+    select \
+      NVL(source_scene, '汇总') as source_scene, \
+      ip, \
+      is_from_rec, \
+      blog_channel, \
+      post_content_type, \
+      quality_type, \
+      postidnum, \
+      uv, \
+      pv, \
+      money \
+    from \
+      ( \
+        select \
+          a.source_scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          case when c.ip is null and a.ip!='汇总' then '其他' else a.ip end as ip, \
+          NVL(d.type, '其他') as quality_type, \
+          count(distinct a.postid) as postidnum, \
+          count(distinct a.userid) as uv, \
+          count(distinct a.userid, a.postid) as pv, \
+          sum(money) as money \
+        from \
+          ( \
+            select \
+              a.* \
+            from \
+              ( \
+                select \
+                  a.*, \
+                  b.blog_channel, \
+                  b.blogid, \
+                  c.createtime, \
+                  c.money, \
+                  row_number() over( \
+                    partition by c.money, \
+                    c.createtime, \
+                    a.userid, \
+                    a.postid, \
+					a.ip \
+                    order by \
+                      (createtime - occurtime) asc \
+                  ) as rk \
+                from \
+                  ( \
+                    select \
+                      userid, \
+                      postid, \
+                      dt, \
+                      occurtime, \
+                      NVL(source1_scene, '未知') as source_scene, \
+                      is_from_rec, \
+                      ip, \
+                      post_content_type \
+                    from \
+                      lofter.dwd_post_browse_di LATERAL VIEW explode( \
+                        case \
+                          when size(post_ips) < 1 then array('其他') \
+                          else post_ips \
+                        end \
+                      ) t2 AS ip \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                      and action_type = 'page_view' \
+                      and source1_scene != '' \
+					   \
+					  UNION \
+					   \
+					   select \
+                      userid, \
+                      postid, \
+                      dt, \
+                      occurtime, \
+                      NVL(source1_scene, '未知') as source_scene, \
+                      is_from_rec, \
+                      '汇总' ip, \
+                      post_content_type \
+                    from \
+                      lofter.dwd_post_browse_di  \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                      and action_type = 'page_view' \
+                      and source1_scene != '' \
+                  ) a \
+                  join ( \
+                    select \
+                      postid, \
+                      blogid, \
+                      blog_channel \
+                    from \
+                      lofter.dim_gift_post_return_dd \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                      and blog_channel in (0, 1) \
+                      and ispay_returngift in (0, 1) \
+                    group by \
+                      postid, \
+                      blogid, \
+                      blog_channel \
+                  ) b on a.postid = b.postid \
+                  join ( \
+                    select \
+                      userid, \
+                      postid, \
+                      blogid, \
+                      unlock_time as createtime, \
+                      money \
+                    from \
+                      lofter.dwd_gift_post_unlock_dd \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                      and money > 0 \
+                      and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                  ) c on a.userid = c.userid \
+                  and a.postid = c.postid and  createtime - occurtime>0 \
+              ) a \
+            where \
+              a.rk = 1 \
+          ) a \
+          left join ( \
+            select \
+              ip \
+            from \
+              lofter_dm.ads_paid_post_quality_score_value_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              ip \
+          ) c on a.ip = c.ip \
+          left join ( \
+            select \
+              postid, \
+              type \
+            from \
+              lofter.dws_gift_post_premium_scoring_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              postid, \
+              type \
+          ) d on a.postid = d.postid \
+        group by \
+          a.source_scene, \
+          a.is_from_rec, \
+          blog_channel, \
+          post_content_type, \
+          case when c.ip is null and a.ip!='汇总' then '其他' else a.ip end , \
+          NVL(d.type, '其他') grouping sets ( \
+            ( \
+              a.source_scene, \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              case when c.ip is null and a.ip!='汇总' then '其他' else a.ip end, \
+              NVL(d.type, '其他') \
+            ), \
+             \
+            ( \
+              case when c.ip is null and a.ip!='汇总' then '其他' else a.ip end, \
+              a.is_from_rec, \
+              blog_channel, \
+              post_content_type, \
+              NVL(d.type, '其他') \
+            ) \
+            ) \
+          ) a \
+      \
+  ) b on a.source_scene = b.source_scene \
+  and a.ip = b.ip \
+  and a.is_from_rec = b.is_from_rec \
+  and a.blog_channel = b.blog_channel \
+  and a.post_content_type = b.post_content_type \
+  and a.quality_type = b.quality_type \
+
+dependencies=ads_paid_post_quality_score_value_di

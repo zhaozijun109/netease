@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_post_review_monitor_di \
+select contenttype,creator_level,is_today_publish,is_pay_gift  \
+	,count(distinct postid) post_cnt  \
+    ,count(distinct case when machine_state = 1 then postid end) machine_pass_cnt  \
+    ,count(distinct case when human_state = 1 then postid end) human_pass_cnt  \
+	,count(distinct case when machine_state = 2 then postid end) trypushing_cnt  \
+    ,count(distinct case when machine_state = 3 then postid end) rule_nopass_cnt  \
+	,count(distinct case when machine_state = 4 then postid end) trypush_nopass_cnt \
+    ,count(distinct case when machine_state = 5 then postid end) AI_nopass_cnt  \
+    ,count(distinct case when machine_state = 6 then postid end) AI_trypush_nopass_cnt  \
+    ,count(distinct case when human_state = 2 then postid end) human_nopass_cnt  \
+    ,count(distinct case when human_state = 3 then postid end) human_pending_cnt  \
+	,a.dt  \
+from  \
+(select *  \
+from lofter.dwd_rec_post_review_di   \
+where dt between date_sub('${azkaban.flow.1.days.ago}',1) and '${azkaban.flow.1.days.ago}'  \
+)a  \
+left join  \
+(select dt,userid as blogid,level as creator_level  \
+from lofter.dws_par_creator_dd  \
+where dt = '${azkaban.flow.1.days.ago}'   \
+group by dt,userid,level  \
+)b  \
+on a.blogid = b.blogid \
+group by contenttype,creator_level,is_today_publish,is_pay_gift,a.dt \

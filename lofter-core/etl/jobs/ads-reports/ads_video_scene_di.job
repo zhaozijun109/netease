@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_scene_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.scene, \
+       realplaypv,realplayuv,realplayuv/dau as realplayuv_ratio,realplay_videonum,per_realplaypv,per_realplay_videonum,t3.hdPv \
+from ( \
+    select dt, scene, \
+       count(distinct deviceUdid) realplayuv, \
+       count(1) realplaypv, \
+       count(distinct postId) realplay_videonum, \
+       count(1) / count(distinct deviceUdid) per_realplaypv, \
+       count(distinct concat(deviceUdid, '_', postId)) / count(distinct deviceUdid) per_realplay_videonum \
+    from lofter.dwd_post_browse_di \
+    where dt='${azkaban.flow.1.days.ago}' and post_content_type = '视频' and is_real > 0 \
+    group by dt,scene \
+) t1 \
+left join ( \
+    select dt,count(distinct deviceudid) dau \
+    from lofter.device_active \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) t2 on t1.dt=t2.dt \
+left join ( \
+    select dt, scene, count(1) as hdPv \
+    from ( \
+        select dt, scene from lofter.dwd_post_response_di where dt='${azkaban.flow.1.days.ago}' and post_content_type = '视频' \
+        union all \
+        select dt, scene from lofter.dwd_post_hot_di where dt='${azkaban.flow.1.days.ago}' and post_content_type = '视频' \
+        union all \
+        select dt, scene from lofter.dwd_post_share_di where dt='${azkaban.flow.1.days.ago}' and post_content_type = '视频' \
+    ) t \
+    group by dt, scene \
+) t3 on t1.dt=t3.dt and t1.scene=t3.scene

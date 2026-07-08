@@ -1,0 +1,95 @@
+type=sparksql
+hive.query.01 = with event_time as (select user_id, character_id, create_time, message_id \
+                                    from (select user_id, \
+                                                 character_id, \
+                                                 create_time, \
+                                                 message_id, \
+                                                 row_number() over (partition by user_id,character_id order by create_time desc) as rk \
+                                          FROM (select user_id, \
+                                                       character_id, \
+                                                       sender, \
+                                                       GET_JSON_OBJECT(ext, '$.eventType')                                               as eventType, \
+                                                       message_id, \
+                                                       create_time, \
+                                                       row_number() over (partition by id order by _bin_op_time desc,_bin_op_seqno desc) as rk \
+                                                from vc.ods_binlog_vc_user_message_record_partition_di \
+                                                where dt = '${azkaban.flow.2.days.ago}' \
+                                                  and sender = 1) \
+                                          where rk = 1 \
+                                            and user_id in (select user_id \
+                                                            from vc.dws_vc_user_behavior_info_a_d \
+                                                            where dt = '${azkaban.flow.1.days.ago}' \
+                                                              and login_type = 'lofter') \
+                                            and character_id in (153090, 153089, 153095, 153092, 153093, 153098, 153099, 153097, 153102, \
+                                                                 153103, 153100, 153101, 153107, 153104, 153105, 153110, 153111, 153114, \
+                                                                 153115, 153112, 153116, 153122, 153123, 153120, 153131, 153129, 153134, \
+                                                                 275508, 275510, 275505, 153141, 153146, 275518, 275513, 275514, 153148, \
+                                                                 275525, 275526, 275520, 153158, 153159, 153157, 153162, 153163, 153161, \
+                                                                 153166, 275529, 153164, 163922, 153170, 163923, 275542, 153169, 275536, \
+                                                                 275539, 275550, 153688, 275544, 275547, 275556, 275554, 275565, 275560, \
+                                                                 275563, 275568, 275571, 264326, 156324, 264364, 154284, 264363, 154289, \
+                                                                 158934, 166131, 166132, 264444, 264445, 264446, 264447, 264442, 264443, \
+                                                                 264448, 156934, 264449, 264450, 264451, 156933, 165661, 264484, 264485, \
+                                                                 264486, 264487, 264483, 264492, 264488, 264489, 264490, 264491, 153403, \
+                                                                 153400, 153404, 264520, 264523, 158550, 158549, 286574, 286575, 286580, \
+                                                                 286581, 286582, 286583, 286576, 286577, 286578, 286579, 286588, 286589, \
+                                                                 286590, 286591, 286584, 286585, 286586, 286587, 286592, 286593, 286594, \
+                                                                 286595, 286628, 264612, 286629, 264613, 286630, 264614, 286631, 264615, \
+                                                                 286624, 286625, 286626, 264610, 286627, 264611, 286636, 286637, 286638, \
+                                                                 286639, 286632, 264616, 286633, 264617, 286634, 264618, 286635, 264619, \
+                                                                 286644, 264116, 286645, 286646, 286647, 286640, 286641, 264113, 286642, \
+                                                                 286643, 261556, 286652, 286653, 286648, 286649, 264121, 286650, 286651, \
+                                                                 264123, 274372, 274373, 264134, 274374, 274375, 264128, 274371, 274380, \
+                                                                 274376, 274377, 274378, 274379, 264149, 163288, 286692, 286693, 153059, \
+                                                                 286694, 286695, 153062, 153063, 286690, 153060, 286691, 153066, 153067, \
+                                                                 153064, 153065, 286696, 153070, 286697, 153071, 286698, 153068, 153074, \
+                                                                 153075, 153072, 153078, 153079, 153076, 153077, 153082, 153083, 153080, \
+                                                                 153087, 153084, 153085, 153108, 153086, 153113, 153117, 153119, 153121, \
+                                                                 153124, 153125, 153126, 153130, 153133, 153139, 153160, 158951, 166143, \
+                                                                 167974, 168555, 168559, 170360, 171021, 171022, 180193, 180207, 184395, \
+                                                                 185423, 185427, 190463, 192623, 192628, 199977, 202930, 202992, 211411, \
+                                                                 213667, 213677, 219819, 221313, 221314, 229946, 233427, 242195, 245447, \
+                                                                 245449, 252451, 255108, 255116, 262943, 262987, 266043, 266107, 274074, \
+                                                                 277165, 277174, 285329, 285342, 288018, 287952) \
+                                            and eventType in ('MISSING', 'NEGLECT')) \
+                                    where rk = 1), \
+                     call_back as (select user_id, \
+                                          character_id, \
+                                          create_time, \
+                                          nums                                                        as talk_cnt, \
+                                          row_number() over (partition by user_id order by nums desc) as rk1 \
+                                   from (select user_id, \
+                                                character_id, \
+                                                create_time, \
+                                                row_number() over (partition by user_id,character_id order by create_time desc) as rk, \
+                                                count(*) over (partition by user_id,character_id)                               as nums \
+                                         FROM (select user_id, \
+                                                      character_id, \
+                                                      sender, \
+                                                      GET_JSON_OBJECT(ext, '$.eventType')                                               as eventType, \
+                                                      create_time, \
+                                                      row_number() over (partition by id order by _bin_op_time desc,_bin_op_seqno desc) as rk \
+                                               from vc.ods_binlog_vc_user_message_record_partition_di \
+                                               where dt >= '${azkaban.flow.3.days.ago}' \
+                                                 and sender in (2, 4)) \
+                                         where rk = 1) \
+                                   where rk = 1) \
+                insert OVERWRITE table vc.ads_vc_om_3704_d PARTITION (dt = '${azkaban.flow.current.date}')  \
+                select user_id, COLLECT_SET(jsonob) as data \
+                from (select user_id, \
+                             character_id, \
+                             message_id, \
+                             talk_cnt, \
+                             named_struct('characterId', character_id, 'sort', rk2, 'messageId', message_id) as jsonob \
+                      from (select x1.user_id, \
+                                   x1.character_id, \
+                                   x1.message_id, \
+                                   x2.talk_cnt, \
+                                   row_number() over (partition by x1.user_id order by x2.rk1) as rk2 \
+                            from event_time x1 \
+                                     left join call_back x2 \
+                                               on x1.user_id = x2.user_id and x1.character_id = x2.character_id and \
+                                                  x1.create_time > x2.create_time \
+                            where x2.create_time is not null) \
+                      where rk2 <= 5) \
+                group by user_id;

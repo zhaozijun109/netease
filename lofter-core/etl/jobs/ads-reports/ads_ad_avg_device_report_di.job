@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_avg_device_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  deviceos, \
+  appversion, \
+  count(distinct deviceudid) as uv \
+from \
+  ( \
+    select \
+      deviceudid, \
+      deviceos, \
+      appversion, \
+      row_number() over( \
+        partition by deviceudid \
+        order by \
+          occurtime desc \
+      ) as rk \
+    from \
+      avg.ods_mda_app_raw_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+  ) a \
+where \
+  rk = 1 \
+  and deviceos is not null \
+  and appversion is not null \
+group by \
+  deviceos, \
+  appversion \
+with cube \

@@ -1,0 +1,71 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_role_summary_report_di partition(dt ='${azkaban.flow.1.days.ago}')      \
+WITH role_info AS ( \
+    SELECT  \
+        id AS role_id,  \
+        status,  \
+        type  \
+    FROM lofter_db_dump.ods_db_pve_role_info_nd  \
+    GROUP BY  \
+        id,  \
+        status,  \
+        type \
+), \
+ \
+chat_agg AS ( \
+    SELECT  \
+        a.dt, \
+        b.type, \
+        b.status,  \
+        COUNT(DISTINCT a.userid) AS chat_user_cnt,  \
+        COUNT(DISTINCT a.roleid) AS chat_role_cnt,  \
+        SUM(a.total_chats) AS total_chats  \
+    FROM ( \
+        SELECT dt, userid, roleid  , total_chats \
+        FROM lofter.dws_pve_user_role_chats_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}'  \
+    ) a   \
+    LEFT JOIN role_info b  \
+        ON a.roleid = b.role_id   \
+    GROUP BY  \
+        a.dt, \
+        b.type, \
+        b.status \
+) \
+, \
+ \
+order_agg AS ( \
+    SELECT  \
+        a.dt, \
+        b.type, \
+        b.status,  \
+        COUNT(DISTINCT a.roleid) AS order_role_cnt, \
+        COUNT(DISTINCT a.userid) AS order_user_cnt, \
+        SUM(a.amount) AS amount  \
+    FROM ( \
+        SELECT dt, userid, roleid , amount \
+        FROM lofter.dwd_pve_user_amount_info_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}'  \
+    ) a   \
+    LEFT JOIN role_info b  \
+        ON a.roleid = b.role_id   \
+    GROUP BY  \
+        a.dt, \
+        b.type, \
+        b.status \
+) \
+ \
+SELECT   \
+    c.type, \
+    c.status, \
+    COALESCE(c.chat_user_cnt, 0) AS chat_user_cnt,  \
+    COALESCE(c.chat_role_cnt, 0) AS chat_role_cnt,  \
+    COALESCE(c.total_chats, 0) AS total_chats,  \
+    COALESCE(o.order_role_cnt, 0) AS order_role_cnt, \
+    COALESCE(o.order_user_cnt, 0) AS order_user_cnt, \
+    COALESCE(o.amount, 0) AS amount  \
+FROM chat_agg c \
+left  JOIN order_agg o  \
+    ON c.dt = o.dt  \
+    AND c.type = o.type   \
+    AND c.status = o.status \

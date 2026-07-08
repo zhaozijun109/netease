@@ -1,0 +1,77 @@
+type=sparksql
+hive.query.01=\
+WITH visits AS ( \
+    SELECT userId, source_type, source, occurtime \
+    FROM lofter.dwd_rewardcenter_visit_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+      AND source_type IS NOT NULL AND source_type <> '' \
+      AND source IS NOT NULL AND source <> '' \
+), \
+exchange_today AS ( \
+    SELECT userId, \
+           exchange_recordid, \
+           exchange_time, \
+           productId, \
+           product_name, \
+           category, \
+           subCategory, \
+           nvl(product_count, 0) as product_count, \
+           nvl(score, 0) as score \
+    FROM lofter.dwd_ad_reward_score_product_exchange_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+      AND productId IS NOT NULL \
+), \
+user_types AS ( \
+    SELECT userId, is_new_user, is_return_user \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+exchange_attr AS ( \
+    SELECT source_type, source, user_type, productId, product_name, category, subCategory, userId, exchange_recordid, product_count, score \
+    FROM ( \
+        SELECT \
+            nvl(v.source_type, 'unknown') as source_type, \
+            nvl(v.source, 'unknown')      as source, \
+            CASE WHEN u.is_new_user > 0 THEN '权益中心新用户' \
+                 WHEN u.is_return_user > 0 THEN '权益中心回流用户' \
+                 ELSE '权益中心存量用户' END as user_type, \
+            e.productId, \
+            e.product_name, \
+            e.category, \
+            e.subCategory, \
+            e.userId, \
+            e.exchange_recordid, \
+            e.product_count, \
+            e.score, \
+            row_number() over ( \
+                partition by e.exchange_recordid \
+                order by CASE WHEN v.occurtime IS NULL THEN 1 ELSE 0 END, \
+                         v.occurtime desc \
+            ) as rn \
+        FROM exchange_today e \
+        LEFT JOIN visits v ON e.userId = v.userId AND v.occurtime <= e.exchange_time \
+        LEFT JOIN user_types u ON e.userId = u.userId \
+    ) t \
+    WHERE rn = 1 \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_reward_center_source_product_exchange_report_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    source_type, \
+    source, \
+    productId, \
+    max(product_name)  as product_name, \
+    max(category)      as category, \
+    max(subCategory)   as subCategory, \
+    count(distinct userId)            as exchange_uv, \
+    count(distinct exchange_recordid) as exchange_cnt, \
+    sum(product_count)                as exchange_product_qty, \
+    sum(score)                        as exchange_score, \
+    user_type \
+FROM exchange_attr \
+GROUP BY source_type, source, user_type, productId \
+DISTRIBUTE BY 1
+
+dependencies=

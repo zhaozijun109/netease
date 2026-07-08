@@ -1,0 +1,37 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 圈层拉新用户 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '圈层拉新用户'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '圈层拉新用户' as tag, 'DAY_1' as cat, ip as grp \
+                                  from lofter.dws_ip_growth_dd \
+                                      lateral view explode(bitmap_to_array(new_bitmap_1d)) as userId \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                               \
+                                  union all \
+                               \
+                                  select userId, '圈层拉新用户' as tag, 'DAY_7' as cat, ip as grp \
+                                  from lofter.dws_ip_growth_dd \
+                                      lateral view explode(bitmap_to_array(new_bitmap_7d)) as userId \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                               \
+                                  union all \
+                               \
+                                  select userId, '圈层拉新用户' as tag, 'DAY_15' as cat, ip as grp \
+                                  from lofter.dws_ip_growth_dd \
+                                      lateral view explode(bitmap_to_array(new_bitmap_15d)) as userId \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                               \
+                                  union all \
+                               \
+                                  select userId, '圈层拉新用户' as tag, 'DAY_30' as cat, ip as grp \
+                                  from lofter.dws_ip_growth_dd \
+                                      lateral view explode(bitmap_to_array(new_bitmap_30d)) as userId \
+                                  where dt = '${azkaban.flow.1.days.ago}' ) "

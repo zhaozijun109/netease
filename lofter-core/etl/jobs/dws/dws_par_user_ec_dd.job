@@ -1,0 +1,78 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_ec_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select u.id as userId, \
+           a.pay_product_category_level1, a.pay_product_category_level2, a.pay_product_category_level3, \
+           b.pay_amount_std, b.market_sale_amount_std, b.card_sale_amount_std, \
+           b.pay_amount_7d,b.market_sale_amount_7d, b.card_sale_amount_7d, \
+           b.pay_amount_15d,b.market_sale_amount_15d, b.card_sale_amount_15d, \
+           b.pay_amount_30d,b.market_sale_amount_30d, b.card_sale_amount_30d, \
+           b.pay_amount_90d,b.market_sale_amount_90d, b.card_sale_amount_90d, \
+           b.pay_amount_180d,b.market_sale_amount_180d, b.card_sale_amount_180d, \
+           c.add_cart_pv_7d, c.add_cart_pv_15d, c.add_cart_pv_30d, c.add_cart_pv_90d, add_cart_pv_180d, \
+           nvl(d.last_active_date, e.last_active_date) as last_active_date \
+    from lofter.dim_user u \
+    left join ( \
+        select a.buyerId as userId, \
+               collect_set(b.category1_name) as pay_product_category_level1, \
+               collect_set(concat_ws('-', b.category1_name, b.category2_name)) as pay_product_category_level2, \
+               collect_set(concat_ws('-', b.category1_name, b.category2_name, b.category3_name)) as pay_product_category_level3 \
+        from lofter_db_dump.ods_db_benefit_order_product_nd a \
+          join lofter.dim_benefit_product b on a.productid = b.productid \
+        where a.status in (1, 4, 7) and b.category1_name is not null \
+        group by a.buyerId \
+    ) a on u.id = a.userId \
+    left join ( \
+        select userId, \
+               sum(money) as pay_amount_std, \
+               sum(if(type <> 5, money, 0)) as market_sale_amount_std, \
+               sum(if(type = 5, money, 0)) as card_sale_amount_std, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, money, 0)) as pay_amount_7d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 7, money, 0)) as market_sale_amount_7d, \
+               sum(if(type = 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 7, money, 0)) as card_sale_amount_7d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, money, 0)) as pay_amount_15d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 15, money, 0)) as market_sale_amount_15d, \
+               sum(if(type = 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 15, money, 0)) as card_sale_amount_15d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, money, 0)) as pay_amount_30d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 30, money, 0)) as market_sale_amount_30d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 30, money, 0)) as card_sale_amount_30d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, money, 0)) as pay_amount_90d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 90, money, 0)) as market_sale_amount_90d, \
+               sum(if(type = 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 90, money, 0)) as card_sale_amount_90d, \
+               sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, money, 0)) as pay_amount_180d, \
+               sum(if(type <> 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 180, money, 0)) as market_sale_amount_180d, \
+               sum(if(type = 5 and datediff('${azkaban.flow.1.days.ago}', dt) < 180, money, 0)) as card_sale_amount_180d \
+        from ( \
+           select buyerId as userId, createTime, type, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, \
+                  storeprice*productnum - newcouponpreferential as money \
+           from lofter_db_dump.ods_db_benefit_order_product_nd \
+           where status in (1,4,7) \
+        ) t \
+        group by userId \
+    ) b on u.id = b.userId \
+    left join ( \
+      select userId, \
+             sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, 1, 0)) as add_cart_pv_7d, \
+             sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, 0)) as add_cart_pv_15d, \
+             sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, 1, 0)) as add_cart_pv_30d, \
+             sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, 1, 0)) as add_cart_pv_90d, \
+             sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, 1, 0)) as add_cart_pv_180d \
+      from lofter.dwd_ec_add_cart_di \
+      where dt <= '${azkaban.flow.1.days.ago}' and \
+            dt > date_sub('${azkaban.flow.1.days.ago}', 180) and \
+            productId > 0 \
+      group by userId \
+    ) c on u.id = c.userId \
+    left join ( \
+        select userId, max(dt) as last_active_date \
+        from lofter.dwd_evt_benefit_page_view_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              userId > 0 \
+        group by userId \
+    ) d on u.id = d.userId \
+    left join ( \
+        select userId, last_active_date \
+        from lofter.dws_par_user_ec_dd \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) e on u.id = e.userId \
+    where nvl(nvl(nvl(a.userId, b.userId), c.userId), d.userId) is not null \
+    distribute by 1

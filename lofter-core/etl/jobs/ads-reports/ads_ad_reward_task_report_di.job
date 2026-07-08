@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+with ad_reward_users as ( \
+    select userId, '访问用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, '新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_platform_new > 0 \
+    union all \
+    select userId, '回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_platform_return > 0 \
+    union all \
+    select userId, '权益中心新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_new_user > 0 \
+    union all \
+    select userId, '权益中心回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' and is_return_user > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_reward_task_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.task_pay_type, a.task_name, a.task_stage, a.pv, a.uv, a.score, b.reward_center_uv, a.user_type \
+from ( \
+    select a.dt, if(a.task_pay_type = 1, '付费任务', '免费任务') as task_pay_type, a.task_name, a.task_stage, b.user_type, count(1) as pv, count(distinct a.userId) as uv, sum(a.score) as score \
+    from lofter.dwd_ad_reward_task_complete_di a \
+         join ad_reward_users b on a.userId = b.userId \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2, 3, 4, 5 \
+) a \
+left join ( \
+    select a.dt, b.user_type, count(distinct a.userId) as reward_center_uv \
+    from lofter.dwd_rewardcenter_user_di a \
+         join ad_reward_users b on a.userId = b.userId \
+    where a.dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) b on a.dt = b.dt and a.user_type = b.user_type \

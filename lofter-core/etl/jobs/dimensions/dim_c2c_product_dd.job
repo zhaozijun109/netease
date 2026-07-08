@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02= \
+insert overwrite table lofter.dim_c2c_product_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select id as productId, blogId, title as name, description, \
+    parse_array(productTags) as product_tags, \
+    parse_array(ipTags) as ip_tags, \
+    cast(type as string) as product_type, \
+    if(status = 1, '上架', '下架') as product_status \
+from lofter_db_dump.ods_db_c2_c_product_spu_info_nd \

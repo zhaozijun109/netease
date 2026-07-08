@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_tag_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select m.*, n.realplaypv, n.realplayuv, n.realplay_videonum, n.per_realplaypv, n.per_realplay_videonum \
+from( \
+    select tagName, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' then postId else null end) postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom ='web' then postId else null end) pc_postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom in('ios','android') then postId else null end) client_postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom ='wap' then postId else null end) wap_postnum, \
+        sum(viewpv) viewpv, \
+        sum(hotpv) hotpv, \
+        sum(praisepv) praisepv, \
+        sum(reproducepv) reproducepv, \
+        sum(recommendpv) recommendpv, \
+        sum(responsepv) responsepv, \
+        sum(subscribepv) subscribepv, \
+        sum(playuv) as playuv, \
+        sum(availableplayuv) as availableplayuv, \
+        sum(finishplayuv) as finishplayuv, \
+        case when sum(finishplayuv) is null then 0 else sum(finishplayuv)/sum(playuv) end finishPlayRatio, \
+        case when sum(availableplayuv) is null then 0 else sum(availableplayuv)/sum(playuv) end availablePlayRatio \
+    from lofter.dws_video_post_general_di lateral view explode(tags) t as tagName \
+    where dt='${azkaban.flow.1.days.ago}' and length(trim(tagName)) > 0 \
+    group by tagName \
+    order by hotpv desc limit 100 \
+) m \
+left join ( \
+  select b.tagName, sum(a.pv) as realplaypv, count(distinct a.deviceUdid) as realplayuv, \
+         count(distinct a.postId) as realplay_videonum, sum(a.pv) /count(distinct a.deviceudid) as per_realplaypv, \
+         count(1) / count(distinct a.deviceudid) as per_realplay_videonum \
+  from ( \
+    select postId, deviceUdid, count(1) pv \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and post_content_type = '视频' and is_real > 0 \
+    group by postId, deviceUdid \
+  ) a join ( \
+    select id as postId, tagName from lofter.dim_post lateral view explode(tags) as tagName \
+  ) b on a.postId = b.postId \
+  group by b.tagName \
+) n on m.tagName = n.tagName
+

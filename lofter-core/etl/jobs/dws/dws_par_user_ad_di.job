@@ -1,0 +1,44 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=40
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dws_par_user_ad_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.adVideoCount \
+from ( \
+    select userId, \
+           sum(if(action_type = 'expose', 1, 0)) as impressPv, \
+           count(distinct if(action_type = 'expose', adId, null)) impressAdCount, \
+           sum(if(action_type = 'click', 1, 0)) as clickPv, \
+           count(distinct if(action_type = 'click', adId, null)) clickAdCount, \
+           sum(if(action_type = 'close', 1, 0)) as closeAdCount \
+    from ( \
+        select userId, \
+               params['adId'] as adId, \
+               case when eventId in ('ad-2','ad-4','ad-6','ad-8','ad-10','ad-12','ad-19','ad-22','ad-24','ad-26','ad-28','ad-30','ad-32','z3-5', 'ad-45') \
+                         then 'click' \
+                    when eventId in ('ad-51', 'ad-52', 'ad-58', 'ad-46') then 'close' \
+                    else 'expose' end as action_type \
+        from lofter.ods_mda_app_partition_di \
+        where dt='${azkaban.flow.1.days.ago}' and \
+              actionType = 'advertisement' and \
+              params['adId'] is not null and \
+              eventId in ('ad-1','ad-3','ad-5','ad-7','ad-9','ad-11','ad-18','ad-21','ad-23','ad-25','ad-27','ad-29','ad-31','z3-6', 'ad-43', 'ad-44', \
+                          'ad-2','ad-4','ad-6','ad-8','ad-10','ad-12','ad-19','ad-22','ad-24','ad-26','ad-28','ad-30','ad-32','z3-5', 'ad-45', \
+                          'ad-51', 'ad-52', 'ad-58', 'ad-46') \
+    ) t \
+    where userId > 0 \
+    group by userId \
+) a \
+left join ( \
+    select userId, count(distinct req_id) as adVideoCount \
+    from lofter.dwd_ad_actions_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+        and positionname like '%激励视频%' \
+        and bgpv>0 \
+        and appid='6ED29071' \
+    group by 1 \
+) b on a.userId = b.userId \
+distribute by 1

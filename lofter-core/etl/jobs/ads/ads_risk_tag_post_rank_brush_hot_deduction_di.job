@@ -1,0 +1,49 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter_dm.ads_risk_tag_post_rank_brush_hot_deduction_di partition(dt = '${azkaban.flow.1.days.ago}') \
+    SELECT x.postId as postId, x.blogId as blogId, x.brush_hot_uv, x.brush_hot, y.hot as hot_1d, \
+           x.brush_hot * 1.0 / y.hot as brush_hot_ratio \
+    from ( \
+        SELECT a.postId, d.blogId, count(distinct a.userId) as brush_hot_uv, sum(c.hot) as brush_hot \
+        from ( \
+            SELECT postId, publisheruserid as userId \
+            from lofter.dwd_suspect_shuare_model_post_rank_di \
+            where dt = '${azkaban.flow.1.days.ago}' and publisheruserid is not null \
+        ) a \
+        join ( \
+            select postId \
+            from ( \
+                    select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                    from lofter_db_dump.ods_db_tag_resource_nd \
+                    where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                union all \
+                    select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                    from lofter_db_dump.ods_db_tag_resource_nd \
+                    where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+                union all \
+                    select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                    from lofter_db_dump.ods_db_tag_resource_nd \
+                    where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            ) t \
+            where rk <= 100 \
+            group by 1 \
+        ) b on a.postId = b.postId \
+        left join ( \
+            SELECT userId, postId, count(1) as hot \
+            from lofter.dwd_post_hot_di \
+            where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+            group by 1, 2 \
+        ) c on a.userId = c.userId and a.postId = c.postId \
+        join lofter.dim_post d on a.postId = d.id \
+        where  d.publishDate >= '2025-08-14' \
+        group by 1, 2 \
+    ) x \
+    left join ( \
+        select postId, hot_pv as hot from lofter.dws_post_interaction_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) y on x.postId = y.postId \
+    left join ( \
+       select * \
+       from lofter_dm.ads_risk_tag_post_rank_brush_hot_deduction_di \
+       where dt < '${azkaban.flow.1.days.ago}' \
+    ) z on x.postId = z.postId \
+    where x.brush_hot_uv >= 10 and z.postId is null \

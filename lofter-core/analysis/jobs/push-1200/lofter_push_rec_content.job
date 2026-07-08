@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select cast(user_id as bigint) as userId, item_id as itemId, push_title as title, push_abstract as content from rec.rec_zero_interest_user_push_item_content where day='${azkaban.flow.1.days.ago}' "
+params= --topic lofter.push.rec.content --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=

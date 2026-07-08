@@ -1,0 +1,88 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 粮票赠送 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '粮票赠送'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '粮票赠送' as tag, 'DAY_7' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 15 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_7d > 0 \
+                                  union all \
+                               \
+                                  select userId, '粮票赠送' as tag, 'DAY_15' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 15 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_15d > 0 \
+                                  union all \
+                               \
+                                  select userId, '粮票赠送' as tag, 'DAY_30' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 15 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_30d > 0 \
+                                  union all \
+                               \
+                                  select userId, '粮票赠送' as tag, 'DAY_90' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 15 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_90d > 0 \
+                                  union all \
+                               \
+                                  select userId, '粮票赠送' as tag, 'DAY_180' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_180d > 0 \
+                                  union all \
+                               \
+                                  select userId, '粮票赠送' as tag, 'DAY_ALL' as cat, \
+                                         case when grain_ticket_consume_7d < 5 then 'COUNT_1_5' \
+                                              when grain_ticket_consume_7d < 10 then 'COUNT_5_10' \
+                                              when grain_ticket_consume_7d < 15 then 'COUNT_10_15' \
+                                              when grain_ticket_consume_7d < 20 then 'COUNT_15_20' \
+                                              when grain_ticket_consume_7d < 25 then 'COUNT_20_25' \
+                                              when grain_ticket_consume_7d < 50 then 'COUNT_25_50' \
+                                              when grain_ticket_consume_7d < 100 then 'COUNT_50_100' \
+                                              else 'COUNT_100' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_consume_std > 0 ) "

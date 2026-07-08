@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table vc.ads_vc_ab_platform_experiment_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value,metric_value \
+from vc.dws_ab_platform_experiment_metric_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+order by exp_date,appid,sceneid,exp_id,metric,bucket_id

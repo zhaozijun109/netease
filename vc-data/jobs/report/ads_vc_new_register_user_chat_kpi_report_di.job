@@ -1,0 +1,137 @@
+type = sparksql
+hive.query.01 =     \
+with kpi_new_user_chat(  \
+select   \
+a.dt,  \
+a.register_date,  \
+a.user_id,  \
+a.origin_type,a.origin,a.device_os,  \
+bb.user_id first_role_chat_user_id,  \
+bb.character_id first_role_chat_character_id,  \
+bb.first_role_chat_cnt,  \
+cc.talk_cnt ,  \
+cc.talk_role_cnt,  \
+cc.user_id  talk_userid,  \
+dd.findpage_role_expose_pv,  \
+dd.user_id findpage_role_expose_userid,  \
+ee.findpage_role_click_pv,  \
+ee.user_id findpage_role_click_userid,  \
+ff.automatic_inspiration_click_pv,  \
+ff.user_id automatic_inspiration_click_userid,  \
+gg.manual_inspiration_click_pv,  \
+gg.user_id manual_inspiration_click_userid  \
+from(  \
+select '${azkaban.flow.1.days.ago}' dt,register_date, user_id,origin_type,device_os,  \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'  \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'  \
+     else '非LOFTER' end origin  \
+from  vc.dws_vc_user_behavior_info_a_d  \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )  \
+and register_date='${azkaban.flow.1.days.ago}'  \
+ and is_anonymity='N'  \
+ AND is_test_user='N'  \
+group by 1,2,3,4,5,6  \
+)a   \
+left join   \
+(  \
+select a.dt,a.user_id ,	  \
+a.character_id,message_send_time,talk_cnt  first_role_chat_cnt  \
+from(  \
+select dt,user_id ,	  \
+character_id,message_send_time,  \
+ROW_NUMBER() OVER (PARTITION BY dt,user_id  ORDER BY message_send_time asc) as first_message  \
+from vc.dwd_vc_uc_talk_info_i_d   \
+where dt='${azkaban.flow.1.days.ago}'  \
+and sender in (2, 4)   \
+and type = 1   \
+) a   \
+left join   \
+(  \
+select dt,user_id ,	  \
+character_id,  \
+count(distinct message_id)    as talk_cnt  \
+from vc.dwd_vc_uc_talk_info_i_d   \
+where dt='${azkaban.flow.1.days.ago}'  \
+and sender in (2, 4)   \
+and type = 1   \
+group by 1,2,3  \
+)  b on a.dt=b.dt  and a.user_id=b.user_id and a.character_id=b.character_id   \
+where first_message=1   \
+) bb on a.dt=bb.dt  and a.user_id=bb.user_id   \
+left join   \
+(  \
+select dt,user_id ,	  \
+count(distinct message_id)    as talk_cnt,  \
+count(distinct character_id) talk_role_cnt  \
+from vc.dwd_vc_uc_talk_info_i_d   \
+where dt='${azkaban.flow.1.days.ago}'  \
+and sender in (2, 4)   \
+and type = 1   \
+group by 1,2  \
+) cc on a.dt=cc.dt  and a.user_id=cc.user_id   \
+left join   \
+(  \
+SELECT  dt, user_id,count(case when dt>='2025-09-29'and  params['type'] ='character' then  1 when dt<'2025-09-29' then 1 end) findpage_role_expose_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid = 'b1-2'  \
+    and params['module'] ='roleCard'  \
+group by 1,2  \
+) dd on a.dt=dd.dt  and a.user_id=dd.user_id  \
+left join   \
+(  \
+SELECT  dt,user_id,count(case when dt>='2025-09-29'and  params['type'] ='character' then  1 when dt<'2025-09-29' then 1 end) findpage_role_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid = 'c1-2'  \
+    and params['module'] ='roleCard'   \
+group by 1,2  \
+) ee on a.dt=ee.dt  and a.user_id=ee.user_id  \
+left join   \
+(  \
+SELECT  dt,user_id,count(1) automatic_inspiration_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid = 'h1-11'  \
+    AND params['type'] = '6'  \
+group by 1,2  \
+) ff on a.dt=ff.dt  and a.user_id=ff.user_id  \
+left join   \
+(  \
+SELECT  dt,user_id,count(1) manual_inspiration_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'   \
+    AND eventid = 'h1-11'  \
+    AND params['type'] = '3'  \
+group by 1,2  \
+) gg on  a.dt=gg.dt  and a.user_id=gg.user_id  \
+)   \
+  \
+insert overwrite table vc_dm.ads_vc_new_register_user_chat_kpi_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select register_date,  \
+origin_type,origin,device_os,  \
+count(distinct user_id) register_user_cnt,  \
+sum(first_role_chat_cnt) first_role_chat_cnt,  \
+count(distinct first_role_chat_user_id) first_role_chat_user_cnt,  \
+count(distinct talk_userid) chat_user_cnt,  \
+sum(talk_cnt) talk_cnt,  \
+sum(talk_role_cnt)talk_role_cnt,  \
+  \
+sum(findpage_role_expose_pv) findpage_role_expose_pv,  \
+count(distinct findpage_role_expose_userid) findpage_role_expose_uv,  \
+  \
+sum(findpage_role_click_pv)findpage_role_click_pv,  \
+count(distinct findpage_role_click_userid) findpage_role_click_uv,  \
+  \
+sum(automatic_inspiration_click_pv) automatic_inspiration_click_pv,  \
+sum(talk_cnt)  automatic_inspiration_expose_pv,  \
+count(distinct automatic_inspiration_click_userid) automatic_inspiration_click_uv,  \
+  \
+sum(manual_inspiration_click_pv) manual_inspiration_click_pv,  \
+sum(talk_cnt) manual_inspiration_expose_pv,  \
+count(distinct manual_inspiration_click_userid ) manual_inspiration_click_uv  \
+  \
+from  kpi_new_user_chat  \
+group by   \
+register_date,  \
+origin_type,origin,device_os

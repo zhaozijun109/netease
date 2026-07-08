@@ -1,0 +1,49 @@
+type=sparksql
+dependencies=
+hive.query.01=insert overwrite table lofter_dm.ads_suspect_hot_based_on_slider_di partition(dt='${azkaban.flow.1.days.ago}')  \
+              select \
+                a.name, a.actiontype as hot_type, \
+                case when b.userid is null then 0 else 1 end as slider_flag, \
+                case when c.publisheruserid is null then 0 else 1 end as db_flag, \
+                count(distinct a.targetpostid) as shuare_post_num, \
+                count(distinct a.userid) as shuare_uv, \
+                count(1) as shuare_pv \
+              from \
+                ( \
+                  select \
+                    dt,userid,targetpostid,eventtime,name, \
+                    case when actiontype = 'like' then 1 else 3 end as actiontype \
+                  from \
+                    lofter.ods_log_anti_risk_shuare_di \
+                  where \
+                    dt = '${azkaban.flow.1.days.ago}' and rgrisk = 'reject' \
+                ) a \
+                left join ( \
+                  select \
+                    dt,get_json_object(payload, '$.userid') as userid \
+                  from \
+                    lofter.ods_log_risk_slider_di \
+                  where \
+                    dt = '${azkaban.flow.1.days.ago}' and get_json_object(payload, '$.opresult') in (0, 1, -1) \
+                  group by \
+                    dt,get_json_object(payload, '$.userid') \
+                ) b on a.dt = b.dt \
+                and a.userid = b.userid \
+                left join ( \
+                  select \
+                    id,postid,blogid,publisheruserid,type, \
+                    from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+                  from \
+                    lofter_db_dump.ods_db_post_hot_nd \
+                  where \
+                    type in (1, 3) \
+                    and from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                  group by \
+                    id,postid,blogid,publisheruserid,type, \
+              	  from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+                ) c \
+                on a.dt = c.dt and a.userid = c.publisheruserid and a.targetpostid = c.postid and a.actiontype = c.type \
+              group by \
+                1,2,3,4 \
+              distribute by 1
+

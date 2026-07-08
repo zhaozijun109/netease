@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(blogId, '-', period) as id, blogId as blogId, period, revenue_level from lofter_dm.ads_post_paid_creator_revenue_detail_di where dt='${azkaban.flow.1.days.ago}' and pay_type = 'all' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_blog_period_revenue --full --atom

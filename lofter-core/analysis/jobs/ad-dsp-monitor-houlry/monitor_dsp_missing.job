@@ -1,0 +1,18 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.bad="\
+select count(distinct b.uuid) / count(distinct a.requestUuid) as dsp_ratio \
+from ( \
+    select * \
+    from lofter.ods_log_ad_client_di \
+    where dt = '${azkaban.flow.current.date}' and expose > 0 and \
+        from_unixtime(cast(`time`/1000 as bigint), 'HH') = from_unixtime(unix_timestamp() - 3600, 'HH') \
+) a \
+left join ( \
+    SELECT uuid \
+    from lofter.ods_log_ad_dsp_raw_di \
+    where dt <= '${azkaban.flow.current.date}' and dt >= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.requestuuid = b.uuid \
+having dsp_ratio < 0.99 \
+"

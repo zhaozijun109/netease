@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="\
+select 'membership' as bizId, replace(settlement_date, '-', '') as intDay, \
+       postId, blogId, \
+       nvl(order_count,0) as orderCount, \
+       nvl(order_amount,0) as orderAmount, \
+       nvl(revenue,0) as revenueAmount, \
+       count(1) over (partition by settlement_date) as totalDataCount, \
+       sum(revenue) over (partition by settlement_date) as totalAmount \
+from lofter_dm.ads_membership_post_revenue_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --messageType 1 --topic LOFTER.COMMON.TRADE.MEMBERSHIP.REVENUE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

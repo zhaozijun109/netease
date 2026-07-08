@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_all_vip_blog_postquality_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogid,publishdays,blogname, \
+count(distinct postid) as postnum, \
+count(distinct case when recomstatus=1 then postid else null end ) as rec_postnum, \
+sum(quality_percent) as quality_percent, \
+sum(fufankuiuv) as fufankuiuv, \
+sum(zhengfankuiuv) as zhengfankuiuv, \
+sum(exposureuv) as exposureuv, \
+sum(qianbg_amount/1000*exposureuv) as money \
+from   \
+(select * ,rank()over(partition by postid order by quality_percent desc   ) as rk  \
+from  \
+lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+and blog_channel_flg=1 \
+and post_content_type='文字') a where rk=1 \
+group by blogid,publishdays,blogname \

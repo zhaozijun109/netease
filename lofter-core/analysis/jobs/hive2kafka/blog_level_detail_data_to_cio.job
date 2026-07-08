@@ -1,0 +1,82 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select t1.blogId, \
+       t1.blogLevel, \
+       t1.blogUrl, \
+       t1.blogNickName, \
+       t1.isCp, \
+       t1.securityGrade, \
+       t1.score, \
+       t1.postCountRecommendPool180d, \
+       t1.postFirstDate, \
+       t1.postLastDate, \
+       t1.postCountStd, \
+       t1.postCount180d, \
+       t1.postCount30d, \
+       t1.postCount1d, \
+       t1.activeDays30d, \
+       t1.activeLastDate, \
+       t1.fansStd, \
+       t1.hdFans1y, \
+       t1.hotAvgRecPoolRecentPosts1y, \
+       t1.categoryR1, \
+       t1.categoryR2, \
+       t1.categoryR3, \
+       t1.domainR1, \
+       t1.domainR2, \
+       t1.domainR3, \
+       t1.ipR1, \
+       t1.ipR2, \
+       t1.ipR3, \
+       t1.postMainContentType, \
+       t1.postCountVideo1y, \
+       t1.postCountText1y, \
+       t1.postCountPhoto1y, \
+       nvl(t2.giftAbilityStatus, 0) as giftAbilityStatus \
+from ( \
+    select blogId, \
+           level as blogLevel, \
+           blog_url as blogUrl, \
+           blog_nickname as blogNickName, \
+           is_cp as isCp, \
+           security_grade as securityGrade, \
+           score, \
+           post_count_recommend_pool_180d as postCountRecommendPool180d, \
+           post_first_date as postFirstDate, \
+           post_last_date as postLastDate, \
+           post_count_std as postCountStd, \
+           post_count_180d as postCount180d, \
+           post_count_30d as postCount30d, \
+           post_count_1d as postCount1d, \
+           active_days_30d as activeDays30d, \
+           active_last_date as activeLastDate, \
+           fans_std as fansStd, \
+           hd_fans_1y as hdFans1y, \
+           hot_avg_rec_pool_recent_posts_1y as hotAvgRecPoolRecentPosts1y, \
+           category_r1 as categoryR1, \
+           category_r2 as categoryR2, \
+           category_r3 as categoryR3, \
+           domain_r1 as domainR1, \
+           domain_r2 as domainR2, \
+           domain_r3 as domainR3, \
+           ip_r1 as ipR1, \
+           ip_r2 as ipR2, \
+           ip_r3 as ipR3, \
+           post_main_content_type as postMainContentType, \
+           post_count_video_1y as postCountVideo1y, \
+           post_count_text_1y as postCountText1y, \
+           post_count_photo_1y as postCountPhoto1y \
+    from lofter_dm.ads_blog_score_di \
+    where level in ('S', 'A', 'B', 'C') and dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+    select blogId, \
+           max(gift_ability_status) as giftAbilityStatus \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) t2 \
+on t1.blogId = t2.blogId \
+"
+params= --topic LOFTER.CIO.BLOG_LEVEL_DETAIL_DATA_TO_CIO --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

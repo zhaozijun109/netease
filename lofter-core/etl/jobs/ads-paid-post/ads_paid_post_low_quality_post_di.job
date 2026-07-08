@@ -1,0 +1,141 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_low_quality_post_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+postid, \
+blog_channel, \
+blogid, \
+words_count, \
+text_length, \
+recomstatus, \
+ai_dizhi_flg, \
+low_quality_flg, \
+trade_money, \
+case when (words_count>=0 and words_count<=2000 and text_length>=0 and text_length<1000 and ruleall_huomian_flg=0) then 1 else 0 end as rule_flg1, \
+case when (words_count>=0 and words_count<=500 and rule2_huomian_flg=0 and ruleall_huomian_flg=0)  then 1 else 0 end as rule_flg2, \
+case when (ai_dizhi_flg=1 and ruleall_huomian_flg=0  ) then 1 else 0 end as rule_flg3, \
+case when (low_quality_flg=1 and ruleall_huomian_flg=0) then 1 else 0 end as rule_flg4 \
+from \
+ \
+( \
+select \
+a.postid,blog_channel,a.blogid,words_count,text_length,recomstatus, \
+ \
+case when size(array_intersect(ai_results, array('同质化套路场景型', '套路场景型'))) > 0  then 1 else 0 end as ai_dizhi_flg, \
+ \
+ case when quality_percent is not null and quality_percent<55 then 1 else 0 end low_quality_flg,trade_money, \
+ case when g.id is null then 0 else 1 end as rule2_huomian_flg, \
+  case when h.id is null then 0 else 1 end as ruleall_huomian_flg \
+ \
+from \
+ \
+(select postid,blog_channel,blogid,text_length \
+from \
+lofter.dim_gift_post_return \
+where status=1 \
+and auditstatus=1 \
+and contenttype='文字' \
+and blog_channel in (0,1) \
+and ispay_returngift in (0,1) \
+and publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+group by postid,blog_channel,blogid,text_length \
+) a \
+ \
+join \
+ \
+ \
+(select id,recomstatus \
+from lofter.dim_post \
+where allowview=0 and valid=0 \
+and publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+group by id,recomstatus \
+) b \
+ \
+on a.postid=b.id \
+ \
+ \
+join \
+ \
+ \
+(select postid \
+, \
+words_count \
+from \
+lofter.dwd_post_length_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+group by postid \
+, \
+words_count \
+) e \
+ \
+on a.postid=e.postid \
+ \
+ \
+left join \
+ \
+(select post_id as postid,  split(concat_ws(',', collect_set(result)), ',') as ai_results \
+from \
+rec.content_reg_payed_title_classify_output2 \
+where \
+day between date_sub('${azkaban.flow.1.days.ago}', 59) and '${azkaban.flow.1.days.ago}' \
+and \
+classify=1  and  probability >0.6999 \
+group by post_id \
+) c \
+ \
+on a.postid=c.postid \
+ \
+left join \
+ \
+ \
+ \
+(select postid,max(quality_percent) as quality_percent \
+from \
+lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+where \
+dt='${azkaban.flow.1.days.ago}' \
+and \
+(styouzhiflg=0  or styouzhiflg is null) \
+and level not in ('S','A','B') \
+group by  postid) d \
+on a.postid=d.postid \
+left join \
+(select postid,trade_money \
+from \
+lofter_dm.ads_post_paid_post_revenue_detail_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and period='history' \
+and pay_type='all' \
+group by postid,trade_money) f \
+on a.postid=f.postid \
+ \
+left  join  \
+ \
+(select id \
+from  \
+lofter.dim_post \
+LATERAL VIEW explode(  tags   ) t2 AS tag \
+where tag in ('桃子红了','月儿爱海天') \
+group by id) g \
+on a.postid =g.id  \
+ \
+left join  \
+(select id \
+from  \
+lofter.dim_post \
+LATERAL VIEW explode(  tags   ) t2 AS tag \
+where tag in ('原创小说','世情小说','现言','古言') \
+group by id) h \
+on a.postid =h.id  \
+ \
+group by a.postid,blog_channel,a.blogid,words_count,text_length,recomstatus, \
+ \
+case when size(array_intersect(ai_results, array('同质化套路场景型', '套路场景型'))) > 0  then 1 else 0 end , \
+ \
+ case when quality_percent is not null and quality_percent<55 then 1 else 0 end,trade_money, \
+ case when g.id is null then 0 else 1 end , \
+  case when h.id is null then 0 else 1 end  \
+ \
+ ) a \
+
+
+dependencies=ads_paid_post_premium_scoring_group_normalization_di,ads_post_paid_post_revenue_detail_di

@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.pre="select count(distinct postId) as cnt from lofter.dwd_ad_content_unlock_sdk_di where dt = '${azkaban.flow.1.days.ago}' having cnt > 0 "
+conf.spark.check.bad="\
+select nvl(a.module, b.module) as module, count(distinct a.postId) as sdk_unlock_post_count, count(distinct a.userId, a.postId) as sdk_unlock_pv, \
+       count(distinct b.postId) as backend_unlock_post_count, count(distinct b.userId, b.postId) as backend_unlock_pv \
+from ( \
+    select * from lofter.dwd_ad_content_unlock_sdk_di where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+full outer join ( \
+    select * from lofter.dwd_ad_content_unlock_di where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId and a.postId = b.postId and a.module = b.module \
+group by 1 \
+having (sdk_unlock_post_count < backend_unlock_post_count * 0.95 or sdk_unlock_post_count >= backend_unlock_post_count * 1.2 or \
+       sdk_unlock_pv < backend_unlock_pv * 0.95 or sdk_unlock_pv >= backend_unlock_pv * 1.2) and module != '视频合集' \
+"
+dependencies=

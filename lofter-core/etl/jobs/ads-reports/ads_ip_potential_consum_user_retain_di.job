@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_potential_consum_user_retain_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select t1.dt,t1.ip,t1.user_type, \
+count(distinct t2.userid) as consum_uv, \
+  count(  \
+    DISTINCT CASE  \
+      WHEN t3.dt = date_add(t1.dt, 1)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1) THEN t3.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS consum_uv_2d,  \
+    count(  \
+    DISTINCT CASE  \
+      WHEN t3.dt = date_add(t1.dt, 6)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (6) THEN t3.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS consum_uv_7d \
+from  \
+( \
+select dt,ip,user_type,userid \
+from lofter.dws_ip_user_life_cycle_dd  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+and user_type in ('新用户','潜力用户') \
+) t1 \
+join \
+( \
+select dt,userid \
+from lofter.dwd_post_talk_expose_di  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+) t2 on t1.userid = t2.userid and t1.dt=t2.dt \
+left join  \
+(select dt,userid \
+from lofter.dwd_user_active_di where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}'  \
+)t3 on t1.userid=t3.userid \
+AND t3.dt BETWEEN date_add(t1.dt, 0)  \
+  AND date_add(t1.dt, 30) \
+  WHERE \
+  datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1, 6) \
+group by \
+  t1.dt, \
+  t1.ip, \
+  t1.user_type  \
+  grouping sets((t1.dt, t1.ip), (t1.dt, t1.ip, t1.user_type)) \

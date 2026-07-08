@@ -1,0 +1,59 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 消费广告 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '消费广告'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select b.userId, '消费广告' as tag, 'DAY_7' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_ad_di \
+                                          where click_pv > 0 and dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',7) \
+                                          group by userId \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '消费广告' as tag, 'DAY_15' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_ad_di \
+                                          where click_pv > 0 and dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',15) \
+                                          group by userId \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '消费广告' as tag, 'DAY_30' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_ad_di \
+                                          where click_pv > 0 and dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',30) \
+                                          group by userId \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '消费广告' as tag, 'DAY_90' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_ad_di \
+                                          where click_pv > 0 and dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',90) \
+                                          group by userId \
+                                  ) b \
+                               \
+                                  union all \
+                               \
+                                  select b.userId, '消费广告' as tag, 'DAY_180' as cat, '1' as grp \
+                                  from ( \
+                                          select userId \
+                                          from lofter.dws_par_user_ad_di \
+                                          where click_pv > 0 and dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',180) \
+                                          group by userId \
+                                  ) b ) "

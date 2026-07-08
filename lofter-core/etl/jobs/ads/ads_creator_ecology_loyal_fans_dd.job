@@ -1,0 +1,94 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_loyal_fans_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.blogId, \
+        tmp1.fans_hd_uv_7d AS sevenDayInteractFollowers, \
+        tmp1.fans_hd_uv_30d AS thirtyDayInteractFollowers, \
+        tmp1.fans_cnt_7d AS sevenDayFollowerAddition, \
+        tmp1.fans_cnt_30d AS thirtyDayFollowerAddition, \
+        concat_ws(',',fans_cnt_7d_rate,fans_cnt_in_7d_30d_rate,fans_cnt_in_30d_365d_rate,round(1-fans_cnt_in_365d_rate,2)) AS followerRates, \
+        tmp2.loyal_fans_list AS followers, \
+        tmp2.loyal_fans_reasons AS reasons, \
+        tmp3.tags AS followerFavorite, \
+        tmp4.nextFanThreshold AS thirtyDayNextFollowers \
+FROM \
+( \
+	SELECT  userId as blogId, \
+	        nvl(fans_hd_uv_7d,0) AS fans_hd_uv_7d, \
+	        nvl(fans_hd_uv_30d,0) AS fans_hd_uv_30d, \
+	        nvl(fans_cnt_7d,0) AS fans_cnt_7d, \
+	        nvl(fans_cnt_30d,0) AS fans_cnt_30d, \
+	        nvl(fans_cnt,0) AS fans_cnt, \
+            nvl(round(fans_cnt_7d/fans_cnt,2),0) AS fans_cnt_7d_rate, \
+            nvl(round(if((fans_cnt_30d-fans_cnt_7d) >= 0,(fans_cnt_30d-fans_cnt_7d)/fans_cnt,0),2),0) AS fans_cnt_in_7d_30d_rate, \
+            nvl(round(if((fans_cnt_365d-fans_cnt_30d) >= 0,(fans_cnt_365d-fans_cnt_30d)/fans_cnt,0),2),0) AS fans_cnt_in_30d_365d_rate, \
+            nvl(round(fans_cnt_365d/fans_cnt,2),0) AS fans_cnt_in_365d_rate \
+	FROM lofter.dws_par_creator_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' AND nvl(fans_cnt, 0) >= 40 and post_count_std >= 1 \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT  userId as blogId, \
+	        concat_ws(',',transform(sort_array(collect_set(struct(fans_hot_cnt_30d,hdUserId)),false),x -> x.hdUserId)) AS loyal_fans_list, \
+	        concat_ws(',',transform(sort_array(collect_set(struct(fans_hot_cnt_30d,hdUserId)),false),x -> concat('贡献',cast(x.fans_hot_cnt_30d AS string),'热度'))) AS loyal_fans_reasons \
+	FROM \
+	( \
+		SELECT  userId, \
+		        hdUserId, \
+		        fans_hot_cnt_30d, \
+		        ROW_NUMBER() OVER (PARTITION BY userId ORDER BY fans_hot_cnt_30d DESC) AS rn \
+		FROM \
+		( \
+			SELECT  t1.userId, \
+			        t1.hdUserId, \
+			        SUM(t1.hot) AS fans_hot_cnt_30d \
+			FROM \
+			( \
+				SELECT  blogId          AS userId, \
+				        publisherUserId AS hdUserId, \
+				        1               AS hot, \
+				        postId \
+				FROM lofter.stg_post_hot_dynamic_in_130d_dd \
+				WHERE dt = '${azkaban.flow.1.days.ago}' AND type IN (1, 2, 3, 4) AND DATEDIFF('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 AS bigint), 'yyyy-MM-dd')) < 30 \
+			) t1 \
+			JOIN ( \
+			    SELECT id FROM lofter.dim_post_article \
+			) x \
+			ON t1.postId = x.id \
+			JOIN \
+			( \
+				SELECT  userId, \
+				        blogId \
+				FROM `lofter_db_dump`.`ods_db_user_following_nd` \
+				WHERE from_unixtime(cast(followtime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+			) t2 \
+			ON t1.hdUserId = t2.userId AND t1.userId = t2.blogId \
+			GROUP BY  t1.userId, \
+			          t1.hdUserId \
+		) t3 \
+		WHERE fans_hot_cnt_30d >= 3 \
+	) t4 \
+	WHERE rn <= 5 \
+	GROUP BY userId \
+) tmp2 \
+ON tmp1.blogId = tmp2.blogId \
+LEFT JOIN ( \
+    SELECT blogId, \
+           tags \
+    FROM lofter_dm.ads_creator_ecology_fans_favorite_wd \
+    WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',7) AND dt < '${azkaban.flow.1.days.ago}' \
+) tmp3 \
+ON tmp1.blogId = tmp3.blogId \
+LEFT JOIN ( \
+    SELECT blogId, \
+           CASE WHEN creatorStatus = 50 OR creatorStatus = 60 THEN 50 \
+                WHEN creatorStatus = 70 OR creatorStatus = 80 THEN 200 \
+                WHEN creatorStatus = 90 THEN 1000 \
+                WHEN creatorStatus = 100 THEN 3000 \
+                ELSE 0 \
+           END AS nextFanThreshold \
+    FROM lofter_dm.ads_creator_ecology_identity_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp4 \
+ON tmp1.blogId = tmp4.blogId
+dependencies=ads_creator_ecology_identity_dd

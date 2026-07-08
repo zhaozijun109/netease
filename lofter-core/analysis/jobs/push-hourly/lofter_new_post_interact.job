@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select blogId as userId, 3 as messageType, postId as itemId, blogId, \
+       if(special_events is null or size(special_events) == 0, 1, 2) as interactType, \
+       offline_hours as offlineHours, \
+       likes,comments,recommends, reproduces, \
+       if(size(special_events) > 0, element_at(special_events, 1).special_type, null) as specialType1, \
+       if(size(special_events) > 0, element_at(special_events, 1).special_count, null) as specialCount1, \
+       if(size(special_events) > 1, element_at(special_events, 2).special_type, null) as specialType2, \
+       if(size(special_events) > 1, element_at(special_events, 2).special_count, null) as specialCount2, \
+       nvl(if(size(special_events) > 0, element_at(element_at(special_events, 1).users,1), null), element_at(interaction_users,1))as targetUserId \
+from lofter_dm.ads_push_new_post_interact_hi \
+where dt='${azkaban.flow.current.date}' and hour = ${azkaban.flow.start.hour} \
+"
+params= --topic LOFTER.PUSH.NEW.TASK --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=ads_push_new_post_interact_hi

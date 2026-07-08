@@ -1,0 +1,158 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_creator_revenue_v2_di partition (dt = '${azkaban.flow.1.days.ago}') \
+SELECT pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 50 \
+			THEN '(0,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		WHEN trade_money >= 500 \
+			AND trade_money < 1000 \
+			THEN '[500,1000)' \
+		WHEN trade_money >= 1000 \
+			AND trade_money < 5000 \
+			THEN '[1000,5000)' \
+		WHEN trade_money >= 5000 \
+			AND trade_money < 10000 \
+			THEN '[5000,10000)' \
+		WHEN trade_money >= 10000 \
+			AND trade_money < 50000 \
+			THEN '[10000,50000)' \
+		ELSE '[50000,~)' \
+		END AS revenue_level \
+	,count(DISTINCT blogid) AS revenue_uv \
+	,sum(trade_money) AS reveune_money \
+FROM lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+WHERE period IN ( \
+		'year' \
+		,'month' \
+		,'history' \
+		,'30' \
+		)  and  dt='${azkaban.flow.1.days.ago}' \
+GROUP BY pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 50 \
+			THEN '(0,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		WHEN trade_money >= 500 \
+			AND trade_money < 1000 \
+			THEN '[500,1000)' \
+		WHEN trade_money >= 1000 \
+			AND trade_money < 5000 \
+			THEN '[1000,5000)' \
+		WHEN trade_money >= 5000 \
+			AND trade_money < 10000 \
+			THEN '[5000,10000)' \
+		WHEN trade_money >= 10000 \
+			AND trade_money < 50000 \
+			THEN '[10000,50000)' \
+		ELSE '[50000,~)' \
+		END \
+ \
+UNION \
+ \
+SELECT pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 2 \
+			THEN '(0,2)' \
+		WHEN trade_money >= 2 \
+			AND trade_money < 10 \
+			THEN '[2,10)' \
+		WHEN trade_money >= 10 \
+			AND trade_money < 50 \
+			THEN '[10,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		ELSE '[500,~)' \
+		END AS revenue_level \
+	,count(DISTINCT blogid) AS revenue_uv \
+	,sum(trade_money) AS reveune_money \
+FROM lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+WHERE period IN ('1') and  dt='${azkaban.flow.1.days.ago}' \
+GROUP BY pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 2 \
+			THEN '(0,2)' \
+		WHEN trade_money >= 2 \
+			AND trade_money < 10 \
+			THEN '[2,10)' \
+		WHEN trade_money >= 10 \
+			AND trade_money < 50 \
+			THEN '[10,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		ELSE '[500,~)' \
+		END \
+ \
+UNION \
+ \
+SELECT pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 10 \
+			THEN '(0,10)' \
+		WHEN trade_money >= 10 \
+			AND trade_money < 50 \
+			THEN '[10,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		WHEN trade_money >= 500 \
+			AND trade_money < 1000 \
+			THEN '[500,1000)' \
+		ELSE '[1000,~)' \
+		END AS revenue_level \
+	,count(DISTINCT blogid) AS revenue_uv \
+	,sum(trade_money) AS reveune_money \
+FROM lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+WHERE period IN ('7') and  dt='${azkaban.flow.1.days.ago}' \
+GROUP BY pay_type \
+	,period \
+	,CASE  \
+		WHEN trade_money > 0 \
+			AND trade_money < 10 \
+			THEN '(0,10)' \
+		WHEN trade_money >= 10 \
+			AND trade_money < 50 \
+			THEN '[10,50)' \
+		WHEN trade_money >= 50 \
+			AND trade_money < 200 \
+			THEN '[50,200)' \
+		WHEN trade_money >= 200 \
+			AND trade_money < 500 \
+			THEN '[200,500)' \
+		WHEN trade_money >= 500 \
+			AND trade_money < 1000 \
+			THEN '[500,1000)' \
+		ELSE '[1000,~)' \
+		END
+dependencies=ads_post_paid_creator_revenue_detail_v2_di

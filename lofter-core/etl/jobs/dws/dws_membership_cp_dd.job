@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_membership_cp_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.tag, zone, a.post_count_std, a.post_count_7d, a.hot \
+from ( \
+    select a.tag, \
+           a.zone, \
+           count(distinct a.postId) post_count_std, \
+           count(distinct if(a.join_date >= '${azkaban.flow.7.days.ago}', a.postId, null)) post_count_7d, \
+           sum(b.hot) as hot \
+    from ( \
+        select postId, 'vip' as zone, tag, join_date \
+        from lofter.dim_membership_post_vip_dd \
+            lateral view explode(tags) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and join_date <= '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId, 'pay' as zone, tag, join_date \
+        from lofter.dim_membership_post_dd \
+            lateral view explode(tags) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and join_date <= '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId, 'vip' as zone, '全部' as tag, join_date \
+        from lofter.dim_membership_post_vip_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and join_date <= '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId, 'pay' as zone, '全部' as tag, join_date \
+        from lofter.dim_membership_post_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and join_date <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select postId, hot_30d as hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    group by 1, 2 \
+    having post_count_std >= 100 or post_count_7d >= 50 \
+) a \
+join (select name as tag from lofter_db_dump.ods_db_cmb_tag_nd where cpFlag > 0 group by 1) b on a.tag = b.tag \
+left join ( \
+    select tagName as tag from lofter_db_dump.ods_db_recommend_tag_new_nd where blackTag > 0 \
+) c on a.tag = c.tag \
+left join ( \
+    select cp from lofter.membership_cp_setting where cp_type = 'cp' \
+) d on a.tag = d.cp \
+where c.tag is null and (d.cp is not null or a.tag = '全部') \
+
+dependencies=dws_post_interaction_dd

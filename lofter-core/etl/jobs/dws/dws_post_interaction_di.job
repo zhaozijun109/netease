@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=insert overwrite table lofter.dws_post_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select p.id as postId, p.userId as post_userId, p.publishDate as post_publish_date, p.contentType as post_content_type, \
+       p.tags as post_tags, \
+       hot_pv, praise_pv, reproduce_pv, recommend_pv, subscribe_pv, \
+       hot_device_bitmap, praise_device_bitmap, reproduce_device_bitmap, recommend_device_bitmap, subscribe_device_bitmap, \
+       response_pv, response_device_bitmap, \
+       share_pv, share_device_bitmap, \
+       valid_response_pv, fans_response_pv, fans_response_user_bitmap, fans_hot_pv, fans_hot_user_bitmap, \
+       nvl(hot_pv,0) + nvl(response_pv,0) + nvl(share_pv,0) as hd_pv, \
+       bitmap_or(hot_device_bitmap, bitmap_or(response_device_bitmap, share_device_bitmap)) as hd_device_bitmap \
+from lofter.dim_post_article p \
+left join ( \
+    select postId, \
+           count(1) hot_pv, \
+           sum(if(opType = 'praise',1,0)) as praise_pv, \
+           sum(if(opType = 'reproduce',1,0)) as reproduce_pv, \
+           sum(if(opType = 'recommend',1,0)) as recommend_pv, \
+           sum(if(opType = 'subscribe',1,0)) as subscribe_pv, \
+           to_bitmap(deviceId) as hot_device_bitmap, \
+           to_bitmap(if(opType = 'praise', deviceId, null)) as praise_device_bitmap, \
+           to_bitmap(if(opType = 'reproduce', deviceId, null)) as reproduce_device_bitmap, \
+           to_bitmap(if(opType = 'recommend', deviceId, null)) as recommend_device_bitmap, \
+           to_bitmap(if(opType = 'subscribe', deviceId, null)) as subscribe_device_bitmap, \
+           sum(is_fans) fans_hot_pv, \
+           to_bitmap(if(is_fans > 0, userId, null)) as fans_hot_user_bitmap \
+    from lofter.dwd_post_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) a on p.id = a.postId \
+left join ( \
+    select postId, count(1) as response_pv, to_bitmap(deviceId) as response_device_bitmap, \
+           sum(is_valid) as valid_response_pv, \
+           sum(is_fans) as fans_response_pv, \
+           to_bitmap(if(is_fans > 0, userId, null)) fans_response_user_bitmap \
+    from lofter.dwd_post_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) b on p.id = b.postId \
+left join ( \
+    select postId, count(1) as share_pv, to_bitmap(deviceId) as share_device_bitmap \
+    from lofter.dwd_post_share_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) c on p.id = c.postId \
+where a.hot_pv > 0 or b.response_pv > 0 or share_pv > 0

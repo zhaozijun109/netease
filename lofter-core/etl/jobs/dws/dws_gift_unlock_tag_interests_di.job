@@ -1,0 +1,140 @@
+type=sparksql
+hive.query.01= \
+with unlocks as ( \
+      select userId, postId \
+      from lofter.dwd_gift_post_unlock_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}' \
+      group by 1, 2 \
+) \
+insert overwrite table lofter.dws_gift_unlock_tag_interests_di partition(dt = '${azkaban.flow.1.days.ago}', period = 1) \
+select x.userId, \
+      collect_list(if(classify = 1, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_contents, \
+      collect_list(if(classify = 2, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_interests \
+from ( \
+  select userId, count(distinct postId) as post_count \
+  from unlocks \
+  group by 1 \
+) x \
+join ( \
+  select *, \
+    row_number() over (partition by userId, classify order by post_count desc) rk \
+  from ( \
+    select a.userId, b.tag, b.classify, count(distinct a.postId) as post_count \
+    from unlocks a \
+    join ( \
+      select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+      from rec.content_reg_payed_title_classify_output2 \
+      where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' \
+    ) b on a.postId = b.postId \
+    where b.rk = 1 \
+    group by 1, 2, 3 \
+  ) t \
+) y on x.userId = y.userId \
+where y.rk <= 5 and y.post_count / x.post_count >= 0.1 \
+group by 1 \
+
+hive.query.02= \
+with unlocks as ( \
+      select userId, postId \
+      from lofter.dwd_gift_post_unlock_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+      group by 1, 2 \
+) \
+insert overwrite table lofter.dws_gift_unlock_tag_interests_di partition(dt = '${azkaban.flow.1.days.ago}', period = 7) \
+select x.userId, \
+      collect_list(if(classify = 1, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_contents, \
+      collect_list(if(classify = 2, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_interests \
+from ( \
+  select userId, count(distinct postId) as post_count \
+  from unlocks \
+  group by 1 \
+) x \
+join ( \
+  select *, \
+    row_number() over (partition by userId, classify order by post_count desc) rk \
+  from ( \
+    select a.userId, b.tag, b.classify, count(distinct a.postId) as post_count \
+    from unlocks a \
+    join ( \
+      select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+      from rec.content_reg_payed_title_classify_output2 \
+      where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' \
+    ) b on a.postId = b.postId \
+    where b.rk = 1 \
+    group by 1, 2, 3 \
+  ) t \
+) y on x.userId = y.userId \
+where y.rk <= 5 and y.post_count / x.post_count >= 0.1 \
+group by 1 \
+
+hive.query.03= \
+with unlocks as ( \
+      select userId, postId \
+      from lofter.dwd_gift_post_unlock_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+      group by 1, 2 \
+) \
+insert overwrite table lofter.dws_gift_unlock_tag_interests_di partition(dt = '${azkaban.flow.1.days.ago}', period = 30) \
+select x.userId, \
+      collect_list(if(classify = 1, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_contents, \
+      collect_list(if(classify = 2, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_interests \
+from ( \
+  select userId, count(distinct postId) as post_count \
+  from unlocks \
+  group by 1 \
+) x \
+join ( \
+  select *, \
+    row_number() over (partition by userId, classify order by post_count desc) rk \
+  from ( \
+    select a.userId, b.tag, b.classify, count(distinct a.postId) as post_count \
+    from unlocks a \
+    join ( \
+      select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+      from rec.content_reg_payed_title_classify_output2 \
+      where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' \
+    ) b on a.postId = b.postId \
+    where b.rk = 1 \
+    group by 1, 2, 3 \
+  ) t \
+) y on x.userId = y.userId \
+where y.rk <= 5 and y.post_count / x.post_count >= 0.1 \
+group by 1 \
+
+hive.query.04= \
+with unlocks as ( \
+      select userId, postId \
+      from lofter.dwd_gift_post_unlock_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 179) and '${azkaban.flow.1.days.ago}' \
+      group by 1, 2 \
+) \
+insert overwrite table lofter.dws_gift_unlock_tag_interests_di partition(dt = '${azkaban.flow.1.days.ago}', period = 180) \
+select x.userId, \
+      collect_list(if(classify = 1, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_contents, \
+      collect_list(if(classify = 2, struct(y.tag as tag,y.post_count/x.post_count as weight, y.post_count as tag_post_count), null)) as unlock_tag_interests \
+from ( \
+  select userId, count(distinct postId) as post_count \
+  from unlocks \
+  group by 1 \
+) x \
+join ( \
+  select *, \
+    row_number() over (partition by userId, classify order by post_count desc) rk \
+  from ( \
+    select a.userId, b.tag, b.classify, count(distinct a.postId) as post_count \
+    from unlocks a \
+    join ( \
+      select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+      from rec.content_reg_payed_title_classify_output2 \
+      where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' \
+    ) b on a.postId = b.postId \
+    where b.rk = 1 \
+    group by 1, 2, 3 \
+  ) t \
+) y on x.userId = y.userId \
+where y.rk <= 5 and y.post_count / x.post_count >= 0.1 \
+group by 1 \

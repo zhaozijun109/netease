@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select item_id, item_type from vc.ads_rec_theater_pool_l1 where day = '${azkaban.flow.1.days.ago}'"
+params= --topic rec_pve_theater_pool --servers lofter-kafka-recommend1.gy.ntes:9092,lofter-kafka-recommend2.gy.ntes:9092,lofter-kafka-recommend3.gy.ntes:9092

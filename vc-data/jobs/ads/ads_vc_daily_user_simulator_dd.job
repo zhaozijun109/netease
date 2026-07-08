@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_daily_user_simulator_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select user_id, \
+       t1.simulator_id, \
+       source, \
+       simulator_chats_1d, \
+       simulator_chats_3d, \
+       simulator_chats_5d, \
+       simulator_chats_7d, \
+       simulator_chats_15d, \
+       simulator_chats_30d, \
+       type \
+from ( \
+    select user_id, \
+           simulator_id, \
+           case when simulator_def = 'vc' then 1 \
+                when simulator_def = 'lofter' then 2 \
+                when simulator_def = 'theater' then 3 \
+           end as source, \
+           sum(case when dt = '${azkaban.flow.1.days.ago}' then total_chats else 0 end) as simulator_chats_1d, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then total_chats else 0 end) as simulator_chats_3d, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 5 then total_chats else 0 end) as simulator_chats_5d, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then total_chats else 0 end) as simulator_chats_7d, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then total_chats else 0 end) as simulator_chats_15d, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then total_chats else 0 end) as simulator_chats_30d \
+    from vc.dws_vc_user_simulator_chats_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+    group by user_id, simulator_id, simulator_def \
+) t1 \
+join ( \
+    select simulator_id, type from vc.ods_db_vc_simulator_info_nd where is_trial = 0 and status = 3 group by simulator_id, type \
+) t2 \
+on t1.simulator_id = t2.simulator_id

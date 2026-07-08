@@ -1,0 +1,324 @@
+type=sparksql
+hive.query.01= \
+with t0 as( \
+select postid \
+    ,contenttype \
+    ,blogid \
+    ,case when ispay_returngift=0 then '付费免费' \
+        when ispay_returngift=1 then '仅付费' \
+        when ispay_returngift=2 then '仅免费' end ispay_returngift \
+    ,case when unlocktype=1 then '高粉专属' \
+        when unlocktype=0 and fans_vip_status=2 then '高粉可解锁' \
+        else '非高粉' end fans_vip_type \
+    ,publishdate \
+    ,id as return_gift_id \
+    ,createdate return_gift_createdate \
+    ,case when status=-1 then '删除' \
+        when status=0 then '未生效' \
+        when status=1 then '生效' end return_gift_status \
+    ,case when review_status=0 then '未标记' \
+        when review_status=1 then '良好' \
+        when review_status=-1 then '低质' \
+        when review_status=-2 then '负面' end return_review_status \
+    ,return_gift_plantype \
+    ,giftname \
+from lofter.dim_gift_post_return_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+    ), \
+t1 as( \
+select id \
+    ,url \
+    ,title \
+    ,tags \
+    ,case when allowview=0 then '公开可见' \
+        when allowview=100 then '仅自己可见' \
+        when allowview=200 then '高粉私享' \
+        else '其他' end allowview \
+    ,case when valid=0 then '正常' \
+        when valid=25 then '被封禁' \
+        when valid=32 then '用户删除' \
+        else '其他' end valid \
+    ,case when recomstatus=0 then '初始' \
+        when recomstatus=1 then '推荐' \
+        when recomstatus=-1 then '不推荐' \
+        else 'null' end recomstatus \
+    ,lower(concat(conv(blogid,10,16),'_',conv(id,10,16))) as item_id \
+    ,concat_ws(', ', coalesce(ips, array())) AS ips \
+from lofter.dim_post \
+    ), \
+t2 as( \
+select postid \
+    ,return_gift_id \
+    ,sum(money) gift_money \
+    ,sum(case when unlock_method='礼物' then 1 else 0 end) gift_cnt \
+    ,sum(case when unlock_method='粮票' then 1 else 0 end) grain_ticket_cnt \
+    ,sum(case when unlock_method='券包' then 1 else 0 end) coupon_cnt \
+from lofter.dwd_gift_post_unlock_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by postid \
+    ,return_gift_id \
+    ), \
+t3 as( \
+    select a.postId, a.blogid, a.return_gift_id, \
+    	count(distinct(case when c.type = 0 and unlock_method <> '粮票' then a.userId end)) as zhengfankui_uv, \
+    	count(distinct(case when c.type = 1 and unlock_method <> '粮票' then a.userId end)) as fufankui_uv, \
+    	count(distinct(case when c.type = 0 and unlock_method = '粮票' then a.userId end)) as food_coupon_zhengfankui_uv, \
+    	count(distinct(case when c.type = 1 and unlock_method = '粮票' then a.userId end)) as food_coupon_fufankui_uv \
+    FROM ( \
+    	SELECT distinct postid, blogid, userid, return_gift_id, unlock_method \
+    	FROM lofter.dwd_gift_post_unlock_dd \
+    	WHERE dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    JOIN ( \
+    	SELECT id \
+    	FROM lofter.dim_gift_post_return_dd \
+    	WHERE dt =  '${azkaban.flow.1.days.ago}' \
+    		AND plantype < 100001 \
+    ) b ON a.return_gift_id = b.id \
+    LEFT JOIN ( \
+    	SELECT distinct returngiftid, userid, type \
+    	FROM lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+    ) c ON a.return_gift_id = c.returngiftid AND a.userid = c.userid \
+    group by a.postId, a.blogid, a.return_gift_id \
+), \
+t4 as( \
+select postid \
+    ,case when styouzhiflg=0 then '非生态优质' \
+        when styouzhiflg=1 then '生态优质' end styouzhiflg \
+from lofter.dws_gift_post_premium_scoring_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+    ), \
+t5 as( \
+select conv(split(item_id, '_')[1], 16, 10) as postid \
+from rec.rec_ra_item_pool_v1 \
+group by conv(split(item_id, '_')[1], 16, 10) \
+    ), \
+t6 as( \
+select postid \
+    ,model_flg \
+    ,type as type_dd \
+    ,bg_amount_flg \
+from lofter.dws_gift_post_premium_scoring_v2_di \
+where dt= '${azkaban.flow.1.days.ago}' \
+group by postid,model_flg,type ,bg_amount_flg \
+), \
+t9 as( \
+    select postid \
+        ,collectionid \
+        ,collection_name \
+    from lofter.bridge_collection_post_dd \
+    where dt= '${azkaban.flow.1.days.ago}' \
+), \
+t12 as( \
+    select \
+        post_id, \
+        concat_ws(',', COLLECT_LIST(if(classify = 1,result,null))) as AI_contenttype, \
+        concat_ws(',', COLLECT_LIST(if(classify = 2,result,null))) as element_tag \
+    from rec.content_reg_payed_title_classify_output2 \
+    where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' and probability >= cast(0.7 as float) and result is not null and classify in (1,2) \
+    group by post_id \
+), \
+t16 as( \
+    select postid,CONCAT_WS(',',COLLECT_LIST(flg)) as checked_contenttype \
+    from lofter_dm.ads_gift_post_title_classify_1_modle_second_check_di \
+    where status = '二次核验打标' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) \
+insert overwrite table lofter_dm.ads_gift_easy_fetch_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select distinct t0.postid \
+    ,contenttype \
+    ,url \
+    ,concat_ws(',', tags) as tags \
+    ,t0.blogid \
+    ,ispay_returngift \
+    ,fans_vip_type \
+    ,allowview \
+    ,recomstatus \
+    ,case when t5.postid is not null then 'recall_poor' \
+        else null end is_recall_poor \
+    ,styouzhiflg \
+    ,publishdate \
+    ,case when type_dd='优质' then '锚定优质内容' \
+        else '非锚定优质内容' end is_premium \
+    ,case when type_dd='其他' and model_flg=1 and bg_amount_flg=0 then '潜在优质' \
+        else '非潜在优质' end is_potential_premium \
+    ,t0.return_gift_id \
+    ,return_gift_createdate \
+    ,return_gift_status \
+    ,return_review_status \
+    ,return_gift_plantype \
+    ,giftname \
+    ,gift_money \
+    ,gift_cnt \
+    ,grain_ticket_cnt \
+    ,coupon_cnt \
+    ,zhengfankui_uv \
+    ,fufankui_uv \
+    ,nvl(blog_gift_grade, '') as blog_gift_grade \
+    ,if(blog_channel = 0, 'UGC', 'PGC') blog_channel \
+    ,title \
+    ,collectionid \
+    ,collection_name \
+    ,t10.words_count \
+    ,t10.photo_count \
+    ,t11.text_length as return_gift_words_count \
+    ,t11.image_count as return_gift_photo_count \
+    ,t11.mark_tags \
+    ,t1.item_id \
+    ,t12.AI_contenttype \
+    ,t12.element_tag \
+    ,t16.checked_contenttype \
+    ,t1.ips \
+    ,t13.realbrowsepv \
+    ,t14.hot \
+    ,t15.browse_pv_30d \
+    ,t17.tag_state \
+    ,t18.is_rec_paid_traffic_support \
+    ,t19.over_40_score_user_cnt \
+    ,t20.long_comment_cnt \
+    ,t21.creatorLevel \
+    ,t22.good_idea_comment_cnt \
+    ,t23.not_changlianzai_cnt \
+    ,t3.food_coupon_zhengfankui_uv \
+    ,t3.food_coupon_fufankui_uv \
+from t0 \
+left join t1 \
+on t0.postid = t1.id \
+left join t2 \
+on t0.postid = t2.postid and t0.return_gift_id = t2.return_gift_id \
+left join t3 \
+on t0.postid = t3.postid and t0.return_gift_id = t3.return_gift_id and t0.blogid = t3.blogid \
+left join t4 \
+on t0.postid = t4.postid \
+left join t5 \
+on t0.postid = t5.postid \
+left join t6 \
+on t0.postid = t6.postid \
+left join ( \
+    select userId, case grade when 1 then '基础版' when 2 then '学徒' when 3 then '进阶' when 4 then '大师' end as blog_gift_grade from lofter_db_dump.ods_db_trade_pay_grade_nd \
+) t7 on t0.blogId = t7.userId \
+left join ( \
+    select blogId, max(blog_channel) as blog_channel \
+    from lofter.dim_gift_post_return \
+    group by 1 \
+) t8 on t0.blogId = t8.blogId \
+left join t9 on t0.postid = t9.postid \
+left join ( \
+    select postId, words_count, photo_count \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t10 on t0.postId = t10.postId \
+left join ( \
+    select postId, sum(text_length) as text_length, sum(image_count) as image_count, \
+           concat_ws(',', collect_list(concat_ws(',', mark_tags))) as mark_tags \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) t11 on t0.postId = t11.postId \
+left join t12 on t0.postid = t12.post_id \
+left join ( \
+    select postid, realbrowsepv \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t13 on t0.postid = t13.postid \
+left join ( \
+    select postid,hot \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t14 on t0.postid = t14.postid \
+left join ( \
+    select postid,browse_pv_30d \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t15 on t0.postid = t15.postid \
+left join t16 on t0.postid = t16.postid \
+left join( \
+    select postid,return_gift_id,tag_state \
+    from( \
+        select postid,return_gift_id,tag_state,row_number() over(partition by postid,return_gift_id order by dt desc) as rNo \
+        from lofter_dm.ads_gift_return_tag_di \
+        where dt <= '${azkaban.flow.1.days.ago}' \
+    ) \
+    where rNo = 1 \
+) t17 on t0.postid = t17.postid and t0.return_gift_id = t17.return_gift_id \
+left join( \
+    select postid,return_gift_id,max(is_rec_paid_traffic_support) is_rec_paid_traffic_support \
+    from( \
+        select a.userid,a.postid,return_gift_id,unlock_time,money,is_rec_paid_traffic_support, \
+            row_number() over(partition by a.userid,a.postid,money,a.unlock_time,return_gift_id order by abs(createtime - unlock_time) asc) as rNo \
+        from( \
+            select userid,postid,return_gift_id,money,cast(unlock_time as bigint) unlock_time \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+                from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and money > 0 \
+        )a \
+        left join( \
+            select a.*,if(b.rec_id is null,0,1) as is_rec_paid_traffic_support  \
+            from( \
+                select item_id,rec_id,cast(conv(split(item_id,'_')[1],16,10) as bigint) as postid,user_id,createtime \
+                from rec.rec_data_noblog_action_di_user_item_business \
+                where day = '${azkaban.flow.1.days.ago}' \
+            )a \
+            left join( \
+                select item_id,rec_id \
+                from rec.alg_data_noblog_action_di_user_item  \
+                where day="${azkaban.flow.1.days.ago}" and  \
+                flow_name in ("FeedRecBoostGift","FeedRecPGCBoostGift","RelatedBoostGift","TagRecBoostGift","TagRecPGC") \
+            )b on a.item_id = b.item_id and a.rec_id = b.rec_id \
+        )b on a.userid = b.user_id and a.postid = b.postid \
+    ) \
+    where rNo = 1 \
+    group by postid, return_gift_id \
+)t18 on t0.postid = t18.postid and t0.return_gift_id = t18.return_gift_id \
+left join( \
+    select blogId, count(distinct userId) as over_40_score_user_cnt \
+    from lofter.dws_par_creator_user_support_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and score >= 40 and blogId <> userId \
+    group by blogId \
+)t19 on t0.blogId = t19.blogId \
+left join( \
+    select postId, long_comment_cnt_std as long_comment_cnt \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t20 on t0.postId = t20.postId \
+left join( \
+    select userId, level as creatorLevel \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t21 on t0.blogId = t21.userId \
+left join( \
+    select \
+        postId, \
+        count(if(is_good_idea = 1, 1, null)) as good_idea_comment_cnt \
+    from( \
+        select id, \
+            postid \
+        from lofter.dwd_gift_return_post_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    )a \
+    left join( \
+        select \
+            returngiftid, \
+            if(ARRAY_CONTAINS(from_json(GET_JSON_OBJECT(ext, '$.selectedKeywords'),'array<string>'),'有创意') or \
+                ARRAY_CONTAINS(from_json(GET_JSON_OBJECT(ext, '$.subKeywords'),'array<string>'),'有创意'), 1, 0) as is_good_idea \
+        from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+    )b on a.id = b.returngiftid \
+    group by postId \
+)t22 on t0.postId = t22.postId  \
+left join( \
+    select blogId, \
+        count(distinct(if(is_changlianzai <> 1, a.postId, null))) as not_changlianzai_cnt \
+    from( \
+        select blogId, id as postId \
+        from lofter.dim_post \
+        where publishdate between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and contenttype = '文字' \
+    )a \
+    left join( \
+        select post_id, \
+            max(if(result like '长连载%', 1, 0)) as is_changlianzai \
+        from rec.content_reg_payed_title_classify_output2 \
+        where day between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and result != '无题材' and probability >= cast(0.7 as float) and result is not null and classify in (1,2) \
+        group by post_id \
+    )b on a.postId = b.post_id \
+    group by blogId \
+)t23 on t0.blogId = t23.blogId

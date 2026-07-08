@@ -1,0 +1,23 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select \
+    postId,\
+    blogId, \
+    post_score_type as `type`, \
+    nvl(hd_rate,0) as interactionRatio, \
+    nvl(hd_rate_level,0) as interactionLevel, \
+    nvl(zhenrate,0) as goodCommentRatio, \
+    nvl(cast(zhenrate * jiesuo_uv as bigint), 0) as goodComment, \
+    nvl(zhenrate_level,0) as goodCommentLevel, \
+    nvl(furate,0) as negativeCommentRatio, \
+    nvl(fufankui_uv,0) as negativeComment, \
+    nvl(furate_level,0) as negativeCommentLevel, \
+    nvl(realbrowse_rate,0) as validBrowseRatio, \
+    nvl(realbrowse_rate_level,0) as validBrowseLevel, \
+    nvl(liulan_fufei_rate,0) as payRatio, \
+    nvl(liulan_fufei_level,0) as payLevel, \
+    nvl(jiesuo_pv,0) as presentCount, \
+    nvl(post_score,0) as postScore \
+from lofter.dws_gift_post_premium_post_score_di \
+where dt = '${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_pay_post --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 2

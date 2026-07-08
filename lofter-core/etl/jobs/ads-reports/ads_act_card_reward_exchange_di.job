@@ -1,0 +1,88 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_reward_exchange_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.uv AS viewuv \
+	,b.uv AS tradeuv \
+	,old_productnum \
+	,old_costprice \
+	,new_costprice \
+	,old_storeprice \
+	,new_productnum \
+FROM ( \
+	SELECT dt \
+		,count(DISTINCT userid) AS uv \
+	FROM lofter.ods_mda_app_partition_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	    AND actionType in ('other', 'benefit_market') \
+		AND eventid = 'w1-64' \
+	GROUP BY dt \
+	) a \
+LEFT JOIN ( \
+	SELECT dt \
+		,count(DISTINCT a.userid) AS uv \
+		,sum(old_productidnum) AS old_productnum \
+		,sum(old_costprice) AS old_costprice \
+		,sum(new_costprice) AS new_costprice \
+		,sum(old_storeprice) AS old_storeprice \
+		,count(DISTINCT a.id) AS new_productnum \
+	FROM ( \
+		SELECT a.id \
+			,a.productid \
+			,a.attributeid \
+			,a.storeprice \
+			,a.dt \
+			,b.userid \
+			,count(b.productid) AS old_productidnum \
+			,sum(b.storeprice) AS old_storeprice \
+			,sum(b.costprice) AS old_costprice \
+		FROM ( \
+			SELECT id \
+				,userid \
+				,newBagId \
+				,productid \
+				,attributeid \
+				,storeprice \
+				,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS dt \
+			FROM lofter_db_dump.ods_db_benefit_user_card_bag_nd \
+			WHERE activityCode = 'SWAP_ACTIVITY' \
+				AND STATUS >= 0 \
+				AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+			) a \
+		JOIN ( \
+			SELECT a.id \
+				,userid \
+				,newBagId \
+				,productid \
+				,attributeid \
+				,storeprice \
+				,costprice \
+			FROM ( \
+				SELECT id \
+					,userid \
+					,newBagId \
+					,productid \
+					,attributeid \
+					,storeprice \
+				FROM lofter_db_dump.ods_db_benefit_user_card_bag_nd \
+				WHERE STATUS = - 4 \
+				) a \
+			JOIN ( \
+				SELECT id \
+					,costprice \
+				FROM lofter_db_dump.ods_db_benefit_product_attribute_nd \
+				) b ON a.attributeid = b.id \
+			) b ON a.id = b.newBagId \
+		GROUP BY a.id \
+			,a.productid \
+			,a.attributeid \
+			,a.storeprice \
+			,a.dt \
+			,b.userid \
+		) a \
+	JOIN ( \
+		SELECT id \
+			,costprice AS new_costprice \
+		FROM lofter_db_dump.ods_db_benefit_product_attribute_nd \
+		) b ON a.attributeid = b.id \
+	GROUP BY dt \
+	) b ON a.dt = b.dt \
+    distribute by 1

@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01 = with daily_activity_detail as (select activity_id, module_id, user_id, desc \
+                                               from ( \
+                                                        select activityid                                                                 as activity_id, \
+                                                               moduleid                                                                   as module_id, \
+                                                               userid                                                                     as user_id, \
+                                                               case \
+                                                                   when ARRAY_CONTAINS(process, 'actModuleReceiveSuccess') then '已领取' \
+                                                                   when ARRAY_CONTAINS(process, 'actModuleFinish') then '已完成' \
+                                                                   when ARRAY_CONTAINS(process, 'actModuleDataChange') then '进行中' \
+                                                                   else '进行中' end                                                      as desc, \
+                                                               row_number() over (partition by activityid, userid order by moduleid)      as rk1, \
+                                                               row_number() over (partition by activityid, userid order by moduleid desc) as rk2 \
+                                                        from (select activityid, \
+                                                                     moduleid, \
+                                                                     userid, \
+                                                                     COLLECT_SET(desc) as    process, \
+                                                                     size(COLLECT_SET(desc)) desc_size \
+                                                              from vc.ods_vc_log_user_activity_i_d \
+                                                              where dt = '${azkaban.flow.1.days.ago}' \
+                                                              group by activityid, moduleid, userid) \
+                                                        ) \
+                                               where (module_id = 0 and rk1 = rk2) \
+                                                  or (module_id != 0)), \
+                     activity_info as (select activity_id, activity_name, activity_type, is_valid, period, module_id, module_type, module_title, module_sub_title \
+                                       from vc.dwd_vc_activity_detail_a_d \
+                                       where dt = '${azkaban.flow.1.days.ago}' \
+                                         and activity_type in (6, 7) \
+                                         and module_type in (9, 10)), \
+                     activity as (select activity_id, activity_name, activity_type, is_valid, period \
+                                  from vc.dwd_vc_activity_detail_a_d \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                                    and activity_type in (6, 7) \
+                                    and module_type in (9, 10) \
+                                  group by activity_id, activity_name, activity_type, is_valid, period) \
+                insert overwrite table vc.dwd_vc_user_activity_schedule_i_d partition (dt = '${azkaban.flow.1.days.ago}')  \
+                select x1.activity_id, \
+                       nvl(x2.activity_name, x3.activity_name) as activity_name, \
+                       nvl(x2.activity_type, x3.activity_type) as activity_type, \
+                       nvl(x2.is_valid, x3.is_valid)           as is_valid, \
+                       nvl(x2.period, x3.period)               as period, \
+                       x1.module_id, \
+                       x2.module_type, \
+                       x1.user_id, \
+                       x1.desc, \
+                       x2.module_title, \
+                       x2.module_sub_title \
+                from daily_activity_detail x1 \
+                         left join activity_info x2 \
+                                   on x1.activity_id = x2.activity_id and x1.module_id = x2.module_id and x1.module_id != 0 \
+                         left join activity x3 on x1.activity_id = x3.activity_id and x1.module_id = 0
+
+dependencies=dwd_vc_activity_detail_a_d

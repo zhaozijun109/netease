@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+driver-memory=8g
+executor-memory=1g
+conf.spark.executor.memoryOverhead=128m
+conf.spark.dynamicAllocation.maxExecutors=1
+conf.spark.executor.cores=1
+class=com.netease.lofter.data.jobs.usergroup.UserGroupJob
+params=--dt ${azkaban.flow.1.days.ago}
+dependencies=

@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_pending_humanreview_monitor_di \
+select contenttype,creator_level,is_today_publish,is_pay_gift \
+    ,count(distinct postid) human_pending_cnt \
+	,a.dt \
+from \
+(select * \
+from lofter.dwd_rec_post_review_di  \
+where dt = date_sub('${azkaban.flow.1.days.ago}',1) \
+and human_state = 3 \
+)a \
+left join \
+(select dt,userid as blogid,level as creator_level \
+from lofter.dws_par_creator_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by dt,userid,level \
+)b \
+on a.blogid = b.blogid \
+group by contenttype,creator_level,is_today_publish,is_pay_gift,a.dt \

@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_all_vip_overview_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  revenue_module, \
+  count(distinct userid) as uv, \
+  sum(money) as money, \
+  count(1) as pv \
+from \
+  lofter.dwd_user_order_dd \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and mbo_lv2_module = '书城会员' \
+  and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by \
+  revenue_module grouping sets ((revenue_module), ()) \

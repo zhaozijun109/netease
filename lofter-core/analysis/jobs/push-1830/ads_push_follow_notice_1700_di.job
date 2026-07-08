@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_follow_notice_1700_di partition(dt = '${azkaban.flow.current.date}') \
+select a.blogId, count(distinct a.userId) newFans \
+from ( \
+    select blogId, userId, sum(if(_bin_op = 0, 1, -1)) subs \
+    from lofter.ods_binlog_user_following_di \
+    where dt = '${azkaban.flow.current.date}' \
+         and _bin_op in (0, 1) \
+         and from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH') >= '${azkaban.flow.current.date} 11' \
+         and from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH') < '${azkaban.flow.current.date} 17' \
+    group by 1,2 \
+    having subs > 0 \
+) a \
+group by a.blogId \
+distribute by 1

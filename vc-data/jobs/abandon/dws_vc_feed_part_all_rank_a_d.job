@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dws_vc_feed_part_all_rank_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}')  \
+                select package_id,rk,version,characters,count(*) over(partition by package_id) as nums \
+                from \
+                (select  \
+                COALESCE(x1.package_id,x2.package_id,x3.package_id,x4.package_id) as package_id, \
+                COALESCE(x1.rk,x2.rk,x3.rk,x4.rk) as rk, \
+                COALESCE(x1.version,x2.version,x3.version,x4.version) as version, \
+                array_distinct(filter(array(x1.character_id,x2.character_id,x3.character_id,x4.character_id), x -> x is not null)) as characters \
+                from \
+                (select package_id,character_id,rk,version  \
+                from vc.dws_vc_feed_part4_rank_a_d  \
+                where rk <= 2000 \
+                and dt = '${azkaban.flow.current.date}' and h = '${azkaban.flow.start.hour}') x1 \
+                full join \
+                (select package_id,character_id,rk,version  \
+                from vc.dws_vc_feed_part3_rank_a_d  \
+                where rk <= 2000 \
+                and dt = '${azkaban.flow.current.date}' and h = '${azkaban.flow.start.hour}') x2 on x1.rk = x2.rk and x1.package_id = x2.package_id \
+                full join \
+                (select package_id,character_id,rk,version  \
+                from vc.dws_vc_feed_part2_rank_a_d  \
+                where rk <= 2000 \
+                and dt = '${azkaban.flow.current.date}' and h = '${azkaban.flow.start.hour}') x3 on x3.rk = x2.rk and x3.package_id = x2.package_id \
+                full join \
+                (select package_id,character_id,rk,version  \
+                from vc.dws_vc_feed_part1_rank_a_d  \
+                where rk <= 2000 \
+                and dt = '${azkaban.flow.current.date}' and h = '${azkaban.flow.start.hour}') x4 on x3.rk = x4.rk and x3.package_id = x4.package_id)
+
+
+dependencies=dws_vc_feed_part1_rank_a_d,dws_vc_feed_part2_rank_a_d,dws_vc_feed_part3_rank_a_d,dws_vc_feed_part4_rank_a_d

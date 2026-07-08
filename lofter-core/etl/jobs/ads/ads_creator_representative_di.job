@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_representative_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, posts \
+from ( \
+    select blogId, \
+       count(distinct postId) as post_count, \
+       concat_ws(',', transform(sort_array(collect_set(struct(rk, postId)), true), x -> x.postId)) as posts \
+    from ( \
+        select a.*, \
+            row_number() over (partition by a.blogId order by if(a.hot_30d > 1000, hot_30d, 0) desc, a.hot desc) as rk \
+        from ( \
+            select postId, blogId, hot, hot_30d \
+            from lofter.dws_post_interaction_dd \
+            where dt='${azkaban.flow.1.days.ago}' and (hot >= 1000 or hot_30d >= 1000) \
+        ) a join lofter.dim_post b on a.postId = b.id \
+        where (a.hot_30d >= 1000 or datediff('${azkaban.flow.1.days.ago}', b.publishDate) < 90) \
+    ) t \
+    where rk <= 4 \
+    group by 1 \
+    having post_count >= 2 \
+) t \

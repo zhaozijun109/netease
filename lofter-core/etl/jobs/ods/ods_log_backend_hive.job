@@ -1,0 +1,17 @@
+type=hivejdbc
+azk.hive.action=execute.query
+hive.query.01=use lofter;
+hive.query.02=alter table lofter.ods_log_risk_slider_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/riskSliderLog/${azkaban.flow.1.days.ago}';
+hive.query.03=alter table lofter.ods_log_content_acw_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/acwBackendLog/${azkaban.flow.1.days.ago}';
+hive.query.04=alter table lofter.ods_log_content_incantation_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/incantationBackendLog/${azkaban.flow.1.days.ago}';
+hive.query.05=alter table lofter.ods_log_risk_slider_result_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/riskSliderResultLog/${azkaban.flow.1.days.ago}';
+hive.query.06=alter table lofter.ods_log_artificial_import_tag_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/artificialImportTag/${azkaban.flow.1.days.ago}';
+hive.query.07=alter table lofter.ods_log_user_phone_unbind_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/post_hot_deduct/${azkaban.flow.1.days.ago}';
+hive.query.08=alter table lofter.ods_log_antispam_brush_dispose_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/datastream/brushLogDispose/${azkaban.flow.1.days.ago}';
+hive.query.09=alter table lofter.ods_log_popupabtest_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/popUpAbTest/${azkaban.flow.1.days.ago}';
+hive.query.10=alter table lofter.ods_log_ios_coin_sms_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/iosCoinSmsLog/${azkaban.flow.1.days.ago}';
+hive.query.11=alter table lofter.ods_log_common_abtest_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/commonAbTest/${azkaban.flow.1.days.ago}';
+hive.query.12=alter table lofter.ods_log_ad_ab_test_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/adAbTest/${azkaban.flow.1.days.ago}';
+hive.query.13=alter table lofter.ods_log_bookstore_coupon_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/bookstore_coupon/${azkaban.flow.1.days.ago}';
+hive.query.14=alter table lofter.ods_log_ab_test_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/backendLog/abTest/${azkaban.flow.1.days.ago}';
+dependencies=

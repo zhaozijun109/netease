@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_miniprogram_post_order_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select miniId, \
+       postId, \
+       count(1) as pay_orders, \
+       sum(amount) as pay_orders, \
+       sum(if(from_unixtime(cast(pay_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}', 1, 0)) pay_orders_7d, \
+       sum(if(from_unixtime(cast(pay_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}', amount, 0)) pay_amount_7d \
+from lofter.dwd_miniprogram_order_di \
+where dt <= '${azkaban.flow.1.days.ago}' and  \
+      from_unixtime(cast(pay_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+      postId > 0 \
+group by miniId, postId

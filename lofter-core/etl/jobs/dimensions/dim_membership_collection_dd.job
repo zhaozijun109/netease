@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_membership_collection_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+  select x.collectionId, y.name as collection_name, y.blogId, \
+      if(membership_vip_post_count == collection_post_count, 1, 0) is_vip, \
+      collection_post_count, membership_post_count, membership_vip_post_count \
+  from ( \
+      select a.collectionId, \
+          count(distinct a.postId) as collection_post_count, \
+          count(distinct b.postId) as membership_post_count, \
+          count(distinct if(b.is_vip > 0, b.postId, null)) as membership_vip_post_count \
+      from ( \
+          select * from lofter.bridge_collection_post where dt = '${azkaban.flow.1.days.ago}' \
+      ) a \
+      left join ( \
+          select * from lofter.dim_membership_post_dd where dt = '${azkaban.flow.1.days.ago}' \
+      ) b on a.postId = b.postId \
+      group by 1 \
+  ) x \
+  join lofter_db_dump.ods_db_post_collection_nd y on x.collectionId = y.id \
+  where membership_post_count > collection_post_count * 0.9 and membership_post_count >= 3 \
+
+dependencies=dim_membership_post_dd,bridge_collection_post

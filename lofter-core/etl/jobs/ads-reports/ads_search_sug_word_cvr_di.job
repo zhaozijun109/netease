@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_sug_word_cvr_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceOs, \
+    params['QueryName'] queryName,params['OrderNumber'] orderNumber, \
+    sum(case when eventId='k1-3' then 1 else 0 end) bg_pv, \
+    count(distinct case when eventId='k1-3' then deviceUdid else null end) bg_uv, \
+    sum(case when eventId='k1-4' then 1 else 0 end) click_pv, \
+    count(distinct case when eventId='k1-4' then deviceUdid else null end) click_uv, \
+    sum(case when eventId='k1-4' then 1 else 0 end)/sum(case when eventId='k1-3' then 1 else 0 end) bg_click_rate \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId in('k1-3','k1-4') \
+group by deviceOs, params['QueryName'], params['OrderNumber']
+

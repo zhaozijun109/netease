@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_collection_browse_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userid, collect_list(collectionIdRank) as collectionRank \
+from ( \
+    select t1.userid, \
+      named_struct('collectionid', t1.collectionid, 'pv', t1.pv) as collectionIdRank \
+    from ( \
+        select userId,collectionid,count(1) as pv  \
+        from lofter.dwd_post_collection_di  \
+        where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+              and action_type='browse' and collectionid>0  \
+        group by 1,2 \
+    ) t1 join lofter_db_dump.ods_db_subscribe_collection_nd t2 \
+              on t1.userid = t2.userid and t1.collectionid = t2.collectionid \
+) t3 group by userid \
+distribute by 1

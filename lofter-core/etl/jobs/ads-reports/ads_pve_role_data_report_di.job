@@ -1,0 +1,137 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_role_data_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select '1' AS period, \
+a.roletype, \
+a.rolestatus, \
+a.rolepublicview, \
+a.roleid, \
+a.rolename, \
+COALESCE(c.pv,0) as pv, \
+COALESCE(c.uv,0) as uv, \
+COALESCE(b.chat_uv,0) as chat_uv, \
+COALESCE(b.chat_uv_10up,0) as chat_uv_10up, \
+COALESCE(b.chat_uv_30up,0) as chat_uv_30up, \
+COALESCE(b.total_chats,0) as total_chats, \
+COALESCE(a.consum_uv,0) as consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+COALESCE(d.total_coststamina,0) as total_coststamina \
+from \
+( \
+select COALESCE(roleid,-1) as roleid, \
+rolename, \
+COALESCE(roletype,-1) as roletype, \
+COALESCE(rolestatus,-1) as rolestatus, \
+COALESCE(rolepublicview,-1) as rolepublicview, \
+count(distinct userid) as consum_uv, \
+sum(amount) as total_amount \
+from lofter.dwd_pve_user_amount_info_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by roleid,rolename,roletype,rolestatus,rolepublicview \
+) a \
+left join \
+( \
+select t1.roleid, \
+t1.rolename, \
+count(distinct t1.userid) as chat_uv, \
+sum(total_chats) as total_chats, \
+count(distinct case when t1.total_chats>9 then t1.userid else null end) as chat_uv_10up, \
+count(distinct case when t1.total_chats>29 then t1.userid else null end) as chat_uv_30up \
+from \
+( \
+select userid,roleid,rolename,count(*) as total_chats \
+from lofter.dwd_pve_user_chats_info_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by userid,roleid,rolename \
+) t1 \
+group by t1.roleid, \
+t1.rolename) b on b.roleid=a.roleid and b.rolename=a.rolename  \
+left join \
+( \
+SELECT activityid,eventid,COALESCE(roleid,-1) as roleid, \
+count(*) as pv, \
+count(distinct userid) as uv \
+from lofter.dwd_act_pve_action_di \
+where activityid='pve-2' \
+and eventid='pve-1' \
+and dt = '${azkaban.flow.1.days.ago}' \
+group by activityid,eventid,roleid \
+) c on a.roleid=c.roleid   \
+left join \
+( \
+select COALESCE(roleid,-1) as roleid ,rolename, \
+abs(sum(total_coststamina)) as total_coststamina \
+from lofter.dws_pve_user_coststamina_role_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by roleid,rolename \
+) d on a.roleid=d.roleid \
+ \
+union all \
+select '7' AS period, \
+a.roletype, \
+a.rolestatus, \
+a.rolepublicview, \
+a.roleid, \
+a.rolename, \
+COALESCE(c.pv,0) as pv, \
+COALESCE(c.uv,0) as uv, \
+COALESCE(b.chat_uv,0) as chat_uv, \
+COALESCE(b.chat_uv_10up,0) as chat_uv_10up, \
+COALESCE(b.chat_uv_30up,0) as chat_uv_30up, \
+COALESCE(b.total_chats,0) as total_chats, \
+COALESCE(a.consum_uv,0) as consum_uv, \
+COALESCE(a.total_amount,0) as total_amount, \
+COALESCE(d.total_coststamina,0) as total_coststamina \
+from \
+( \
+select COALESCE(roleid,-1) as roleid, \
+rolename, \
+COALESCE(roletype,-1) as roletype, \
+COALESCE(rolestatus,-1) as rolestatus, \
+COALESCE(rolepublicview,-1) as rolepublicview, \
+count(distinct userid) as consum_uv, \
+sum(amount) as total_amount \
+from lofter.dwd_pve_user_amount_info_di \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by roleid,rolename,roletype,rolestatus,rolepublicview \
+) a \
+left join \
+( \
+select t1.roleid, \
+t1.rolename, \
+count(distinct t1.userid) as chat_uv, \
+sum(total_chats) as total_chats, \
+count(distinct case when t1.total_chats>9 then t1.userid else null end) as chat_uv_10up, \
+count(distinct case when t1.total_chats>29 then t1.userid else null end) as chat_uv_30up \
+from \
+( \
+select userid,roleid,rolename,count(*) as total_chats \
+from lofter.dwd_pve_user_chats_info_di \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by userid,roleid,rolename \
+) t1 \
+group by t1.roleid, \
+t1.rolename) b on b.roleid=a.roleid and b.rolename=a.rolename  \
+left join \
+( \
+SELECT activityid,eventid,COALESCE(roleid,-1) as roleid, \
+count(*) as pv, \
+count(distinct userid) as uv \
+from lofter.dwd_act_pve_action_di \
+where activityid='pve-2' \
+and eventid='pve-1' \
+and dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by activityid,eventid,roleid \
+) c on a.roleid=c.roleid   \
+left join \
+( \
+select COALESCE(roleid,-1) as roleid, \
+rolename, \
+abs(sum(total_coststamina)) as total_coststamina \
+from lofter.dws_pve_user_coststamina_role_di \
+where dt <= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', dt) < 7 \
+group by roleid,rolename \
+) d on a.roleid=d.roleid \

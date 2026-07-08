@@ -1,0 +1,154 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=20
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.04=\
+insert overwrite table lofter_dm.ads_creator_ecology_identity_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId as blogId, \
+	   creatorStatus, \
+	   post_count_30d, \
+	   fans_hd_uv_30d, \
+	   avg_hot_cnt_30d, \
+	   case when creatorStatus = 50 then 50 \
+	        when creatorStatus = 60 then 50 \
+	        when creatorStatus = 70 then 200 \
+	        when creatorStatus = 80 then 200 \
+	        when creatorStatus = 90 then 1000 \
+	        when creatorStatus = 100 then 3000 \
+	        else 0 \
+	   end as nextLevelFollowNums, \
+       case when post_count_90d >= 5 and creatorStatus = 50 then \
+                case when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(50 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(50 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            when post_count_90d >= 5 and creatorStatus = 60 then \
+                case when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(50 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 50 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 50 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(50 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            when post_count_90d >= 5 and creatorStatus = 70 then \
+                case when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(300 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(300 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            when post_count_90d >= 5 and creatorStatus = 80 then \
+                case when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(300 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 300 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 300 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(300 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            when post_count_90d >= 5 and creatorStatus = 90 then \
+                case when 1000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 1000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(1000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 1000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 1000 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(1000 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 1000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 1000 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(1000 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            when post_count_90d >= 5 and creatorStatus = 100 then \
+                case when 5000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 5000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布1篇热度超过', ceil(5000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 5000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 5000 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布2篇热度超过', ceil(5000 * (post_count_90d + 2) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     when 5000 * (post_count_90d + 1) - (post_count_90d * avg_hot_cnt_90d) >= 0.5 * avg_hot_cnt_90d and 5000 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d) <= 1.5 * avg_hot_cnt_90d then concat('发布3篇热度超过', ceil(5000 * (post_count_90d + 3) - (post_count_90d * avg_hot_cnt_90d)), '的内容') \
+                     else null \
+                end \
+            else null \
+       end as hotChallengeTarget \
+from ( \
+	select t1.userId, \
+		   case when post_count_30d = 0 and fans_std >= 1000 then 30 \
+                when post_count_30d = 0 and fans_std >= 100 and fans_std < 1000 then 20 \
+                when post_count_30d = 0 and fans_std >= 0 and fans_std < 100 then 10 \
+                when fans_std >= 100 and (level in ('S','A') or (fans_hd_uv_30d >= 3000) or (collection_subscribe_uv_30d >= 3000) or (post_count_90d >= 5 and avg_hot_cnt_90d >= 5000)) then 110 \
+                when fans_std >= 100 and (level in ('B') or (fans_hd_uv_30d >= 1000 and fans_hd_uv_30d < 3000) or (collection_subscribe_uv_30d >= 1000 and collection_subscribe_uv_30d < 3000) or (post_count_90d >= 5 and avg_hot_cnt_90d >= 1000 and avg_hot_cnt_90d < 5000)) then 100 \
+                when level in ('C') or (fans_hd_uv_30d >= 200 and fans_hd_uv_30d < 1000) or (collection_subscribe_uv_30d >= 200 and collection_subscribe_uv_30d < 1000) or (post_count_90d >= 5 and avg_hot_cnt_90d >= 300 and avg_hot_cnt_90d < 1000) then 90 \
+                when (level in ('D','D*') or level is null) and (collection_subscribe_uv_30d + fans_cnt_30d) >= 100 then 80 \
+                when level in ('D') or (fans_hd_uv_30d >= 50 and fans_hd_uv_30d < 200) or (collection_subscribe_uv_30d >= 50 and collection_subscribe_uv_30d < 200) or (post_count_90d >= 5 and avg_hot_cnt_90d >= 50 and avg_hot_cnt_90d < 300) then 70 \
+                when t2.post_ip_cnt_30d >= 2 then 60 \
+                when level is null and post_count_30d > 0 then 40 \
+                when level in ('D*') or (fans_hd_uv_30d >= 10 and fans_hd_uv_30d < 50) or (collection_subscribe_uv_30d >= 10 and collection_subscribe_uv_30d < 50) or (post_count_90d >= 5 and avg_hot_cnt_90d >= 10 and avg_hot_cnt_90d < 50) then 50 \
+                else 0 \
+		   end as creatorStatus, \
+		   t1.post_count_30d, \
+		   t1.fans_hd_uv_30d, \
+		   t1.avg_hot_cnt_30d, \
+		   t1.post_count_90d, \
+		   t1.avg_hot_cnt_90d \
+    from ( \
+		select a.userId, \
+		       d.level, \
+			   nvl(b.fans_cnt_30d,0) as fans_cnt_30d, \
+			   nvl(b.fans_std,0) as fans_std, \
+			   nvl(post_count_30d,0) as post_count_30d, \
+			   nvl(fans_hd_uv_30d,0) as fans_hd_uv_30d, \
+			   nvl(collection_subscribe_uv_30d,0) as collection_subscribe_uv_30d, \
+			   nvl(post_count_90d,0) as post_count_90d, \
+			   nvl(post_hot_30d/post_count_30d,0) as avg_hot_cnt_30d, \
+			   nvl(post_hot_90d/post_count_90d,0) as avg_hot_cnt_90d \
+        from ( \
+            select userId, post_count_30d, post_count_90d, post_count_std \
+            from lofter.dws_par_user_post_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1 \
+        ) a \
+        left join ( \
+          select userId, \
+                 fans_total as fans_std, \
+                 fans_7d as fans_cnt_7d, \
+                 fans_30d as fans_cnt_30d, \
+                 fans_90d as fans_cnt_90d, \
+                 fans_total as fans_cnt, \
+                 fans_365d as fans_cnt_365d \
+          from lofter.dws_par_user_fans_dd \
+          where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.userId = b.userId \
+        left join ( \
+            select userId, \
+                   post_receive_hot_cnt_7d,post_receive_hot_cnt_30d,post_receive_hot_cnt_90d, \
+                   post_hot_7d,post_hot_30d,post_hot_90d, \
+                   fans_receive_hot_cnt_7d,fans_receive_hot_cnt_30d,fans_receive_hot_cnt_90d, \
+                   fans_hd_uv_7d,fans_hd_uv_30d,fans_hd_uv_90d, \
+                   receive_hot_std, \
+                   receive_comment_cnt,receive_comment_cnt_7d,receive_comment_cnt_15d,receive_comment_cnt_30d, \
+                   hd_uv_7d,hd_uv_30d,hd_uv_90d \
+            from lofter.dws_par_creator_interaction_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) c on a.userId = c.userId \
+        left join (select userId, level from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}' ) d on a.userId = d.userId \
+        left join ( \
+          select blogId as userId, \
+                 bitmap_count(bitmap_union(subscribe_bitmap_30d)) as collection_subscribe_uv_30d \
+          from lofter.dws_collection_dd \
+          where dt = '${azkaban.flow.1.days.ago}' \
+          group by blogId \
+        ) e on a.userId = e.userId \
+    ) t1 \
+    left join ( \
+		select userId, \
+			   bitmap_count(bitmap_union(postId_bitmap)) as post_ip_cnt_30d \
+		from ( \
+			select userId, \
+				   ip, \
+				   to_bitmap(postId) as postId_bitmap \
+			from lofter.dwd_post_publish_di \
+			lateral view explode(post_ips) t1 as ip \
+			where dt between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' \
+			group by userId,ip \
+		) a \
+		join ( \
+		    select ip \
+            from lofter.dws_ip_life_cycle_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and post_cnt_30d < 500 \
+		) b \
+		on a.ip = b.ip \
+		join ( \
+		    select ip \
+            from lofter.dim_ip_dd \
+            where dt='${azkaban.flow.1.days.ago}' \
+		) c \
+		on a.ip = c.ip \
+		group by userId \
+    ) t2 \
+    on t1.userId=t2.userId \
+) tmp

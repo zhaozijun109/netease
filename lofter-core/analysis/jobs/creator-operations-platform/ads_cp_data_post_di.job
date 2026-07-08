@@ -1,0 +1,192 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE table lofter_dm.ads_cp_data_post_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    a.id as postid, \
+    a.blogid, \
+    title, \
+    publishdate, \
+    if(i.postid is null,'免费','付费') as payment_type, \
+    contenttype as content_type, \
+    recomstatus, \
+    NVL(expose_uv_90d, 0) as expose_pv_90d, \
+    NVL(hd_pv,0) as hd_cnt_1d, \
+    NVL(hot_pv,0) as hot_cnt_1d, \
+    NVL(praise_pv,0) as praise_cnt_1d, \
+    NVL(reproduce_pv,0) as reproduce_cnt_1d, \
+    NVL(recommend_pv,0) as recommend_cnt_1d, \
+    NVL(subscribe_pv,0) as subscribe_cnt_1d, \
+    NVL(share_pv,0) as share_cnt_1d, \
+    NVL(response_pv,0) as response_cnt_1d, \
+    NVL(like_cnt,0) as praise_cnt_std, \
+    NVL(reproduce_cnt,0) as reproduce_cnt_std, \
+    NVL(recommend_cnt,0) as recommend_cnt_std, \
+    NVL(collect_cnt,0) as subscribe_cnt_std, \
+    null as share_cnt_std, \
+    NVL(comment_cnt,0) as response_cnt_std, \
+    NVL(gift_income_1d,0) as gift_income_1d, \
+    NVL(grain_tickets_1d,0) as grain_tickets_1d, \
+    NVL(fans_vip_income_1d,0) as fans_vip_income_1d, \
+    NVL(ad_unlock_income_1d,0) as ad_unlock_income_1d, \
+    NVL(coupon_income_1d,0) as coupon_income_1d, \
+    NVL(gift_income_std,0)+NVL(grain_tickets_std,0)*0.01+NVL(fans_vip_income_std,0)+NVL(ad_unlock_income_std,0)+NVL(coupon_income_std,0) as total_income, \
+    NVL(pay_words_count,0) as pair_words_count, \
+    NVL(words_count,0) as free_words_count, \
+    NVL(pay_words_count,0)+NVL(words_count,0) as words_count, \
+    if(i.postid is not null and contenttype = '文字' and NVL(pay_words_count,0)>0,NVL(per_1k_price,0),0) as kword_price, \
+    NVL(paid_uv,0) as paid_uv, \
+    NVL(click_uv_90d, 0) as click_pv_90d, \
+    NVL(viewcount, 0) as viewcount \
+from( \
+    select id,blogid,title,publishdate,contenttype,recomstatus \
+    from( \
+        select id,blogid,title,publishdate,contenttype,recomstatus \
+        from lofter.dim_post \
+        where publishDate <= '${azkaban.flow.1.days.ago}' and contenttype in ('文字','视频','图片') \
+          and publishdate >= date_sub('${azkaban.flow.1.days.ago}', 1825) and is_book_store = 0 and isPublished=true and isForbidden=false and isCitedPost = false \
+          and allowView=0 and isMoved = 0 and isActivityAutoPost=0 and isImported=0 \
+        ) t1 \
+        join ( \
+             select userid \
+             from lofter.dws_par_creator_dd \
+             where post_count_365d is not NULL \
+               and post_count_365d > 0 \
+               and dt = '${azkaban.flow.1.days.ago}' \
+    ) t2 on t1.blogid = t2.userid \
+) a \
+    LEFT JOIN ( \
+              select postid,hot_pv,praise_pv,reproduce_pv,recommend_pv,subscribe_pv,share_pv,response_pv,hd_pv \
+              from lofter.dws_post_interaction_di \
+              where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.id = b.postid \
+    LEFT JOIN ( \
+              select postId, hot as hot_std,like_cnt,reproduce_cnt,recommend_cnt,collect_cnt,comment_cnt \
+              from lofter.dws_post_interaction_dd \
+              where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.id = c.postId \
+    LEFT JOIN ( \
+              select postid, \
+                     sum(amount) as fans_vip_income_std, \
+                     sum(if(dt = '${azkaban.flow.1.days.ago}', amount, 0)) as fans_vip_income_1d \
+              from ( \
+                   select *, from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') as dt \
+                   from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+                   where status = 1 and postid > 0 and postid is not null \
+                     and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                   ) t \
+              group by 1 \
+) d on a.id = d.postid \
+    LEFT JOIN ( \
+              select postid, \
+                     sum(grain_tickets) as grain_tickets_std, \
+                     sum(if(unlock_date = '${azkaban.flow.1.days.ago}', grain_tickets, 0)) as grain_tickets_1d, \
+                     sum(if(unlock_method = '券包', money, 0)) as coupon_income_std, \
+                     sum(if(unlock_method = '券包' and unlock_date = '${azkaban.flow.1.days.ago}', money, 0)) as coupon_income_1d \
+              from ( \
+                   select *, from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as unlock_date \
+                   from lofter.dwd_gift_post_unlock_dd \
+                   where dt = '${azkaban.flow.1.days.ago}' and postid > 0 and postid is not null \
+                     and from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                   ) t \
+              group by 1 \
+) e on a.id = e.postid \
+    LEFT JOIN ( \
+              select postid, \
+                     sum(money) as ad_unlock_income_std, \
+                     sum(if(dt = '${azkaban.flow.1.days.ago}', money, 0)) as ad_unlock_income_1d \
+              from lofter.dwd_user_ad_revenue_di \
+              where dt <= '${azkaban.flow.1.days.ago}' and revenue_module = '激励广告解锁' and postid > 0 and postid is not null \
+              group by 1 \
+) f on a.id = f.postid \
+    LEFT JOIN ( \
+              select postid, \
+                     sum(money) as gift_income_std, \
+                     sum(if(pay_date = '${azkaban.flow.1.days.ago}', money, 0)) as gift_income_1d \
+              from lofter.dwd_user_order_dd \
+              where dt = '${azkaban.flow.1.days.ago}' and order_type = 'gift_present' and \
+                  pay_date <= '${azkaban.flow.1.days.ago}' and postid > 0 and postid is not null \
+              group by postid \
+) g on a.id = g.postid \
+    LEFT JOIN ( \
+              select postid,words_count  \
+              from lofter.dwd_post_length_dd \
+              where dt = '${azkaban.flow.1.days.ago}' \
+) h on a.id = h.postid \
+    LEFT JOIN ( \
+              SELECT \
+                  x.postid, \
+                  x.pay_words_count, \
+                  ROUND(x.cheapest_price / x.cheapest_words * 1000, 4) AS per_1k_price \
+              FROM ( \
+                   SELECT \
+                       t.postid, \
+                       SUM(CASE WHEN t.rn > 0 THEN t.words ELSE 0 END) AS pay_words_count, \
+                       MAX(CASE WHEN t.rn = 1 THEN t.gift_price END) AS cheapest_price, \
+                       MAX(CASE WHEN t.rn = 1 THEN t.words END) AS cheapest_words \
+                   FROM ( \
+                        SELECT \
+                            b.postid, \
+                            NVL(b.text_length, 0) AS words, \
+                            NVL(g.coin, 0) * 0.1 AS gift_price, \
+                            ROW_NUMBER() OVER ( \
+                PARTITION BY b.postid \
+                ORDER BY NVL(g.coin, 0) * 0.1 ASC, NVL(b.text_length, 0) DESC \
+            ) AS rn \
+                        FROM ( \
+                             SELECT \
+                                 postid, \
+                                 contenttype, \
+                                 text_length, \
+                                 CASE \
+                                     WHEN INSTR(giftname, '糖果') > 0 THEN '糖果' \
+                                     WHEN INSTR(giftname, '小星星') > 0 THEN '小星星' \
+                                     WHEN INSTR(giftname, '饼干') > 0 THEN '饼干' \
+                                     WHEN INSTR(giftname, '小棉花') > 0 THEN '小棉花' \
+                                     WHEN INSTR(giftname, '奶茶') > 0 THEN '奶茶' \
+                                     WHEN INSTR(giftname, '蛋糕') > 0 THEN '蛋糕' \
+                                     WHEN INSTR(giftname, '小红心') > 0 THEN '小红心' \
+                                     WHEN INSTR(giftname, '小蓝手') > 0 THEN '小蓝手' \
+                                     ELSE '粮票' \
+                                     END AS gift_type \
+                             FROM lofter.dim_gift_post_return_dd \
+                             WHERE dt = '${azkaban.flow.1.days.ago}' \
+                               AND status = 1 \
+                               AND contenttype = '文字' \
+                               AND NVL(text_length, 0) > 0 \
+                             ) b \
+                             LEFT JOIN ( \
+                                       SELECT * \
+                                       FROM lofter.dim_gift_dd \
+                                       WHERE dt = '${azkaban.flow.1.days.ago}' \
+                                         AND id <> 1001 \
+                        ) g \
+                                       ON b.gift_type = g.name \
+                        ) t \
+                   GROUP BY t.postid \
+                   ) x \
+              WHERE x.cheapest_words > 0 \
+) i on a.id = i.postid \
+    LEFT JOIN ( \
+              select \
+                  t.postid, \
+                  count(1) as paid_uv \
+              from ( \
+                   select \
+                       postid, \
+                       userid \
+                   from lofter.dwd_user_order_dd \
+                   where dt = '${azkaban.flow.1.days.ago}' \
+                     and order_type in ('fans_vip','gift_present','coupon') \
+                   group by postid, userid \
+                   ) t \
+              group by t.postid \
+) j on a.id = j.postid \
+    left join ( \
+        select postid,click_uv_90d,expose_uv_90d \
+        from lofter.dws_post_traffic_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (expose_pv_90d > 0 or click_pv_90d > 0) \
+) k on a.id = k.postid \
+    left join ( \
+        select postid,viewcount \
+        from lofter_db_dump.ods_db_post_view_count_nd \
+) l on a.id = l.postid

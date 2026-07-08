@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_x_search_result_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select case when eventid = 'b5-10' then '搜索结果页点击至note' when  eventid = 'b5-17' then '搜索结果页' end as event \
+,count(deviceudid) as device_pv,count(distinct deviceudid) as device_uv \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+and actiontype in ('cell_click','search')  \
+and eventid in ('b5-10','b5-17')  \
+group by case when eventid = 'b5-10' then '搜索结果页点击至note' when  eventid = 'b5-17' then '搜索结果页' end \

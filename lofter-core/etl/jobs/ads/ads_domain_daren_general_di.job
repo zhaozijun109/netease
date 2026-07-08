@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_domain_daren_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select blogId,blogName,blogNickName,concat(blogName,'.lofter.com/') as blogUrl, concat_ws(',', authDomainNames) as blogAuthDomains,domainName,from_unixtime(cast(authTime/1000 as bigint),'yyyy-MM-dd') as authDate, \
+       from_unixtime(cast(blogcreatetime/1000 as bigint),'yyyy-MM-dd') as blogCreateDate,funs,activeFuns,if(funs > 0, activeFuns / funs, 0) as activeFunsRatio, accPostNum,accHotNum,publishCount,followCount,newFollowCount, \
+       if(followCount > 0, newFollowCount / followCount, 0) as newFollowCountRatio,newFollowHotOpUserCount,newFollowHotOpHot,if(followCount > 0, newFollowHotOpUserCount / followCount, 0) as newFollowHotOpRatio, \
+       hot,praiseCount,reproduceCount,recommendCount, subscribeCount,newHot,newPostHotNum, if(hot > 0, newHot / hot, 0) as newHotRatio,if(hot > 0, newPostHotNum / hot, 0) as newPostHotRatio, \
+       commendUserCount,commendCount,hotIp1, hotIp1Count, hotIp2, hotIp2Count, hotIp3, hotIp3Count, hotIp4, hotIp4Count, hotIp5, hotIp5Count, \
+       concat('https://',blogName,'.lofter.com/') AS `view_url` \
+from ( \
+    select a.*, \
+           c.domainName,b.createtime as authTime,d.blogcreatetime,e.funs,f.accPostNum,g.accHotNum,h.newPostHotNum,j.activeFuns \
+    from ( \
+       select * \
+       from lofter_dm.ads_blog_general_di \
+       where isAuthenticated = true and dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+      join lofter_db_dump.ods_db_authenticate_blog_nd b on a.blogId = b.blogid \
+      join lofter.dim_domain c on b.domainid = c.id \
+      join lofter_db_dump.ods_db_blog_info_nd d on a.blogId = d.blogid \
+      join lofter.dim_blog on a.blogId = dim_blog.id \
+      join ( \
+          select blogid,count(distinct userid) funs \
+          from lofter_db_dump.ods_db_user_following_nd \
+          group by blogid \
+      ) e on a.blogid = e.blogid \
+      join ( \
+          select blogid, count(1) accPostNum \
+          from lofter.dim_post \
+          where ispublished=true and \
+                isforbidden=false and \
+                (movefrom is null or movefrom not like 'blogmove2018%') \
+          group by blogid \
+      ) f on a.blogid = f.blogid \
+      join ( \
+          select blogid,count(1) as accHotNum \
+          from lofter_db_dump.ods_db_post_hot_nd \
+          group by blogid \
+      ) g on a.blogid = g.blogid \
+      join ( \
+          select blogid,sum(hot) as newPostHotNum \
+          from lofter_dm.ads_post_general_di \
+          where dt = '${azkaban.flow.1.days.ago}' \
+          group by blogid \
+      ) h on a.blogid = h.blogid \
+      join ( \
+          select bb.blogid,count(distinct aa.userid) as activeFuns \
+          from lofter_db_dump.ods_db_user_following_nd bb \
+          join ( \
+             select accountId as userId \
+             from lofter.dwd_evt_user_login_di \
+             where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+             group by accountId \
+          ) aa on aa.userid = bb.userid \
+          group by bb.blogid \
+      ) j on a.blogid = j.blogid \
+      where dim_blog.isTest = 0 \
+) t
+dependencies=ads_blog_general_di,ads_post_general_di

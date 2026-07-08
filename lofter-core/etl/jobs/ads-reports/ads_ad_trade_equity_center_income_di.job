@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_trade_equity_center_income_di partition(dt='${azkaban.flow.1.days.ago}') \
+select positionname,sum(bid_amount/1000) as money,count(distinct userid) as uv , count(1) as pv \
+from \
+lofter.dwd_ad_actions_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and positionname like '%激励视频%' \
+and bgpv>0 \
+and appid='6ED29071' \
+group by positionname \
+with cube \
+

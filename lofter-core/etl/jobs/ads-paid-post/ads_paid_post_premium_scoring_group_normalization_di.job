@@ -1,0 +1,293 @@
+type=sparksql
+hive.query.01=\
+with \
+  fenweidu as ( \
+    select \
+      postid, \
+      blog_channel_flg, \
+	  post_content_type, \
+      publishdate, \
+      publishdays, \
+      words_count, \
+      ai_results, \
+      blogid, \
+      ips, \
+      ispay_returngift, \
+      recomstatus, \
+      blogname, \
+      styouzhiflg, \
+      yinliuflg, \
+      collectionid, \
+      bg_flg, \
+      tags, \
+      review_status, \
+      exposureuv, \
+      qianbg_amount, \
+      liulan_fufei_rate, \
+      furate, \
+      zhenrate, \
+      text_length, \
+      level, \
+      shuareflg, \
+      liulanuv, \
+      zhengfankuiuv, \
+      fufankuiuv, \
+      dianzanuv, \
+      unlock_dianzanuv, \
+      unlock_hou_dianzanuv, \
+      recommenduv, \
+      unlock_recommenduv, \
+      unlock_hou_recommenduv, \
+      responseuv, \
+      unlock_responseuv, \
+      unlock_hou_responseuv, \
+      subscribecollectionuv, \
+      unlock_subscribecollectionuv, \
+      unlock_hou_subscribecollectionuv, \
+      followuv, \
+      unlock_followuv, \
+      unlock_hou_followuv, \
+      blackuv, \
+      unlock_blackuv, \
+      unlock_hou_blackuv, \
+      unlock_rate, \
+      zhengfankui_rate, \
+      fufankui_rate, \
+      dianzan_rate, \
+      recommend_rate, \
+      response_rate, \
+      subscribe_rate, \
+      follow_rate, \
+      black_rate, \
+      unlock_rate_ln, \
+      zhengfankui_rate_ln, \
+      fufankui_rate_ln, \
+      dianzan_rate_ln, \
+      recommend_rate_ln, \
+      response_rate_ln, \
+      subscribe_rate_ln, \
+      follow_rate_ln, \
+      black_rate_ln, \
+      no_jiaquan_all_score, \
+      jiaquan_all_score, \
+      case \
+        when b.ip is null then 'other' \
+        else b.ip \
+      end as ip \
+    from \
+      ( \
+        select \
+          *, \
+          ip \
+        from \
+          lofter_dm.ads_paid_post_premium_scoring_all_round_di LATERAL VIEW explode(split(ips, ',')) t2 AS ip \
+        where \
+          dt='${azkaban.flow.1.days.ago}' and  \
+          liulanuv > 30 \
+      ) a \
+      left join ( \
+        select \
+          ip \
+        from \
+          lofter.dws_gift_post_premium_ip_scoring_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          ip \
+      ) b on a.ip = b.ip \
+  ), \
+  globalStats AS ( \
+    select \
+      blog_channel_flg, \
+      ip, \
+      ispay_returngift, \
+      publishdays, \
+	  post_content_type, \
+      MAX(unlock_rate_ln) AS max_unlock_rate_ln, \
+      MIN(unlock_rate_ln) AS min_unlock_rate_ln, \
+      MAX(zhengfankui_rate_ln) AS max_zhengfankui_rate_ln, \
+      MIN(zhengfankui_rate_ln) AS min_zhengfankui_rate_ln, \
+      MAX(fufankui_rate_ln) AS max_fufankui_rate_ln, \
+      MIN(fufankui_rate_ln) AS min_fufankui_rate_ln, \
+      MAX(dianzan_rate_ln) AS max_dianzan_rate_ln, \
+      MIN(dianzan_rate_ln) AS min_dianzan_rate_ln, \
+      MAX(recommend_rate_ln) AS max_recommend_rate_ln, \
+      MIN(recommend_rate_ln) AS min_recommend_rate_ln, \
+      MAX(response_rate_ln) AS max_response_rate_ln, \
+      MIN(response_rate_ln) AS min_response_rate_ln,	   \
+      MAX(subscribe_rate_ln) AS max_subscribe_rate_ln, \
+      MIN(subscribe_rate_ln) AS min_subscribe_rate_ln, \
+      MAX(follow_rate_ln) AS max_follow_rate_ln, \
+      MIN(follow_rate_ln) AS min_follow_rate_ln, \
+      MAX(black_rate_ln) AS max_black_rate_ln, \
+      MIN(black_rate_ln) AS min_black_rate_ln	   \
+    from \
+      fenweidu \
+    group by \
+      blog_channel_flg, \
+      ip, \
+      publishdays, \
+      ispay_returngift, \
+	  post_content_type \
+  ), \
+  NormalizedScores AS ( \
+    SELECT \
+      lt.*, \
+      CASE \
+        WHEN gs.max_unlock_rate_ln = gs.min_unlock_rate_ln THEN 0.5 \
+        ELSE (unlock_rate_ln - gs.min_unlock_rate_ln) / (gs.max_unlock_rate_ln - gs.min_unlock_rate_ln) \
+      END AS unlock_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_zhengfankui_rate_ln = gs.min_zhengfankui_rate_ln THEN 0.5 \
+        ELSE (zhengfankui_rate_ln - gs.min_zhengfankui_rate_ln) / ( \
+          gs.max_zhengfankui_rate_ln - gs.min_zhengfankui_rate_ln \
+        ) \
+      END AS zhengfankui_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_fufankui_rate_ln = gs.min_fufankui_rate_ln THEN 0.5 \
+        ELSE (fufankui_rate_ln - gs.min_fufankui_rate_ln) / (gs.max_fufankui_rate_ln - gs.min_fufankui_rate_ln) \
+      END AS fufankui_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_dianzan_rate_ln = gs.min_dianzan_rate_ln THEN 0.5 \
+        ELSE (dianzan_rate_ln - gs.min_dianzan_rate_ln) / (gs.max_dianzan_rate_ln - gs.min_dianzan_rate_ln) \
+      END AS dianzan_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_recommend_rate_ln = gs.min_recommend_rate_ln THEN 0.5 \
+        ELSE (recommend_rate_ln - gs.min_recommend_rate_ln) / ( \
+          gs.max_recommend_rate_ln - gs.min_recommend_rate_ln \
+        ) \
+      END AS recommend_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_response_rate_ln = gs.min_response_rate_ln THEN 0.5 \
+        ELSE (response_rate_ln - gs.min_response_rate_ln) / ( \
+          gs.max_response_rate_ln - gs.min_response_rate_ln \
+        ) \
+      END AS response_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_subscribe_rate_ln = gs.min_subscribe_rate_ln THEN 0.5 \
+        ELSE (subscribe_rate_ln - gs.min_subscribe_rate_ln) / ( \
+          gs.max_subscribe_rate_ln - gs.min_subscribe_rate_ln \
+        ) \
+      END AS subscribe_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_follow_rate_ln = gs.min_follow_rate_ln THEN 0.5 \
+        ELSE (follow_rate_ln - gs.min_follow_rate_ln) / (gs.max_follow_rate_ln - gs.min_follow_rate_ln) \
+      END AS follow_rate_ln_guiyi, \
+      CASE \
+        WHEN gs.max_black_rate_ln = gs.min_black_rate_ln THEN 0.5 \
+        ELSE (black_rate_ln - gs.min_black_rate_ln) / (gs.max_black_rate_ln - gs.min_black_rate_ln) \
+      END AS black_rate_ln_guiyi \
+    FROM \
+      fenweidu lt \
+      JOIN globalStats gs on lt.blog_channel_flg = gs.blog_channel_flg \
+      AND lt.ip = gs.ip \
+      and lt.publishdays = gs.publishdays \
+      and lt.ispay_returngift = gs.ispay_returngift \
+	  and lt.post_content_type=gs.post_content_type \
+  ), \
+  CompositeScore AS ( \
+    SELECT \
+      *, \
+      ( \
+        unlock_rate_ln_guiyi * 0.1 + zhengfankui_rate_ln_guiyi * 0.2 - fufankui_rate_ln_guiyi * 0.15 + dianzan_rate_ln_guiyi * 0.15 + recommend_rate_ln_guiyi * 0.20 + subscribe_rate_ln_guiyi * 0.15 + follow_rate_ln_guiyi * 0.15 \
+		+response_rate_ln_guiyi*0.25-black_rate_ln_guiyi*0.25 \
+      ) AS quality_score \
+    FROM \
+      NormalizedScores \
+  ) \
+insert overwrite table lofter_dm.ads_paid_post_premium_scoring_group_normalization_di partition(dt='${azkaban.flow.1.days.ago}') \
+ \
+ SELECT \
+postid, \
+blog_channel_flg, \
+publishdate, \
+publishdays, \
+words_count, \
+ai_results, \
+blogid, \
+ips, \
+ispay_returngift, \
+recomstatus, \
+blogname, \
+styouzhiflg, \
+yinliuflg, \
+collectionid, \
+bg_flg, \
+tags, \
+review_status, \
+exposureuv, \
+qianbg_amount, \
+liulan_fufei_rate, \
+furate, \
+zhenrate, \
+text_length, \
+level, \
+shuareflg, \
+liulanuv, \
+zhengfankuiuv, \
+fufankuiuv, \
+dianzanuv, \
+unlock_dianzanuv, \
+unlock_hou_dianzanuv, \
+recommenduv, \
+unlock_recommenduv, \
+unlock_hou_recommenduv, \
+subscribecollectionuv, \
+unlock_subscribecollectionuv, \
+unlock_hou_subscribecollectionuv, \
+followuv, \
+unlock_followuv, \
+unlock_hou_followuv, \
+unlock_rate, \
+zhengfankui_rate, \
+fufankui_rate, \
+dianzan_rate, \
+recommend_rate, \
+subscribe_rate, \
+follow_rate, \
+unlock_rate_ln, \
+zhengfankui_rate_ln, \
+fufankui_rate_ln, \
+dianzan_rate_ln, \
+recommend_rate_ln, \
+subscribe_rate_ln, \
+follow_rate_ln, \
+no_jiaquan_all_score, \
+jiaquan_all_score, \
+ip, \
+unlock_rate_ln_guiyi, \
+zhengfankui_rate_ln_guiyi, \
+fufankui_rate_ln_guiyi, \
+dianzan_rate_ln_guiyi, \
+recommend_rate_ln_guiyi, \
+subscribe_rate_ln_guiyi, \
+follow_rate_ln_guiyi, \
+quality_score, \
+   ROUND(quality_score * 100, 2) AS quality_percent, \
+   CASE \
+     WHEN quality_score >= 0.93 THEN 'S级' \
+     WHEN quality_score >= 0.78 THEN 'A级' \
+     WHEN quality_score >= 0.55 THEN 'B级' \
+     WHEN quality_score >= 0.33 THEN 'C级' \
+	 WHEN quality_score >= 0.12 THEN 'C-级' \
+     ELSE 'D级' \
+   END AS quality_grade, \
+   post_content_type, \
+responseuv, \
+unlock_responseuv, \
+unlock_hou_responseuv, \
+blackuv, \
+unlock_blackuv, \
+unlock_hou_blackuv, \
+response_rate, \
+black_rate, \
+response_rate_ln, \
+black_rate_ln, \
+response_rate_ln_guiyi, \
+black_rate_ln_guiyi \
+ FROM \
+   CompositeScore \
+ ORDER BY \
+   quality_score DESC \
+
+dependencies=ads_paid_post_premium_scoring_all_round_di

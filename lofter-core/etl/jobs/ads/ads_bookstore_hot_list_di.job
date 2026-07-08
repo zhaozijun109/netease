@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ads.BookstoreHotListsStats
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=ads_ec_paid_subscribe_actpwd_funnel_di

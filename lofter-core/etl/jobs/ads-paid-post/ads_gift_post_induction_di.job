@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+conf.spark.sql.shuffle.partitions=100
+conf.spark.dynamicAllocation.maxExecutors=25
+class=com.netease.lofter.etl.ads.GiftPostInduction
+params= --date ${azkaban.flow.1.days.ago}
+dependencies=ads_gift_post_similarity_model_di

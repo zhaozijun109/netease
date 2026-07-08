@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.yuanqi.doris.Hive2DorisManualSync
+conf.spark.sql.shuffle.partitions=5
+conf.spark.task.maxFailures=1
+conf.spark.blacklist.enabled=false
+conf.spark.sql.hive.convertMetastoreParquet=false
+retries=1
+params=--partition-col dt --doris-db lofter --mode partition_range --date 2026-03-10,2026-03-16 --hive-db lofter_dm --table

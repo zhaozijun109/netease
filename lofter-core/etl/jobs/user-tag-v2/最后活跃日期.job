@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag 最后活跃日期 --bitmap
+retries=0
+conf.spark.execute.sql="select accountId                             as userId, \
+                               '最后活跃日期'                          as tag_name, \
+                               ''                                    as dim1, \
+                               ''                                    as dim2, \
+                               ''                                    as dim3, \
+                               ''                                    as dim4, \
+                               from_unixtime(cast(app_time / 1000 as bigint), 'yyyy-MM-dd') as grp, \
+                               ''                                    as value \
+                        from lofter.dws_evt_login_user_last_dd \
+                        where dt = '${azkaban.flow.1.days.ago}' and app_time > 0"

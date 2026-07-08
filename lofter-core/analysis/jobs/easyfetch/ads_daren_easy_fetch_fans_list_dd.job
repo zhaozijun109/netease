@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_daren_easy_fetch_fans_list_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    a.blogid, \
+    a.domainname AS authenticatename, \
+    FROM_UNIXTIME(CAST((if(a.updatetime > 0, a.updatetime, a.createtime))/1000 AS BIGINT), 'yyyy-MM-dd') AS verify_date, \
+    b.domainname, \
+    f.blogname, \
+    f.blognickname, \
+    CONCAT('https://', f.blogname, '.lofter.com') AS blogurl, \
+    c.userId as fans_userId, \
+    c.followdate as fans_follow_date, \
+    datediff('${azkaban.flow.1.days.ago}',followdate) as fans_follow_days, \
+    d.customUdid as fans_customUdid, \
+    e.phone as fans_phone \
+FROM lofter_db_dump.ods_db_authenticate_blog_nd a \
+LEFT JOIN lofter.dim_domain b ON a.domainid = b.id \
+left join( \
+    select blogid, userId, from_unixTime(followtime/1000, 'yyyy-MM-dd') as followdate \
+    from lofter_db_dump.ods_db_user_following_nd \
+)c on a.blogId = c.blogId \
+join( \
+    select sid as userid,tid as customudid \
+    from lofter.dwd_device_mapping \
+    where sid_tp='userid' and tid_tp='customudid' and lastNo=1 \
+)d on c.userId = d.userId \
+join( \
+    select userid,verifyphone as phone \
+    from lofter_db_dump.ods_db_verify_phone_account_nd \
+)e on c.userId = e.userId \
+join lofter.dim_blog f on a.blogId = f.id

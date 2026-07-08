@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_challenge_detail_post_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.tag,url,blogid,a.postid,a.userid,title,contenttype,recomstatus \
+,hot,comments,share,browse_today,browse_cnt \
+from(select id as postid,userid,title,publishdate,tag,recomstatus,blogid,url \
+,case when contenttype =1 then '文字' when contenttype =2 then '图片' else '其他' end as contenttype \
+from lofter.dim_post_article \
+lateral view explode(tags) t as tag \
+where publishdate = '${azkaban.flow.1.days.ago}' \
+) a  \
+left join  \
+(select id as postid \
+from lofter.dim_post_article \
+where publishdate >= '2025-07-25' \
+) x  \
+on a.postid = x.postid \
+join  \
+(select tag \
+from lofter_db_dump.ods_db_challenge_tag_nd \
+where type = 2 and status = 1 \
+group by tag \
+) b  \
+on a.tag = b.tag \
+left join  \
+(select postid,count(deviceudid) as browse_today \
+from lofter.dwd_post_browse_di  \
+where dt = '${azkaban.flow.1.days.ago}' and is_real > 0  \
+group by postid \
+) c  \
+on a.postid = c.postid \
+left join  \
+(select postid,realbrowsepv as browse_cnt \
+from lofter.dws_post_base_stats_dd  \
+where dt = '${azkaban.flow.1.days.ago}'  \
+) cc \
+on a.postid = cc.postid \
+left join  \
+(select postid,poshotpv-neghotpv as hot,poscommentpv+negcommentpv as comments,sharepv as share \
+from lofter.dws_post_base_stats_dd  \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by postid,poshotpv-neghotpv,poscommentpv+negcommentpv,sharepv \
+) e \
+On a.postid = e.postid \

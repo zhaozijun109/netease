@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_video_speedrate_dd partition(dt='${azkaban.flow.1.days.ago}') \
+with sess as ( \
+    select \
+        deviceOs, deviceUdid, is_real, is_finished, played_time_ms, buffer_session_count, buffer_time_ms, \
+        case \
+            when play_rate is null or play_rate <= 0 then 1.0 \
+            else play_rate \
+        end                                                        as play_rate_normalized \
+    from lofter.dwd_video_play_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and is_real = 1 \
+), \
+all_play_uv as ( \
+    select deviceOs, count(distinct deviceUdid) as play_uv \
+    from sess \
+    group by deviceOs \
+), \
+spd_uv as ( \
+    select deviceOs, count(distinct deviceUdid) as speedrate_uv \
+    from sess \
+    where play_rate_normalized <> 1.0 \
+    group by deviceOs \
+) \
+select \
+    a.deviceOs, \
+    case \
+        when ss.play_rate_normalized = 1.0  then '1.0x' \
+        when ss.play_rate_normalized = 1.25 then '1.25x' \
+        when ss.play_rate_normalized = 1.5  then '1.5x' \
+        when ss.play_rate_normalized = 1.75 then '1.75x' \
+        when ss.play_rate_normalized = 2.0  then '2.0x' \
+        when ss.play_rate_normalized = 0.5  then '0.5x' \
+        when ss.play_rate_normalized = 0.75 then '0.75x' \
+        else concat(cast(ss.play_rate_normalized as string), 'x') \
+    end                                                            as speedrate_tier, \
+    a.play_uv                                                      as overall_play_uv, \
+    nvl(s.speedrate_uv, 0)                                         as overall_speedrate_uv, \
+    count(1)                                                       as tier_session_count, \
+    count(distinct ss.deviceUdid)                                  as tier_session_uv, \
+    sum(case when ss.is_finished = 1 then 1 else 0 end)            as tier_finish_count, \
+    sum(ss.buffer_session_count)                                   as tier_buffer_session_count, \
+    sum(ss.buffer_time_ms)                                         as tier_buffer_time_ms, \
+    sum(ss.played_time_ms)                                         as tier_played_time_ms \
+from all_play_uv a \
+left join spd_uv s on a.deviceOs = s.deviceOs \
+left join sess   ss on a.deviceOs = ss.deviceOs \
+group by a.deviceOs, a.play_uv, s.speedrate_uv, \
+         case \
+             when ss.play_rate_normalized = 1.0  then '1.0x' \
+             when ss.play_rate_normalized = 1.25 then '1.25x' \
+             when ss.play_rate_normalized = 1.5  then '1.5x' \
+             when ss.play_rate_normalized = 1.75 then '1.75x' \
+             when ss.play_rate_normalized = 2.0  then '2.0x' \
+             when ss.play_rate_normalized = 0.5  then '0.5x' \
+             when ss.play_rate_normalized = 0.75 then '0.75x' \
+             else concat(cast(ss.play_rate_normalized as string), 'x') \
+         end
+dependencies=

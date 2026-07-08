@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01= \
+WITH user_video_stats AS ( \
+    SELECT  \
+        userid, \
+        COUNT(DISTINCT dt) AS active_days, \
+        SUM(CASE WHEN is_real = 1 THEN 1 ELSE 0 END) AS valid_play_pv, \
+        SUM(CASE WHEN is_real = 1 THEN duration ELSE 0 END) / 1000 / 60 AS valid_duration_mins \
+    FROM lofter.dwd_post_browse_di \
+    WHERE dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+      AND dt <= '${azkaban.flow.1.days.ago}' \
+      AND action_type = 'page_duration' \
+      and post_content_type='视频' \
+    GROUP BY userid \
+) \
+insert overwrite table lofter_dm.ads_video_core_consume_user_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    COUNT(1) AS cnt_userid \
+FROM user_video_stats \
+WHERE active_days       >= 3 \
+  AND valid_play_pv     >= 8 \
+  AND valid_duration_mins >= 3
+

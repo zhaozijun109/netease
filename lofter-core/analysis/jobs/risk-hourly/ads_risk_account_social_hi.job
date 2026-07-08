@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=\
+with follow_actions as ( \
+    select  userId, blogId, followTime, updateTime, opType \
+    from ( \
+        select userId, blogId, followTime, updateTime, opType, \
+              row_number() over (partition by userId, blogId order by updateTime desc) as rk \
+        from ( \
+            select userId, blogId, followTime, `_bin_op_time` as updateTime, `_bin_op` as opType \
+            from lofter.ods_binlog_user_following_di \
+            where dt = '${azkaban.flow.current.date}' and `_bin_op` < 2 \
+          union all \
+            select userId, blogId, followTime, followTime as updateTime, 0 as opType \
+            from lofter_db_dump.ods_db_user_following_nd \
+            where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        ) t \
+    ) tt \
+    where rk = 1 and opType = 0 \
+) \
+insert overwrite table lofter_dm.ads_risk_account_social_hi partition(dt='${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select userId, \
+       sum(subscribes) as subscribes, concat_ws(',', first_value(subscribe_list, true)) as subscribe_list, \
+       sum(fans) as fans, concat_ws(',', first_value(fan_list, true)) as fan_list, max(updateTime) as updateTime \
+from ( \
+    select userId, count(1) as subscribes, null as subscribe_list, 0 as fans, null as fan_list, max(updateTime) as updateTime from follow_actions group by userId \
+    union all \
+    select blogId as userId, 0 as subscribes, null as subscribe_list, count(1) as fans, null as fan_list, max(updateTime) as updateTime from follow_actions group by blogId \
+) a \
+group by userId \
+having (fans >= 100 or subscribes >= 100) and (unix_timestamp() - updateTime/1000) < 3600 \

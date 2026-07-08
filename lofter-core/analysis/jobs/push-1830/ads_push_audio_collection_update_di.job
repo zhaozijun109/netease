@@ -1,0 +1,114 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_audio_collection_update_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, collectionId, copy_type, cp_tag, ip_tag, hot_comment, postId, blogId \
+from ( \
+    select cand.userId, cand.collectionId, \
+           case when nvl(meta.description, '') rlike '背景|简介|食用|爽文|虐|x|X|×|更新|更文|短篇|长篇|连载|一发完|ABO|alpha|omega|beta|enigma|合集|属性|壁垒|避雷|无脑|脑洞|产物|字数|汉化|欢迎|嗑点|爱而不自知|爱恨交织|傲娇|腹黑|0|1|左位|右位|攻|受|白切黑|白月光|背德|病娇|纯爱|纯恨|爹系|定情信物|对抗路|小情侣|反差感|夫妻相|肤色差|父母爱情|古早|恨海情天|红蓝|狐狸|互为半身|欢喜冤家|家属感|剑羚|狮子|姐狗|金婚|镜子的两面|久别重逢|救赎|绝世双枭|开膛手|雇佣兵|口嫌体正直|哭包攻|拉扯感|来世图书馆|灵魂伴侣|绿茶|美强惨|妹狗|萌|男鬼|泥塑|整肃|年上|年下|训狗|偏爱|破镜重圆|奇美拉|前世今生|强制爱|青梅竹马|日久生情|上下级|圣人私心|师生|史密斯夫妇|世界第一|双标|双反派|双强|双死|双向暗恋|双向奔赴|双向救赎|死而复生|宿敌|宿命感|酸涩|体型差|替身|天降|天降竹马|甜宠|同居|弯恋直|相爱相杀|相互信任|小太阳|校园|惺惺相惜|性张力|秀恩爱|养成|一见钟情|引导型恋人|幼驯染|炸毛|挚友|智性恋|重力系|自毁侵向|s0m1|双生|高攻低防|高攻高防|雏鸟情结|狗塑|没头脑和不高兴|高岭之花|避嫌|死遁|钓系|闷骚|同源而生|精神锚点|猫塑|苦尽甘来|鸟塑|人夫|szd|每章|ooc|感谢|古风|中篇|AU|paro|中心向|剧情|if线|全文|免费|杂事|拆逆|不拆不逆|无差|be|he|oe|慎入|预计|结局|单机|家产|指正|收录|补档|微博|置顶|总结|崛起' then 'A' else 'B' end as copy_type, \
+           tag_info.cp_tag, tag_info.ip_tag, \
+           hot_post.hot_comment, hot_post.postId, hot_post.blogId, \
+           row_number() over (partition by cand.userId \
+                              order by nvl(meta.subscribe_uv_7d, 0) desc, nvl(meta.lastPublishTime, 0) desc, cand.collectionId) as rk \
+    from ( \
+        select userId, collectionId \
+        from ( \
+            select s.subscribe_userId as userId, s.collectionId \
+            from ( \
+                select subscribe_userId, collectionId \
+                from lofter.dwd_collection_user_subscribe_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by 1, 2 \
+            ) s \
+            join ( \
+                select accountId as userId \
+                from lofter.dws_evt_login_user_last_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and accountId > 0 and \
+                      datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd')) <= 90 \
+            ) l on s.subscribe_userId = l.userId \
+            union \
+            select userId, collectionId \
+            from lofter.dwd_post_collection_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) and \
+                  action_type = 'browse' and is_real > 0 and userId > 0 and collectionId > 0 \
+            group by userId, collectionId \
+            having count(1) >= 3 \
+        ) u \
+        group by userId, collectionId \
+    ) cand \
+    join ( \
+        select collectionId \
+        from lofter_db_dump.ods_db_audio_collection_nd \
+        where status = 0 \
+        group by collectionId \
+    ) ac on cand.collectionId = ac.collectionId \
+    left join ( \
+        select a.collectionId, a.subscribe_uv_7d, a.lastPublishTime, b.description \
+        from ( \
+            select collectionId, subscribe_uv_7d, lastPublishTime \
+            from lofter.dws_collection_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) a \
+        left join ( \
+            select id as collectionId, description \
+            from lofter_db_dump.ods_db_post_collection_nd \
+        ) b on a.collectionId = b.collectionId \
+    ) meta on cand.collectionId = meta.collectionId \
+    left join ( \
+        select collectionId, \
+               min(case when cpflag > 0 then ct.tag end) as cp_tag, \
+               min(case when ipflag > 0 then ct.tag end) as ip_tag \
+        from ( \
+            select a.id as collectionId, trim(t.tag) as tag \
+            from lofter_db_dump.ods_db_post_collection_nd a \
+                 lateral view explode(split(a.tags, ',')) t as tag \
+            where a.status = 0 and a.tags is not null and length(a.tags) > 0 \
+        ) ct \
+        join lofter.dim_tag dt on ct.tag = dt.tag \
+        where dt.cpflag > 0 or dt.ipflag > 0 \
+        group by collectionId \
+    ) tag_info on cand.collectionId = tag_info.collectionId \
+    left join ( \
+        select collectionId, hot_comment, postId, blogId \
+        from ( \
+            select b.collectionId, h.content as hot_comment, b.postId, b.blogId, \
+                   row_number() over (partition by b.collectionId order by nvl(p.hot, 0) desc, b.postId) as prk \
+            from lofter.bridge_collection_post b \
+            join lofter_dm.ads_post_highlight_comment_dd h \
+                 on b.postId = h.postId and h.dt = '${azkaban.flow.1.days.ago}' \
+            left join ( \
+                select postId, hot \
+                from lofter.dws_post_interaction_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) p on b.postId = p.postId \
+            join lofter.dim_post m on b.postId = m.id \
+            where m.valid = 0 and m.isPublished = true and m.isCitedPost = false and m.isForbidden = false and \
+                  m.allowView = 0 \
+        ) t \
+        where prk = 1 \
+    ) hot_post on cand.collectionId = hot_post.collectionId \
+    left join ( \
+        select userId, 1 as pushed_3d \
+        from lofter_dm.ads_push_task_pool_di \
+        where dt between date_sub('${azkaban.flow.current.date}', 2) and date_sub('${azkaban.flow.current.date}', 1) and \
+              policy = 'audio_collection_update' \
+        group by userId \
+    ) f1 on cand.userId = f1.userId \
+    left join ( \
+        select userId, collectionId, \
+               count(distinct dt) as push_cnt, \
+               max(dt) as last_push_dt \
+        from ( \
+            select userId, dt, \
+                   get_json_object(push_params, '$.collectionId') as collectionId \
+            from lofter_dm.ads_push_task_pool_di \
+            where dt < '${azkaban.flow.current.date}' and dt >= date_sub('${azkaban.flow.current.date}', 30) and \
+                  policy = 'audio_collection_update' \
+        ) hist \
+        where collectionId is not null and length(collectionId) > 0 \
+        group by userId, collectionId \
+    ) f2 on cand.userId = f2.userId and cand.collectionId = f2.collectionId \
+    where f1.pushed_3d is null and \
+          (f2.push_cnt is null or \
+           (f2.push_cnt < 2 and datediff('${azkaban.flow.current.date}', f2.last_push_dt) > 5)) \
+) tt \
+where rk = 1 and length(hot_comment) > 0 \
+distribute by 1

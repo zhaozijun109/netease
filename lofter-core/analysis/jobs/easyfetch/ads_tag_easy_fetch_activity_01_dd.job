@@ -1,0 +1,302 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.executor.cores=4
+hive.query.01=\
+with t1 as ( \
+    select a.id as postId, blogId, concat_ws(',',tags) as tags, concat_ws(',',ips) as ips, publishDate as action_date, b.isauthenticated, \
+        FROM_UNIXTIME(publishtime/1000, 'yyyy-MM-dd HH:mm:ss') as publish_time, recomstatus, url, title, \
+        concat_ws(',',b.authdomainnames) as authdomain_names, b.blogName, contenttype, b.blognickname, c.sourcetype \
+    from lofter.dim_post a \
+        join lofter.dim_blog b on a.blogId = b.id \
+        left join lofter.dim_user c on a.blogId = c.id \
+    where publishDate between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}'  \
+        and a.isPublished = true  \
+        and a.isCitedPost = false  \
+        and a.isForbidden=false  \
+        and a.allowView = 0  \
+        and a.valid in (0,12,15,16)  \
+        and b.isValid = true \
+) \
+insert overwrite table lofter_dm.ads_tag_easy_fetch_activity_01_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.tags, t1.action_date, t1.postId, t1.blogId, \
+    if(t2.is_first_publish > 0 and t2.is_new_user = 0, 1, 0) as is_first_published, \
+    if(t2.is_new_user > 0, 1, 0) as is_new_register, \
+    if(t2.is_new_user = 0 and t2.is_first_publish = 0 and t2.is_active_creator = 0 , 1, 0) as is_return_published, \
+    if(t1.isauthenticated, 1, 0) as is_daren, \
+    if(t3.userId is not null, 1, 0) as is_premium, \
+    t4.level, \
+    if(t5.postId is not null, 1, 0) as is_premium_post, \
+    if(t8.userId is not null, 1, 0) as is_next_day_retain, \
+	if(t10.shua_hot > 0, 1, 0) as is_shua, \
+    nvl(t10.shua_hot, 0) as shua_hot, \
+    t1.publish_time, \
+    if(t1.recomStatus > 0, '人审通过', if(t1.recomStatus < 0, '人审不通过', '人审等待')) as recomStatus, \
+    t4.post_main_content_type, \
+    t1.url as post_url, \
+    t1.authdomain_names, \
+    t1.blogname, \
+    t4.fans_std, \
+    t4.post_count_std, \
+    t1.contenttype as post_content_type, \
+    t1.title, \
+    t9.hot as total_hot, \
+    t9.commend_count, \
+    t9.praise_count, \
+    t9.reproduce_count, \
+    t9.recommend_count, \
+    t9.subscribe_count, \
+    t13.exposed_count, \
+    t13.click_count, \
+    t13.rec_exposed_count, \
+    t13.tag_rec_exposed_count, \
+    t13.feed_rec_exposed_count,  \
+    t13.cold_start_rec_exposed_count, \
+    t14.return_gift_plantype, \
+    t15.free_gift_send_post_uv, \
+    t15.free_gift_post_pv, \
+    t15.paid_gift_send_post_uv, \
+    t15.pay_gift_money_post_amount, \
+    if(t16.postId is not null, 1, 0) as is_paid_premium_post, \
+    t4.blog_url, \
+    t4.domain_r1, \
+    t17.fans_total as pre_fans_cnt, \
+    t4.fans_std as current_fans_cnt, \
+    if(paid_gift_send_blog_uv > 0 or pay_gift_money_blog_amount >0, 1, 0) as isReturnGiftSetBLog, \
+    t18.free_gift_send_blog_uv, \
+    t18.free_gift_blog_pv, \
+    t18.paid_gift_send_blog_uv, \
+    t18.pay_gift_money_blog_amount, \
+    t1.blognickname, \
+    t19.words_count, \
+    t19.photo_count, \
+    t20.text_length as return_gift_words_count, \
+    t20.image_count as return_gift_photo_count, \
+    t20.ispay_returngift, \
+    t1.ips, \
+    t1.sourcetype, \
+    t21.unlock_uv_with_candy_coupon, \
+    t21.unlock_money_with_candy_coupon, \
+    t22.after_published_7_days_amount, \
+    t23.after_published_7_days_hot, \
+    t4.first_published_date, \
+    t4.last_published_date, \
+    t24.paid_post_count, \
+    t4.post_top_ips, \
+    t4.post_top_tags, \
+    t4.post_top10_ips, \
+    t4.post_top10_tags, \
+    t23.after_published_15_days_hot, \
+    t23.after_published_30_days_hot, \
+    t25.after_published_7_days_valid_comment_uv, \
+    t25.after_published_15_days_valid_comment_uv, \
+    t25.after_published_30_days_valid_comment_uv, \
+    t25.after_published_60_days_valid_comment_uv, \
+    if(t26.postId is not null, 1, 0) as is_c2c_product_post \
+from t1 \
+left join( \
+    select distinct dt, userId, is_new_user, is_first_publish, is_active_creator \
+    from lofter.dws_par_creator_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+)t2  \
+on t1.blogId = t2.userId  \
+    and t1.action_date = t2.dt \
+left join( \
+    select distinct userId, is_premium \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+)t3 \
+on t1.blogId = t3.userId \
+left join( \
+    select distinct userId, level, blog_url, fans_std, element_at(post_top_domains, 1) as domain_r1, \
+        post_main_content_type, fans_cnt_7d, fans_cnt_30d, post_count_std, \
+        post_first_date as first_published_date, \
+        post_last_date as last_published_date, \
+        concat_ws(',',post_top_ips) as post_top_ips, \
+        concat_ws(',',post_top_tags) as post_top_tags, \
+        concat_ws(',',post_top10_ips) as post_top10_ips, \
+        concat_ws(',',post_top10_tags) as post_top10_tags \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t4 \
+on t1.blogId = t4.userId \
+left join( \
+    select distinct postId \
+    from lofter.dws_post_premium_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' and premium_date is not null \
+)t5 \
+on t1.postId = t5.postId \
+left join( \
+    select distinct dt, userId \
+    from lofter.dwd_user_active_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+)t8 \
+on t1.blogId = t8.userId and datediff(t8.dt, t1.action_date) = 1 \
+left join( \
+    select postId, sum(commendCount) commend_count, sum(hot) as hot, \
+           sum(praiseCount) as praise_count, sum(reproduceCount) as reproduce_count, \
+           sum(recommendCount) as recommend_count, sum(subscribeCount) as subscribe_count \
+    from lofter_dm.ads_post_general_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    group by postId \
+)t9  \
+on t1.postId = t9.postId \
+left join ( \
+   select postId, sum(dailyShuaHot) as shua_hot \
+   from lofter_dm.ads_risk_shuare_model_stat_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+   group by postId \
+) t10  \
+on t1.postId = t10.postId \
+left join( \
+    select conv(split(item_id, '_')[1], 16, 10) as postid, \
+           sum(if(major_scene = 'ALL', exposed_count,0)) as exposed_count, \
+           sum(if(major_scene = 'ALL', click_count,0)) as click_count, \
+           sum(if(major_scene = 'REC', exposed_count,0)) as rec_exposed_count, \
+           sum(if(scene = 'feed_rec', exposed_count,0)) as feed_rec_exposed_count, \
+           sum(if(scene = 'tag_rec', exposed_count,0)) as tag_rec_exposed_count, \
+           sum(if(major_scene = 'REC' and datediff(day, publishdate) in (0 ,1, 2), exposed_count,0)) as cold_start_rec_exposed_count \
+    from( \
+        select *,day \
+        from rec.rec_item_article_stat_daily \
+        where day between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    )a \
+    join( \
+        select id, publishdate \
+        from lofter.dim_post \
+        where publishdate between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    )b \
+    on conv(split(a.item_id, '_')[1], 16, 10) = b.id \
+    group by 1 \
+)t13 \
+on t1.postId = t13.postId \
+left join( \
+    select postId, \
+           concat_ws(',', collect_set(return_gift_plantype)) as return_gift_plantype \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) t14 \
+on t1.postId = t14.postId \
+left join( \
+    select postId, \
+           count(distinct(if(giftType = 0, sender, null))) as free_gift_send_post_uv, \
+           sum(if(giftType = 0, 1, 0)) free_gift_post_pv, \
+           count(distinct(if(giftType = 1, sender, null))) as paid_gift_send_post_uv, \
+           sum(if(giftType = 1, coin/10, 0)) pay_gift_money_post_amount \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    group by postid \
+)t15 \
+on t1.postId = t15.postId \
+left join ( \
+    select postId from lofter.dws_gift_post_premium_scoring_dd where dt = '${azkaban.flow.1.days.ago}' \
+) t16  \
+on t1.postId = t16.postId \
+left join ( \
+    select distinct dt, userId, fans_total \
+    from lofter.dws_par_user_fans_dd \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 365) and '${azkaban.flow.1.days.ago}' \
+)t17 \
+on t1.blogId = t17.userId and datediff(t1.action_date, t17.dt) = 1 \
+left join( \
+    select blogId, \
+           count(distinct(if(giftType = 0, sender, null))) as free_gift_send_blog_uv, \
+           sum(if(giftType = 0, 1, 0)) free_gift_blog_pv, \
+           count(distinct(if(giftType = 1, sender, null))) as paid_gift_send_blog_uv, \
+           sum(if(giftType = 1, coin/10, 0)) pay_gift_money_blog_amount \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+)t18 \
+on t1.blogId = t18.blogId \
+left join ( \
+    select distinct postId, words_count, photo_count \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t19 \
+on t1.postId = t19.postId \
+left join( \
+    select postId, concat_ws(',',collect_set(ispay_returngift)) as ispay_returngift, \
+        sum(text_length) as text_length, sum(image_count) as image_count \
+    from( \
+        select distinct postId, \
+            case when ispay_returngift=0 then '付费免费' \
+                when ispay_returngift=1 then '仅付费' \
+                when ispay_returngift=2 then '仅免费' \
+            end as ispay_returngift, \
+            text_length, \
+            image_count \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) \
+    group by postId \
+) t20 \
+on t1.postId = t20.postId \
+left join( \
+    select postId, \
+        count(distinct userId) as unlock_uv_with_candy_coupon, \
+        sum(money) as unlock_money_with_candy_coupon \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+        and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+        and giftId in(1, 2, 3, 1001) \
+        and unlock_method = '券包' \
+    group by postId \
+) t21 \
+on t1.postId = t21.postId \
+left join( \
+    select t1.postId, nvl(sum(money),0) as after_published_7_days_amount \
+    from t1 \
+    left join( \
+        select postId, from_unixtime(unlock_time/1000, 'yyyy-MM-dd') as unlock_date, money \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(unlock_time/1000, 'yyyy-MM-dd') >= date_sub('${azkaban.flow.1.days.ago}', 364) and is_settle = 1 \
+    ) t_unlock \
+    on t1.postId = t_unlock.postId and (t_unlock.unlock_date between t1.action_date and date_add(t1.action_date, 6)) \
+    group by t1.postId \
+)t22 \
+on t1.postId = t22.postId \
+left join( \
+    select t1.postId, \
+        nvl(sum(if(datediff(t_hot.dt, t1.action_date) between 0 and 6, 1, 0)),0) as after_published_7_days_hot, \
+        nvl(sum(if(datediff(t_hot.dt, t1.action_date) between 0 and 14, 1, 0)),0) as after_published_15_days_hot, \
+        nvl(sum(if(datediff(t_hot.dt, t1.action_date) between 0 and 29, 1, 0)),0) as after_published_30_days_hot \
+    from t1 \
+    left join( \
+        select postid, dt, optype \
+        from lofter.dwd_post_hot_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+    ) t_hot \
+    on t1.postId = t_hot.postId and (t_hot.dt between t1.action_date and date_add(t1.action_date, 29)) \
+    group by t1.postId \
+)t23 \
+on t1.postId = t23.postId \
+left join ( \
+    select blogId, count(distinct postId) as paid_post_count \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 1) \
+    group by 1 \
+) t24 \
+on t1.blogId = t24.blogId \
+left join( \
+    select t1.postId, \
+        nvl(count(distinct if(datediff(t_comment.dt, t1.action_date) between 0 and 6, t_comment.userId, null)),0) as after_published_7_days_valid_comment_uv, \
+        nvl(count(distinct if(datediff(t_comment.dt, t1.action_date) between 0 and 14, t_comment.userId, null)),0) as after_published_15_days_valid_comment_uv, \
+        nvl(count(distinct if(datediff(t_comment.dt, t1.action_date) between 0 and 29, t_comment.userId, null)),0) as after_published_30_days_valid_comment_uv, \
+        nvl(count(distinct if(datediff(t_comment.dt, t1.action_date) between 0 and 59, t_comment.userId, null)),0) as after_published_60_days_valid_comment_uv \
+    from t1 \
+    left join( \
+        select postId, dt, userId \
+        from lofter.dwd_post_response_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 364) and '${azkaban.flow.1.days.ago}' \
+            and is_valid = 1 \
+            and length(regexp_replace(content,'\\[.*?\\]','')) >= 10 \
+    ) t_comment \
+    on t1.postId = t_comment.postId and (t_comment.dt between t1.action_date and date_add(t1.action_date, 59)) \
+    group by t1.postId \
+) t25 \
+on t1.postId = t25.postId \
+left join ( \
+    select postId from lofter.bridge_c2c_product_post_dd where dt = '${azkaban.flow.1.days.ago}' group by 1 \
+) t26 on t1.postId = t26.postId \

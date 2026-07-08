@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_group_blog_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+    select a.blogId, a.expose_pv, a.expose_pv_total, b.maisui_settlement_total, \
+        a.expose_pv / a.expose_pv_total *  b.lofter_revenue as lofter_revenue, \
+        a.expose_pv / a.expose_pv_total *  b.lofter_revenue * 0.2 as settlement_revenue, \
+        b.lofter_revenue as lofter_revenue_total \
+    from ( \
+        select *, sum(expose_pv) over () as expose_pv_total \
+        from ( \
+            select x.dt, y.blogId, sum(least(expose_pv, 6)) expose_pv \
+            from ( \
+                select dt, postId, userId, groupId, count(1) as expose_pv  \
+                from lofter.dwd_ad_resource_action_di \
+                where dt='${azkaban.flow.1.days.ago}' and opType = 'expose' \
+                group by 1, 2, 3, 4 \
+            ) x \
+            join lofter.dim_post y on x.postId = y.id \
+            group by 1, 2 \
+        ) t \
+    ) a \
+    join ( \
+        select dt, sum(maisui_settle_money) / 100 as maisui_settlement_total, \
+               (nvl(sum(cut_price_money),0) + nvl(sum(cut_maisui_settle_money), 0)) / 100 as lofter_revenue \
+        from lofter.ads_iad_lofter_info_flow_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.dt = b.dt \

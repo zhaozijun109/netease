@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_return_tag_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select id as return_gift_id, postId, blogId, tag, tag_state \
+from ( \
+    select a.id, a.postId, a.blogId, 'price' as tag, \
+           if(a.status = 1 and b.postId is null and \
+              case when text_length < 30 then true \
+                   when text_length <= 150 then ispay_returngift in (0,1) \
+                   when text_length <= 300 then ispay_returngift = 1 and c.min_coin > 9 \
+                   when text_length <= 500 then ispay_returngift = 1 and c.min_coin > 19 \
+                   when text_length <= 800 then ispay_returngift = 1 and c.min_coin > 29 \
+                   when text_length <= 1500 then ispay_returngift = 1 and c.min_coin > 99 end, \
+              '极低性价比', '') as tag_state \
+    from ( \
+        select id, postId, blogId, text_length, ispay_returngift, status \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            createDate >= '${azkaban.flow.7.days.ago}' and \
+            contentType = '文字' and \
+            (return_gift_plantype = '彩蛋' or return_gift_plantype = '隐藏结局' or return_gift_plantype = '甜剧场') \
+    ) a \
+    left join ( \
+        select postId from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count >= 8000 \
+    ) b on a.postId = b.postId \
+    left join ( \
+        select a.id, min(b.coin) as min_coin \
+        from ( \
+            select id, giftId \
+            from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+                   lateral view explode(split(get_json_object(giftjson ,'$.giftIds') ,',')) t2 AS giftId \
+        ) a \
+        join lofter.dim_gift b on a.giftId = b.id \
+        where b.is_pay > 0 and b.coin > 0 \
+        group by 1 \
+    ) c on a.id = c.id \
+  union all \
+    select a.id, a.postId, a.blogId, 'truncate' as tag, \
+           if(a.status = 1 and a.text_length >= b.post_words_count * 3, '超级截断', '') as tag_state \
+    from ( \
+        select id, postId, blogId, text_length, status \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              createDate >= '${azkaban.flow.7.days.ago}' and \
+              contentType = '文字' and \
+              (return_gift_plantype = '彩蛋' or return_gift_plantype = '隐藏结局' or return_gift_plantype = '甜剧场') \
+    ) a \
+    join ( \
+        select postId, words_count as post_words_count from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count <= 500 \
+    ) b on a.postId = b.postId \
+  union all \
+    select a.id, a.postId, a.blogId, 'port' as tag, \
+           if(status = 1 and array_contains(mark_tags,'明星图') and image_count >= 1, '搬运图', '') as tag_state \
+    from ( \
+        select id, postId, blogId, status, mark_tags, image_count \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            createDate >= '${azkaban.flow.7.days.ago}' and \
+            contentType = '图片' and \
+            (return_gift_plantype = '彩蛋' or return_gift_plantype = '隐藏结局' or return_gift_plantype = '甜剧场') \
+    ) a \
+  union all \
+    select a.id, a.postId, a.blogId, 'neg_mark' as tag, \
+          if(status = 1 and review_status=-2, '负面', '') as tag_state \
+    from ( \
+        select id, postId, blogId, status, review_status \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              createDate >= '${azkaban.flow.7.days.ago}' \
+    ) a \
+  union all \
+    select a.id, a.postId, a.blogId, \
+         'neg_feedback' as tag, \
+         if(b.negative_feedback_count >= 5 and unlock_count >= 10 and (negative_feedback_count / unlock_count > 0.20), \
+            if(ooc_feedback_count >= negative_feedback_count * 0.3 ,'差评高且是OOC','差评高'), \
+           '') as tag_state \
+    from ( \
+        select id, postId, blogId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and status = 1 and \
+            createdate <= '${azkaban.flow.1.days.ago}' and  createdate >= date_sub('${azkaban.flow.1.days.ago}', 90) and \
+            (return_gift_plantype = '彩蛋' or return_gift_plantype = '隐藏结局' or return_gift_plantype = '甜剧场') \
+    ) a \
+    join ( \
+        select returngiftid, \
+             sum(if(type=1, 1, 0)) as negative_feedback_count, \
+             sum(if(type=1 and ext like '%ooc%', 1, 0)) ooc_feedback_count \
+        from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+        group by 1 \
+    ) b on a.id = b.returngiftid \
+    join ( \
+        select return_gift_id, count(1) as unlock_count \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) c on a.id = c.return_gift_id \
+) t \

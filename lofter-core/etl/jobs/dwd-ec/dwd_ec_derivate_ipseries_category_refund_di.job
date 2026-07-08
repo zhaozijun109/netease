@@ -1,0 +1,133 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_ec_derivate_ipseries_category_refund_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    o.id AS order_id, \
+    CAST(GET_JSON_OBJECT(er.single, '$.productId') AS BIGINT) AS product_id, \
+    CAST(GET_JSON_OBJECT(er.single, '$.productName') AS STRING) AS product_name, \
+    CASE WHEN t.orderfrom = 'legu_mini' THEN '小程序' ELSE 'LOFTER' END AS channel, \
+    CASE \
+        WHEN COALESCE(pi.purchasesupplierid, o.supplierid) = 7639000 THEN 'legu' \
+        ELSE 'nolegu' \
+        END AS supplier_type, \
+    COALESCE(NULLIF(rel.ipname, ''), '未分类') AS ip_name, \
+    COALESCE(NULLIF(rel.seriesname, ''), '未分类') AS series_name, \
+    CASE \
+        WHEN c2.id IS NULL THEN '未分类' \
+        WHEN c2.level = 2 THEN COALESCE(c2.name, '未分类') \
+        WHEN c2.level = 3 THEN COALESCE(c1.name, '未分类') \
+        ELSE '未分类' \
+        END AS category_name, \
+    CAST(GET_JSON_OBJECT(er.single, '$.num') AS BIGINT) AS refund_qty, \
+    ROUND(CAST(GET_JSON_OBJECT(er.single, '$.refundPrice') AS DOUBLE), 2) AS refund_amount \
+FROM ( \
+     SELECT \
+         r.id, \
+         r.orderid, \
+         r.finishtime, \
+         single \
+     FROM lofter_db_dump.ods_db_benefit_refund_nd r \
+         LATERAL VIEW explode( \
+    split( \
+        regexp_replace(  \
+                regexp_replace(  \
+                    regexp_replace(productinfo, '\\\\s+', ''),  \
+                    '^\\\\[|\\\\]$',  \
+                    ''  \
+                ),  \
+                '\\\\}\\\\,\\\\{',  \
+                '};{'  \
+            ),  \
+        ';'  \
+    ) \
+  ) t AS single \
+     WHERE r.status = 3 \
+       AND r.finishtime > 0 \
+       AND r.productinfo IS NOT NULL \
+       AND from_unixtime(CAST(r.finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+     ) er \
+     JOIN lofter_db_dump.ods_db_benefit_refund_nd br \
+          ON er.id = br.id \
+     JOIN lofter_db_dump.ods_db_benefit_order_nd o \
+          ON er.orderid = o.id \
+     JOIN lofter_db_dump.ods_db_benefit_trade_nd t \
+          ON o.tradeid = t.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_product_info_nd pi \
+               ON CAST(GET_JSON_OBJECT(er.single, '$.productId') AS BIGINT) = pi.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_ip_series_relation_nd rel \
+               ON CAST(GET_JSON_OBJECT(er.single, '$.productId') AS BIGINT) = rel.itemid \
+                   AND rel.itemtype = 0 \
+                   AND rel.isdeleted = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_product_relation_nd cpr \
+               ON CAST(GET_JSON_OBJECT(er.single, '$.productId') AS BIGINT) = cpr.productid \
+                   AND cpr.categorytype = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c2 \
+               ON cpr.categoryid = c2.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c1 \
+               ON c2.parentid = c1.id \
+WHERE o.deliverytime > 0 \
+  AND o.status = 3 \
+  AND t.deletestatus = 0 \
+  AND o.producttype IN (3, 9) \
+  AND CAST(GET_JSON_OBJECT(er.single, '$.productName') AS STRING) <> '邮费' \
+union ALL \
+SELECT \
+    paso.id AS order_id, \
+    ds.relaskuid AS product_id, \
+    ds.name AS product_name, \
+    'legu' AS channel, \
+    pd.typename AS supplier_type, \
+    COALESCE(ds.iptags, '未分类') AS ip_name, \
+    IF( \
+            INSTR(ds.name, '系列') > 1, \
+            SUBSTRING(ds.name, 1, INSTR(ds.name, '系列') - 1), \
+            '未分类' \
+    ) AS series_name, \
+    CASE \
+        WHEN c2.id IS NULL THEN '未分类' \
+        WHEN c2.level = 2 THEN COALESCE(c2.name, '未分类') \
+        WHEN c2.level = 3 THEN COALESCE(c1.name, '未分类') \
+        ELSE '未分类' \
+        END AS category_name, \
+    CAST(pasd.qty AS BIGINT) AS refund_qty, \
+    ROUND(COALESCE(pasd.purchaseprice, 0D) * COALESCE(pasd.qty, 0), 2) AS refund_amount \
+FROM lofter_db_dump.ods_db_derive_purchase_after_sale_order_nd paso \
+     JOIN ( \
+          SELECT \
+              d.id, \
+              d.aftersaleorderid, \
+              d.purchaseorderitemid, \
+              d.purchaseprice, \
+              d.deliveredcount, \
+              d.status, \
+              s.biz_type, \
+              s.qty \
+          FROM lofter_db_dump.ods_db_derive_purchase_after_sale_detail_nd d \
+              LATERAL VIEW explode( \
+    array( \
+      named_struct('biz_type', 'return', 'qty', d.returncount) \
+    ) \
+  ) t AS s \
+          WHERE s.qty <> 0 \
+            AND d.status IN (2, 3) \
+            AND d.deliveredcount > 0 \
+) pasd \
+          ON paso.id = pasd.aftersaleorderid \
+     JOIN lofter_db_dump.ods_db_derive_purchase_order_item_nd poi \
+          ON pasd.purchaseorderitemid = poi.id \
+     JOIN lofter_db_dump.ods_db_derive_partner_nd p \
+          ON p.id = poi.partnerid \
+              AND p.status = 0 \
+              AND p.id <> 5007 \
+     JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd \
+          ON p.partnerdiscountid = pd.id \
+              AND pd.status = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_derive_sku_nd ds \
+               ON ds.id = poi.deriveskuid \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c2 \
+               ON ds.categoryids = c2.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c1 \
+               ON c2.parentid = c1.id \
+WHERE paso.createtime > 0 \
+  AND paso.status IN (2, 3) \
+  AND from_unixtime(CAST(paso.createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \

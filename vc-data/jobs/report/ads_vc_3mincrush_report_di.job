@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc_dm.ads_vc_3mincrush_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select eventid,  \
+COALESCE(params['clicktype'],-1) AS clicktype, \
+CONCAT(eventid, '_', COALESCE(params['clicktype'],-1)) AS clickItem, \
+case when eventid in ('crush_alert', 'crush_page', 'crush_page_result') then 'expose' \
+when eventid in ('crush_alert_click', 'crush_page_result_click') then 'click' \
+else null  \
+end as event_type, \
+count(*) as pv_cnt,  \
+count(distinct user_id) as uv_cnt \
+from vc.ods_mda_app_di \
+where eventid in ('crush_alert', 'crush_page', 'crush_page_result','crush_alert_click', 'crush_page_result_click') \
+and dt = '${azkaban.flow.1.days.ago}' \
+AND (params['clicktype'] NOT LIKE '%.%'  or params['clicktype'] is null) \
+group by dt, eventid,params['clicktype'], \
+CONCAT(eventid, '_', params['clicktype']) , \
+case when eventid in ('crush_alert', 'crush_page', 'crush_page_result') then 'expose' \
+when eventid in ('crush_alert_click', 'crush_page_result_click') then 'click' \
+else null  \
+end \

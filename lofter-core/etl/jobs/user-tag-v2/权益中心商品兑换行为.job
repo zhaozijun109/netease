@@ -1,0 +1,100 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 权益中心商品兑换行为 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '权益中心商品兑换行为' as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from ( \
+                                 select userId, '粮票' as cat, cast(grain_ticket_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and grain_ticket_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '糖果券' as cat, cast(coupon_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and coupon_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '虚拟人体力' as cat, cast(pve_stamina_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_stamina_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, 'IP糖果券' as cat, cast(ip_coupon_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and ip_coupon_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '表情包' as cat, cast(emote_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and emote_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '头像框' as cat, cast(avatarbox_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and avatarbox_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '评论气泡' as cat, cast(comment_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and comment_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '主题装扮' as cat, cast(skin_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and skin_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '谷票（红包）' as cat, cast(red_packet_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and red_packet_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '后悔卡' as cat, cast(regret_card_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and regret_card_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '定制开屏' as cat, cast(boot_screen_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and boot_screen_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '印鸽' as cat, cast(yinge_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and yinge_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '现金' as cat, cast(cash_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and cash_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '影视音会员' as cat, cast(media_vip_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and media_vip_count_total > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, '云音乐会员' as cat, cast(music_vip_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_exchange_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and music_vip_count_total > 0 ) "

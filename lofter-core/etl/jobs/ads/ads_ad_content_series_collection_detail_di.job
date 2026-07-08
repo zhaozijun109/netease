@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=insert overwrite table lofter_dm.ads_ad_content_series_collection_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, b.real_browse_pv, c.ad_expose_pv, c.ad_click_pv, d.unlock_pv, d.unlock_uv, e.sdk_unlock_pv, e.sdk_unlock_uv, \
+    f.ad_consume_amount, f.author_income \
+from ( \
+    select x.postId, x.blogId, y.collectionId \
+    from ( \
+        select postId, blogId \
+        from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+        where array_contains(parse_array(get_json_object(giftJson ,'$.giftIds')), '120003') \
+        group by 1, 2 \
+    ) x \
+    join lofter.bridge_collection_post y on x.postId = y.postId \
+    join lofter_db_dump.ods_db_post_collection_nd z on y.collectionId = z.id \
+    where z.collectionType = 5 \
+) a \
+left join ( \
+    select postId, real_browse_pv from lofter.dws_post_traffic_di where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select postId, count(distinct if(is_bg > 0, req_id, null)) as ad_expose_pv, count(distinct if(is_click > 0, req_id, null)) as ad_click_pv \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and postId > 0 and (is_bg > 0 or is_click > 0) \
+    group by 1 \
+) c on a.postId = c.postId \
+left join ( \
+    select postId, count(1) as unlock_pv, count(distinct userId) as unlock_uv \
+    from lofter.dwd_ad_content_unlock_di \
+    where dt = '${azkaban.flow.1.days.ago}' and module = '广告文' and postId > 0 \
+    group by 1 \
+) d on a.postId = d.postId \
+left join ( \
+    select postId, count(1) as sdk_unlock_pv, count(distinct userId) as sdk_unlock_uv \
+    from lofter.dwd_ad_content_unlock_sdk_di \
+    where dt = '${azkaban.flow.1.days.ago}' and module = '广告文' and postId > 0 \
+    group by 1 \
+) e on a.postId = e.postId \
+left join ( \
+    select postId, sum(raw_ad_revenue) as ad_consume_amount, sum(post_ad_revenue) as author_income \
+    from lofter_dm.ads_ad_content_revenue_post_di \
+    where dt = '${azkaban.flow.1.days.ago}' and module = '广告文' \
+    group by 1 \
+) f on a.postId = f.postId \
+
+dependencies=ads_ad_content_revenue_post_di

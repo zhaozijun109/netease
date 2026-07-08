@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ug_new_return_device_active_report_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select  \
+    base_date, \
+    datediff('${azkaban.flow.1.days.ago}' ,base_date) date_diff, \
+    nvl(device_type, 'ALL') as device_type,  \
+    nvl(origin_type, 'ALL') as origin_type,  \
+    nvl(is_paid_subscribe, 'ALL') as is_paid_subscribe,  \
+    nvl(origin_channel, 'ALL') as origin_channel,  \
+    nvl(deviceos, 'ALL') as deviceos, \
+    nvl(is_whiteboard, 'ALL') as is_whiteboard, \
+    nvl(is_ture_new_return,'ALL') as is_ture_new_return, \
+    count(distinct t0.deviceudid) as deviceudid_cnt, \
+    count(if(datediff('${azkaban.flow.1.days.ago}' ,base_date) >= datediff(t1.dt ,base_date) and datediff(t1.dt ,base_date)>=1 ,t1.dt ,null)) as active_days \
+from \
+    (select   \
+        t0.dt as base_date, t0.deviceudid ,device_type ,origin_type ,is_paid_subscribe ,origin_channel ,deviceos ,is_whiteboard \
+        ,if((device_type='new' and isanonymous = 0 and t2.createdate >= t0.dt) or (device_type='return_30' and isanonymous = 0 and t3.userId is not null ) ,1 ,0) is_ture_new_return \
+    from   \
+        ( \
+            select dt, deviceudid, \
+            nvl(device_type, '无') as device_type,  \
+            nvl(origin_type, '无') as origin_type,  \
+            nvl(is_paid_subscribe, '无') as is_paid_subscribe,  \
+            nvl(origin_channel, '无') as origin_channel,  \
+            nvl(deviceos, '无') as deviceos, \
+            nvl(is_whiteboard, '无') as is_whiteboard \
+            from lofter.dwd_device_growth_attribution_di where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' \
+        ) t0 \
+    left join \
+        (select dt ,deviceudid ,element_at(userIds, 1) as userId  from lofter.device_active where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') t1  \
+        on t0.deviceudid = t1.deviceudid and t0.dt = t1.dt \
+    left join lofter.dim_user t2 on t1.userId = t2.id  \
+    left join  \
+        (select dt, userid from lofter.dwd_user_return_di WHERE dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}' group by 1,2) t3  \
+    on t1.userId =t3.userId and t1.dt = t3.dt \
+    )t0  \
+left join (select dt  ,deviceudid from lofter.device_active where dt between date_sub('${azkaban.flow.1.days.ago}',30) and '${azkaban.flow.1.days.ago}') t1  \
+on t0.deviceudid = t1.deviceudid   \
+where datediff('${azkaban.flow.1.days.ago}' ,base_date) in (1,7,15,30) \
+group by base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, origin_type, is_paid_subscribe, origin_channel, deviceos, is_whiteboard ,is_ture_new_return \
+grouping sets( \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, origin_type), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, origin_type, origin_channel), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, deviceos), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_ture_new_return), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe ,is_ture_new_return), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard ,is_ture_new_return), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, origin_type ,is_ture_new_return), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, origin_type, origin_channel ,is_ture_new_return), \
+  (base_date ,datediff('${azkaban.flow.1.days.ago}' ,base_date) ,device_type, is_paid_subscribe, is_whiteboard, deviceos ,is_ture_new_return) \
+) \

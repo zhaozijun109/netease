@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_apply_user_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select period, stat_type, status, uv from     \
+              (select   count(distinct userid) as uv,'激励计划' stat_type,'日' as period,'计划开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_account_nd   \
+               where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  \
+               union \
+               select    count(distinct userid) as uv,'收费权限' stat_type,'日' as period,'计划开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd  \
+               where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  \
+               union \
+               select   count(distinct userid) as uv,'激励计划' stat_type,'日' as period,'同意开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_account_nd   \
+               where  from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  and status=2 \
+               union \
+               select   count(distinct userid) as uv,'收费权限' stat_type,'日' as period,'同意开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd   \
+               where from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  and status=2  \
+               union \
+               select   count(distinct userid) as uv,'激励计划' stat_type,'累计' as period,'计划开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_account_nd   \
+               where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+               union \
+               select  count(distinct userid) as uv,'收费权限' stat_type,'累计' as period,'计划开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd  \
+               where from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+               union \
+               select   count(distinct userid) as uv,'激励计划' stat_type,'累计' as period,'同意开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_account_nd   \
+               where  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' and status=2 \
+               union \
+               select   count(distinct userid) as uv, '收费权限' stat_type,'累计' as period,'同意开通人数' as status \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd   \
+               where from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' and status=2 \
+               union \
+               select   count(distinct userid) as uv,'汇总' stat_type,'累计' as period,'同意开通人数' as status \
+               from  \
+               (select userid  \
+               from  \
+               lofter_db_dump.ods_db_trade_gift_account_nd   \
+               where  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' and status=2 \
+               union \
+               select  userid \
+               from  \
+               lofter_db_dump.ods_db_trade_gift_pay_account_nd   \
+               where from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' and status=2) a  ) a    \
+              distribute by 1

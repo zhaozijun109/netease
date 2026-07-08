@@ -1,0 +1,149 @@
+type=sparksql
+hive.query.01= \
+with user_posts as ( \
+  select a.userId, a.postId \
+  from ( \
+      select userId, postId \
+      from lofter.dwd_post_browse_di \
+      where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and is_real > 0 \
+      group by 1, 2 \
+  ) a \
+  join ( \
+      select userId \
+      from lofter_db_dump.ods_db_trade_commentator_reward_nd \
+      where userType = 1 \
+  ) b on a.userId = b.userId \
+), \
+user_top_ip as ( \
+    select userId, ip, rk \
+    from ( \
+      select userId, ip, row_number() over (partition by userId order by post_count desc) rk \
+      from ( \
+        select b.userId, a.ip, count(distinct b.postId) as post_count \
+        from (select id, ip from lofter.dim_post lateral view explode(ips) as ip) a \
+        join user_posts b on a.id = b.postId \
+        group by 1, 2 \
+      ) t \
+    ) tt \
+    where rk <= 5 \
+), \
+user_top_classify1 as ( \
+    select userId, tag, rk \
+    from ( \
+      select userId, tag, row_number() over (partition by userId order by post_count desc) rk \
+      from ( \
+        select b.userId, a.tag, count(distinct b.postId) as post_count \
+        from ( \
+            select post_id as postId, result as tag \
+            from rec.content_reg_payed_title_classify_output2 \
+            where day <= '${azkaban.flow.1.days.ago}' and classify = 1 \
+            group by 1, 2 \
+        ) a \
+        join user_posts b on a.postId = b.postId \
+         group by 1, 2 \
+      ) t \
+    ) tt \
+    where rk <= 5 \
+), \
+user_top_classify2 as ( \
+    select userId, tag, rk \
+    from ( \
+      select userId, tag, row_number() over (partition by userId order by post_count desc) rk \
+      from ( \
+        select b.userId, a.tag, count(distinct b.postId) as post_count \
+        from ( \
+            select post_id as postId, result as tag \
+            from rec.content_reg_payed_title_classify_output2 \
+            where day <= '${azkaban.flow.1.days.ago}' and classify = 2 \
+            group by 1, 2 \
+        ) a \
+        join user_posts b on a.postId = b.postId \
+        group by 1, 2 \
+      ) t \
+    ) tt \
+    where rk <= 5 \
+), \
+post_pool as ( \
+    select postId \
+    from lofter_dm.ads_gift_commentator_post_pool_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+         postId % 10 in (1,2,3,4,5,6,7,8) and \
+         blogId % 10 in (1,2,3,4,5,6,7,8) \
+) \
+insert overwrite table lofter_dm.ads_gift_commentator_task_post_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, postId, blogId, rk, 1 as postType \
+from ( \
+  select *, row_number() over (partition by userId order by comment_cnt desc) rk \
+  from ( \
+      select a.userId, b.postId, c.comment_cnt, c.blogid \
+      from ( \
+        select userId, 'ip' as tag_type, ip as tag from user_top_ip \
+        union all \
+        select userId, 'classify1' as tag_type, tag from user_top_classify1 \
+        union all \
+        select userId, 'classify2' as tag_type, tag from user_top_classify2 \
+      ) a \
+      join ( \
+          select b.postId as postId, 'ip' as tag_type, a.ip as tag \
+          from (select id, ip from lofter.dim_post lateral view explode(ips) as ip) a \
+              join post_pool b on a.id = b.postId \
+        union all \
+          select b.postId as postId, 'classify1' as tag_type, a.tag as tag \
+          from ( \
+              select post_id as postId, result as tag \
+              from rec.content_reg_payed_title_classify_output2 \
+              where day <= '${azkaban.flow.1.days.ago}' and classify = 1 \
+              group by 1, 2 \
+          ) a \
+          join post_pool b on a.postId = b.postId \
+        union all \
+          select b.postId as postId, 'classify2' as tag_type, a.tag as tag \
+          from ( \
+              select post_id as postId, result as tag \
+              from rec.content_reg_payed_title_classify_output2 \
+              where day <= '${azkaban.flow.1.days.ago}' and classify = 2 \
+              group by 1, 2 \
+          ) a \
+          join post_pool b on a.postId = b.postId \
+      ) b on a.tag_type = b.tag_type and a.tag = b.tag \
+      join ( \
+        select postId, blogid, comment_cnt from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+      ) c on b.postId = c.postId \
+      group by 1, 2, 3, 4 \
+  ) tt \
+) t \
+where rk <= 200 \
+union all \
+select a1.userId, a1.postId, a1.blogId, \
+      row_number() over (partition by a1.userId order by a1.unlock_time) as rk, \
+      0 as postType \
+from ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_commentator_reward_nd \
+) a \
+join ( \
+  select userId, postId, blogId, return_gift_id as returnGiftId, max(unlock_time) as unlock_time \
+  from lofter.dwd_gift_post_unlock_dd \
+  where dt = '${azkaban.flow.1.days.ago}' and \
+        from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+  group by 1, 2, 3, 4 \
+) a1 on a.userId = a1.userId \
+left join ( \
+    select returnGiftId, userId \
+    from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+    group by 1, 2 \
+) b on a1.returnGiftId = b.returnGiftId and a1.userId = b.userId \
+left join ( \
+    select publisherUserid as userId, postId, blogId, dt \
+    from ( \
+        select  *, \
+                ROW_NUMBER() over(PARTITION BY publisherUserid,postId,id ORDER BY _bin_op_time DESC, _bin_op_seqno DESC) AS rk \
+        from lofter.ods_binlog_post_response_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and \
+            dt >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    where `_bin_op` in (0,2) and rk = 1 \
+) d on a1.postId = d.postId and a1.userId = d.userId \
+where nvl(b.userId, d.userId) is null \
+
+dependencies=ads_gift_commentator_post_pool_di

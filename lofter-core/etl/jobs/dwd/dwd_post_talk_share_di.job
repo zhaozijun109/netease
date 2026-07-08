@@ -1,0 +1,100 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_post_talk_share_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  t1.userId, \
+        t1.talkId, \
+        IF(t2.talkType = 'QUESTION_POST', t2.talkType, t1.talkType) AS talkType, \
+        t1.deviceOs AS platform, \
+        t1.actionType AS action_type, \
+        t1.deviceUdId, \
+        t1.eventId, \
+        t1.scene, \
+        t1.source1_scene, \
+        t1.source2_scene, \
+        t1.module, \
+        t1.source1_module, \
+        t1.source2_module, \
+        t1.occurTime, \
+        t1.kafkaTime, \
+        t1.rec_alg, \
+        t1.ip, \
+        t1.appVersion, \
+        t1.detail_source1_scene_level_1, \
+        t1.detail_source1_scene_level_2, \
+        t2.blogId, \
+        t2.questionId, \
+        t2.questionUserId, \
+        t2.talkContent, \
+        t2.createDate, \
+        t2.tags, \
+        IF(t3.createDate = '${azkaban.flow.1.days.ago}',1,0) AS is_new_user, \
+        t4.deviceId, \
+        case when eventId = 'z4-24' then '截图' else '按钮' end as share_method, \
+        case when eventId = 'z4-35' then '小红书' \
+             when eventId = 'z4-1' then '新浪微博' \
+             when eventId = 'z4-2' then '微信好友' \
+             when eventId = 'z4-3' then '微信朋友圈' \
+             when eventId = 'z4-4' then 'QQ好友' \
+             when eventId = 'z4-5' then 'QQ空间' \
+             when eventId = 'z4-6' then '大神好友' \
+             when eventId = 'z4-7' then '大神圈子' \
+             when eventId = 'z4-24' then share_channel \
+        end as share_channel, \
+        IF(t5.userId IS NOT NULL,1,0) AS is_fans, \
+        t2.ips \
+FROM \
+( \
+        SELECT  deviceUdId, \
+                actionType, \
+                userId, \
+                deviceOs, \
+                eventId, \
+                CASE WHEN params['add_itemType'] = 'PostAnswer' THEN CAST(params['add_itemId'] AS BIGINT) \
+                     WHEN params['ext_itemType'] = 'PostAnswer' THEN CAST(params['ext_itemId'] AS BIGINT) \
+                     ELSE CAST(NVL(itemId,params['tid']) AS BIGINT) \
+                END AS talkId, \
+                IF(params['add_itemType'] = 'PostAnswer' OR params['ext_itemType'] = 'PostAnswer', 'PostAnswer', itemType) AS talkType, \
+                scene, \
+                GET_JSON_OBJECT(source,'$[1].scene')      AS source1_scene, \
+                GET_JSON_OBJECT(source,'$[2].scene')      AS source2_scene, \
+                params['module']                          AS module, \
+                GET_JSON_OBJECT(source,'$[1].module')     AS source1_module, \
+                GET_JSON_OBJECT(source,'$[2].module')     AS source2_module, \
+                occurTime, \
+                kafkaTime, \
+                GET_JSON_OBJECT(algInfo,"$.algName")      AS rec_alg, \
+                ip, \
+                appVersion, \
+                CASE WHEN GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec_chat' THEN 'related_talk' \
+                     ELSE GET_JSON_OBJECT(source,'$[1].scene') \
+                END AS detail_source1_scene_level_1, \
+                CASE WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tab') IN ('动态推荐','动态最新') THEN 'tag_talk' \
+                     WHEN GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec_chat' THEN GET_JSON_OBJECT(source,'$[1].scene') \
+                END AS detail_source1_scene_level_2, \
+                params['text'] as share_channel \
+        FROM lofter.ods_mda_app_partition_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND actionType = 'share' \
+) t1 \
+JOIN lofter.dim_post_talk t2 \
+ON t1.talkId = t2.talkId AND (t1.talkType = t2.talkType OR (LOWER(t1.talkType) LIKE '%answer%' AND t2.talkType = 'QUESTION_POST')) \
+LEFT JOIN lofter.dim_user t3 \
+ON t1.userId = t3.id \
+LEFT JOIN \
+( \
+       SELECT  deviceUdId, \
+               deviceId \
+       FROM lofter.dwd_par_device_all_dd \
+       WHERE dt = '${azkaban.flow.1.days.ago}' \
+) t4 \
+ON t1.deviceUdId = t4.deviceUdId \
+LEFT JOIN \
+( \
+       SELECT  userId, \
+               blogId \
+       FROM lofter_db_dump.ods_db_user_following_nd \
+       WHERE FROM_UNIXTIME(CAST(followTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+       GROUP BY  userId, \
+                 blogId \
+) t5 \
+ON t1.userId = t5.userId AND t2.blogId = t5.blogId
+dependencies=dwd_par_device_all_dd

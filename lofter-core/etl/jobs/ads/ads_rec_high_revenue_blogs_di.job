@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_high_revenue_blogs_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.blogId \
+from (  \
+    select blogId \
+    from ( \
+        select blogId, \
+               sum(money) as revenue_std, \
+               sum(if(from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}', money, 0)) as revenue_30d \
+        from lofter.dwd_evt_post_paid_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and pay_type in('付费礼物','粉丝会员','官方账号') \
+        group by blogId \
+    ) t \
+    where revenue_std > 500 or revenue_30d > 50 \
+ union all \
+    select userId as blogId \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.30.days.ago}' and fans_vip_open_time > 0 \
+) a \
+left join ( \
+    select  cast(trim(blogId) as bigint) as blogId \
+    from lofter_db_dump.ods_db_admin_pub_data_nd \
+         lateral view explode(split(content, ',')) as blogId \
+    where name in ('blogvip_ids', 'book_store_blogIds') and cast(trim(blogId) as bigint) > 0 \
+    group by 1 \
+) b on a.blogId = b.blogId \
+where b.blogId is null \
+distribute by 1

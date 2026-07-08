@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_question_easy_fetch_talk_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select questionId, is_role_talk, questionContent, talk_publisher, question_publisher, talk_pulishTime, talkId, talkContent, \
+    tags, count(distinct userId) as praise_cnt, count(distinct commentId) as comment_cnt \
+from( \
+    select a.questionId, a.is_role_talk, b.questionContent, a.blogid as talk_publisher, a.questionUserid as question_publisher, a.talk_pulishTime, a.talkId, a.talkContent, a.tags, c.userId, d.commentId \
+    from( \
+        select questionId, if(cosplay = 1,1,0) as is_role_talk, questionUserid, concat_ws(',',tags) tags, \
+            from_unixtime(cast(createtime/1000 as bigint), 'yyyy-MM-dd HH:mm:ss') as talk_pulishTime, talkId, talkContent, blogId \
+        from lofter.dim_post_talk \
+        where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}',90) \
+        )a \
+        left join( \
+            select id, question as questionContent \
+            from lofter_db_dump.ods_db_ask_question_nd \
+        )b on a.questionId = b.id \
+        left join( \
+            select talkId, userId, questionId \
+            from lofter.dwd_post_talk_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and optype = 'praise' \
+        )c on a.talkId = c.talkId and a.questionId = c.questionId and a.blogid <> c.userId \
+        left join( \
+            select talkId, questionId, userId, commentId \
+            from lofter.dwd_post_talk_response_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        )d on a.talkId = d.talkId and a.questionId = d.questionId \
+) \
+group by questionId, is_role_talk, questionContent, talk_publisher, question_publisher, talk_pulishTime, talkId, talkContent, tags

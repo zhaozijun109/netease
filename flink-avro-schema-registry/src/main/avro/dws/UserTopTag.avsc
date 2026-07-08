@@ -1,0 +1,11 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "UserTopTag",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "dt", "type": "int"},
+    {"name": "tag", "type": "string"},
+    {"name": "pv", "type": "long"}
+  ]
+}

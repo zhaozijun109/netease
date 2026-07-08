@@ -1,0 +1,25 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_subscribed_tags_hot_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select userId, collect_list(tagInfo) as tagInfos \
+    from ( \
+       select userId as userId,named_struct('tagName',tagname,'postNum',postnum, 'hot',hotpv) as tagInfo \
+       from ( \
+          select t1.userid,t1.tagname,count(distinct t3.postid) postnum,sum(hotpv) hotpv \
+          from lofter_db_dump.ods_db_favorite_tag_nd t1 \
+          join ( \
+            select userid,id,tag \
+            from lofter.dim_post \
+            lateral view outer explode(tags) myTable as tag \
+            where ispublished=true and allowview=0 and valid in(0,12) \
+          ) t2 on t1.userid=t2.userid and t1.tagname=t2.tag \
+           join ( \
+            select postid,sum(1) hotpv \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+            group by postid \
+          )t3 on t2.id=t3.postid \
+          group by t1.userid,t1.tagname \
+       ) e \
+    ) f \
+    group by userId distribute by userId % 10

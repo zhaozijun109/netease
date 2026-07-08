@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_double_perspective_user_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.blogId, blog_nickname, \
+       concat_ws('|', x1.double_perspective_type) as double_perspective_type, \
+       active_days_30d, posts_30d, \
+       double_perspective_posts_all, double_perspective_posts_1d, double_perspective_posts_premium, \
+       quality_type, creator_type, level, concat(blog_name, '.lofter.com') as blog_url, \
+       fans_std, ips, is_gift_open, is_fans_vip_open, exposure_pv, click_pv, real_pv, comment_pv, hot_pv, share_pv, gift_amount \
+from ( \
+    select blogId, blog_name, blog_nickname, \
+           count(distinct a.postId) as double_perspective_posts_all, \
+           count(distinct if(a.publish_date = '${azkaban.flow.1.days.ago}', a.postId, null)) as double_perspective_posts_1d, \
+           count(distinct b.postId) as double_perspective_posts_premium, \
+           sum(a.exposure_pv) as exposure_pv, sum(a.click_pv) as click_pv, sum(a.real_pv) as real_pv, \
+           sum(a.comment_pv) as comment_pv, sum(a.hot_pv) as hot_pv, sum(a.share_pv) as share_pv, sum(gift_amount) as gift_amount \
+    from ( \
+        select * \
+        from lofter_dm.ads_creator_double_perspective_post_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select postid \
+        from lofter.dws_post_premium_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    group by blogId, blog_name, blog_nickname \
+) x \
+left join ( \
+    select blogId, collect_set(special_category) as double_perspective_type \
+    from lofter_dm.ads_creator_double_perspective_post_di \
+         lateral view explode(split(double_perspective_type, '\\\\|')) as special_category \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) x1 on x.blogId = x1.blogId \
+left join ( \
+    select userId, count(distinct dt) as active_days_30d from lofter.dws_par_user_active_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by userId \
+) y on x.blogId = y.userId \
+left join ( \
+    select userid, \
+           case when is_premium=1 then '优质' \
+                when is_premium_high_potential=1 then '高潜' \
+                when is_premium_middle_potential=1 then '中潜' \
+                else '其他' end quality_type \
+   from lofter_dm.ads_creator_premium_detail_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+) z on x.blogid = z.userid \
+left join ( \
+    select userid, \
+           case when is_first_publish=1 and is_new_user=1 then '新注册发文用户' \
+                when is_first_publish=1 and is_new_user<>1 then '首发文老用户' \
+                when is_active_creator=1 and is_first_publish<>1 and is_new_user<>1 then '活跃发文用户' \
+                 else '回流发文用户' end creator_type \
+    from lofter.dws_par_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' and post_count > 0 \
+) e on x.blogid = e.userid \
+left join ( \
+  select userId, level, fans_std, concat_ws('|', post_top_ips) as ips, if(gift_open_time > 0, 1, 0) as is_gift_open, \
+         if(fans_vip_open_time > 0, 1, 0) as is_fans_vip_open \
+  from lofter.dws_par_creator_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) f on x.blogid = f.userId \
+left join ( \
+    select blogId, count(distinct id) as posts_30d \
+    from lofter.dim_post \
+    where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+          isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") and \
+          publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' \
+    group by blogId \
+) g on x.blogId = g.blogId
+dependencies=ads_creator_double_perspective_post_di,ads_creator_premium_detail_di

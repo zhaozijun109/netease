@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_comment_tag_distribution_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select commentId, \
+       publisherUserId, \
+       postId, \
+       blogId, \
+       content, \
+       commentHot, \
+       pid, \
+       priority \
+from ( \
+    select commentId, \
+           publisherUserId, \
+           postId, \
+           blogId, \
+           content, \
+           commentHot, \
+           pid, \
+           priority, \
+           row_number() over(partition by postId order by commentHot desc) as rn \
+    from ( \
+        select t1.commentId, \
+               t1.publisherUserId, \
+               t1.postId, \
+               t1.blogId, \
+               t1.content, \
+               t1.commentHot, \
+               t1.pid, \
+               t1.priority \
+        from ( \
+            select commentId, \
+                   publisherUserId, \
+                   postId, \
+                   blogId, \
+                   content, \
+                   commentHot, \
+                   pid, \
+                   type as priority \
+            from lofter_dm.ads_post_comment_type_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and type in (0, 1) \
+        ) t1 \
+        join ( \
+             select postId, \
+                    blogId \
+             from lofter.dws_post_interaction_dd \
+             where dt = '${azkaban.flow.1.days.ago}' and hot >= 500 \
+        ) t2 \
+        on t1.postId = t2.postId and t1.blogId = t2.blogId \
+    ) t3 \
+) t4 \
+where rn <= 2
+dependencies=ads_post_comment_type_dd
+

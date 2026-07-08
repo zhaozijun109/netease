@@ -1,0 +1,22 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_tag_top_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select * \
+    from ( \
+      select userId, tag, pv, row_number() over (partition by userId order by pv desc) as rnk2 \
+      from( \
+        select userId, tag, sum(pv) pv \
+        from ( \
+            select userId, tag, pv, \
+                   sum(post_count) over (partition by userId order by dt desc ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as prev_post_count \
+            from lofter.dws_tag_user_consume_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and \
+                  dt >= date_sub('${azkaban.flow.1.days.ago}', 30) and \
+                  userId > 0 \
+        ) t1 \
+        where nvl(prev_post_count, 0) < 500 \
+        group by userId, tag \
+      ) t2 \
+    ) t \
+    where rnk2 <= 10
+dependencies=

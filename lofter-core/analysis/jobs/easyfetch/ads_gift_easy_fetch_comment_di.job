@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_gift_easy_fetch_comment_di partition(dt='${azkaban.flow.1.days.ago}') \
+select return_gift_id \
+    ,postid \
+    ,blogid \
+    ,b.userid \
+    ,c.usertype \
+    ,return_gift_status \
+    ,publishdate \
+    ,return_gift_plantype \
+    ,type \
+    ,content1 as comment_level_1 \
+    ,content2 as comment_level_2 \
+    ,comment_date \
+from( \
+    select id as return_gift_id \
+        ,postid \
+        ,blogid \
+        ,case when status=-1 then '删除' \
+            when status=0 then '未生效' \
+            when status=1 then '生效' end return_gift_status \
+        ,publishdate \
+        ,return_gift_plantype \
+    from lofter.dwd_gift_return_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join( \
+    select returngiftid \
+        ,userid \
+        ,type \
+        ,concat_ws(',',from_json(GET_JSON_OBJECT(ext, '$.selectedKeywords'),'array<string>')) as content1 \
+        ,concat_ws(',',from_json(GET_JSON_OBJECT(ext, '$.subKeywords'),'array<string>')) as content2 \
+        ,FROM_UNIXTIME(cast(createtime/1000 as bigint),'yyyy-MM-dd') as comment_date \
+from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+)b on a.return_gift_id = b.returngiftid \
+left join( \
+    select userid,usertype \
+    from lofter_db_dump.ods_db_trade_commentator_reward_nd \
+)c on b.userid = c.userid

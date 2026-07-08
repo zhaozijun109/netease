@@ -1,0 +1,125 @@
+type=sparksql
+hive.query.01= \
+WITH \
+  t1 AS (select dt,NVL(detail_type,'汇总') as detail_type  , NVL(sub_type,'汇总') sub_type,userid,money \
+from \
+(SELECT dt, \
+        concat_ws(',', productType, productId) as detail_type, \
+        case when productType=1 then '忘忧草' \
+        when productType=2 and productId=100  then '新人礼包' \
+        when productType=0 and productId in  (12,13)  then '周月卡' \
+        when productType=7   then '琉光' \
+        else '体力值' end as sub_type, \
+        userid,sum(amount) as money \
+        FROM lofter.dwd_pve_user_amount_info_di \
+        WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' \
+        group by   dt, \
+        concat_ws(',', productType, productId) , \
+        case when productType=1 then '忘忧草' \
+        when productType=2 and productId=100  then '新人礼包' \
+        when productType=0 and productId in  (12,13)  then '周月卡' \
+        when productType=7   then '琉光' \
+        else '体力值' end , \
+        userid \
+        grouping sets \
+        ((dt,concat_ws(',', productType, productId) , \
+        case when productType=1 then '忘忧草' \
+        when productType=2 and productId=100  then '新人礼包' \
+        when productType=0 and productId in (12,13)  then '周月卡' \
+        when productType=7   then '琉光' \
+        else '体力值' end,userid ),(dt, \
+        case when productType=1 then '忘忧草' \
+        when productType=2 and productId=100  then '新人礼包' \
+        when productType=0 and productId in (12,13)  then '周月卡' \
+        when productType=7   then '琉光' \
+        else '体力值' end,userid),(dt,userid))) a) \
+insert overwrite table lofter_dm.ads_pve_user_paid_retain_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  b.dt as base_date, \
+  datediff('${azkaban.flow.1.days.ago}', b.dt) as period, \
+  a.userchannel, \
+  case \
+    when a.first_trade_date = b.dt then 1 \
+    else 0 \
+  end as new_flg, \
+  b.detail_type, \
+  b.sub_type, \
+  count(DISTINCT b.userid) AS uv, \
+  sum(b.money) as money, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt = date_add(b.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt = date_add(b.dt, 1) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_2d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt between date_add(b.dt, 1) and  date_add(b.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_30d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 59) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (59) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_60d, \
+  count( \
+    DISTINCT CASE \
+      WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 89) \
+      AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (89) THEN c.userid \
+      ELSE NULL \
+    END \
+  ) AS uv_90d \
+from \
+  ( \
+    select \
+      userid, \
+      userchannel, \
+      first_trade_date \
+    from \
+      lofter.dim_pve_user \
+  ) a \
+  join t1 b on a.userid = b.userid \
+  left join t1 c on b.userid = c.userid \
+  AND c.dt BETWEEN date_add(b.dt, 0) \
+  AND date_add(b.dt, 89) \
+  and b.detail_type = c.detail_type \
+  and b.sub_type = c.sub_type \
+WHERE \
+  datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 6, 14, 29, 59, 89) \
+group by \
+  b.dt, \
+  datediff('${azkaban.flow.1.days.ago}', b.dt), \
+  a.userchannel, \
+  case \
+    when a.first_trade_date = b.dt then 1 \
+    else 0 \
+  end, \
+  b.detail_type, \
+  b.sub_type \
+ \

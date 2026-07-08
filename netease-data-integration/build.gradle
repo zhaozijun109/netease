@@ -1,0 +1,122 @@
+import java.text.SimpleDateFormat
+
+group 'com.netease.bdms'
+version '1.1'
+
+ext {
+  versions = [
+    "scala"            : "2.12.17",
+    "scalaBinary"      : "2.12",
+    "json4s"           : "3.7.0-M11",
+    "springBoot"       : "2.1.6.RELEASE",
+    "metrics"          : "4.1.0",
+    "spark"            : "3.3.0",
+    "hadoop"           : "2.9.2",
+    "jetty"            : "9.3.24.v20180605",
+    "scalatra"         : "2.3.0",
+    "fastjson"         : "1.2.59",
+    "httpclient"       : "4.5.9",
+    "mybatisSpringBoot": "1.3.5",
+    "mybatisGenerator" : "1.3.7",
+    "pagehelper"       : "1.2.12",
+    "lombok"           : "1.18.4",
+    "jedis"            : "2.1.0",
+    "commonsIO"        : "2.6",
+    "commonsLang3"     : "3.5",
+    "wizardSDK"        : "1.1.2",
+    "commonsLang"      : "2.6",
+    "antlr4"           : "4.7",
+    "mysql"            : "5.1.48",
+    "guava"            : "27.0.1-jre",
+    "dbutils"          : "1.7",
+    "slf4jLog4j"       : "1.7.26",
+    "scalaTest"        : "3.0.8",
+    "junit"            : "4.12",
+    "fluentHC"         : "4.5.6",
+    "redisson"         : "3.10.6"
+  ]
+
+  packages = [
+    "scalaLibrary"         : "org.scala-lang:scala-library:${versions.scala}",
+
+    "springBootPlugin"     : "org.springframework.boot:spring-boot-gradle-plugin:${versions.springBoot}",
+    "springBootStarterWeb" : "org.springframework.boot:spring-boot-starter-web:${versions.springBoot}",
+    "springBootStarterAop" : "org.springframework.boot:spring-boot-starter-aop:${versions.springBoot}",
+    "springBootDevtools"   : "org.springframework.boot:spring-boot-devtools:${versions.springBoot}",
+    "springBootStarterTest": "org.springframework.boot:spring-boot-starter-test:${versions.springBoot}",
+
+    "slf4jLog4j"           : "org.slf4j:slf4j-log4j12:${versions.slf4jLog4j}",
+    "mysqlConnector"       : "mysql:mysql-connector-java:${versions.mysql}",
+    "dbutils"              : "commons-dbutils:commons-dbutils:${versions.dbutils}",
+    "commonsIO"            : "commons-io:commons-io:${versions.commonsIO}",
+    "json4s"               : "org.json4s:json4s-jackson_${versions.scalaBinary}:${versions.json4s}",
+    "guava"                : "com.google.guava:guava:${versions.guava}",
+    "junit"                : "junit:junit:${versions.junit}",
+    "scalaTest"            : "org.scalatest:scalatest_${versions.scalaBinary}:3.0.8",
+    "metricsCore"          : "io.dropwizard.metrics:metrics-core:${versions.metrics}",
+    "metricsJmx"           : "io.dropwizard.metrics:metrics-jmx:${versions.metrics}",
+    "sparkCore"            : "org.apache.spark:spark-core_${versions.scalaBinary}:${versions.spark}",
+    "sparkSQL"             : "org.apache.spark:spark-sql_${versions.scalaBinary}:${versions.spark}",
+    "sparkHive"            : "org.apache.spark:spark-hive_${versions.scalaBinary}:${versions.spark}",
+    "jetty"                : ["org.eclipse.jetty:jetty-http:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-continuation:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-servlet:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-servlets:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-proxy:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-client:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-util:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-security:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-plus:${versions.jetty}",
+                              "org.eclipse.jetty:jetty-server:${versions.jetty}"],
+    "scalatra"             : ["org.scalatra:scalatra_${versions.scalaBinary}:${versions.scalatra}",
+                              "org.scalatra:scalatra-jetty_${versions.scalaBinary}:${versions.scalatra}",
+                              "org.scalatra:scalatra-json_${versions.scalaBinary}:${versions.scalatra}",
+                              "org.scalatra:scalatra-test_${versions.scalaBinary}:${versions.scalatra}"],
+    "hadoopClient"         : "org.apache.hadoop:hadoop-client:${versions.hadoop}",
+    "hadoopCommon"         : "org.apache.hadoop:hadoop-common:${versions.hadoop}",
+    "yarnClient"           : "org.apache.hadoop:hadoop-yarn-client:${versions.hadoop}",
+    "fluentHC"             : "org.apache.httpcomponents:fluent-hc:${versions.fluentHC}",
+    "fastjson"             : "com.alibaba:fastjson:${versions.fastjson}",
+    "httpclient"           : "org.apache.httpcomponents:httpclient:${versions.httpclient}",
+    "mybatisSpringBoot"    : "org.mybatis.spring.boot:mybatis-spring-boot-starter: ${versions.mybatisSpringBoot}",
+    "mybatisGenerator"     : "org.mybatis.generator:mybatis-generator-core:${versions.mybatisGenerator}",
+    "pagehelper"           : "com.github.pagehelper:pagehelper-spring-boot-starter:${versions.pagehelper}",
+    "lombok"               : "org.projectlombok:lombok:${versions.lombok}",
+    "jedis"                : "redis.clients:jedis:${versions.jedis}",
+    "commonsLang3"         : "org.apache.commons:commons-lang3:${versions.commonsLang3}",
+    "wizardSDK"            : "com.netease.music.da:wizard-sdk:${versions.wizardSDK}",
+
+    "commonsLang"          : "commons-lang:commons-lang:${versions.commonsLang}",
+    "antlr4"               : "org.antlr:antlr4-runtime:${versions.antlr4}",
+    "redisson"             : "org.redisson:redisson:${versions.redisson}"
+
+  ]
+}
+
+ext {
+  cmdCaller = { commandln ->
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine commandln
+      standardOutput = stdout
+    }
+    return stdout.toString().trim()
+  }
+  createVersionFile = { versionFile ->
+    println("Create version file")
+    String gitCommitHash = cmdCaller(['git', 'rev-parse', 'HEAD']);
+    String gitRepo = cmdCaller(['git', 'config', '--get', 'remote.origin.url']);
+    def date = new Date()
+    def format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    format.setTimeZone(TimeZone.getTimeZone("GMT+8"))
+    def formattedTime = format.format(date)
+    def versionString = """version=${project.property("ndi-version")}
+          |packageTime=${formattedTime}
+          |commit=${gitCommitHash}
+          |remoteOriginUrl=${gitRepo}
+""".stripMargin()
+    println(versionString)
+    versionFile.parentFile.mkdirs()
+    versionFile.write(versionString)
+  }
+}

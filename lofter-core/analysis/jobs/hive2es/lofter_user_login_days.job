@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select userId, login_days_30d from lofter.dws_par_user_base_dd where dt = '${azkaban.flow.1.days.ago}' and login_days_30d > 0 "
+params= --partition ${azkaban.flow.1.days.ago} --id userId --dest lofter_user_login_days --full --atom

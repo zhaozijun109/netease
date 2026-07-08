@@ -1,0 +1,51 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tp_total_indicator_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select   \
+a.content_type,  \
+a.os,  \
+a.dsp_channel,  \
+a.rta_sponsorid ,  \
+a.positionid,  \
+a.amount,  \
+a.bg_pv,  \
+a.click_pv,  \
+a.ctr,  \
+a.ecpm,  \
+a.ad_post_browse_pv,  \
+a.bg_pv/cnt_req rate_bg,  \
+cnt_req,  \
+cnt_bg  \
+from(  \
+select dt,content_type,os,dsp_channel,  \
+case when rta_sponsorid is null then '未知'  \
+     else rta_sponsorid end rta_sponsorid,  \
+positionid,  \
+sum(amount)amount,  \
+sum(bg_pv)bg_pv,  \
+sum(click_pv)click_pv,  \
+sum(click_pv)/sum(bg_pv) ctr,  \
+sum(amount)/sum(bg_pv)*1000 ecpm,  \
+sum(ad_post_browse_pv) ad_post_browse_pv  \
+from  lofter_dm.ads_ad_resource_cvr_di    \
+where dt='${azkaban.flow.1.days.ago}'     \
+group by 1,2,3,4,5 ,6  \
+) a   \
+left join   \
+(  \
+select dt,  \
+case when rta_sponsorid is null then '未知'  \
+     else rta_sponsorid end rta_sponsorid,  \
+positionid,  \
+os,  \
+case when dspId=5002 then '麦穗'  \
+     else '如愿sdk' end dsp_channel,  \
+ contenttype,  \
+sum(case when is_request=1 then 1 end) cnt_req,  \
+sum(case when is_bg=1 then 1 end) cnt_bg  \
+from  lofter.dwd_ad_actions_v2_di  a       \
+join lofter.dim_post b on a.postid=b.id   \
+where dt='${azkaban.flow.1.days.ago}'     \
+and positionid in ('147004')  \
+group by 1,2 ,3,4,5,6  \
+) b on a.dt=b.dt and a.rta_sponsorid=b.rta_sponsorid and a.positionid=b.positionid   \
+and a.os=b.os and a.dsp_channel=b.dsp_channel and a.content_type=b.contenttype  \

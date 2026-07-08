@@ -1,0 +1,124 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 乐乎币消费 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '乐乎币消费'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '乐乎币消费' as tag, 'DAY_7' as cat, \
+                                         case when coin_consume_7d < 5 then 'COUNT_1_5' \
+                                              when coin_consume_7d < 8 then 'COUNT_5_8' \
+                                              when coin_consume_7d < 10 then 'COUNT_8_10' \
+                                              when coin_consume_7d < 15 then 'COUNT_10_15' \
+                                              when coin_consume_7d < 20 then 'COUNT_15_20' \
+                                              when coin_consume_7d < 25 then 'COUNT_20_25' \
+                                              when coin_consume_7d < 50 then 'COUNT_25_50' \
+                                              when coin_consume_7d < 80 then 'COUNT_50_80' \
+                                              when coin_consume_7d < 100 then 'COUNT_80_100' \
+                                              when coin_consume_7d < 150 then 'COUNT_100_150' \
+                                              when coin_consume_7d < 200 then 'COUNT_150_200' \
+                                              when coin_consume_7d < 250 then 'COUNT_200_250' \
+                                              when coin_consume_7d < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_7d > 0 \
+                                  union all \
+                               \
+                                  select userId, '乐乎币消费' as tag, 'DAY_15' as cat, \
+                                         case when coin_consume_15d < 5 then 'COUNT_1_5' \
+                                              when coin_consume_15d < 8 then 'COUNT_5_8' \
+                                              when coin_consume_15d < 10 then 'COUNT_8_10' \
+                                              when coin_consume_15d < 15 then 'COUNT_10_15' \
+                                              when coin_consume_15d < 20 then 'COUNT_15_20' \
+                                              when coin_consume_15d < 25 then 'COUNT_20_25' \
+                                              when coin_consume_15d < 50 then 'COUNT_25_50' \
+                                              when coin_consume_15d < 80 then 'COUNT_50_80' \
+                                              when coin_consume_15d < 100 then 'COUNT_80_100' \
+                                              when coin_consume_15d < 150 then 'COUNT_100_150' \
+                                              when coin_consume_15d < 200 then 'COUNT_150_200' \
+                                              when coin_consume_15d < 250 then 'COUNT_200_250' \
+                                              when coin_consume_15d < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_15d > 0 \
+                                  union all \
+                               \
+                                  select userId, '乐乎币消费' as tag, 'DAY_30' as cat, \
+                                         case when coin_consume_30d < 5 then 'COUNT_1_5' \
+                                              when coin_consume_30d < 8 then 'COUNT_5_8' \
+                                              when coin_consume_30d < 10 then 'COUNT_8_10' \
+                                              when coin_consume_30d < 15 then 'COUNT_10_15' \
+                                              when coin_consume_30d < 20 then 'COUNT_15_20' \
+                                              when coin_consume_30d < 25 then 'COUNT_20_25' \
+                                              when coin_consume_30d < 50 then 'COUNT_25_50' \
+                                              when coin_consume_30d < 80 then 'COUNT_50_80' \
+                                              when coin_consume_30d < 100 then 'COUNT_80_100' \
+                                              when coin_consume_30d < 150 then 'COUNT_100_150' \
+                                              when coin_consume_30d < 200 then 'COUNT_150_200' \
+                                              when coin_consume_30d < 250 then 'COUNT_200_250' \
+                                              when coin_consume_30d < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_30d > 0 \
+                                  union all \
+                               \
+                                  select userId, '乐乎币消费' as tag, 'DAY_90' as cat, \
+                                         case when coin_consume_90d < 5 then 'COUNT_1_5' \
+                                              when coin_consume_90d < 8 then 'COUNT_5_8' \
+                                              when coin_consume_90d < 10 then 'COUNT_8_10' \
+                                              when coin_consume_90d < 15 then 'COUNT_10_15' \
+                                              when coin_consume_90d < 20 then 'COUNT_15_20' \
+                                              when coin_consume_90d < 25 then 'COUNT_20_25' \
+                                              when coin_consume_90d < 50 then 'COUNT_25_50' \
+                                              when coin_consume_90d < 80 then 'COUNT_50_80' \
+                                              when coin_consume_90d < 100 then 'COUNT_80_100' \
+                                              when coin_consume_90d < 150 then 'COUNT_100_150' \
+                                              when coin_consume_90d < 200 then 'COUNT_150_200' \
+                                              when coin_consume_90d < 250 then 'COUNT_200_250' \
+                                              when coin_consume_90d < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_90d > 0 \
+                                  union all \
+                               \
+                                  select userId, '乐乎币消费' as tag, 'DAY_180' as cat, \
+                                         case when coin_consume_180d < 5 then 'COUNT_1_5' \
+                                              when coin_consume_180d < 8 then 'COUNT_5_8' \
+                                              when coin_consume_180d < 10 then 'COUNT_8_10' \
+                                              when coin_consume_180d < 15 then 'COUNT_10_15' \
+                                              when coin_consume_180d < 20 then 'COUNT_15_20' \
+                                              when coin_consume_180d < 25 then 'COUNT_20_25' \
+                                              when coin_consume_180d < 50 then 'COUNT_25_50' \
+                                              when coin_consume_180d < 80 then 'COUNT_50_80' \
+                                              when coin_consume_180d < 100 then 'COUNT_80_100' \
+                                              when coin_consume_180d < 150 then 'COUNT_100_150' \
+                                              when coin_consume_180d < 200 then 'COUNT_150_200' \
+                                              when coin_consume_180d < 250 then 'COUNT_200_250' \
+                                              when coin_consume_180d < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_180d > 0 \
+                                  union all \
+                               \
+                                  select userId, '乐乎币消费' as tag, 'DAY_ALL' as cat, \
+                                         case when coin_consume_std < 5 then 'COUNT_1_5' \
+                                              when coin_consume_std < 8 then 'COUNT_5_8' \
+                                              when coin_consume_std < 10 then 'COUNT_8_10' \
+                                              when coin_consume_std < 15 then 'COUNT_10_15' \
+                                              when coin_consume_std < 20 then 'COUNT_15_20' \
+                                              when coin_consume_std < 25 then 'COUNT_20_25' \
+                                              when coin_consume_std < 50 then 'COUNT_25_50' \
+                                              when coin_consume_std < 80 then 'COUNT_50_80' \
+                                              when coin_consume_std < 100 then 'COUNT_80_100' \
+                                              when coin_consume_std < 150 then 'COUNT_100_150' \
+                                              when coin_consume_std < 200 then 'COUNT_150_200' \
+                                              when coin_consume_std < 250 then 'COUNT_200_250' \
+                                              when coin_consume_std < 300 then 'COUNT_250_300' \
+                                              else 'COUNT_300' end as grp \
+                                  from lofter.dws_par_user_pay_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and coin_consume_std > 0 ) "

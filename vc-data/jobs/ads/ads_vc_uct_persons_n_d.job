@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_uct_persons_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select 'last_7_days' as sign,'uc' as dimensionality, user_id, character_id, sum(talk_cnt) as talk_cnt,'N' as is_merge,0 as pve_talk_cnt,sum(talk_cnt) as vc_talk_cnt  \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+where dt BETWEEN '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+group by user_id, character_id  \
+UNION all  \
+select 'last_30_days' as sign,'uc' as dimensionality, user_id, character_id, sum(talk_cnt) as talk_cnt,'N' as is_merge,0 as pve_talk_cnt,sum(talk_cnt) as vc_talk_cnt \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+group by user_id, character_id \
+UNION all \
+select x1.sign, \
+       x1.dimensionality, \
+       x1.user_id, \
+       x1.character_id, \
+       x1.talk_cnt + nvl(x2.talk_cnt,0)                             as talk_cnt, \
+       if(x2.user_id is null and x2.character_id is null, 'N', 'Y') as is_merge, \
+       nvl(x2.talk_cnt,0)                                           as pve_talk_cnt, \
+       x1.talk_cnt                                                  as vc_talk_cnt \
+from (select 'last_all_days' as sign, 'uc' as dimensionality, user_id, character_id, sum(talk_cnt) as talk_cnt \
+      from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+      where dt <= '${azkaban.flow.1.days.ago}' \
+      group by user_id, character_id) x1 \
+         left join \
+     (select user_id, character_id, sum(talk_cnt) as talk_cnt \
+      from (select user_id, character_id, cast(GET_JSON_OBJECT(ext, '$.lofterUserSendTimes') as int) as talk_cnt \
+            from vc.ods_db_vc_user_message_list_nd \
+            where instr(ext, 'lofterUserSendTimes') > 0) \
+      group by user_id, character_id) x2 on x1.user_id = x2.user_id and x1.character_id = x2.character_id \
+UNION all \
+select 'last_3_days' as sign,'uc' as dimensionality, user_id, character_id, sum(talk_cnt) as talk_cnt,'N' as is_merge,0 as pve_talk_cnt,sum(talk_cnt) as vc_talk_cnt   \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d   \
+where dt BETWEEN '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}'   \
+group by user_id, character_id ;

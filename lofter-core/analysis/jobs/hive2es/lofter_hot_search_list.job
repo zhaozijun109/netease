@@ -1,0 +1,59 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query=" \
+select id, listName, targetWord, \
+       if(threeDayAgoListCount == 0 and listName = 1, 2, icon) as icon, \
+       if(rk<=10 and rank_up>0,1,0) as trend, \
+       source, histCount, recentCount, score, postId, blogId, listRank, dt, interactionCount, \
+       searchingCircle, null as joinCount, null as challengeTags, null as collectionId \
+from (  \
+    select a.*,nvl(b.histCount,0) as histCount,nvl(b.recentCount,0) as recentCount, \
+           case when c.listRank is not null and a.listRank<=40 then c.listRank-a.listRank \
+                when c.listRank is null and a.listRank<=40 then 101-a.listRank else -1 end as rank_up, \
+           row_number() over ( \
+               partition by a.listName \
+               order by case when c.listRank is not null and a.listRank <= 40 then c.listRank - a.listRank \
+                             when c.listRank is null and a.listRank<=40  then 101-a.listRank else -1 end desc ) as rk, \
+           nvl(b.threeDayAgoListCount, 0) as threeDayAgoListCount \
+    from ( \
+        select concat_ws('_',listName,listRank) as id, listName, nvl(targetWord,'') as targetWord, icon, source, score, \
+               nvl(postId,0) as postId, nvl(blogId,0) as blogId, listRank, dt, interaction_count as interactionCount, \
+               searching_circle as searchingCircle \
+        from lofter_dm.ads_hot_search_list_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select listName,nvl(targetWord,'') as targetWord,nvl(postId,0) as postId,nvl(blogId,0) as blogId, \
+               sum(if(listRank<=40,1,0)) as histCount, \
+               sum(if(dt>='${azkaban.flow.7.days.ago}' and listRank<=40,1,0)) as recentCount, \
+               sum(if(dt<'${azkaban.flow.3.days.ago}' and listRank<=40,1,0)) as threeDayAgoListCount \
+        from lofter_dm.ads_hot_search_list_di \
+        where dt < '${azkaban.flow.1.days.ago}' \
+        group by listName,targetWord,postId,blogId \
+    ) b on a.listName = b.listName and a.targetWord = b.targetWord and a.postId=b.postId and a.blogId=b.blogId \
+    left join ( \
+        select listName, nvl(targetWord,'') as targetWord, icon, source, score, nvl(postId,0) as postId, nvl(blogId,0) as blogId, listRank, dt \
+        from lofter_dm.ads_hot_search_list_di \
+        where dt='${azkaban.flow.2.days.ago}' \
+    ) c on a.listName=c.listName and a.targetWord=c.targetWord and a.postId=c.postId and a.blogId=c.blogId \
+) a \
+union all \
+select concat_ws('_',listName,listRank) as id, listName, role_tag as targetWord, \
+  null icon, null as trend, source, null as histCount, \
+  null as recentCount, null as score, null as postId, \
+  null as blogId, listRank, dt, null as interactionCount, \
+  null as searchingCircle, joinCount, challengeTags, \
+  null as collectionId \
+from lofter_dm.ads_summer_act_role_challenge_list_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+union all \
+select concat_ws('_', listName, listRank) as id, listName, null as targetWord, \
+       null icon, null as trend, source, null as histCount, \
+       null as recentCount, null as score, null as postId, \
+       null as blogId, listRank, dt, null as interactionCount, \
+       null as searchingCircle, null as joinCount, null as challengeTags, \
+       collectionId \
+from lofter_dm.ads_post_audio_hot_search_list_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago}  --dest lofter_hot_search_list --postfixsep --full --atom

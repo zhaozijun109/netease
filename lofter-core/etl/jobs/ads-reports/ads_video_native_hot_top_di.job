@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_native_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='day') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname,concat_ws(',',tags) as tags, duration, \
+           size_mb, publishdate, movefrom, \
+           viewpv, viewuv, hotpv, praisepv, reproducepv, recommendpv, responsepv, subscribepv, playuv, \
+           availableplayuv, finishplayuv, nvl(finishplayuv,0) / playuv as finishPlayRatio, \
+           nvl(availableplayuv,0) / playuv as availablePlayRatio, realplaypv, realplayuv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType = 3 and publishdate = '${azkaban.flow.1.days.ago}' \
+    order by hotpv desc \
+    limit 100
+hive.query.02=insert overwrite table lofter_dm.ads_video_native_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='week') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname,concat_ws(',',tags) as tags, duration, \
+           size_mb, publishdate, movefrom, \
+           viewpv, viewuv, hotpv, praisepv, reproducepv, recommendpv, responsepv, subscribepv, playuv, \
+           availableplayuv, finishplayuv, nvl(finishplayuv,0) / playuv as finishPlayRatio, \
+           nvl(availableplayuv,0) / playuv as availablePlayRatio, realplaypv, realplayuv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType = 3 and publishdate <= '${azkaban.flow.1.days.ago}' and publishdate >= '${azkaban.flow.7.days.ago}' \
+    order by hotpv desc \
+    limit 100
+hive.query.03=insert overwrite table lofter_dm.ads_video_native_hot_top_di partition(dt = '${azkaban.flow.1.days.ago}', period='month') \
+    select postId, concat('http://',blogname,'.lofter.com/post/', hex(blogid),'_',hex(postId)) as posturl, blogname, \
+           blognickname,concat_ws(',',tags) as tags, duration, \
+           size_mb, publishdate, movefrom, \
+           viewpv, viewuv, hotpv, praisepv, reproducepv, recommendpv, responsepv, subscribepv, playuv, \
+           availableplayuv, finishplayuv, nvl(finishplayuv,0) / playuv as finishPlayRatio, \
+           nvl(availableplayuv,0) / playuv as availablePlayRatio, realplaypv, realplayuv \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          videoType = 3 and publishdate <= '${azkaban.flow.1.days.ago}' and publishdate >= '${azkaban.flow.30.days.ago}' \
+    order by hotpv desc \
+    limit 100

@@ -1,0 +1,176 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_mbo_revenue_content_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select income_below_1k_creators, income_1k_3k_creators, income_3k_5k_creators, income_5k_creators, \
+       gift_creators, gift_text_creators, gift_photo_creators, \
+       browse_uv, text_browse_uv, photo_browse_uv, gift_ecpm * 1000, gift_text_ecpm * 1000, gift_photo_ecpm * 1000, premium_browse_uv, premium_text_browse_uv, \
+       premium_photo_browse_uv,premium_gift_ecpm * 1000,premium_gift_money, premium_gift_text_money, premium_gift_photo_money, premium_gift_text_ecpm * 1000, \
+       premium_gift_photo_ecpm * 1000, publish_post_count, publish_text_post_count, publish_photo_post_count,publish_fans_post_count, \
+       publish_text_fans_post_count, publish_photo_fans_post_count, premium_post_count, premium_text_post_count, premium_photo_post_count, \
+       new_premium_post_count,new_premium_text_post_count,new_premium_photo_post_count, \
+       fans_money, total_money, text_money, photo_money \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt \
+) a \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct if(revenue_range = '0~1000', userId, null)) as income_below_1k_creators, \
+           count(distinct if(revenue_range = '1000~3000', userId, null)) as income_1k_3k_creators, \
+           count(distinct if(revenue_range = '3000~5000', userId, null)) as income_3k_5k_creators, \
+           count(distinct if(revenue_range = '5000~', userId, null)) as income_5k_creators \
+    from ( \
+        select case when money<1000 then '0~1000' \
+                    when money>=1000 and money<3000  then '1000~3000' \
+                    when money>=3000 and money<5000  then '3000~5000' \
+                    else '5000~' end as revenue_range, blogId as userId \
+        from ( \
+            select blogId, sum(money) as money \
+            from ( \
+                select blogId, money \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and \
+                      from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                      from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+                      money > 0 and blogId > 0 \
+              union all \
+                  select blogId, money \
+                  from lofter.dwd_user_order_dd \
+                  where dt = '${azkaban.flow.1.days.ago}' and \
+                        pay_date <= '${azkaban.flow.1.days.ago}' and \
+                        pay_date >= '${azkaban.flow.30.days.ago}' and \
+                        blogId > 0 and \
+                        revenue_module in ('粉丝会员') \
+            ) t \
+            group by blogId \
+        ) t \
+    ) tt \
+) b on a.dt = b.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct blogid) as gift_creators, \
+           count(distinct if(contentType = '文字', blogid, null)) as gift_text_creators, \
+           count(distinct if(contentType = '图片', blogid, null)) as gift_photo_creators \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          status = 1 and auditStatus = 1 and \
+          blog_channel in (0, 1) and \
+          ispay_returngift in (0,1) and \
+          contentType in ('图片','文字')  and \
+          publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+) c on a.dt = c.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+            sum(realBrowseUv) as browse_uv, \
+            sum(if(a.contentType = '文字', realBrowseUv, 0)) as text_browse_uv, \
+            sum(if(a.contentType = '图片', realBrowseUv, 0)) as photo_browse_uv, \
+            sum(money_gift) / sum(exposureUv) as gift_ecpm, \
+            sum(if(a.contentType = '文字',money_gift,0)) / sum(if(a.contentType = '文字', exposureUv,0)) as gift_text_ecpm, \
+            sum(if(a.contentType = '图片',money_gift,0)) / sum(if(a.contentType = '图片', exposureUv,0)) as gift_photo_ecpm, \
+            sum(if(a.qualityflg='优质', realBrowseUv,0)) as premium_browse_uv, \
+            sum(if(a.qualityflg='优质' and a.contentType = '文字', realBrowseUv, 0)) as premium_text_browse_uv, \
+            sum(if(a.qualityflg='优质' and a.contentType = '图片', realBrowseUv, 0)) as premium_photo_browse_uv, \
+            sum(if(a.qualityflg='优质', money_gift,0)) / sum(if(a.qualityflg='优质', exposureUv,0)) premium_gift_ecpm, \
+            sum(if(a.qualityflg='优质', money_gift,0)) as premium_gift_money, \
+            sum(if(a.qualityflg='优质' and a.contentType = '文字', money_gift,0)) as premium_gift_text_money, \
+            sum(if(a.qualityflg='优质' and a.contentType = '图片', money_gift,0)) as premium_gift_photo_money, \
+            sum(if(a.qualityflg='优质' and a.contentType = '文字', money_gift,0)) / sum(if(a.qualityflg='优质' and a.contentType = '文字', exposureUv,0)) premium_gift_text_ecpm, \
+            sum(if(a.qualityflg='优质' and a.contentType = '图片', money_gift,0)) / sum(if(a.qualityflg='优质' and a.contentType = '图片', exposureUv,0)) premium_gift_photo_ecpm, \
+            sum(publish_post_count) as publish_post_count, \
+            sum(if(a.contentType = '文字', publish_post_count,0)) as publish_text_post_count, \
+            sum(if(a.contentType = '图片', publish_post_count,0)) as publish_photo_post_count, \
+            sum(publish_fans_post_count) as publish_fans_post_count, \
+            sum(if(a.contentType = '文字', publish_fans_post_count,0)) as publish_text_fans_post_count, \
+            sum(if(a.contentType = '图片', publish_fans_post_count,0)) as publish_photo_fans_post_count, \
+            sum(if(a.qualityflg='优质', post_count,0)) as premium_post_count, \
+            sum(if(a.qualityflg='优质' and a.contentType = '文字', post_count,0)) as premium_text_post_count, \
+            sum(if(a.qualityflg='优质' and a.contentType = '图片', post_count,0)) as premium_photo_post_count, \
+            sum(if(a.qualityflg='优质', quality_post_count,0)) as new_premium_post_count, \
+            sum(if(a.qualityflg='优质' and a.contentType = '文字', quality_post_count,0)) as new_premium_text_post_count, \
+            sum(if(a.qualityflg='优质' and a.contentType = '图片', quality_post_count,0)) as new_premium_photo_post_count \
+    from ( \
+        select contenttype,qualityflg, \
+            count(distinct a.postid) as post_count, \
+            count(distinct if(publishDate = '${azkaban.flow.1.days.ago}', a.postid, null)) as publish_post_count, \
+            count(distinct if(qualityflg_date = '${azkaban.flow.1.days.ago}', a.postid, null)) as quality_post_count, \
+            count(distinct if(publishDate = '${azkaban.flow.1.days.ago}' and a.unlocktype = 1 and fans_vip_status = 2, a.postid, null)) as publish_fans_post_count, \
+            count(distinct case when pay_type='付费礼物' then  b.userid else null end) as charge_uv_gift, \
+            sum(case when pay_type='付费礼物' then  money else 0 end) as money_gift, \
+            sum(case when pay_type='粉丝会员' then money else 0 end) as money_fan, \
+            sum(money) as money_all \
+        from ( \
+            select a.postid,contenttype,publishdate, unlocktype, nvl(b.type, '其他') as qualityflg, qualityflg_date, fans_vip_status \
+            from lofter.dim_gift_post_return_dd a \
+            left join ( \
+                select postid, type \
+                from lofter.dws_gift_post_premium_scoring_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by 1, 2 \
+            ) b on a.postid=b.postid \
+            left join ( \
+                select postid, min(dt) as qualityflg_date \
+                from lofter.dws_gift_post_premium_scoring_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and type = '优质' \
+                group by 1 \
+            ) c on a.postid=c.postid \
+            where dt = '${azkaban.flow.1.days.ago}' and status=1 and ispay_returngift in (0,1) and contenttype in ('图片','文字') and \
+                  a.blog_channel in (0, 1) \
+            group by 1, 2, 3, 4, 5, 6, 7 \
+        ) a \
+        left join ( \
+            select postId, blogId, '付费礼物' as pay_type, money, userId, \
+                   from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as dt \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                  from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+                  money > 0 and postId > 0 \
+          union all \
+              select postId, blogId, revenue_module as pay_type, money, userId, pay_date as dt \
+              from lofter.dwd_user_order_dd \
+              where dt = '${azkaban.flow.1.days.ago}' and pay_date = '${azkaban.flow.1.days.ago}' and \
+                    postId > 0 and \
+                    revenue_module in ('粉丝会员') \
+        ) b on a.postid=b.postid \
+        group by contenttype,qualityflg \
+    ) a \
+    join ( \
+        select contenttype,qualityflg, \
+            sum(exposureuv) as exposureuv, \
+            sum(clickuv) as clickuv, \
+            sum(browseuv) as browseuv, \
+            sum(realbrowseuv) as realbrowseuv \
+        from ( \
+            select a.postid,contenttype,publishdate, nvl(b.type, '其他') as qualityflg \
+            from lofter.dim_gift_post_return_dd a \
+            left join ( \
+                select postid, type \
+                from lofter.dws_gift_post_premium_scoring_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by 1, 2 \
+            ) b on a.postid=b.postid \
+            where dt = '${azkaban.flow.1.days.ago}' and status=1 and \
+                  ispay_returngift in (0,1) and contenttype in ('图片','文字') and \
+                  blog_channel in (0, 1) \
+            group by 1,2,3,4 \
+        ) a \
+        left join ( \
+            select postid,sum(exposureuv) as exposureuv ,sum(clickuv) as clickuv, \
+                    sum(browseuv) as browseuv ,sum(realbrowseuv) as realbrowseuv \
+            from  lofter.dws_post_base_stats_di \
+            where dt ='${azkaban.flow.1.days.ago}' \
+            group by postid \
+        ) b on a.postid=b.postid \
+        group by contenttype,qualityflg \
+    ) b on a.contenttype=b.contenttype and a.qualityflg=b.qualityflg \
+) d on a.dt = d.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+            sum(if(m.revenue_module = '粉丝会员', money,0)) as fans_money, \
+            sum(if(m.revenue_module in ('付费礼物', '图片商城'), m.money,0)) as total_money, \
+            sum(if(m.revenue_module = '付费礼物' and n.contentType = '文字', m.money,0)) as text_money, \
+            sum(if((m.revenue_module = '付费礼物' and n.contentType = '图片') or m.revenue_module = '图片商城', m.money,0)) as photo_money \
+    from lofter.dwd_user_order_dd m \
+		left join lofter.dim_post n on m.postId = n.id \
+    where m.dt = '${azkaban.flow.1.days.ago}' and \
+          m.pay_date = '${azkaban.flow.1.days.ago}' \
+) e on a.dt = e.dt \
+
+dependencies=

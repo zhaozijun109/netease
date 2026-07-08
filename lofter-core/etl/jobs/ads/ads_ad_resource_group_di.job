@@ -1,0 +1,98 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.groupId, a.os, \
+       a.maisui_expose_pv, a.maisui_click_pv, a.maisui_settle_money, \
+       b.pool_post_count, b.pool_blog_count, \
+       c.expose_pv, c.expose_uv, c.click_pv, c.click_uv, \
+       c.downfinish_uv as download_uv, c.installfinish_uv as install_uv, \
+       lofter_revenue as lofter_revenue, \
+       lofter_revenue * 0.2 as lofter_creator_revenue, \
+       maisui_activation_value, maisui_register_value, \
+       switch_blog_count, \
+       downloadstart_pv, downloadstart_uv, \
+       downfinish_pv as download_pv, \
+       installstart_pv, installstart_uv, \
+       installfinish_pv as install_pv, \
+       cash \
+from ( \
+    select nvl(x.groupId, y.groupId) as groupId, nvl(x.os, y.os) as os, \
+           nvl(x.maisui_expose_pv,0) as maisui_expose_pv, \
+           nvl(x.maisui_click_pv,0) as maisui_click_pv, \
+           nvl(x.maisui_settle_money, 0) as maisui_settle_money, \
+           nvl(x.maisui_activation_value, 0) as maisui_activation_value, \
+           nvl(x.maisui_register_value,0) as maisui_register_value, \
+           sum(x.maisui_settle_money) over () as maisui_settle_money_total, \
+           nvl(lofter_revenue,0) as lofter_revenue, \
+           nvl(cash, 0) as cash \
+    from ( \
+        select case when flight_id in ('1000100601', '1000100301') then specific_sponsors \
+                    when flight_id in ('1000101601', '1000101703') then '竞价广告' \
+                    else '未知' end as groupId, \
+            case when lower(flight_name) like '%android%' then 'android' \
+                when lower(flight_name) like '%ios%' then 'ios' \
+                else '未知' end as os, \
+            sum(anti_exposure) as maisui_expose_pv, \
+            sum(anti_click) as maisui_click_pv, \
+            sum(maisui_settle_money) as maisui_settle_money, \
+            sum(activationValue) as maisui_activation_value, \
+            sum(registerValue) as maisui_register_value, \
+            nvl(sum(cut_price_money),0) + nvl(sum(cut_maisui_settle_money), 0) as lofter_revenue, \
+            sum(cash) as cash \
+        from lofter.ads_iad_lofter_info_flow_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) x \
+    full outer join ( \
+        select case when groupId in ('A','C')  then '时空中的绘旅人'  \
+                    when groupId='B' then '破次元恋人' \
+                    else groupId end as groupId, \
+               os, \
+               count(distinct case when opType='expose' then userid end) expose_uv \
+        from lofter.dwd_ad_resource_action_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) y on x.groupId = y.groupId and x.os = y.os \
+) a \
+left join ( \
+    select groupId, count(distinct postId) as pool_post_count, count(distinct userId) as pool_blog_count \
+    from lofter_db_dump.ods_db_rta_ad_post_pool_nd \
+    where batchDate = cast(replace('${azkaban.flow.2.days.ago}', '-', '') as bigint) \
+    group by 1 \
+) b on a.groupId = b.groupId \
+left join ( \
+    select *, sum(expose_pv) over () as expose_pv_total \
+    from ( \
+        select case when groupId in ('A','C')  then '时空中的绘旅人'  \
+                    when groupId='B'  then '破次元恋人' \
+                    else groupId end as groupId, \
+                    os, \
+            count( distinct case when optype='expose' then userid end)expose_uv, \
+            count( case when optype='expose' then userid  end ) expose_pv, \
+            count( distinct case when optype='click' then userid  end ) click_uv, \
+            count( case when optype='click' then userid  end ) click_pv, \
+            count( case when optype='downstart' then userid  end ) downloadstart_pv, \
+            count( distinct case when optype='downstart' then userid  end ) downloadstart_uv, \
+            count(case when optype='downfinish' then userid  end )  downfinish_pv, \
+            count(distinct case when optype='downfinish' then userid  end )  downfinish_uv, \
+            count(case when optype='installstart' then userid  end ) installstart_pv, \
+            count(distinct case when optype='installstart' then userid  end ) installstart_uv, \
+            count(case when optype='installfinish' then userid  end ) installfinish_pv, \
+            count(distinct case when optype='installfinish' then userid  end ) installfinish_uv \
+        from lofter.dwd_ad_resource_action_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) t \
+) c on a.groupId = c.groupId and a.os = c.os \
+left join ( \
+    select x.main_ip as groupId, count(distinct y.userId) as switch_blog_count \
+    from ( \
+        select userId, element_at(post_top_ips, 1) as main_ip \
+        from lofter.dws_par_creator_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and size(post_top_ips) > 0 \
+    ) x \
+    join lofter_db_dump.ods_db_rta_creator_ad_switch_nd y on x.userId = y.userId \
+    where y.openAd = 1 \
+    group by 1 \
+) d on a.groupId = d.groupId \
+
+dependencies=ads_ad_resource_content_pool_di

@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_device_platform_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.deviceOs, a.dau, a.wau, a.mau, b.device_new_cnt, b.device_return_cnt, d.retain_ratio_1d, d.retain_ratio_7d, \
+       b.paid_subscribe_device_new_cnt, b.paid_subscribe_device_return_cnt, \
+       e.session_count, e.session_times, e.perTime, \
+       a.uv_15d, a.uv_60d, a.uv_90d, a.uv_120d, a.uv_180d \
+from ( \
+    select deviceOs, \
+           count(distinct if(dt = '${azkaban.flow.1.days.ago}', deviceUdid, null)) as dau, \
+           count(distinct if(dt >= '${azkaban.flow.7.days.ago}', deviceUdid, null)) as wau, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 30, deviceUdid,null)) as mau, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 15, deviceUdid,null)) as uv_15d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 60, deviceUdid,null)) as uv_60d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 90, deviceUdid,null)) as uv_90d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 120, deviceUdid,null)) as uv_120d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}',dt) < 180, deviceUdid,null)) as uv_180d \
+    from lofter.device_active \
+    where dt <='${azkaban.flow.1.days.ago}' and \
+          dt >= date_sub('${azkaban.flow.30.days.ago}', 180) \
+    group by deviceOs \
+) a \
+left join ( \
+  select deviceOs, \
+         count(distinct if(device_type = 'new' and is_paid_subscribe = 0, deviceUdid, null)) as device_new_cnt, \
+         count(distinct if(device_type = 'new' and is_paid_subscribe > 0, deviceUdid, null)) as paid_subscribe_device_new_cnt, \
+         count(distinct if(device_type = 'return_30' and is_paid_subscribe = 0, deviceUdid, null)) as device_return_cnt, \
+         count(distinct if(device_type = 'return_30' and is_paid_subscribe > 0, deviceUdid, null)) as paid_subscribe_device_return_cnt \
+  from lofter.dwd_device_growth_attribution_di \
+  where dt='${azkaban.flow.1.days.ago}' \
+  group by deviceOs \
+) b on a.deviceOs = b.deviceOs \
+left join ( \
+    select deviceOs, \
+           count(distinct if(period = 1 and is_retain > 0, deviceUdid, null)) / count(distinct if(period = 1, deviceUdid, null)) as retain_ratio_1d, \
+           count(distinct if(period = 6 and is_retain > 0, deviceUdid, null)) / count(distinct if(period = 6, deviceUdid, null)) as retain_ratio_7d \
+    from lofter.device_retain \
+    where dt = '${azkaban.flow.1.days.ago}' and period in (1, 6) \
+    group by deviceOs \
+) d on a.deviceOs = d.deviceOs \
+left join ( \
+    select deviceOs, sum(sessionTime) / count(distinct deviceUdid) as perTime, \
+           sum(sessionTime) as session_times, \
+           sum(sessionCount) as session_count \
+    from lofter.dws_par_device_session_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by deviceOs \
+) e on a.deviceOs = e.deviceOs

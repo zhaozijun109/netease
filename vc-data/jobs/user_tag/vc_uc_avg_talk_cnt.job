@@ -1,0 +1,59 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--cktable vc.user_portrait_datas --b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_uc_avg_talk_cnt
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '平均聊天轮次' as tag_name, \
+       dim1, \
+       character_name as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       '' as dim5, \
+       ceiling(avg_talk_cnt) as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_uc_avg_talk_cnt' as tag \
+from ( \
+    select 'DAY_7' as dim1, \
+           user_id, \
+           nvl(character_name, 'ALL') as character_name, \
+           sum(message_cnt) / count(distinct dt) as avg_talk_cnt \
+    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 7) \
+    GROUP BY grouping sets ((user_id, character_id, character_name), (user_id)) \
+    union all \
+    select 'DAY_15' as dim1, \
+           user_id, \
+           nvl(character_name, 'ALL') as character_name, \
+           sum(message_cnt) / count(distinct dt) as avg_talk_cnt \
+    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 15) \
+    GROUP BY grouping sets ((user_id, character_id, character_name), (user_id)) \
+    union all \
+    select 'DAY_30' as dim1, \
+           user_id, \
+           nvl(character_name, 'ALL') as character_name, \
+           sum(message_cnt) / count(distinct dt) as avg_talk_cnt \
+    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+    GROUP BY grouping sets ((user_id, character_id, character_name), (user_id)) \
+    union all \
+    select 'DAY_90' as dim1, \
+           user_id, \
+           nvl(character_name, 'ALL') as character_name, \
+           sum(message_cnt) / count(distinct dt) as avg_talk_cnt \
+    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+    GROUP BY grouping sets ((user_id, character_id, character_name), (user_id)) \
+    union all \
+    select 'DAY_180' as dim1, \
+           user_id, \
+           nvl(character_name, 'ALL') as character_name, \
+           sum(message_cnt) / count(distinct dt) as avg_talk_cnt \
+    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 180) \
+    GROUP BY grouping sets ((user_id, character_id, character_name), (user_id)) \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

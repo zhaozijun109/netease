@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_growth_return_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.deviceudid,a.deviceOs,a.appVersion,a.appChannel, \
+       case when b.deviceudid is not null then '点击归因' else '渠道包归因' end source, \
+       case when b.deviceudid is not null then b.matchType else null end matchType, \
+       case when b.deviceudid is not null then b.proxy else a.proxy end proxy, \
+       case when b.deviceudid is not null then b.media else a.media end media, \
+       case when b.deviceudid is not null then b.advertiserId else a.advertiserId end advertiserId, \
+       case when b.deviceudid is not null then b.campaignId else null end campaignId, \
+       case when b.deviceudid is not null then b.aid else null end aid, \
+       case when b.deviceudid is not null then b.cid else null end cid, \
+       1 as is_ad_attributed, \
+       b.customUdid, \
+       b.custom_ouid, b.photoId \
+from ( \
+    select t1.*,t2.advertiserId,proxy,media, channelPackage \
+    from ( \
+        select dt,deviceOs,appVersions[0] appVersion,appChannels[0] appChannel,deviceudid \
+        from lofter.device_return \
+        where dt = '${azkaban.flow.1.days.ago}' and period = 30 \
+    ) t1 \
+    left outer join ( \
+        select channelPackage,advertiserId,proxy,media \
+        from ( \
+            select channelPackage,advertiserId,proxy,media, \
+                   row_number() over (partition by appid, channelPackage order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+            where channelPackage is not null and channelPackage != '' \
+        ) cfg where cfg_rk = 1 \
+    ) t2 on t1.appChannel=t2.channelPackage \
+) a \
+left outer join ( \
+    select t1.dt,platform,matchType,customudid,deviceudid, \
+          t1.advertiserId,campaignId,aid,cid, \
+          t2.proxy, \
+          case when t2.media is not null then t2.media else t1.media end media, \
+          time as ad_link_up_time, \
+          t1.custom_ouid, t1.photoId \
+    from ( \
+        select dt,platform,matchType,channel, time, \
+               case when channel='GDT' then '广点通' \
+                    when channel='bilibili' then '哔哩哔哩' \
+                    when channel='music' then '麦穗' else channel end media, \
+               case when advertiserId is null and channel='GDT' then adid \
+                    when advertiserId is null then subchannel else advertiserId end advertiserId, \
+               campaignId,aid,cid, \
+               deviceid customudid, \
+               dadeviceid deviceudid, \
+               custom_ouid, \
+               photoId, \
+               row_number() over (partition by daDeviceId, dt order by time) as rnk \
+        from lofter.ods_log_ad_new_linkup_di \
+        where newUserFlag = 'false' and dt >= '${azkaban.flow.1.days.ago}' and dt <= '${azkaban.flow.current.date}' \
+    ) t1 \
+    left outer join ( \
+        select distinct advertiserId,proxy,media \
+        from ( \
+            select advertiserId,proxy,media, \
+                   row_number() over (partition by appid, advertiserId order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+        ) cfg where cfg_rk = 1 \
+    ) t2 on t1.advertiserId=t2.advertiserId \
+    where t1.rnk = 1 \
+) b on a.deviceudid=b.deviceudid \
+where (a.channelPackage is not null or b.deviceudid is not null)
+dependencies=device_return

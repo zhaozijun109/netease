@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01 = with characters as (select character_id, character_type \
+                                    from (select x1.character_id, \
+                                                 x1.character_type, \
+                                                 row_number() over (partition by x1.character_type order by talk_cnt desc) as rk \
+                                          from (select character_id, character_type, sum(talk_cnt) as talk_cnt \
+                                                from vc.dws_vc_uc_talk_summary_single_a_d \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                                  and is_anonymity = 'N' \
+                                                group by character_id, character_type) x1 \
+                                                   inner join \
+                                               (select character_id \
+                                                from vc.dws_vc_character_behavior_info_a_d \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                                  and public_scope = 1 \
+                                                  and status = 1) x2 \
+                                               on x1.character_id = x2.character_id \
+                                             ) \
+                                    where rk <= 500), \
+                     uc as (select user_id, character_id, character_type \
+                            from vc.dws_vc_uc_talk_summary_single_a_d \
+                            where dt = '${azkaban.flow.1.days.ago}' \
+                              and is_anonymity = 'N' \
+                              and user_id in (select user_id from vc.ods_db_vc_user_benefits_nd where benefit_type in (1, 15)) \
+                              and character_id in (select character_id from characters) \
+                            group by user_id, character_id, character_type) \
+                insert OVERWRITE table vc.ads_vc_om_25313_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select y2.user_id, \
+                       y1.character_type, \
+                       concat_ws(',', COLLECT_SET(y1.character_id)) as characters \
+                from characters y1 \
+                         cross join uc y2 \
+                WHERE NOT EXISTS( \
+                        select 1 from uc y3 where y3.character_id = y1.character_id and y3.user_id = y2.user_id) \
+                group by y2.user_id, y1.character_type

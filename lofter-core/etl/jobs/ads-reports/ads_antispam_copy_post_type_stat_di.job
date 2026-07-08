@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_copy_post_type_stat_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select priority,bizinfo,hist,category,bussinesstype, \
+              	  from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd-HH') as dthour, \
+              	  count(1) as check_count, \
+              	  sum(videocheckcount) as video_check_count, \
+              	  sum(videosnapshotphotocount) as video_snapshot_photo_count, \
+              	  sum(textcheckcount) as text_check_count, \
+              	  sum(photocheckcount) as photo_check_count \
+              from lofter.ods_log_anti_spam_copy_di  \
+              where dt = '${azkaban.flow.1.days.ago}' and  \
+                  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+              group by priority, bizinfo,hist,category,bussinesstype,dthour \
+              grouping sets((priority, bizinfo,hist,category,bussinesstype,dthour),( priority, bizinfo,hist,category,bussinesstype)) \
+              distribute by 1

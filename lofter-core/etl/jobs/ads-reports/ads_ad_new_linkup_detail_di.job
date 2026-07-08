@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_new_linkup_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select appId, nvl(b.media, a.channel) as media, b.proxy as proxy, \
+    a.advertiserid, a.campaignid, a.aid, a.cid, a.actionid, a.time \
+from ( \
+    select appid,channel,advertiserid,campaignid,aid,cid,actionid,time,dt \
+    from lofter.ods_log_ad_new_linkup_di \
+    where dt = '${azkaban.flow.1.days.ago}' and newuserflag='true' \
+) a \
+join ( \
+    select distinct advertiserId, proxy, media \
+    from ( \
+        select advertiserId, proxy, media, \
+               row_number() over (partition by appid, advertiserId order by createTime desc) as cfg_rk \
+        from lofter_db_dump.ods_db_ad_channel_config_nd \
+    ) cfg where cfg_rk = 1 \
+) b on a.advertiserId = b.advertiserId \
+

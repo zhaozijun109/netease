@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_tag_wanre_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.postId, t1.tag, t3.postHot \
+from ( \
+    select id as postId, tag \
+    from lofter.dim_post_article lateral view explode(tags) as tag \
+    where publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+) t1 \
+join ( \
+    select tag from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1000 \
+) t2 \
+on t1.tag = t2.tag \
+join ( \
+    select postId, hot as postHot \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    and hot >= 5000 \
+) t3 \
+on t1.postId = t3.postId \
+left join ( \
+    select tag from lofter.dim_black_tag \
+) t4 \
+on t1.tag = t4.tag \
+where t4.tag is null

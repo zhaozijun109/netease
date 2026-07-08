@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_par_creator_first_publish_di partition(dt = '${azkaban.flow.1.days.ago}') \
+        select blogid,blogname,postid,contenttype,valid,isforbidden,publishdate,publishtime,usercreatedate,url,tags     \
+        from    \
+        (    \
+            select blogid,blogname,publishdate,id postid,publishtime,contenttype,userpostindex,valid,isforbidden,usercreatedate,url,tags,  \
+                    row_number()over(partition by blogid order by publishtime ) rk    \
+            from lofter.dim_post    \
+            where ispublished=true and iscitedpost=false and isforbidden=false     \
+            and allowview=0    \
+            and contenttype in ("图片","文字","视频")    \
+            and isactivityautopost=0 and isimported=0 and ismoved=0    \
+        )    \
+        where rk=1 and publishdate='${azkaban.flow.1.days.ago}'   \
+        distribute by 1

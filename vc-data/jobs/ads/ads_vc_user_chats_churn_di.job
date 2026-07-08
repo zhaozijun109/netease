@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=\
+with userSource as ( \
+    select t1.user_id, t2.simulator_def \
+    from ( \
+        select id as user_id from vc.ods_db_vc_user_account_nd \
+    ) t1 \
+    join ( \
+        select user_id, simulator_def \
+        from vc.dws_vc_user_simulator_chats_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+        group by user_id, simulator_def \
+    ) t2 \
+    on t1.user_id = t2.user_id \
+    left join ( \
+        select user_id \
+        from vc.dws_vc_user_simulator_chats_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by user_id \
+    ) t3 \
+    on t1.user_id = t3.user_id \
+    where t3.user_id is null \
+) \
+insert overwrite table vc_dm.ads_vc_user_chats_churn_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.user_id, \
+       t1.simulator_def, \
+       case when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 1 then 1 \
+            when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 2 then 3 \
+            when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 4 then 5 \
+            when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 6 then 7 \
+            when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 14 then 15 \
+            when datediff('${azkaban.flow.1.days.ago}', t2.dt) = 29 then 30 \
+       end as chats_churn \
+from ( \
+    select user_id, simulator_def from userSource \
+) t1 \
+left join ( \
+    select user_id, max(dt) as dt \
+    from vc.dws_vc_user_simulator_chats_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+    group by user_id \
+) t2 \
+on t1.user_id = t2.user_id

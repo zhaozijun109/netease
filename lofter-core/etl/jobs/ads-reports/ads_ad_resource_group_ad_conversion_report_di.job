@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ad_resource_group_ad_conversion_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.groupId, a.os, \
+    count(distinct if(requestcount > 0, b.req_id, null)) as req_count, \
+    count(distinct if(fillcount > 0, b.req_id, null)) as fill_count, \
+    count(distinct if(winpv > 0, b.req_id, null)) as win_count, \
+    count(distinct if(client_fill_count > 0, b.req_id, null)) as client_fill_count, \
+    count(distinct if(client_win_count > 0, b.req_id, null)) as client_win_count, \
+    count(distinct if(bgpv > 0, b.req_id, null)) as bg_count, \
+    count(distinct if(clickpv > 0, b.req_id, null)) as click_count \
+from ( \
+    select ext['rta_sponsorId'] as groupId, uuid as req_uid, os \
+    from lofter.ods_log_ad_dsp_di \
+    where dt = '${azkaban.flow.1.days.ago}' and ext['rta_sponsorId'] is not NULL \
+) a \
+join ( \
+    select * \
+    from lofter.dwd_ad_actions_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.req_uid = b.uuid \
+group by 1, 2 \

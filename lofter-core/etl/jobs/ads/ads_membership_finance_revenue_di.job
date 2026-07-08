@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_membership_finance_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select '${azkaban.flow.2.days.ago}' as settlement_date, \
+    a.sku, a.revenue, a.channel_fee, a.other_fee, a.kol_fee, \
+    b.revenue as settled_revenue, b.channel_fee as settled_channel_fee, b.other_fee as settled_other_fee, b.kol_fee as settled_kol_fee \
+from ( \
+    select x.*, x.kol_order_count * y.unitCost as kol_fee \
+    from ( \
+        select cast(replace(a.dt, '-','') as bigint) as day, \
+            cast(a.vip_days as string) as sku, \
+            sum(a.amount) as revenue, \
+            sum(b.channeldivision) as channel_fee, \
+            sum(b.fee) as other_fee, \
+            count(distinct if(actpwd is not null, order_id, null)) as kol_order_count \
+        from lofter.dwd_membership_order_di a \
+            left join lofter_db_dump.ods_db_trade_member_ship_order_nd b on a.order_id = b.id \
+        where a.dt = '${azkaban.flow.2.days.ago}' \
+        group by 1, 2 \
+    ) x \
+    left join ( \
+        select date as day, max(unitCost / 100) as unitCost \
+        from lofter_db_dump.ods_db_kol_attribution_order_cost_nd \
+        where settlementType = 'CPS' \
+        group by 1 \
+    ) y on x.day = y.day \
+) a \
+left join ( \
+    select cast(vipdays as string) as sku, \
+        sum(revenue) as revenue, sum(channel_fee) as channel_fee, sum(other_fee) as other_fee, sum(kol_fee) as kol_fee \
+    from lofter_dm.ads_membership_finance_revenue_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.sku = b.sku \
+
+dependencies=ads_membership_finance_revenue_detail_di

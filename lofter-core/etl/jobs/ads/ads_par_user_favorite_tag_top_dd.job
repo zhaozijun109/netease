@@ -1,0 +1,17 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_favorite_tag_top_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select userId, tag, pv, rnk \
+    from ( \
+      select a.userId, a.tag, a.pv, row_number() over (partition by a.userId order by a.pv desc) as rnk \
+      from( \
+        select userId, tag, sum(pv) as pv \
+        from lofter.dws_tag_user_consume_di \
+        where userId > 0 and is_favorite_tag = 1 and \
+              dt <= '${azkaban.flow.1.days.ago}' and \
+              dt >= date_sub('${azkaban.flow.1.days.ago}', 180) \
+        group by userId, tag \
+      ) a \
+    ) t \
+    where rnk < 10
+dependencies=

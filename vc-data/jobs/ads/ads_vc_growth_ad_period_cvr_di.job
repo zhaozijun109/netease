@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.ads.GrowthAdPeriodCvr
+params=--date ${azkaban.flow.1.days.ago}

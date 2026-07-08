@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_active_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId, a.deviceOs, a.firstActiveTime, u.isanonymous as is_anonymous \
+from ( \
+    select userId, deviceOs, firstActiveTime \
+    from ( \
+        select userId, deviceOs, nvl(returnOccurTime, firstAccessTime) as firstActiveTime, \
+               row_number() over (partition by userId order by nvl(returnOccurTime, firstAccessTime)) rnk \
+        from lofter.device_active \
+        lateral view explode(userIds) t as userId \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rnk = 1 \
+) a \
+left join lofter.dim_user u on a.userId = u.id \
+distribute by 1

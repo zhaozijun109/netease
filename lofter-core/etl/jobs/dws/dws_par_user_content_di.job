@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter.dws_par_user_content_di partition(dt='${azkaban.flow.1.days.ago}') \
+select u.id as userId, browse_pv, browse_post_count, browse_text_photo_post_count, browse_video_count, browse_question_count, session_time, browse_post_bitmap, \
+       browse_note_pv,browse_discovery_pv,browse_search_pv,browse_tag_pv   \
+from lofter.dim_user u \
+left join ( \
+       select userid, \
+              count(1) as browse_pv, \
+              bitmap_count(to_bitmap(postId)) as browse_post_count, \
+              count(distinct if(post_content_type in ('文字', '图片', '长文章'), postId, null)) as browse_text_photo_post_count, \
+              count(distinct if(post_content_type in ('视频'), postId, null)) as browse_video_count, \
+              count(distinct if(post_content_type = '问答', postId, null)) as browse_question_count, \
+              to_bitmap(postId) as browse_post_bitmap, \
+              sum(if(source1_scene='note' and source_module in ('related_item' ,' similar_article'),1,0)) as browse_note_pv,     \
+              sum(if(source1_scene='discovery' and source_module in ('feed_rec' ,' feed_rec_domain'),1,0)) as browse_discovery_pv,     \
+              sum(if(source1_scene='search' and source_module in ('search'),1,0)) as browse_search_pv,     \
+              sum(if(source1_scene='tag' and source_module in ('tag_rec'),1,0)) as browse_tag_pv    \
+       from lofter.dwd_post_browse_di \
+       where dt='${azkaban.flow.1.days.ago}' and is_real > 0 \
+       group by userid \
+) a on u.id = a.userId \
+left join ( \
+       select userId, sum(session_total_time) as session_time \
+       from lofter.dws_par_user_session_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+       group by userId \
+) b on u.id = b.userId \
+where (a.browse_pv > 0 or b.session_time > 0)
+dependencies=dws_par_device_session_di

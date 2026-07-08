@@ -1,0 +1,70 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_core_security_user_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select t1.userid,case when t2.userid is not null then 'S' else 'A' end as core_level \
+from  \
+( \
+select userid \
+from \
+( \
+select a.userid \
+from \
+( \
+    select userid \
+    from lofter.dws_par_user_active_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',59) and '${azkaban.flow.1.days.ago}' \
+    and is_anonymous=0 \
+    group by userid \
+    having count(case when dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' then dt end)>=5 \
+    and count(case when dt between date_sub('${azkaban.flow.1.days.ago}',59) and date_sub('${azkaban.flow.1.days.ago}',30) then dt end)>=5 \
+) a \
+join \
+( \
+    select userid \
+    from lofter.dws_par_user_base_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and datediff(dt,from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))>=60 \
+    group by userid \
+) b \
+on a.userid=b.userid  \
+join \
+( \
+    select userid \
+    from lofter.dws_par_user_interaction_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    group by userid \
+    having sum(send_hot+send_comment_cnt)>0 \
+)c \
+on a.userid=c.userid \
+union all \
+select a.userid \
+from \
+( \
+    select userid \
+    from lofter.dws_par_user_active_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and is_anonymous=0 \
+    and active_days_30d>=10 \
+    group by userid \
+) a \
+join \
+( \
+    select userid \
+    from lofter.dws_par_user_interaction_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    group by userid \
+    having sum(send_comment_cnt)>0 \
+) b \
+on a.userid=b.userid \
+) \
+group by userid \
+) t1 \
+left join \
+( \
+    select userid \
+    from  lofter.dws_par_user_content_di \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    and browse_pv>60 \
+    group by userid \
+    having count(dt) >3 \
+) t2 \
+on t1.userid=t2.userid \

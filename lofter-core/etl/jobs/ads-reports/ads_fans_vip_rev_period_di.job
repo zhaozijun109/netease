@@ -1,0 +1,91 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_fans_vip_rev_period_di partition(dt = '${azkaban.flow.1.days.ago}') \
+    select '1' period \
+        ,sourcetype \
+        ,sum(money) total_money \
+        ,count(1) pay_pv \
+        ,count(distinct userid) pay_uv \
+        ,count(distinct blogid) pay_blogid_cnt \
+        ,round(sum(money)/count(distinct userid),4) `人均付费金额` \
+        ,round(sum(money)/count(distinct blogid),4) `单账号收益金额` \
+        ,round(count(distinct userid)/count(distinct blogid),4) `单账号收益人数` \
+    from ( \
+    select postid \
+        ,blogid \
+        ,money \
+        ,userid \
+        ,from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') createdate \
+        ,pay_type \
+    from lofter.dwd_evt_post_paid_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+        and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        and pay_type = '粉丝会员' \
+    ) a \
+    left join \
+    ( \
+    select id \
+        ,sourcetype \
+    from lofter.dim_user \
+    ) b \
+    on a.blogid = b.id \
+    group by period, sourcetype \
+    union all \
+    select '7' period \
+        ,sourcetype \
+        ,sum(money) total_money \
+        ,count(1) pay_pv \
+        ,count(distinct userid) pay_uv \
+        ,count(distinct blogid) pay_blogid_cnt \
+        ,round(sum(money)/count(distinct userid),4) `人均付费金额` \
+        ,round(sum(money)/count(distinct blogid),4) `单账号收益金额` \
+        ,round(count(distinct userid)/count(distinct blogid),4) `单账号收益人数` \
+    from ( \
+    select postid \
+        ,blogid \
+        ,money \
+        ,userid \
+        ,from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') createdate \
+        ,pay_type \
+    from lofter.dwd_evt_post_paid_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+        and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        and pay_type = '粉丝会员' \
+    ) a \
+    left join \
+    ( \
+    select id \
+        ,sourcetype \
+    from lofter.dim_user \
+    ) b \
+    on a.blogid = b.id \
+    group by period,sourcetype \
+    union all \
+    select '30' period \
+        ,sourcetype \
+        ,sum(money) total_money \
+        ,count(1) pay_pv \
+        ,count(distinct userid) pay_uv \
+        ,count(distinct blogid) pay_blogid_cnt \
+        ,round(sum(money)/count(distinct userid),4) `人均付费金额` \
+        ,round(sum(money)/count(distinct blogid),4) `单账号收益金额` \
+        ,round(count(distinct userid)/count(distinct blogid),4) `单账号收益人数` \
+    from ( \
+    select postid \
+        ,blogid \
+        ,money \
+        ,userid \
+        ,from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') createdate \
+        ,pay_type \
+    from lofter.dwd_evt_post_paid_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+        and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        and pay_type = '粉丝会员' \
+    ) a \
+    left join \
+    ( \
+    select id \
+        ,sourcetype \
+    from lofter.dim_user \
+    ) b \
+    on a.blogid = b.id \
+    group by period,sourcetype \

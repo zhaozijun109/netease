@@ -1,0 +1,677 @@
+type = sparksql
+hive.query.01 =     \
+with post as    \
+(   \
+select   \
+dt, 	  \
+postid  \
+from lofter.dwd_ad_actions_v2_di   \
+where dt = '${azkaban.flow.1.days.ago}'    \
+and positionId in (279600, 278625, 278626, 277629)   \
+and (is_bg > 0 or is_click > 0)   \
+group by 1, 2  \
+union   \
+select   \
+dt,  \
+postid    \
+from lofter.dwd_gift_post_unlock_dd  \
+where dt='${azkaban.flow.1.days.ago}'   \
+and ( ( from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' ) )  \
+and unlock_method like '%粮票%'  \
+group by 1,2  \
+)     \
+  \
+  \
+,   \
+   \
+ad_postid as (   \
+select    \
+a.postid,   \
+b.userid,   \
+c.ips,   \
+case when post_publish_date=a.dt then '当日发文'    \
+when datediff(a.dt,post_publish_date) between 1 and 7 then '1~7日发文'    \
+when datediff(a.dt,post_publish_date) between 8 and 30 then '8~30日发文'    \
+when datediff(a.dt,post_publish_date) between 31 and 180 then '31~180日发文'    \
+else '181日~以上发文' end as  publish_date_flg,   \
+is_new_user,   \
+case when d.blog_channel is not null  then d.blog_channel else -1 end as blog_channel_flg,   \
+case when a.dt>firstday and firstday is not null  then 1 else 0 end as charge_flg,   \
+post_content_type    \
+from(   \
+select dt,postid   \
+from post    \
+group by 1,2    \
+) a     \
+join    \
+(   \
+select    \
+dt,postid,userid,	   \
+is_new_user,count( userid) real_pv   \
+from lofter.dwd_post_browse_di  a    \
+where dt  ='${azkaban.flow.1.days.ago}'    \
+and a.action_type='page_duration'    \
+and  a.is_real=1     \
+group by 1,2,3,4   \
+) b on a.postid=b.postid    \
+left join    \
+(   \
+select id,ips ,publishdate post_publish_date,	   \
+contenttype  post_content_type   \
+from lofter.dim_post       \
+group by 1,2 ,3,4   \
+) c on a.postid=c.id    \
+left join    \
+(   \
+select postid,blog_channel      \
+from lofter.dim_gift_post_return_dd     \
+where dt = '${azkaban.flow.1.days.ago}'     \
+and status=1    \
+and blog_channel in (0,1)     \
+group by postid,blog_channel    \
+) d on a.postid=d.postid    \
+left join    \
+(   \
+select userid ,min(from_unixtime(cast(first_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as firstday    \
+from lofter.dws_user_pay_type_info_dd    \
+where dt='${azkaban.flow.1.days.ago}' and pay_type in  ('礼物付费' , '粉丝会员')    \
+group by userid    \
+)e  on b.userid=e.userid    \
+)    \
+   \
+   \
+   \
+   \
+insert overwrite table lofter_dm.ads_content_ad_post_premium_scoring_metrics_detail_report_di partition(dt='${azkaban.flow.1.days.ago}')   \
+SELECT   \
+  a.postid,   \
+  a.ips,   \
+  a.publish_date_flg,   \
+  a.blog_channel_flg,   \
+  a.words_count,   \
+  a.ai_results,   \
+  a.blogid,   \
+  a.publishdate,   \
+  a.collectionid,   \
+  a.return_gift_id,   \
+  a.text_length,   \
+  a.ispay_returngift,   \
+  a.review_status,   \
+  a.mark_tags,   \
+  liulanuv,   \
+  unlockuv,   \
+  zhengfankuiuv,   \
+  fufankuiuv,   \
+  dianzanuv,   \
+  unlock_dianzanuv,   \
+  unlock_hou_dianzanuv,   \
+  recommenduv,   \
+  unlock_recommenduv,   \
+  unlock_hou_recommenduv,   \
+  subscribecollectionuv,   \
+  unlock_subscribecollectionuv,   \
+  unlock_hou_subscribecollectionuv,   \
+  followuv,   \
+  unlock_followuv,   \
+  unlock_hou_followuv,   \
+  clickuv,   \
+  browseuv,   \
+  exposureuv,   \
+  realbrowseuv,   \
+  freegiftuv,   \
+  freegiftamount,   \
+  chargegiftuv,   \
+  money,   \
+  pospraiseuv,   \
+  posrecuv,   \
+  posreproduceuv,   \
+  possubscribeuv,   \
+  poshotpv,   \
+  poshotuv,   \
+  poscommentpv,   \
+  poscommentuv,   \
+  hdpv,   \
+  hduv,   \
+  post_content_type,   \
+  responseuv,   \
+  unlock_responseuv,   \
+  unlock_hou_responseuv,   \
+  blackuv,   \
+  unlock_blackuv,   \
+  unlock_hou_blackuv   \
+from   \
+  (   \
+    select   \
+      postid,   \
+      ips,   \
+      publish_date_flg,   \
+      blog_channel_flg,   \
+      words_count,   \
+      ai_results,   \
+      blogid,   \
+      publishdate,   \
+      collectionid,   \
+      return_gift_id,   \
+      text_length,   \
+      ispay_returngift,   \
+      review_status,   \
+      mark_tags,   \
+	  post_content_type,   \
+      count(distinct userid) as liulanuv,   \
+      count(   \
+        distinct case   \
+          when unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlockuv,   \
+      count(   \
+        distinct case   \
+          when zhengfankui_returngiftid is not null then userid   \
+          else null   \
+        end   \
+      ) as zhengfankuiuv,   \
+      count(   \
+        distinct case   \
+          when fufankui_returngiftid is not null then userid   \
+          else null   \
+        end   \
+      ) as fufankuiuv,   \
+      count(   \
+        distinct case   \
+          when dianzan_time is not null then userid   \
+          else null   \
+        end   \
+      ) as dianzanuv,   \
+      count(   \
+        distinct case   \
+          when dianzan_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_dianzanuv,   \
+      count(   \
+        distinct case   \
+          when dianzan_time is not null   \
+          and dianzan_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_dianzanuv,   \
+      count(   \
+        distinct case   \
+          when recommend_time is not null then userid   \
+          else null   \
+        end   \
+      ) as recommenduv,   \
+      count(   \
+        distinct case   \
+          when recommend_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_recommenduv,   \
+      count(   \
+        distinct case   \
+          when recommend_time is not null   \
+          and recommend_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_recommenduv,   \
+	     \
+count(   \
+        distinct case   \
+          when response_time is not null then userid   \
+          else null   \
+        end   \
+      ) as responseuv,   \
+      count(   \
+        distinct case   \
+          when response_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_responseuv,   \
+      count(   \
+        distinct case   \
+          when response_time is not null   \
+          and response_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_responseuv,   \
+    \
+      count(   \
+        distinct case   \
+          when subscribecollection_time is not null then userid   \
+          else null   \
+        end   \
+      ) as subscribecollectionuv,   \
+      count(   \
+        distinct case   \
+          when subscribecollection_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_subscribecollectionuv,   \
+      count(   \
+        distinct case   \
+          when subscribecollection_time is not null   \
+          and subscribecollection_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_subscribecollectionuv,   \
+      count(   \
+        distinct case   \
+          when follow_time is not null then userid   \
+          else null   \
+        end   \
+      ) as followuv,   \
+      count(   \
+        distinct case   \
+          when follow_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_followuv,   \
+      count(   \
+        distinct case   \
+          when follow_time is not null   \
+          and follow_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_followuv,   \
+	     \
+      count(   \
+        distinct case   \
+          when black_time is not null then userid   \
+          else null   \
+        end   \
+      ) as blackuv,   \
+      count(   \
+        distinct case   \
+          when black_time is not null   \
+          and unlock_time is not null then userid   \
+          else null   \
+        end   \
+      ) as unlock_blackuv,   \
+      count(   \
+        distinct case   \
+          when black_time is not null   \
+          and black_time >= unlock_time then userid   \
+          else null   \
+        end   \
+      ) as unlock_hou_blackuv   \
+    from   \
+      (   \
+        select   \
+          a.postid,   \
+          a.userid,   \
+          a.ips,   \
+          a.publish_date_flg,   \
+          a.is_new_user,   \
+          a.blog_channel_flg,   \
+          a.charge_flg,   \
+          a.words_count,   \
+          a.ai_results,   \
+          e.blogid,   \
+          e.publishdate,   \
+          f.collectionid,   \
+          b.id as return_gift_id,   \
+          text_length,   \
+          ispay_returngift,   \
+          review_status,   \
+          mark_tags,   \
+          c.unlock_time,   \
+          m.returngiftid as zhengfankui_returngiftid,   \
+          n.returngiftid as fufankui_returngiftid,   \
+          l.dianzan_time,   \
+          d.recommend_time,   \
+		  j.response_time,   \
+          g.subscribecollection_time,   \
+          h.follow_time,   \
+		  k.black_time,   \
+		  a.post_content_type   \
+        from   \
+          (   \
+            select   \
+              postid,   \
+              userid,   \
+              concat_ws(',', ips) AS ips,   \
+              publish_date_flg,   \
+              is_new_user,   \
+              blog_channel_flg,   \
+              charge_flg,   \
+              words_count,   \
+              ai_results,   \
+			  post_content_type   \
+            from   \
+              (   \
+                select   \
+                  a.postid,   \
+                  a.userid,   \
+                  ips,   \
+                  publish_date_flg,   \
+                  is_new_user,   \
+                  blog_channel_flg,   \
+                  charge_flg,   \
+                  b.words_count,   \
+                  c.ai_results,   \
+				  post_content_type   \
+                from   \
+                  (   \
+				     \
+                    select   \
+                      postid,   \
+                      userid,   \
+                      ips,   \
+                      publish_date_flg,   \
+                      is_new_user,   \
+                      blog_channel_flg,   \
+                      charge_flg,   \
+					  post_content_type   \
+                    from  ad_postid   \
+                      \
+                    group by   \
+                      postid,   \
+                      userid,   \
+                      ips,   \
+                      publish_date_flg,   \
+                      is_new_user,   \
+                      blog_channel_flg,   \
+                      charge_flg,   \
+					  post_content_type   \
+					     \
+                  ) a   \
+                 left  join (   \
+                    select   \
+                      postid,   \
+                      words_count   \
+                    from   \
+                      lofter.dwd_post_length_dd   \
+                    where   \
+                      dt = '${azkaban.flow.1.days.ago}'   \
+                    group by   \
+                      postid,   \
+                      words_count   \
+                  ) b on a.postid = b.postid   \
+                  left join (   \
+                    select   \
+                      post_id as postid,   \
+                      concat_ws(',', collect_set(result)) as ai_results   \
+                    from   \
+                      rec.content_reg_payed_title_classify_output2   \
+                    where   \
+                      classify = 1   \
+                      and probability > 0.6999   \
+                    group by   \
+                      post_id   \
+                  ) c on a.postid = c.postid   \
+              ) a   \
+          ) a   \
+          left join (   \
+		     \
+		     \
+            select   \
+              id,   \
+              blogid,   \
+              publishdate   \
+            from   \
+              lofter.dim_post   \
+			     \
+			     \
+          ) e on a.postid = e.id   \
+          left join (   \
+		     \
+            select   \
+              postid,   \
+              collectionid   \
+            from   \
+              lofter.bridge_collection_post   \
+            group by   \
+              postid,   \
+              collectionid   \
+			     \
+          ) f on a.postid = f.postid   \
+          left join (   \
+            select   \
+              a.id,   \
+              postid,   \
+              text_length,   \
+              ispay_returngift,   \
+              review_status,   \
+              mark_tags   \
+            from   \
+              (   \
+                select   \
+                  id,   \
+                  postid,   \
+                  text_length,   \
+                  ispay_returngift,   \
+                  case   \
+                    when review_status is null then 0   \
+                    when review_status = -3 then 0   \
+                    else review_status   \
+                  end as review_status,   \
+                  mark_tags,   \
+                  row_number() over(   \
+                    partition by postid   \
+                    order by   \
+                      ispay_returngift desc   \
+                  ) as rk   \
+                from   \
+                  lofter.dim_gift_post_return   \
+                where   \
+                  status = 1   \
+                  and auditstatus = 1   \
+                  And contenttype in ( '文字','图片')   \
+                  and blog_channel in (0, 1)   \
+                  and ispay_returngift in (0, 1)   \
+                  and return_gift_plantype not in ('原图','表情包','装扮','图图有证')   \
+              ) a   \
+            where   \
+              rk = 1   \
+          ) b on a.postid = b.postid   \
+          left join (   \
+            select   \
+              userid,   \
+              postid,   \
+              return_gift_id,   \
+              min(unlock_time) as unlock_time,   \
+              blogid   \
+            from   \
+              lofter.dwd_gift_post_unlock_dd   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+              and unlock_unit = '文章'   \
+              And content_type in ( '文字','图片')   \
+              And from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'   \
+            group by   \
+              userid,   \
+              postid,   \
+              return_gift_id,   \
+              blogid   \
+          ) c on a.postid = c.postid   \
+          and b.id = c.return_gift_id   \
+          and a.userid = c.userid   \
+          left join (   \
+            SELECT   \
+              returngiftid,   \
+              userid   \
+            FROM   \
+              lofter_db_dump.ods_db_trade_return_gift_feed_back_nd   \
+            WHERE   \
+              type in (0)   \
+              and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'   \
+            GROUP BY   \
+              returngiftid,   \
+              userid   \
+          ) m on c.return_gift_id = m.returngiftid   \
+          and c.userid = m.userid   \
+          left join (   \
+            SELECT   \
+              returngiftid,   \
+              userid   \
+            FROM   \
+              lofter_db_dump.ods_db_trade_return_gift_feed_back_nd   \
+            WHERE   \
+              type in (1)   \
+              and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'   \
+            GROUP BY   \
+              returngiftid,   \
+              userid   \
+          ) n on c.return_gift_id = n.returngiftid   \
+          and c.userid = n.userid   \
+          left join (   \
+            select   \
+              userid,   \
+              postid,   \
+              min(optime) as dianzan_time,   \
+              blogid   \
+            from   \
+              lofter.dwd_post_hot_di   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+              and optype = 'praise'   \
+              And post_content_type in ( '文字','图片')   \
+            group by   \
+              userid,   \
+              postid,   \
+              blogid   \
+          ) l on a.postid = l.postid   \
+          and a.userid = l.userid   \
+          left join (   \
+            select   \
+              userid,   \
+              postid,   \
+              min(optime) as recommend_time,   \
+              blogid   \
+            from   \
+              lofter.dwd_post_hot_di   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+              and optype = 'recommend'   \
+              And post_content_type in ( '文字','图片')   \
+            group by   \
+              userid,   \
+              postid,   \
+              blogid   \
+          ) d on a.postid = d.postid   \
+          and a.userid = d.userid   \
+   \
+		  left join (   \
+		     \
+		  select userid,postid,response_time,blogid   \
+		  from    \
+            (select   \
+              userid,   \
+              postid,   \
+              optime as response_time,   \
+              blogid,   \
+			  commentid,   \
+			  row_number()over(partition by userid,postid order by optime asc  ) as rk    \
+            from   \
+              lofter.dwd_post_response_di   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+              And post_content_type in ( '文字','图片')   \
+			  and is_valid=1   \
+			  and userid!=blogid   \
+			  ) a    \
+			  left join    \
+			(SELECT level1_tag,itemid from lofter.dwd_rec_content_understand_dd    \
+			where dt='${azkaban.flow.1.days.ago}' and type='评论体系分类'    \
+			) b    \
+			on a.commentid=b.itemid   \
+           where rk=1 and  (level1_tag!='负向' or level1_tag is null)   \
+          ) j on a.postid = j.postid   \
+          and a.userid = j.userid   \
+		     \
+          left join (   \
+            select   \
+              userid,   \
+              collectionid,   \
+              min(optime) as subscribecollection_time   \
+            from   \
+              lofter.ods_log_subscribecollection_di   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+              and collectionid > 0   \
+            group by   \
+              userid,   \
+              collectionid   \
+          ) g on f.collectionid = g.collectionid   \
+          and a.userid = g.userid   \
+          left join (   \
+            select   \
+              userid,   \
+              blogid,   \
+              min(follow_time) as follow_time   \
+            from   \
+              lofter.dwd_blog_follow_di   \
+            where   \
+              dt = '${azkaban.flow.1.days.ago}'   \
+            group by   \
+              userid,   \
+              blogid   \
+          ) h on e.blogid = h.blogid   \
+          and a.userid = h.userid   \
+		     \
+		  left join    \
+		      \
+		     \
+		(   \
+			select userid,blacklistblogid as blogid,min(createtime) as black_time   \
+				from    \
+				lofter_db_dump.ods_db_blacklist_user_nd   \
+				where   \
+             from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'   \
+				group by userid,blacklistblogid   \
+		) k    \
+		     \
+		 on e.blogid = k.blogid   \
+          and a.userid = k.userid   \
+		       \
+   \
+      ) a   \
+    group by   \
+      postid,   \
+      ips,   \
+      publish_date_flg,   \
+      blog_channel_flg,   \
+      words_count,   \
+      ai_results,   \
+      blogid,   \
+      publishdate,   \
+      collectionid,   \
+      return_gift_id,   \
+      text_length,   \
+      ispay_returngift,   \
+      review_status,   \
+      mark_tags,   \
+	  post_content_type   \
+  ) a   \
+  left join (   \
+    select   \
+      postid,   \
+      publishdate,   \
+      clickuv,   \
+      browseuv,   \
+      exposureuv,   \
+      realbrowseuv,   \
+      freegiftuv,   \
+      freegiftamount,   \
+      chargegiftuv,   \
+      chargegiftamount * 0.1 as money,   \
+      pospraiseuv,   \
+      posrecuv,   \
+      posreproduceuv,   \
+      possubscribeuv,   \
+      poshotpv,   \
+      poshotuv,   \
+      poscommentpv,   \
+      poscommentuv,   \
+      hdpv,   \
+      hduv   \
+    from   \
+      lofter.dws_post_base_stats_di   \
+    where   \
+      dt = '${azkaban.flow.1.days.ago}'   \
+  ) b on a.postid = b.postid

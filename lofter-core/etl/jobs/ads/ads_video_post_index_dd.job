@@ -1,0 +1,21 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=insert overwrite table lofter_dm.ads_video_post_index_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId,sum(view_pv) as view_pv,sum(view_uv) as view_uv,sum(play_pv) as play_pv,sum(play_uv) as play_uv, \
+       sum(real_play_pv) as real_play_pv, sum(real_play_uv) as real_play_uv, \
+       sum(finish_play_pv) as finish_play_pv,sum(finish_play_uv) as finish_play_uv, \
+       sum(real_play_time) as real_play_time,sum(play_time) as play_time \
+from ( \
+    select postId, exposurePv as view_pv, exposureUv as view_uv, playPv as play_pv, playUv as play_uv,\
+            realPlayPv as real_play_pv, realPlayUv as real_play_uv, finishPlayPv as finish_play_pv, finishPlayUv as finish_play_uv, \
+            realPlayTime as real_play_time, playtime as play_time \
+    from lofter.dws_post_base_stats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select postid,view_pv,view_uv,play_pv,play_uv,real_play_pv,real_play_uv, \
+           finish_play_pv,finish_play_uv,real_play_time,play_time \
+    from lofter_dm.ads_video_post_index_dd \
+    where dt = '${azkaban.flow.2.days.ago}' \
+) t \
+group by postId \
+distribute by postId % 10

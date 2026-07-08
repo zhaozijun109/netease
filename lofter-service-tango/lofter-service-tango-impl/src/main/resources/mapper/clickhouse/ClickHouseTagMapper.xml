@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.netease.lofter.tango.impl.mapper.clickhouse.ClickHouseTagMapper">
+
+    <sql id="TAG_CONDITION_CLAUSE">
+        <if test="tags != null and tags.size &gt; 0">
+            and
+            <foreach collection="tags" item="tag" open="(" close=")" index="index">
+                tag = #{tag}
+                <if test="index &lt; (tags.size - 1)">
+                    or
+                </if>
+            </foreach>
+        </if>
+    </sql>
+
+    <sql id="IP_CONDITION_CLAUSE">
+        <if test="ips != null and ips.size &gt; 0">
+            and
+            <foreach collection="ips" item="ip" open="(" close=")" index="index">
+                locate(ips, #{ip}) > 0
+                <if test="index &lt; (ips.size - 1)">
+                    or
+                </if>
+            </foreach>
+        </if>
+    </sql>
+    <sql id="DT_RANGE_CONDITION_CLAUSE">
+        1 = 1
+        <if test="startDate != null and startDate.length &gt; 0">
+            and dt &gt;= #{startDate}
+        </if>
+        <if test="endDate != null and endDate.length &gt; 0">
+            and dt &lt;= #{endDate}
+        </if>
+    </sql>
+
+
+    <select id="listTag"
+            parameterType="map"
+            resultType="com.netease.lofter.tango.impl.web.vo.clickhouse.ClickhouseTagVO">
+        select dt,tag,ips,post_count,post_uv,free_post_count,free_photo_post_count,free_text_post_count,free_video_post_count,photo_post_count,text_post_count,video_post_count,photo_post_uv,text_post_uv,video_post_uv,level_s_post_count,level_a_post_count,level_b_post_count,level_c_post_count,level_d_post_count,level_d_star_post_count,level_none_post_count,level_s_post_uv,level_a_post_uv,level_b_post_uv,level_c_post_uv,level_d_post_uv,level_d_star_post_uv,level_none_post_uv,hot,recommend_count,photo_hot,text_hot,video_hot,photo_recommend_count,text_recommend_count,video_recommend_count,expose_pv,real_browse_pv,premium_post_count,photo_premium_post_count,text_premium_post_count,video_premium_post_count
+        from hive.ads_tag_fetch_tag_di
+        where <include refid="DT_RANGE_CONDITION_CLAUSE"/>
+        <include refid="TAG_CONDITION_CLAUSE"/>
+        <include refid="IP_CONDITION_CLAUSE"/>
+
+        <choose>
+            <when test="sortField != null">
+                order by ${sortField} ${sortOrder}
+            </when>
+            <otherwise>
+                order by dt desc, post_uv desc
+            </otherwise>
+        </choose>
+
+        limit #{limit} offset #{offset}
+    </select>
+
+
+    <select id="countTag" resultType="long">
+        select count(*)
+        from hive.ads_tag_fetch_tag_di
+        where <include refid="DT_RANGE_CONDITION_CLAUSE"/>
+        <include refid="TAG_CONDITION_CLAUSE"/>
+        <include refid="IP_CONDITION_CLAUSE"/>
+    </select>
+
+</mapper>

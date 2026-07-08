@@ -1,0 +1,36 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 激励视频获得粮票 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '激励视频获得粮票'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '激励视频获得粮票' as tag, \
+                                        'DAY_7' as cat, \
+                                        case when video_grain_ticket_7d < 20 then '1-20' \
+                                             else '20及以上' end as grp \
+                                  from lofter.dws_par_user_ad_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and video_grain_ticket_7d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '激励视频获得粮票' as tag, \
+                                        'DAY_15' as cat, \
+                                        case when video_grain_ticket_15d < 20 then '1-20' \
+                                             else '20及以上' end as grp \
+                                  from lofter.dws_par_user_ad_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and video_grain_ticket_15d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '激励视频获得粮票' as tag, \
+                                        'DAY_30' as cat, \
+                                        case when video_grain_ticket_30d < 20 then '1-20' \
+                                             else '20及以上' end as grp \
+                                  from lofter.dws_par_user_ad_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and video_grain_ticket_30d > 0 ) "

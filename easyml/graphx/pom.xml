@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-graphx</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-graphx_${scala.binary.version}</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-graph</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>spark-on-angel-graph</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

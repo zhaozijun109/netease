@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id as postId, tags, ips, NVL(recomstatus,0) as isInRecommendPool from lofter.dim_post where SIZE(array_intersect(ips,array('原神', '庆余年', '庆余年2'))) > 0 AND NVL(recomstatus,0) != 1"
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_dim_post_ip_ab --update
+

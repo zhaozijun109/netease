@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE table lofter_dm.ads_ec_derivate_confirm_receipt_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  COALESCE(a.dt, b.dt, c.dt) AS summarytime, \
+        COALESCE(a.channel, b.channel, c.channel) AS channel, \
+        COALESCE(a.channeltype, b.channeltype, c.channeltype) AS channeltype, \
+        COALESCE(a.suppliertype, b.suppliertype, c.suppliertype) AS suppliertype, \
+        COALESCE(a.gmv, 0) AS gmv, \
+        COALESCE(b.revenue, 0) AS revenue, \
+        COALESCE(b.deliveryprice, 0) AS deliveryprice, \
+        COALESCE(c.refund, 0) AS refund \
+FROM ( \
+        SELECT  dt, \
+                channel, \
+                case \
+                      when channel = '小程序' then 'ToC' \
+                      when channel = 'LOFTER' then 'ToC' \
+                      else 'ToB' \
+                end as channeltype, \
+                suppliertype, \
+                ROUND(SUM(payAmount), 2) AS gmv \
+        FROM lofter.dwd_ec_derivate_gmv_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY dt, channel, channeltype, suppliertype \
+) a \
+FULL JOIN ( \
+        SELECT  dt, \
+                channel, \
+                case \
+                      when channel = '小程序' then 'ToC' \
+                      when channel = 'LOFTER' then 'ToC' \
+                      else 'ToB' \
+                end as channeltype, \
+                suppliertype, \
+                ROUND(SUM(revenue), 2) AS revenue, \
+                SUM(freight_revenue) AS deliveryprice \
+        FROM lofter.dwd_ec_derivate_revenue_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY dt, channel, channeltype, suppliertype \
+) b ON a.dt = b.dt AND a.channel = b.channel AND a.suppliertype = b.suppliertype \
+FULL JOIN ( \
+        SELECT  dt, \
+                channel, \
+                case \
+                      when channel = '小程序' then 'ToC' \
+                      when channel = 'LOFTER' then 'ToC' \
+                      else 'ToB' \
+                end as channeltype, \
+                suppliertype, \
+                suppliertype, \
+                ROUND(SUM(refund), 2) AS refund \
+        FROM lofter.dwd_ec_derivate_refund_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY dt, channel, channeltype, suppliertype \
+) c ON COALESCE(a.dt, b.dt) = c.dt AND COALESCE(a.channel, b.channel) = c.channel AND COALESCE(a.suppliertype, b.suppliertype) = c.suppliertype; \

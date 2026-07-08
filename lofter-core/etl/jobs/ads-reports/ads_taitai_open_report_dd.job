@@ -1,0 +1,7 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_taitai_open_report_dd partition(dt ='${azkaban.flow.1.days.ago}')    \
+select     \
+id,userid,openad ,   \
+createtime,updatetime,lastclosetime,  \
+dbcreatetime,dbupdatetime  \
+from  lofter_db_dump.ods_db_rta_creator_ad_switch_nd   \

@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_creator_post_aid_push_di partition(dt='${azkaban.flow.1.days.ago}') \
+select m.*, \
+       if(case when n.level = 'D*' then m.actionPv > 10 and m.likeCount > 5 \
+               when n.level in ('C', 'D') then m.actionPv > 20 and m.likeCount > 10 \
+               when n.level in ('S', 'A', 'B') then m.actionPv > 50 and m.likeCount > 30 end, 'value', 'normal') as sense_type \
+from ( \
+    select conv(split(a.item_id, '_') [1], 16, 10) as postId, \
+      conv(split(a.item_id, '_') [0], 16, 10) as blogId, \
+      0 as flag, \
+      sum(c.exposed_count) as exposePv, \
+      sum(c.light_action_count)+sum(c.high_action_count) as actionPv, \
+      sum(like_count) as likeCount \
+    from ( \
+      select item_id \
+      from rec.rec_recommend_review_post \
+      where day = '${azkaban.flow.1.days.ago}' and \
+            create_time >= date_sub('${azkaban.flow.1.days.ago}',7) and \
+            create_time <= '${azkaban.flow.1.days.ago}' and \
+            recom_status = 1 \
+    ) a \
+    join( \
+      select item_id,blog_id,tags,exposed_count,light_action_count,high_action_count, cast(like_count as bigint) as like_count \
+      from rec.rec_lofter_analysis_rec_article \
+      where day >= date_sub('${azkaban.flow.1.days.ago}',7) and day <= '${azkaban.flow.1.days.ago}' and \
+            scene is null \
+    ) c on a.item_id = c.item_id \
+    group by a.item_id \
+) m left join ( \
+    select userId, level \
+    from lofter.dws_par_creator_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) n on m.blogId = n.userId \
+where ( case when n.level is null or n.level = 'no' then  m.exposePv > 1000 and m.actionPv > 5 \
+             when n.level = 'D*' then m.exposePv > 800 \
+             when n.level in ('C', 'D') then m.exposePv > 2000 and m.actionPv > 15 \
+             when n.level in ('S', 'A', 'B') then if(m.flag == 1, m.exposePv > 1000, m.exposePv > 5000 and m.actionPv > 50) end ) or \
+      ( case when n.level = 'D*' then m.actionPv > 10 and m.likeCount > 5 \
+             when n.level in ('C', 'D') then m.actionPv > 20 and m.likeCount > 10 \
+             when n.level in ('S', 'A', 'B') then m.actionPv > 50 and m.likeCount > 30 end ) \
+distribute by 1

@@ -1,0 +1,500 @@
+type=sparksql
+hive.query.01=WITH dim_target_pay_posts AS ( \
+    SELECT \
+        postid \
+    FROM lofter.dim_gift_post_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND is_pay_return_gift NOT IN ('0', '1') \
+    GROUP BY postid \
+), \
+t_browse_30d AS ( \
+    SELECT \
+        a.userid, \
+        COUNT(1) AS browse_pay_post_pv_30d, \
+        SUM( \
+            CASE \
+                WHEN arrays_overlap( \
+                    a.post_ips, \
+                    array('崩坏星穹铁道','时代少年团','原神','第五人格','鬼灭之刃', \
+                          '王者荣耀','文豪野犬','奇洛李维斯回信', \
+                          '魔道祖师','188男团','盗墓笔记','少年歌行','少年白马醉春风', \
+                          '恋与深空','原创小说','小潭山没有天文台') \
+                ) \
+                THEN 1 \
+                ELSE 0 \
+            END \
+        ) AS browse_pay_post_pv_30d_ip \
+    FROM ( \
+        SELECT userid, postid, post_ips \
+        FROM lofter.dwd_post_browse_di \
+        WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+          AND is_real = 1 \
+          AND userid IS NOT NULL \
+    ) a \
+    JOIN dim_target_pay_posts b ON a.postid = b.postid \
+    GROUP BY a.userid \
+), \
+t_trade_30d AS ( \
+    SELECT \
+        o.userid, \
+        SUM(o.money) AS pay_amount_30d, \
+        SUM( \
+            CASE \
+                WHEN arrays_overlap( \
+                    p.ips, \
+                    array('崩坏星穹铁道','时代少年团','原神','第五人格','鬼灭之刃', \
+                          '王者荣耀','文豪野犬','奇洛李维斯回信', \
+                          '魔道祖师','188男团','盗墓笔记','少年歌行','少年白马醉春风', \
+                          '恋与深空','原创小说','小潭山没有天文台') \
+                ) THEN o.money \
+                ELSE 0 \
+            END \
+        ) AS pay_amount_30d_ip \
+    FROM ( \
+        SELECT userid, postid, money \
+        FROM lofter.dwd_user_order_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND pay_date BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+          AND revenue_module IN ('付费礼物','券包','粉丝会员','书城会员') \
+          AND userid IS NOT NULL \
+    ) o \
+    JOIN dim_target_pay_posts filter ON o.postid = filter.postid \
+    LEFT JOIN lofter.dim_post p ON o.postid = p.id \
+    GROUP BY o.userid \
+), \
+t0 AS ( \
+    SELECT userid \
+    FROM lofter.dwd_user_order_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND pay_date BETWEEN date_sub('${azkaban.flow.1.days.ago}',364) AND '${azkaban.flow.1.days.ago}' \
+      AND revenue_module IN ('付费礼物','PVE虚拟陪伴','券包','粉丝会员','书城会员','市集','抽赏') \
+    GROUP BY userid \
+), \
+t1 AS ( \
+    SELECT userid \
+        ,SUM(1d_money) all_1d_money \
+        ,SUM(CASE WHEN revenue_module='付费礼物' THEN 1d_money END) pay_gift_1d_money \
+        ,SUM(CASE WHEN revenue_module='PVE虚拟陪伴' THEN 1d_money END) pve_1d_money \
+        ,SUM(CASE WHEN revenue_module='券包' THEN 1d_money END) coupon_card_1d_money \
+        ,SUM(CASE WHEN revenue_module='粉丝会员' THEN 1d_money END) fans_vip_1d_money \
+        ,SUM(CASE WHEN revenue_module='书城会员' THEN 1d_money END) book_vip_1d_money \
+        ,SUM(CASE WHEN revenue_module='市集' THEN 1d_money END) market_1d_money \
+        ,SUM(CASE WHEN revenue_module='抽赏' THEN 1d_money END) lottery_1d_money \
+        ,SUM(CASE WHEN revenue_module IN ('付费礼物', '券包', '粉丝会员', '书城会员') THEN 1d_money ELSE 0 END) AS core_pay_money_1d \
+    FROM \
+    ( \
+    SELECT userid \
+        ,revenue_module \
+        ,SUM(money) 1d_money \
+    FROM lofter.dwd_user_order_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+        AND pay_date = '${azkaban.flow.1.days.ago}' \
+        AND revenue_module IN ('付费礼物','PVE虚拟陪伴','券包','粉丝会员','书城会员','市集','抽赏') \
+    GROUP BY userid, revenue_module \
+    ) sub \
+    GROUP BY userid \
+), \
+t2 AS ( \
+    SELECT userid \
+        ,SUM(1d_money) all_total_money \
+        ,SUM(CASE WHEN revenue_module='付费礼物' THEN 1d_money END) pay_gift_total_money \
+        ,SUM(CASE WHEN revenue_module='PVE虚拟陪伴' THEN 1d_money END) pve_total_money \
+        ,SUM(CASE WHEN revenue_module='券包' THEN 1d_money END) coupon_card_total_money \
+        ,SUM(CASE WHEN revenue_module='粉丝会员' THEN 1d_money END) fans_vip_total_money \
+        ,SUM(CASE WHEN revenue_module='书城会员' THEN 1d_money END) book_vip_total_money \
+        ,SUM(CASE WHEN revenue_module='市集' THEN 1d_money END) market_total_money \
+        ,SUM(CASE WHEN revenue_module='抽赏' THEN 1d_money END) lottery_total_money \
+    FROM \
+    ( \
+    SELECT userid \
+        ,revenue_module \
+        ,SUM(money) 1d_money \
+    FROM lofter.dwd_user_order_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+        AND pay_date <= '${azkaban.flow.1.days.ago}' \
+        AND revenue_module IN ('付费礼物','PVE虚拟陪伴','券包','粉丝会员','书城会员','市集','抽赏') \
+    GROUP BY userid, revenue_module \
+    ) sub \
+    GROUP BY userid \
+), \
+t3 AS ( \
+  SELECT id,createdate register_date \
+  FROM lofter.dim_user \
+), \
+t4 AS ( \
+    SELECT userid \
+        ,SUM(collection_subscribe_pv) total_collection_subscribe_pv \
+        ,SUM(follow_uv) total_follow_uv \
+    FROM lofter.dws_par_user_interaction_di \
+    WHERE dt <= '${azkaban.flow.1.days.ago}' \
+    GROUP BY userid \
+), \
+t5 AS ( \
+    SELECT userid \
+        ,SUM(cnt) all_post_gift_cnt \
+        ,SUM(CASE WHEN content_type = '文字' THEN cnt END) words_post_gift_cnt \
+        ,SUM(CASE WHEN content_type = '图片' THEN cnt END) picture_post_gift_cnt \
+    FROM \
+    ( \
+    SELECT userid \
+        ,content_type \
+        ,count(1) cnt \
+    FROM lofter.dwd_gift_post_unlock_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+        AND from_unixtime(cast(unlock_time/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    GROUP BY userid, content_type \
+    ) sub \
+    GROUP BY userid \
+), \
+t6 AS ( \
+    SELECT userid \
+        ,SUM(cnt) all_post_browse_cnt \
+        ,SUM(CASE WHEN post_content_type='图片' AND is_pay='free' THEN cnt END) free_picture_post_browse_cnt \
+        ,SUM(CASE WHEN post_content_type='文字' AND is_pay='free' THEN cnt END) free_words_post_browse_cnt \
+        ,SUM(CASE WHEN post_content_type='图片' AND is_pay='pay' THEN cnt END) pay_picture_post_browse_cnt \
+        ,SUM(CASE WHEN post_content_type='文字' AND is_pay='pay' THEN cnt END) pay_words_post_browse_cnt \
+        ,SUM(CASE WHEN is_pay='pay' AND is_real=1 THEN cnt ELSE 0 END) AS valid_pay_browse_pv_1d \
+    FROM \
+    ( \
+        SELECT userid \
+            ,post_content_type \
+            ,CASE WHEN b.postid IS NULL THEN 'free' ELSE 'pay' END is_pay \
+            ,is_real \
+            ,count(1) cnt \
+        FROM \
+        ( \
+            SELECT userid \
+                ,postid \
+                ,post_content_type \
+                ,is_real \
+            FROM lofter.dwd_post_browse_di \
+            WHERE dt = '${azkaban.flow.1.days.ago}' \
+        ) a \
+        LEFT JOIN \
+        ( \
+            SELECT postid \
+            FROM lofter.dim_gift_post_dd \
+            WHERE dt = '${azkaban.flow.1.days.ago}' \
+              AND is_pay_return_gift NOT IN ('0', '1') \
+            GROUP BY postid \
+        ) b \
+        ON a.postid = b.postid \
+        GROUP BY userid, post_content_type, CASE WHEN b.postid IS NULL THEN 'free' ELSE 'pay' END, is_real \
+    ) sub \
+    GROUP BY userid \
+), \
+t7 AS ( \
+    SELECT user_id \
+    FROM rec.rec_fea_gift_item_boost_user_v3 \
+    WHERE day= '${azkaban.flow.1.days.ago}' \
+        AND boost_gift_user_v3='1' \
+), \
+t8 AS ( \
+    SELECT user_id \
+    FROM rec.rec_gift_low_acceptance_users_upload \
+    WHERE day='${azkaban.flow.1.days.ago}' \
+        AND refuse_gift_user='1' \
+), \
+t9 AS ( \
+    SELECT userid \
+        ,CASE WHEN total_money>0 AND total_money<1 THEN 'level_1' \
+            WHEN total_money>=1 AND total_money<3 THEN 'level_2' \
+            WHEN total_money>=3 AND total_money<7 THEN 'level_3' \
+            WHEN total_money>=7 AND total_money<15 THEN 'level_4' \
+            WHEN total_money>=15 THEN 'level_5' END 1d_gift_level \
+        ,total_money as 1d_gift_money \
+    FROM \
+    ( \
+        SELECT userid \
+            ,SUM(money) total_money \
+        FROM lofter.dwd_gift_post_unlock_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        GROUP BY userid \
+    ) sub \
+), \
+t10 AS ( \
+    SELECT userid \
+        ,CASE WHEN total_money>0 AND total_money<1 THEN 'level_1' \
+            WHEN total_money>=1 AND total_money<3 THEN 'level_2' \
+            WHEN total_money>=3 AND total_money<7 THEN 'level_3' \
+            WHEN total_money>=7 AND total_money<25 THEN 'level_4' \
+            WHEN total_money>=25 AND total_money<50 THEN 'level_5' \
+            WHEN total_money>=50 THEN 'level_6' END 7d_gift_level \
+        ,total_money as 7d_gift_money \
+    FROM \
+    ( \
+        SELECT userid \
+            ,SUM(money) total_money \
+        FROM lofter.dwd_gift_post_unlock_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' AND \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+        GROUP BY userid \
+    ) sub \
+), \
+t11 AS ( \
+    SELECT userid \
+        ,CASE WHEN total_money>0 AND total_money<1 THEN 'level_1' \
+            WHEN total_money>=1 AND total_money<3 THEN 'level_2' \
+            WHEN total_money>=3 AND total_money<7 THEN 'level_3' \
+            WHEN total_money>=7 AND total_money<25 THEN 'level_4' \
+            WHEN total_money>=25 AND total_money<50 THEN 'level_5' \
+            WHEN total_money>=50 THEN 'level_6' END 30d_gift_level \
+        ,total_money as 30d_gift_money \
+    FROM \
+    ( \
+        SELECT userid \
+            ,SUM(money) total_money \
+        FROM lofter.dwd_gift_post_unlock_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' AND \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        GROUP BY userid \
+    ) sub \
+), \
+t12 AS ( \
+  SELECT userid, \
+          CASE WHEN trade_money>0 THEN '付费' \
+               WHEN trade_money<=0 AND post_cnt>0 THEN '发文' \
+               WHEN trade_money<=0 AND post_cnt<=0 AND discuss>0 THEN '讨论' \
+               WHEN trade_money<=0 AND post_cnt<=0 AND discuss<=0 AND interact>0 THEN '互动' \
+               WHEN trade_money<=0 AND post_cnt<=0 AND discuss<=0 AND interact<=0 AND valid_pv>2 THEN '消费' \
+               ELSE '无效' END AS active_type \
+  FROM ( \
+    SELECT userid, \
+           valid_pv,send_hot,follow,share_cnt,send_comment_cnt, \
+           send_hot+send_comment_cnt+follow+share_cnt as interact, \
+           discuss, post_cnt, trade_money \
+    FROM lofter.dws_par_user_stratify_di \
+    WHERE dt='${azkaban.flow.1.days.ago}' \
+  ) tt \
+), \
+t13 AS ( \
+   SELECT userId, SUM(IF(unlock_method = '粮票', 1, 0)) AS grain_unlock_pv, \
+          SUM(IF(unlock_method = '券包', 1, 0)) AS coupon_unlock_pv \
+   FROM lofter.dwd_gift_post_unlock_dd \
+   WHERE dt= '${azkaban.flow.1.days.ago}' AND from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+   GROUP BY userId \
+), \
+t14 AS ( \
+   SELECT a.userId, a.balance AS coin_balance, b.recharge_money_1d \
+   FROM ( \
+       SELECT userId, balance \
+       FROM lofter_db_dump.ods_db_trade_coin_balance_nd \
+   ) a \
+   LEFT JOIN ( \
+       SELECT userId, SUM(amount) AS recharge_money_1d \
+       FROM lofter_db_dump.ods_db_trade_buy_coin_order_nd \
+       WHERE status = 1 AND from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+       GROUP BY userId \
+   ) b ON a.userId = b.userId \
+), \
+t15 AS ( \
+   SELECT userId, SUM(count) AS coupon_balance_new_1d \
+   FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+   WHERE from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+   GROUP BY userId \
+), \
+t16 AS ( \
+   SELECT userId, concat_ws(',', transform(sort_array(collect_set(struct(rk, ip)), true), x -> x.ip)) AS top_ips \
+   FROM ( \
+       SELECT userId, ip, row_number() OVER (PARTITION BY userId ORDER BY post_count DESC) AS rk \
+       FROM lofter.dws_ip_user_consume_di \
+       WHERE dt = '${azkaban.flow.1.days.ago}' AND post_count >= 5 \
+   ) t \
+   WHERE rk <= 20 \
+   GROUP BY userId \
+), \
+t17 AS ( \
+   SELECT userId, \
+          SUM(IF(type = 0, 1,0)) AS zhengfankui_pv, \
+          SUM(IF(type = 1, 1,0)) AS fufankui_pv \
+   FROM lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+   WHERE type IN (0, 1) \
+   GROUP BY userId \
+), \
+t18 AS ( \
+   SELECT a.userId, COUNT(DISTINCT a.postId) AS subscribe_unlock_post_count \
+   FROM ( \
+       SELECT userId, postId \
+       FROM lofter.dwd_gift_post_unlock_dd \
+       WHERE dt = '${azkaban.flow.1.days.ago}' AND money > 0 \
+       GROUP BY userId, postId \
+   ) a \
+   JOIN lofter.bridge_collection_post b ON a.postId = b.postId \
+   JOIN lofter_db_dump.ods_db_subscribe_collection_nd c ON b.collectionId = c.collectionId AND a.userId = c.userId \
+   GROUP BY a.userId \
+), \
+t19 AS ( \
+   SELECT userId, concat_ws(',', transform(sort_array(collect_set(struct(rk, ip)), true), x -> x.ip)) AS pay_top_ips \
+   FROM ( \
+       SELECT userId, ip, row_number() OVER (PARTITION BY userId ORDER BY pay_post_count DESC) AS rk \
+       FROM lofter.dws_ip_user_consume_di \
+       WHERE dt = '${azkaban.flow.1.days.ago}' AND pay_post_count > 0 \
+   ) t \
+   WHERE rk <= 20 \
+   GROUP BY userId \
+), \
+t20 AS( \
+  SELECT id,concat('https://',blogname,'.lofter.com/') AS user_homepage \
+  FROM lofter.dim_blog \
+), \
+t21 AS( \
+  SELECT \
+    userid, \
+    MAX(CASE WHEN period = 1 AND tag_type = 'content' THEN tags END) AS pay_top_types_1d, \
+    MAX(CASE WHEN period = 7 AND tag_type = 'content' THEN tags END) AS pay_top_types_7d, \
+    MAX(CASE WHEN period = 1 AND tag_type = 'interest' THEN tags END) AS pay_top_sells_1d, \
+    MAX(CASE WHEN period = 7 AND tag_type = 'interest' THEN tags END) AS pay_top_sells_7d \
+  FROM ( \
+    SELECT \
+      userid, \
+      period, \
+      tag_type, \
+      CONCAT_WS(',', COLLECT_LIST(tag)) AS tags \
+    FROM ( \
+      SELECT \
+        userid, \
+        period, \
+        'content' AS tag_type, \
+        types.tag AS tag \
+      FROM lofter.dws_gift_unlock_tag_interests_di \
+      LATERAL VIEW EXPLODE(unlock_tag_contents) exploded_table AS types \
+      WHERE dt = '${azkaban.flow.1.days.ago}' AND period IN (1, 7) \
+    UNION ALL \
+      SELECT \
+        userid, \
+        period, \
+        'interest' AS tag_type, \
+        sells.tag AS tag \
+      FROM lofter.dws_gift_unlock_tag_interests_di \
+      LATERAL VIEW EXPLODE(unlock_tag_interests) exploded_table AS sells \
+      WHERE dt = '${azkaban.flow.1.days.ago}' AND period IN (1, 7) \
+    ) combined_data \
+    GROUP BY userid, period, tag_type \
+  )grouped_data \
+  GROUP BY userid \
+), \
+t22 AS( \
+    SELECT userId, \
+        COUNT(IF(unlock_date = '${azkaban.flow.1.days.ago}' AND return_gift_type = 'article', 1, null )) AS article_unlock_times_0d, \
+        COUNT(IF(unlock_date >= date_sub('${azkaban.flow.1.days.ago}',29) AND return_gift_type = 'article', 1, null )) AS article_unlock_times_30d, \
+        COUNT(IF(unlock_date >= date_sub('${azkaban.flow.1.days.ago}',89) AND return_gift_type = 'article', 1, null )) AS article_unlock_times_90d, \
+        SUM(IF(unlock_date = '${azkaban.flow.1.days.ago}' AND return_gift_type = 'article', money, 0 )) AS article_unlock_money_0d, \
+        SUM(IF(unlock_date >= '${azkaban.flow.30.days.ago}' AND return_gift_type = 'article', money, 0 )) AS article_unlock_money_30d, \
+        SUM(IF(unlock_date = '${azkaban.flow.1.days.ago}' AND return_gift_type = 'picture', money, 0 )) AS picture_unlock_money_0d, \
+        SUM(IF(unlock_date >= '${azkaban.flow.30.days.ago}' AND return_gift_type = 'picture', money, 0 )) AS picture_unlock_money_30d, \
+        SUM(IF(unlock_date = '${azkaban.flow.1.days.ago}' AND return_gift_type = 'dress', money, 0 )) AS dress_unlock_money_0d, \
+        SUM(IF(unlock_date >= '${azkaban.flow.30.days.ago}' AND return_gift_type = 'dress', money, 0 )) AS dress_unlock_money_30d \
+    FROM( \
+        SELECT userId, return_gift_id, money, from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') AS unlock_date \
+        FROM lofter.dwd_gift_post_unlock_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') BETWEEN date_sub('${azkaban.flow.1.days.ago}',89) AND '${azkaban.flow.1.days.ago}' \
+    )a \
+    LEFT JOIN ( \
+        SELECT id, \
+            CASE \
+                WHEN cast(get_json_object(content, '$.returnGiftDressId') as bigint) > 0 THEN 'dress' \
+                WHEN get_json_object(imagejson, '$.images[0].raw') IS NOT NULL THEN 'picture' \
+                WHEN content IS NOT NULL THEN 'article' \
+                ELSE 'other' \
+            END AS return_gift_type \
+        FROM lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+    )b ON a.return_gift_id = b.id \
+    GROUP BY userId \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_gift_easy_fetch_user_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT t0.userid \
+    ,register_date \
+    ,total_collection_subscribe_pv \
+    ,total_follow_uv \
+    ,all_post_browse_cnt \
+    ,free_picture_post_browse_cnt \
+    ,free_words_post_browse_cnt \
+    ,pay_picture_post_browse_cnt \
+    ,pay_words_post_browse_cnt \
+    ,all_post_gift_cnt \
+    ,words_post_gift_cnt \
+    ,picture_post_gift_cnt \
+    ,all_1d_money \
+    ,pay_gift_1d_money \
+    ,pve_1d_money \
+    ,coupon_card_1d_money \
+    ,fans_vip_1d_money \
+    ,book_vip_1d_money \
+    ,market_1d_money \
+    ,lottery_1d_money \
+    ,all_total_money \
+    ,pay_gift_total_money \
+    ,pve_total_money \
+    ,coupon_card_total_money \
+    ,fans_vip_total_money \
+    ,book_vip_total_money \
+    ,market_total_money \
+    ,lottery_total_money \
+    ,1d_gift_level \
+    ,7d_gift_level \
+    ,30d_gift_level \
+    ,CASE WHEN t7.user_id IS NOT NULL THEN '高付费意愿' ELSE '其他' END is_high_willing_pay_user \
+    ,CASE WHEN t8.user_id IS NOT NULL THEN '付费排斥' ELSE '其他' END refuse_pay_user \
+    ,1d_gift_money, 7d_gift_money, 30d_gift_money \
+    ,active_type \
+    ,grain_unlock_pv \
+    ,coupon_unlock_pv \
+    ,coin_balance \
+    ,recharge_money_1d \
+    ,coupon_balance_new_1d \
+    ,top_ips \
+    ,subscribe_unlock_post_count \
+    ,zhengfankui_pv \
+    ,fufankui_pv \
+    ,pay_top_ips \
+    ,t20.user_homepage \
+    ,t21.pay_top_types_1d \
+    ,t21.pay_top_sells_1d \
+    ,t21.pay_top_types_7d \
+    ,t21.pay_top_sells_7d \
+    ,t22.article_unlock_times_0d \
+    ,t22.article_unlock_times_30d \
+    ,t22.article_unlock_times_90d \
+    ,t22.article_unlock_money_0d \
+    ,t22.article_unlock_money_30d \
+    ,t22.picture_unlock_money_0d \
+    ,t22.picture_unlock_money_30d \
+    ,t22.dress_unlock_money_0d \
+    ,t22.dress_unlock_money_30d \
+    ,nvl(tb.browse_pay_post_pv_30d, 0) AS paid_post_valid_pv_30d \
+    ,nvl(tt.pay_amount_30d, 0) AS paid_post_amount_30d \
+    ,nvl(tb.browse_pay_post_pv_30d_ip, 0) AS ip_paid_post_valid_pv_30d \
+    ,nvl(tt.pay_amount_30d_ip, 0) AS ip_paid_post_amount_30d \
+    ,nvl(t1.core_pay_money_1d, 0) AS total_pay_amount_1d \
+    ,nvl(t6.valid_pay_browse_pv_1d, 0) AS valid_pay_browse_pv_1d \
+    ,nvl(t14.recharge_money_1d, 0) AS coin_recharge_amount_1d \
+    ,nvl(t1.coupon_card_1d_money, 0) AS coupon_buy_amount_1d \
+FROM t0 \
+LEFT JOIN t1 ON t0.userid = t1.userid \
+LEFT JOIN t2 ON t0.userid = t2.userid \
+LEFT JOIN t3 ON t0.userid = t3.id \
+LEFT JOIN t4 ON t0.userid = t4.userid \
+LEFT JOIN t5 ON t0.userid = t5.userid \
+LEFT JOIN t6 ON t0.userid = t6.userid \
+LEFT JOIN t7 ON t0.userid = t7.user_id \
+LEFT JOIN t8 ON t0.userid = t8.user_id \
+LEFT JOIN t9 ON t0.userid = t9.userid \
+LEFT JOIN t10 ON t0.userid = t10.userid \
+LEFT JOIN t11 ON t0.userid = t11.userid \
+LEFT JOIN t12 ON t0.userid = t12.userid \
+LEFT JOIN t13 ON t0.userid = t13.userid \
+LEFT JOIN t14 ON t0.userid = t14.userid \
+LEFT JOIN t15 ON t0.userid = t15.userid \
+LEFT JOIN t16 ON t0.userid = t16.userid \
+LEFT JOIN t17 ON t0.userid = t17.userid \
+LEFT JOIN t18 ON t0.userid = t18.userid \
+LEFT JOIN t19 ON t0.userid = t19.userid \
+LEFT JOIN t20 ON t0.userid = t20.id \
+LEFT JOIN t21 ON t0.userid = t21.userid \
+LEFT JOIN t22 ON t0.userid = t22.userid \
+LEFT JOIN t_browse_30d tb ON t0.userid = tb.userid \
+LEFT JOIN t_trade_30d tt ON t0.userid = tt.userid \
+ORDER BY t0.userid

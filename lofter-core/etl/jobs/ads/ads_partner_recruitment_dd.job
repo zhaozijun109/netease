@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_partner_recruitment_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, cnt as 7DayCommentOrAskNum, type \
+from ( \
+    select userId, cnt, type, row_number() over(partition by userId order by type desc) as rn \
+    from ( \
+        select userId, send_comment_cnt_7d as cnt, 1 as type from lofter.dws_par_user_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and send_comment_cnt_7d >= 5 \
+        union all \
+        select blogId as userId, count(1) as cnt, 2 as type from lofter.dim_post_talk where createDate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' group by userId having count(1) >= 5 \
+    ) t1 \
+) t2 \
+where rn = 1

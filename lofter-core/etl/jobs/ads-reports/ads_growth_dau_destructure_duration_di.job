@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_dau_destructure_duration_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select growth_type, growth_duration, count(distinct deviceUdid) as users \
+from ( \
+    select deviceUdid, \
+          case when (origin_channel like '%订阅' or origin_channel like '%会员]' or origin_channel like '%米良%') then '付费拉新' \
+               when origin_type in ('口令','广告') and (origin_channel not like '%订阅' and origin_channel not like '%会员]%' and origin_channel not like '%米良%') then '免费拉新' \
+               else '自然' end as growth_type, \
+    case when datediff('${azkaban.flow.1.days.ago}', last_growth_date) < 7 then '近7天' \
+         when datediff('${azkaban.flow.1.days.ago}', last_growth_date) < 30 then '近8-30天' \
+         when datediff('${azkaban.flow.1.days.ago}', last_growth_date) < 90 then '近31-90天' \
+         else '90天以上' end growth_duration \
+    from lofter.dwd_device_all_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_active_today = 1 \
+) t \
+group by growth_duration, growth_type \
+distribute by 1

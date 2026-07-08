@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_collection_content_info_total_dd` partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.columnId, \
+        tmp1.columnType, \
+        tmp1.contentId AS collectionId, \
+        tmp1.exposureCount, \
+        tmp1.clickCount, \
+        tmp1.clickRateCount, \
+        tmp2.subscribeCount \
+FROM \
+( \
+	SELECT  columnId, \
+	        columnType, \
+	        contentid, \
+	        SUM(exposureCount)  AS exposureCount, \
+	        SUM(clickCount)     AS clickCount, \
+	        NVL(SUM(clickCount)/SUM(exposureCount),0) AS clickRateCount \
+	FROM  `lofter_dm`.`ads_column_content_info_total_dd` \
+    WHERE dt = '${azkaban.flow.1.days.ago}' AND columnType = 'COLLECTION' \
+	GROUP BY columnId, \
+             columnType, \
+             contentid \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT collectionid, \
+           NVL(subscribe_uv_acc, 0) AS subscribeCount \
+    FROM lofter.dws_collection_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp2 \
+ON tmp1.contentid = tmp2.collectionid
+dependencies=ads_column_content_info_total_dd

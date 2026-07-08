@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option java_outer_classname = "RtrsFileRecord";
+option java_package = "com.netease.cloudmusic";
+
+message Record {
+  string pk = 1;      // 主key
+  string sk = 2;      // 副key
+  bytes value = 3;    // value
+  int32 ttl = 4;      // 过期时间(s)
+}

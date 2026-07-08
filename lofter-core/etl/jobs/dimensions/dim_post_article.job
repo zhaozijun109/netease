@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dim_post_article \
+select id, \
+       userId, \
+       blogId, \
+       blogName, \
+       title, \
+       publishTime, \
+       publishDate, \
+       tags, \
+       domains, \
+       isPublished, \
+       isForbidden, \
+       isBlogAuthenticated, \
+       userPostIndex, \
+       contentType, \
+       citedParentPostid, \
+       isCitedPost, \
+       moveFrom, \
+       userCreateFrom, \
+       userCreateDate, \
+       blogNickname, \
+       valid, \
+       allowView, \
+       isChat, \
+       isMoved, \
+       isImported, \
+       isActivityAutopost, \
+       ips, \
+       url, \
+       is_book_store, \
+       recomStatus, \
+       importPlatformType \
+from lofter.dim_post \
+where contentType <> '问答'
+dependencies=dim_post

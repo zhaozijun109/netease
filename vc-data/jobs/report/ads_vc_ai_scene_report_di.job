@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc_dm.ads_vc_ai_scene_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select  \
+date_format(requesttime, 'yyyy-MM-dd HH')  as requesttime, \
+model, \
+modelname, \
+aiscenecode, \
+aiscenecodedesc, \
+code,  \
+errormsg, \
+MAX(codedesc) as codedesc,  \
+count(*) as callcount, \
+sum(inputtokencount) as inputtokencount, \
+sum(outputtokencount) as outputtokencount, \
+sum(totaltokencount) as totaltokencount, \
+sum(inputcost) as inputcost, \
+sum(outputcost) as outputcost, \
+sum(cachecost) as cachecost, \
+sum(cachetokencount) as cachetokencount \
+from vc.ods_vc_log_ai_scene_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by date_format(requesttime, 'yyyy-MM-dd HH') , \
+model, \
+modelname, \
+aiscenecode, \
+aiscenecodedesc, \
+code,  \
+errormsg \

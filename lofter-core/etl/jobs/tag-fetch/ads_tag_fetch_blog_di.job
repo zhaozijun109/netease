@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_tag_fetch_blog_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as userId, free_gift_sender_bitmap, nvl(free_gift_pv,0), pay_gift_sender_bitmap, nvl(pay_gift_money_amount,0), \
+       nvl(is_new_user,0), nvl(is_first_publish,0), nvl(is_active_creator,0), nvl(fans_std,0) \
+from lofter.dim_blog a \
+left join ( \
+    select b.blogId, \
+           to_bitmap(if(giftType = 0, sender, null)) free_gift_sender_bitmap, \
+           sum(if(giftType = 0, 1, 0)) free_gift_pv, \
+           to_bitmap(if(giftType = 1, sender, null)) pay_gift_sender_bitmap, \
+           sum(if(giftType = 1, coin/10, 0)) pay_gift_money_amount \
+    from ( \
+        select postId, blogId \
+        from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+        where status = 1 and auditStatus = 1 \
+        group by postId, blogId \
+    ) b \
+    left join ( \
+        select postId, giftType, sender, coin \
+        from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+              giftType in (0, 1) \
+    ) c on b.postId = c.postId \
+    group by b.blogId \
+) b on a.id = b.blogId \
+left join ( \
+ select userId, is_new_user, is_first_publish, is_active_creator \
+ from lofter.dws_par_creator_di \
+ where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.id = c.userId \
+left join ( \
+    select blogId, \
+           count(1) as fans_std \
+    from lofter_db_dump.ods_db_user_following_nd \
+    where from_unixtime(cast(followTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) d on a.id = d.blogId \
+where (free_gift_pv > 0 or pay_gift_money_amount > 0 or fans_std > 0 or c.userId is not null)

@@ -1,0 +1,20 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag pve用户剩余体力 --bitmap
+retries=0
+conf.spark.execute.sql="select userid                          as userId, \
+                               'pve用户剩余体力'               as tag_name, \
+                               ''                              as dim1, \
+                               ''                              as dim2, \
+                               ''                              as dim3, \
+                               ''                              as dim4, \
+                               case \
+                                  when stamina = 0 then '0' \
+                                  when stamina > 0 and stamina <= 50 then '0-50' \
+                                  when stamina > 50 and stamina <= 100 then '50-100' \
+                                  when stamina > 100 and stamina <= 300 then '100-300' \
+                                  when stamina > 300 and stamina <= 500 then '300-500' \
+                                  else '500及以上' end          as grp, \
+                               ''                              as value \
+                        from lofter_db_dump.ods_db_pve_user_info_nd \
+                        where sendmsgcount > 0;"

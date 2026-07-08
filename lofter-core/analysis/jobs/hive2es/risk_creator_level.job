@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select userId as id, userId as blogId, dt, level as dengji from lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}' and level is not null "
+params= --partition ${azkaban.flow.1.days.ago} --dest risk_creator_level --url "lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F" --update --full --atom --postfixsep

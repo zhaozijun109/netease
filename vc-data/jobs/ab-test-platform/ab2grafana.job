@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select exp_date as day, exp_id as expId, bucket_id as expGroupId, metricDetailId, metricDimId, metric_value as value from vc.dws_ab_platform_experiment_metric_di where dt='${azkaban.flow.1.days.ago}' "
+params= --topic data_center_ab_exp_result
+dependencies=dws_ab_platform_experiment_metric_di

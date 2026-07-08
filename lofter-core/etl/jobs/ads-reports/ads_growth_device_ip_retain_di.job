@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_device_ip_retain_di partition(dt='${azkaban.flow.1.days.ago}') \
+select base_date, a.ip,categories,device_type, origin_type, origin_channel, is_paid_subscribe,  \
+       nvl(count(distinct if(b.period = 1, b.deviceUdid, null)), 0) as retain_device_count,  \
+       nvl(count(distinct if(b.period = 6, b.deviceUdid, null)), 0) as retain_7d_device_count,  \
+       nvl(count(distinct if(b.period = 14, b.deviceUdid, null)), 0) as retain_15d_device_count, \
+       nvl(count(distinct if(b.period = 29, b.deviceUdid, null)), 0) as retain_30d_device_count \
+from (  \
+   select ip, device_type, origin_type, origin_channel, deviceUdid, is_paid_subscribe,dt  \
+   from lofter.dwd_device_growth_content_di \
+   lateral view explode(split(ips,',')) t1 as ip \
+   where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.2.days.ago}' \
+) a  \
+join  \
+(  \
+   select deviceUdid, base_date, period  \
+   from lofter.device_retain  \
+   where dt = '${azkaban.flow.1.days.ago}' and is_retain > 0  \
+) b  \
+on a.deviceUdid = b.deviceUdid and a.dt = b.base_date  \
+left join \
+( \
+    select ip,concat_ws(',',categories) categories  \
+    from lofter.dim_ip_dd \
+    where dt='${azkaban.flow.1.days.ago}'   \
+) c \
+on a.ip=c.ip \
+where datediff('${azkaban.flow.1.days.ago}', a.dt) in (1, 6, 14,29)  \
+group by base_date, a.ip,categories,device_type, origin_type, origin_channel, is_paid_subscribe \

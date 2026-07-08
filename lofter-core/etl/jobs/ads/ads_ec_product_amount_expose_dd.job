@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ec_product_amount_expose_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select date_format('${azkaban.flow.1.days.ago}','yyyyMMdd') as `date`, \
+       t1.itemId, \
+       t1.itemType, \
+       t1.ipName, \
+       t1.seriesName, \
+       nvl(t2.gmv, 0) as gmv, \
+       nvl(t3.showCount, 0) as showCount \
+from ( \
+    select itemId, \
+           itemType, \
+           ipName, \
+           seriesName, \
+           null as cardActivityCode \
+    from lofter_db_dump.ods_db_benefit_ip_series_relation_nd \
+    where isDeleted = 0 and itemType = 0 \
+    union all \
+    select itemId, \
+           itemType, \
+           ipName, \
+           seriesName, \
+           cardActivityCode \
+    from ( \
+        select itemId, \
+               itemType, \
+               ipName, \
+               seriesName \
+        from lofter_db_dump.ods_db_benefit_ip_series_relation_nd \
+        where isDeleted = 0 and itemType = 1 \
+    ) a \
+    left join ( \
+        select id, \
+               code as cardActivityCode \
+        from lofter_db_dump.ods_db_benefit_card_activity_nd \
+    ) b \
+    on a.itemId = b.id \
+) t1 \
+left join ( \
+    select productId as itemId, \
+           case when productType = 3 then 0 \
+                when productType = 5 then 1 \
+           end as itemType, \
+           cardActivityCode, \
+           sum(storePrice * productNum) as gmv \
+    from lofter.dwd_ec_product_order_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 29) and dt <= '${azkaban.flow.1.days.ago}' and originType = 0 and productType in (3, 5) and status in (1, 4) \
+    group by productId, productType, cardActivityCode \
+) t2 \
+on (t1.itemId = t2.itemId and t1.itemType = 0 and t2.itemType = 0) or (t1.cardActivityCode = t2.cardActivityCode and t1.itemType = 1 and t2.itemType = 1) \
+left join ( \
+    select itemId, \
+           case when itemType = 'PRODUCT' then 0 \
+                when itemType = 'CARD' then 1 \
+           end as itemType, \
+           count(1) as showCount \
+    from lofter.dwd_ec_product_expose_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 29) and dt <= '${azkaban.flow.1.days.ago}' \
+    group by itemId, itemType \
+) t3 \
+on t1.itemId = t3.itemId and t1.itemType = t3.itemType

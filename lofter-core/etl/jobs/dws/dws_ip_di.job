@@ -1,0 +1,118 @@
+type=sparksql
+hive.query.01=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.02=insert overwrite table lofter.dws_ip_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.ip, a1.tags, \
+    b.post_count, b.post_uv, b.free_post_count, \
+    b.photo_post_count, b.text_post_count, b.video_post_count, \
+    b.photo_post_uv, b.text_post_uv, b.video_post_uv, \
+    b.level_s_post_count, b.level_a_post_count, b.level_b_post_count, b.level_c_post_count,b.level_d_post_count,b.level_d_star_post_count, b.level_none_post_count, \
+    b.level_s_post_uv, b.level_a_post_uv, b.level_b_post_uv, b.level_c_post_uv,b.level_d_post_uv,b.level_d_star_post_uv, b.level_none_post_uv, \
+    c.hot, c.recommend_count, c.photo_hot, c.text_hot, c.video_hot, \
+    c.photo_recommend_count, c.text_recommend_count, c.video_recommend_count, \
+    d.expose_pv, d.real_browse_pv, e.premium_post_count, \
+    e.photo_premium_post_count, e.text_premium_post_count, e.video_premium_post_count, \
+    b.pay_post_count, \
+    f.pay_gift_money_1d, f.pay_gift_uv_1d \
+from ( \
+    select ip \
+    from lofter.dim_ip_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select ip, collect_set(tag) as tags \
+    from lofter.dwd_tag_ip_mapping_nd \
+    group by 1 \
+) a1 on a.ip = a1.ip \
+left join ( \
+    select ip, \
+        count(distinct x.postId) as post_count, \
+        count(distinct x.userId) as post_uv, \
+        count(distinct if(y.postId is null, x.postId, null)) as free_post_count, \
+        count(distinct if(x.post_content_type = '图片', x.postId, null)) as photo_post_count, \
+        count(distinct if(x.post_content_type = '文字', x.postId, null)) as text_post_count, \
+        count(distinct if(x.post_content_type = '视频', x.postId, null)) as video_post_count, \
+        count(distinct if(x.post_content_type = '图片', x.userId, null)) as photo_post_uv, \
+        count(distinct if(x.post_content_type = '文字', x.userId, null)) as text_post_uv, \
+        count(distinct if(x.post_content_type = '视频', x.userId, null)) as video_post_uv, \
+        count(distinct if(z.level = 'S', x.postId, null)) as level_s_post_count, \
+        count(distinct if(z.level = 'A', x.postId, null)) as level_a_post_count, \
+        count(distinct if(z.level = 'B', x.postId, null)) as level_b_post_count, \
+        count(distinct if(z.level = 'C', x.postId, null)) as level_c_post_count, \
+        count(distinct if(z.level = 'D', x.postId, null)) as level_d_post_count, \
+        count(distinct if(z.level = 'D*', x.postId, null)) as level_d_star_post_count, \
+        count(distinct if(z.level is null, x.postId, null)) as level_none_post_count, \
+        count(distinct if(z.level = 'S', x.userId, null)) as level_s_post_uv, \
+        count(distinct if(z.level = 'A', x.userId, null)) as level_a_post_uv, \
+        count(distinct if(z.level = 'B', x.userId, null)) as level_b_post_uv, \
+        count(distinct if(z.level = 'C', x.userId, null)) as level_c_post_uv, \
+        count(distinct if(z.level = 'D', x.userId, null)) as level_d_post_uv, \
+        count(distinct if(z.level = 'D*', x.userId, null)) as level_d_star_post_uv, \
+        count(distinct if(z.level is null, x.userId, null)) as level_none_post_uv, \
+        count(distinct if(y.ispay_returngift in (0, 1), x.postId, null)) as pay_post_count \
+    from ( \
+        select ip, postId, userId, post_content_type \
+        from lofter.dwd_post_publish_di \
+            lateral view explode(post_ips) as ip \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    left join ( \
+        select postId, ispay_returngift \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) y on x.postId = y.postId \
+    left join ( \
+        select userId, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) z on x.userId = z.userId \
+    group by 1 \
+) b on a.ip = b.ip \
+left join ( \
+    select post_ip as ip, \
+        sum(1) as hot, \
+        sum(if(opType='recommend', 1, 0)) as recommend_count, \
+        sum(if(post_content_type = '图片', 1, 0)) as photo_hot, \
+        sum(if(post_content_type = '文字', 1, 0)) as text_hot, \
+        sum(if(post_content_type = '视频', 1, 0)) as video_hot, \
+        sum(if(post_content_type = '图片' and opType='recommend', 1, 0)) as photo_recommend_count, \
+        sum(if(post_content_type = '文字' and opType='recommend', 1, 0)) as text_recommend_count, \
+        sum(if(post_content_type = '视频' and opType='recommend', 1, 0)) as video_recommend_count \
+    from lofter.dwd_post_hot_di \
+        lateral view explode(post_ips) as post_ip \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) c on a.ip = c.ip \
+left join ( \
+    select ip, \
+        sum(expose_pv) as expose_pv, sum(real_browse_pv) as real_browse_pv \
+    from lofter.dws_post_traffic_di \
+        lateral view explode(resolve_tag_ip(post_tags)) as ip \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.ip = d.ip \
+left join ( \
+    select ip, \
+        count(distinct postId) as premium_post_count, \
+        count(distinct if(content_type = '图片', postId, null)) as photo_premium_post_count, \
+        count(distinct if(content_type = '视频', postId, null)) as video_premium_post_count, \
+        count(distinct if(content_type = '文字', postId, null)) as text_premium_post_count \
+    from lofter.dws_post_premium_di \
+        lateral view explode(resolve_tag_ip(tags)) as ip \
+    where dt = '${azkaban.flow.1.days.ago}' and premium_date = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.ip = e.ip \
+left join ( \
+    select b.ip, sum(a.money) as pay_gift_money_1d, count(distinct a.userId) as pay_gift_uv_1d \
+    from ( \
+        select postId, money, userId \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+              money > 0 \
+    ) a \
+    join (select id as postId, ip from lofter.dim_post lateral view explode(ips) as ip) b on a.postId = b.postId \
+    group by 1 \
+) f on a.ip = f.ip \
+
+dependencies=dws_par_creator_level_scoring_dd,dws_post_traffic_di,dws_post_premium_di

@@ -1,0 +1,48 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_act_card_trace_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.activityid, a.activityname, a.adtrace, adtrace_name, count(distinct a.userid) as visit_user_count, \
+          count(distinct if(a1.isanonymous = 0, a.userid, null)) as visit_register_user_count, \
+          count(distinct b.userid) as payers, count(distinct orderid) as orders, sum(b.money) as money \
+    from ( \
+        select aa.dt, aa.activityid, aa.adtrace, aa.name activityname, aa.userid, bb.name adtrace_name \
+        from ( \
+            select \
+              distinct dt, \
+              parse_url(currenturl, "QUERY", "adTrace") adtrace, \
+              parse_url(currenturl, "QUERY", "activityCode") activityid, \
+              b.name, \
+              userid \
+            from \
+              lofter.ods_mda_wap_di a \
+              join lofter_db_dump.ods_db_benefit_card_activity_nd b on parse_url(currenturl, "QUERY", "activityCode") = b.code \
+            where dt = '${azkaban.flow.1.days.ago}' \
+          ) aa \
+          left outer join ( \
+            select parse_url(traceurl, "QUERY", "adTrace") adtrace, name \
+            from lofter_db_dump.ods_db_benefit_ad_trace_config_nd \
+          ) bb on aa.adtrace = bb.adtrace \
+      ) a \
+      left outer join lofter.dim_user a1 on a.userid = a1.id \
+      left outer join ( \
+        select \
+          from_unixtime(cast(createtime / 1000 as bigint), 'yyyy-MM-dd') day, \
+          adtrace, buyerid userid, orderid, cardActivityCode, \
+          sum(storeprice * productnum - newcouponpreferential) money \
+        from lofter_db_dump.ods_db_benefit_order_product_nd \
+        where from_unixtime(cast(createtime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+          and status in (1, 4) \
+          and type = 5 \
+        group by \
+          from_unixtime(cast(createtime / 1000 as bigint), 'yyyy-MM-dd'),\
+          adtrace, \
+          buyerid, \
+          orderid, \
+          cardActivityCode \
+      ) b on a.dt = b.day \
+      and a.adtrace = b.adtrace \
+      and a.userid = b.userid \
+      and a.activityid = b.cardActivityCode \
+    where a.adtrace is not null \
+    group by a.activityname, adtrace_name, a.activityid, a.adtrace \
+    distribute by 1

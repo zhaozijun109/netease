@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_index_user_status_di partition(dt='${azkaban.flow.1.days.ago}') \
+select to_bitmap(if(is_new_user > 0, a.userId, null)) as new_creator_bitmap, \
+       to_bitmap(if(is_new_user = 0 and is_first_publish = 0 and is_active_creator = 0, a.userId, null)) as return_creator_bitmap, \
+       to_bitmap(if(is_first_publish > 0 and is_new_user = 0, a.userId, null)) as first_publish_creator_bitmap, \
+       to_bitmap(if(b.active_type = 1, b.userId, null)) as new_user_bitmap, \
+       to_bitmap(if(b.active_type = 2, b.userId, null)) as return_user_bitmap, \
+       to_bitmap(if(b.active_type = 3, b.userId, null)) as login_user_bitmap \
+from ( \
+  select userId, is_new_user, is_first_publish, is_active_creator \
+  from lofter.dws_par_creator_di \
+  where dt='${azkaban.flow.1.days.ago}' \
+) a \
+full outer join ( \
+  select id as userId, 1 as active_type \
+  from lofter.dim_user \
+  where createDate = '${azkaban.flow.1.days.ago}' \
+ union all \
+  select accountId as userId, 2 as active_type \
+  from lofter.dws_evt_login_user_last_dd \
+  where dt = '${azkaban.flow.1.days.ago}' and accountId > 0 and \
+        from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+        datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd')) >= 30 \
+ union all \
+  select accountId as userId, 3 as active_type \
+  from lofter.dwd_evt_user_login_di \
+  where dt = '${azkaban.flow.1.days.ago}' and accountId > 0 and actionType = 'login' \
+) b on a.userId = b.userId

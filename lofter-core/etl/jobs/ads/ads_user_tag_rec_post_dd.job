@@ -1,0 +1,87 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=\
+insert overwrite table lofter_dm.ads_user_tag_rec_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       postId, \
+       blogId, \
+       tags \
+from ( \
+    select t1.userId, \
+           t2.postId, \
+           t2.blogId, \
+           t2.tags, \
+           row_number() over(partition by t1.userId order by t3.hot desc) as rn \
+    from ( \
+        select userId,\
+               tag \
+        from ( \
+            select a.userId, \
+                   tag, \
+                   row_number() over(partition by a.userId order by send_hot_std desc) as rn \
+            from ( \
+                select userId, \
+                       tag, \
+                       sum(send_hot_std) as send_hot_std \
+                from lofter.dws_user_tag_interaction_di \
+                where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                group by userId, \
+                         tag \
+                having sum(send_hot_std) >= 5 \
+            ) a \
+            join ( \
+                select userId \
+                from lofter.dwd_user_active_di \
+                where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and is_anonymous = 0 \
+                group by userId \
+                having count(distinct dt) > 10 \
+            ) b \
+            on a.userId = b.userId \
+        ) c \
+        where rn <= 10 \
+    ) t1 \
+    join ( \
+        select userId, \
+               a.postId, \
+               tag, \
+               blogId, \
+               tags \
+        from ( \
+            select userId, \
+                   postId, \
+                   blogId \
+            from lofter_db_dump.ods_db_user_subscribe_post_nd \
+        ) a \
+        join ( \
+            select id, \
+                   tag, \
+                   tags \
+            from lofter.dim_post_article lateral view explode(tags) as tag \
+        ) b \
+        on a.postId = b.id \
+        union \
+        select userId, \
+               postId, \
+               tag, \
+               post_userId as blogId, \
+               post_tags as tags \
+        from lofter.dwd_post_hot_di lateral view explode(post_tags) as tag \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and opType = 'recommend' \
+    ) t2 \
+    on t1.userId = t2.userId and t1.tag = t2.tag \
+    join ( \
+        select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 500 \
+    ) t3 \
+    on t2.postId = t3.postId \
+    join ( \
+        select id as postId \
+        from lofter.dim_post_article \
+        where publishDate <= '${azkaban.flow.1.days.ago}' and contentType in ("图片","文字","视频") and isPublished = true \
+              and valid = 0 and allowView = 0 and isForbidden = false and isCitedPost = false and isActivityAutoPost = 0 \
+              and isImported = 0 and isMoved = 0 \
+    ) t4 \
+    on t2.postId = t4.postId \
+) t5 \
+where rn <= 20 \
+group by userId, postId, blogId, tags

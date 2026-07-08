@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ask_recommend_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, \
+       blogId, \
+       questionId, \
+       90dHotCount \
+from ( \
+    select talkId as postId, \
+           blogId, \
+           questionId, \
+           like_cnt_90d as 90dHotCount, \
+           row_number() over(partition by questionId order by like_cnt_90d desc) as rn \
+    from lofter.dws_post_talk_answer_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and questionStatus = 1 and like_cnt_90d > 0 \
+) t1 \
+where rn <= 5

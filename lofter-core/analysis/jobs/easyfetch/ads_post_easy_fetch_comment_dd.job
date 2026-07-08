@@ -1,0 +1,121 @@
+type=sparksql
+hive.query.01=\
+with response_source as( \
+  select id,postid,blogid,publisheruserid,publishtime,content,replytouserid,replyl1commentid,replyl2commentid,commenthot,replyl2count \
+  FROM \
+    lofter_db_dump.ods_db_post_response_nd \
+  where \
+    FROM_UNIXTIME(publishtime/1000,'yyyy-MM-dd') between date_sub(current_date,90) and '${azkaban.flow.1.days.ago}' \
+), \
+post_source as ( \
+  select id as postid,userid,url, contentType, title \
+  from lofter.dim_post \
+), \
+unlock_source as( \
+  select postid,userid,if(unlock_method in ('券包','付费'),0,1) as unlock_number \
+  from lofter.dwd_gift_post_unlock_dd \
+  where dt = '${azkaban.flow.1.days.ago}' and is_settle = 1 \
+) \
+insert overwrite table lofter_dm.ads_post_easy_fetch_comment_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+  t1.userid,t1.commentid,t1.postid,t1.publishtime,t1.publishdate,t1.like_cnt,t1.reply_cnt,t1.content,t1.comment_level,t1.content_words_cnt, \
+  t3.user_homepage, \
+  t2.url as post_url, \
+  if(t4.postid is null,0,1) as pay_type, \
+  if(t5.unlock_method is null,2,t5.unlock_method) as gift_type, \
+  nvl(t6.author_replyed,0) as author_replyed, \
+  t2.contentType as content_type, \
+  t2.title, \
+  t7.creator_level, \
+  if(t1.userId == t1.blogId, '自评', '他评') as comment_type, \
+  t8.gift_creator_level, \
+  hot, comment_cnt, long_comment_cnt, words_count, jiesuo_pv, jiesuo_money, t7.fans_std, \
+  if(t12.comment_id is not null,1,0) as is_quality_long_comment, \
+  t13.usertype \
+from( \
+  SELECT \
+  publisheruserid AS userid, \
+  id as commentid, \
+  postid, \
+  publishtime, \
+  from_unixtime(cast(publishtime / 1000 AS BIGINT), 'yyyy-MM-dd') as publishdate, \
+  commenthot AS like_cnt, \
+  replyl2count AS reply_cnt, \
+  regexp_replace(content,'\\\\[.*?\\\\]','') as content, \
+  case when replyl1commentid = 0 and replyl2commentid = 0 then 1 else 2 end as comment_level, \
+  LENGTH(regexp_replace(content,'\\\\[.*?\\\\]','')) as content_words_cnt, \
+  blogid \
+from response_source \
+)t1 \
+left join( \
+  select postid,url, contentType, title \
+  from post_source \
+)t2 on t1.postid = t2.postid \
+left join( \
+    select id,concat('https://',blogname,'.lofter.com/') as user_homepage \
+    from lofter.dim_blog \
+)t3 on t1.userid = t3.id \
+left join( \
+  select postid \
+  from unlock_source \
+  group by postid \
+)t4 on t1.postid = t4.postid \
+left join( \
+  select postid,userid,min(unlock_number) as unlock_method \
+  from unlock_source \
+  group by postid,userid \
+)t5 on t1.postid = t5.postid and t1.userid = t5.userid \
+left join( \
+  select replytouserid,replyed_commentid,1 as author_replyed \
+  from( \
+    select postid,publisheruserid as userid,id as commentid,replytouserid,nvl(replyl1commentid,replyl2commentid) as replyed_commentid \
+    from response_source \
+  )t1 \
+  join( \
+    select postid,userid \
+    from post_source \
+  )t2 on t1.postid = t2.postid and t1.userid = t2.userid \
+) t6 on t1.userid = t6.replytouserid and t1.commentid = t6.replyed_commentid \
+left join ( \
+    select userId, level as creator_level,fans_std \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t7 on t1.blogid = t7.userId \
+left join ( \
+    select userId as blogid, \
+           case when grade = 5 then '殿堂' \
+                when grade = 4 then '大师' \
+                when grade = 3 then '进阶' \
+                when grade = 2 then '学徒' \
+                when grade = 1 then '基础版' else '无' end as gift_creator_level \
+    from lofter_db_dump.ods_db_trade_pay_grade_nd \
+) t8 on t1.blogId = t8.blogid \
+left join ( \
+    select postId, hot, comment_cnt, long_comment_cnt_std as long_comment_cnt \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t9 on t1.postId = t9.postId \
+left join ( \
+    select postId, words_count \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t10 on t1.postId = t10.postId \
+left join ( \
+    select postid, \
+           sum(jiesuo_pv) as jiesuo_pv, \
+           sum(jiesuo_money) as jiesuo_money \
+    from lofter.dws_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) t11 on t1.postId = t11.postId \
+left join( \
+  select comment_id \
+  from rec.rec_data_ecology_quality_long_comment \
+  where day <= '${azkaban.flow.1.days.ago}' and is_quality = 1 \
+  group by comment_id \
+)t12 on t1.commentid = t12.comment_id \
+left join( \
+  select userid,usertype \
+  from lofter_db_dump.ods_db_trade_commentator_reward_nd \
+  group by userid,usertype \
+)t13 on t1.userid = t13.userid

@@ -1,0 +1,98 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.adaptive.enabled=false
+hive.query.01=\
+ with period_unlocks as ( \
+    select a.*, \
+        case when b.blog_channel is null then 0 else b.blog_channel end   as blog_channel, \
+        case when b.ispay_returngift is null then -1 else b.ispay_returngift end   as ispay_returngift, \
+        case when b.review_status is null then 0 else b.review_status end   as review_status, \
+        nvl(is_jieduan,'其他') as is_jieduan, \
+        nvl(c.type,'其他') as type, \
+        a1.period \
+    from ( \
+        select nvl(return_gift_plantype,'其他') as return_gift_plantype, \
+            nvl(content_type,'其他') as content_type, \
+            unlock_unit, \
+            unlock_method, \
+            money, \
+            unlock_time, \
+            postId, \
+            blogId, \
+            return_gift_id, \
+            userId, \
+            case when money>0 then 1 else 0 end as is_paid, \
+            from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') as unlock_date \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+        and unlock_method in ('礼物','券包') \
+    ) a \
+    join lofter.bridge_calendar_date a1 on a.unlock_date = a1.relate_date \
+         and a1.calendar_date = '${azkaban.flow.1.days.ago}' and a1.period in ('1', '7') \
+    left join ( \
+        select id, \
+            blog_channel, \
+            review_status, \
+            ispay_returngift, \
+            case when  array_contains (mark_tags,'非截断')=1 then '非截断' \
+            when  array_contains (mark_tags,'截断')=1 then '截断' \
+            else '其他' end as is_jieduan \
+        from lofter.dim_gift_post_return \
+        group by 1,2,3,4,5 \
+    ) b on a.return_gift_id=b.id \
+    left join ( \
+        select postid,type \
+        from lofter.dws_gift_post_premium_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              blog_channel=0 and type in ('优质','低质') \
+        group by postid,type \
+    ) c on a.postid=c.postid \
+) \
+insert overwrite table lofter_dm.ads_post_paid_monitor_v2_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select '1' as period, \
+    return_gift_plantype, \
+    content_type, \
+    unlock_unit, \
+    unlock_method, \
+    is_paid, \
+    blog_channel, \
+    review_status, \
+    ispay_returngift, \
+    is_jieduan, \
+    type as quality_type , \
+    sum(money) as trade_money, \
+    count(1) as trade_num, \
+    count(distinct postId) as post_num, \
+    count(distinct blogId) as blog_num, \
+    count(distinct userId) as trade_uv, \
+    count(distinct concat(userId,'-',postId)) as post_user_num, \
+    count(distinct concat(userId,'-',blogId)) as blog_user_num \
+from period_unlocks \
+where period = '1' \
+group by return_gift_plantype, content_type, unlock_unit, unlock_method,  is_paid,  blog_channel, \
+        review_status, ispay_returngift, is_jieduan, type \
+with cube \
+union all \
+select '7' as period, \
+    return_gift_plantype, \
+    content_type, \
+    unlock_unit, \
+    unlock_method, \
+    is_paid, \
+    blog_channel, \
+    review_status, \
+    ispay_returngift, \
+    is_jieduan, \
+    type as quality_type , \
+    sum(money) as trade_money, \
+    count(1) as trade_num, \
+    count(distinct postId) as post_num, \
+    count(distinct blogId) as blog_num, \
+    count(distinct userId) as trade_uv, \
+    count(distinct concat(userId,'-',postId)) as post_user_num, \
+    count(distinct concat(userId,'-',blogId)) as blog_user_num \
+from period_unlocks \
+where period = '7' \
+group by return_gift_plantype, content_type, unlock_unit, unlock_method,  is_paid,  blog_channel, \
+        review_status, ispay_returngift, is_jieduan, type \
+with cube \

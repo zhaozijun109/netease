@@ -1,0 +1,137 @@
+type = sparksql
+hive.query.01 =      \
+with kpi_new_user_chatpage_deatil(  \
+select    \
+a.register_date,  \
+a.user_id,  \
+a.origin_type,a.device_os,   \
+a.origin,a.amounts,  \
+b.chat_detail_expose_pv,  \
+c.talk_cnt,  \
+d.automatic_inspiration_click_pv,  \
+e.manual_inspiration_click_pv,  \
+f.interaction_click_pv,  \
+task_page_expose_pv,  \
+task_page_click_pv,  \
+event_click_pv  \
+  \
+from(  \
+select '${azkaban.flow.1.days.ago}' dt,register_date, user_id,origin_type,device_os,   \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'   \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'   \
+     else '非LOFTER' end origin ,amounts  \
+from  vc.dws_vc_user_behavior_info_a_d   \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )   \
+and register_date='${azkaban.flow.1.days.ago}'   \
+ and is_anonymity='N'   \
+ AND is_test_user='N'   \
+group by 1,2,3,4,5,6 ,7  \
+) a   \
+left join   \
+(  \
+SELECT dt,user_id,count(1) chat_detail_expose_pv   \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid ='h1-1'  \
+    and action='2'  \
+   and lower(scene)='chatdetail'  \
+group by 1,2  \
+) b on a.user_id=b.user_id   \
+left join   \
+(  \
+select dt,user_id ,	  \
+count(distinct message_id)    as talk_cnt  \
+from vc.dwd_vc_uc_talk_info_i_d   \
+where dt='${azkaban.flow.1.days.ago}'  \
+and sender in (2, 4)   \
+and type = 1   \
+group by 1,2  \
+) c on a.user_id=c.user_id   \
+  \
+left join   \
+(  \
+SELECT  dt,user_id,count(1) automatic_inspiration_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid = 'h1-11'  \
+    AND params['type'] = '6'  \
+group by 1,2  \
+) d on  a.user_id=d.user_id  \
+  \
+left join   \
+(  \
+SELECT  dt,user_id,count(1) manual_inspiration_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'   \
+    AND eventid = 'h1-11'  \
+    AND params['type'] = '3'  \
+group by 1,2  \
+) e on  a.user_id=e.user_id  \
+  \
+left join   \
+(  \
+SELECT dt,user_id,count(1) interaction_click_pv  \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+    AND eventid ='h1-13'  \
+    and action='1'  \
+   and lower(scene)='chatdetail'  \
+   and  params['pos'] in (15,17)  \
+group by 1,2  \
+) f on a.user_id=f.user_id   \
+  \
+left join   \
+(  \
+SELECT dt,user_id,count(1) task_page_expose_pv   \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+and eventid ='task_page'  \
+and action='0'  \
+group by 1,2  \
+) g on a.user_id=g.user_id   \
+  \
+left join   \
+(  \
+SELECT dt,user_id,count(1) task_page_click_pv   \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'  \
+and eventid ='task_page_btn'  \
+and action='1'  \
+group by 1,2  \
+) h on a.user_id=h.user_id   \
+  \
+left join   \
+(  \
+SELECT dt,user_id,count(1) event_click_pv    \
+FROM vc.ods_mda_app_di  \
+WHERE dt='${azkaban.flow.1.days.ago}'   \
+and eventid ='chatdetail_event_click'  \
+and lower(scene)='chatdetail'  \
+group by 1,2  \
+) i on a.user_id=i.user_id   \
+)   \
+  \
+insert overwrite table vc_dm.ads_new_register_action_convert_report_di partition(dt ='${azkaban.flow.1.days.ago}')      \
+select  register_date,  \
+origin_type,device_os,   \
+origin,  \
+count(distinct user_id ) register_user_cnt,  \
+count(distinct case when chat_detail_expose_pv>0 then user_id end ) chat_detail_expose_uv,  \
+sum(chat_detail_expose_pv) chat_detail_expose_pv,  \
+sum(talk_cnt)talk_cnt,  \
+count(distinct case when  talk_cnt >0 then user_id end) talk_user_cnt,  \
+sum(automatic_inspiration_click_pv)automatic_inspiration_click_pv,  \
+count(distinct case when automatic_inspiration_click_pv>0 then user_id end) automatic_inspiration_click_uv,  \
+sum(manual_inspiration_click_pv) manual_inspiration_click_pv,  \
+count(distinct case when manual_inspiration_click_pv>0 then user_id end) manual_inspiration_click_uv,  \
+sum(interaction_click_pv) interaction_click_pv,  \
+count(distinct case when interaction_click_pv>0 then user_id end) interaction_click_uv,  \
+sum(task_page_expose_pv)task_page_expose_pv,  \
+count(distinct case when task_page_expose_pv>0 then user_id end)task_page_expose_uv,  \
+sum(task_page_click_pv)task_page_click_pv,  \
+count(distinct case when task_page_click_pv>0 then user_id end) task_page_click_uv,  \
+sum(event_click_pv) event_click_pv,  \
+count(distinct case when event_click_pv>0 then user_id end) event_click_uv   \
+  \
+from  kpi_new_user_chatpage_deatil  \
+group by 1,2,3,4

@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01=msck repair table lofter.dwd_post_group_post_list_di

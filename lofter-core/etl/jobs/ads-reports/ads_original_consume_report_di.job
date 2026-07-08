@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01= \
+WITH base_data AS ( \
+    SELECT dt, \
+           userid, \
+           '原创' AS type \
+    FROM lofter.dwd_post_browse_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND is_real = 1 \
+      AND post_content_type = '文字' \
+      AND exists(post_tags, x -> x RLIKE '(原创|短篇小说|bg|言情|gb|四爱|女攻男受|gl|百合|bl)') \
+      AND NOT exists(post_tags, x -> x RLIKE '同人') \
+    GROUP BY 1, 2 \
+) \
+insert overwrite table lofter_dm.ads_original_consume_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+       a.type \
+       ,COUNT(DISTINCT a.userid) AS cnt \
+FROM base_data a \
+GROUP BY 1

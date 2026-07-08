@@ -1,0 +1,146 @@
+type=sparksql
+hive.query.01=\
+with question_source as ( \
+    select t1.questionId, \
+           nvl(1dAnswerCount,0) + nvl(1dCommentCount,0) as 1dDiscussCount, \
+           nvl(2dAnswerCount,0) + nvl(2dCommentCount,0) as 2dDiscussCount, \
+           nvl(3dAnswerCount,0) + nvl(3dCommentCount,0) as 3dDiscussCount, \
+           nvl(7dAnswerCount,0) + nvl(7dCommentCount,0) as 7dDiscussCount, \
+           nvl(30dAnswerCount,0) + nvl(30dCommentCount,0) as 30dDiscussCount, \
+           nvl(90dAnswerCount,0) + nvl(90dCommentCount,0) as 90dDiscussCount \
+    from ( \
+        select questionId, \
+               sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 1dAnswerCount, \
+               sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',1) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 2dAnswerCount, \
+               sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',2) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 3dAnswerCount, \
+               sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 7dAnswerCount, \
+               sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 30dAnswerCount, \
+               count(1) as 90dAnswerCount \
+        from lofter_db_dump.ods_db_ask_answer_post_nd \
+        where questionId <> 0 and from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+        group by questionId \
+    ) t1 \
+    left join ( \
+        select questionId, \
+               sum(case when from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 1dCommentCount, \
+               sum(case when from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',1) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 2dCommentCount, \
+               sum(case when from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',2) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 3dCommentCount, \
+               sum(case when from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 7dCommentCount, \
+               sum(case when from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 30dCommentCount, \
+               count(1) as 90dCommentCount \
+        from ( \
+            select questionId, \
+                   get_json_object(ext,'$.commentId') as commentId, \
+                   get_json_object(ext,'$.postId') as postId, \
+                   get_json_object(ext,'$.blogId') as blogId \
+            from lofter_db_dump.ods_db_ask_answer_post_nd \
+            where questionId <> 0 \
+        ) a \
+        join ( \
+            select id as commentId, \
+                   postId, \
+                   blogId, \
+                   publishTime \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+        ) b \
+        on a.commentId = b.commentId and a.postId = b.postId and a.blogId = b.blogId \
+        group by questionId \
+    ) t2 \
+    on t1.questionId = t2.questionId \
+), \
+score_question_source as ( \
+    select parentQuestionId as questionId, \
+           sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 1dScoreCount, \
+           sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',1) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 2dScoreCount, \
+           sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',2) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 3dScoreCount, \
+           sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 7dScoreCount, \
+           sum(case when from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' then 1 else 0 end) as 30dScoreCount, \
+           count(1) as 90dScoreCount \
+    from ( \
+        select parentQuestionId, \
+               id as subQuestionId \
+        from lofter_db_dump.ods_db_ask_question_nd \
+        where parentQuestionId <> 0 and cosplay = 3 \
+    ) a \
+    join ( \
+        select questionId, \
+               userId, \
+               createTime \
+        from lofter_db_dump.ods_db_ask_user_item_score_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    ) b \
+    on a.subQuestionId = b.questionId \
+    group by parentQuestionId \
+) \
+INSERT OVERWRITE TABLE lofter.dws_post_talk_question_interaction_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+select t1.talkId, \
+       t1.talkType, \
+       t1.talkContent, \
+       t1.blogId, \
+       t1.cosplay, \
+       t1.tags, \
+       t1.ips, \
+       t1.createTime, \
+       t1.createDate, \
+       t1.recomStatus, \
+       t1.totalAnswerCount, \
+       t1.totalDiscussCount, \
+       t1.totalScoreCount, \
+       nvl(t2.1dDiscussCount, 0) as 1dDiscussCount, \
+       nvl(t2.3dDiscussCount, 0) as 3dDiscussCount, \
+       nvl(t2.7dDiscussCount, 0) as 7dDiscussCount, \
+       nvl(t2.30dDiscussCount, 0) as 30dDiscussCount, \
+       nvl(t2.90dDiscussCount, 0) as 90dDiscussCount, \
+       nvl(t3.1dScoreCount, 0) as 1dScoreCount, \
+       nvl(t3.3dScoreCount, 0) as 3dScoreCount, \
+       nvl(t3.7dScoreCount, 0) as 7dScoreCount, \
+       nvl(t3.30dScoreCount, 0) as 30dScoreCount, \
+       nvl(t3.90dScoreCount, 0) as 90dScoreCount, \
+       nvl(t2.2dDiscussCount, 0) as 2dDiscussCount, \
+       nvl(t3.2dScoreCount, 0) as 2dScoreCount, \
+       t1.questionType, \
+       t1.status, \
+       t1.is_fans_question \
+from ( \
+    select talkId, \
+           talkType, \
+           talkContent, \
+           blogId, \
+           questionType, \
+           cosplay, \
+           tags, \
+           ips, \
+           status, \
+           createTime, \
+           createDate, \
+           recomStatus, \
+           answerCount as totalAnswerCount, \
+           discussCount as totalDiscussCount, \
+           scoreCount as totalScoreCount, \
+           is_fans_question \
+    from lofter.dim_post_talk \
+    where cosplay in (0, 1, 2) \
+) t1 \
+left join ( \
+    select questionId, \
+           1dDiscussCount, \
+           2dDiscussCount, \
+           3dDiscussCount, \
+           7dDiscussCount, \
+           30dDiscussCount, \
+           90dDiscussCount \
+    from question_source \
+) t2 \
+on t1.talkId = t2.questionId \
+left join ( \
+    select questionId, \
+           1dScoreCount, \
+           2dScoreCount, \
+           3dScoreCount, \
+           7dScoreCount, \
+           30dScoreCount, \
+           90dScoreCount \
+    from score_question_source \
+) t3 \
+on t1.talkId = t3.questionId

@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01= \
+with base_data as ( \
+    select postid,dt \
+    from lofter_dm.ads_post_trend_grade_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and grade is not null \
+) \
+,post_data as ( \
+    select id as postid ,ips \
+    from lofter.dim_post_article \
+    where contenttype in ('图片','视频','文字') \
+      group by 1,2 \
+) \
+insert overwrite table lofter_dm.ads_ip_hot_report_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select  \
+CASE  \
+    WHEN exists(ips, x -> x RLIKE '盗墓笔记|南部档案') THEN '盗墓笔记' \
+    WHEN exists(ips, x -> x RLIKE '奥特曼')   THEN '奥特曼' \
+    WHEN exists(ips, x -> x RLIKE '遗忘之海') THEN '遗忘之海' \
+    ELSE array_join(ips, ',') \
+END AS ip_group \
+,count(DISTINCT a.postid) as cnt  \
+from base_data a  \
+join post_data b on a.postid = b.postid  \
+group by 1

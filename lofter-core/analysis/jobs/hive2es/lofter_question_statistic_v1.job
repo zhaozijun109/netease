@@ -1,0 +1,52 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select talkId as questionId, \
+       blogId as userId, \
+       talkContent as question, \
+       tags, \
+       cosplay, \
+       createTime, \
+       recomStatus, \
+       1dDiscussCount, \
+       3dDiscussCount, \
+       7dDiscussCount, \
+       30dDiscussCount, \
+       90dDiscussCount, \
+       1dScoreCount, \
+       3dScoreCount, \
+       7dScoreCount, \
+       30dScoreCount, \
+       90dScoreCount, \
+       totalAnswerCount, \
+       totalDiscussCount, \
+       totalScoreCount, \
+       2dDiscussCount, \
+       2dScoreCount \
+from lofter.dws_post_talk_question_interaction_dd \
+where dt = '${azkaban.flow.1.days.ago}' and (totalDiscussCount >= 10 or totalScoreCount >= 10) and questionType = 3 and status = 1 \
+union all \
+select 58346414 as questionId, \
+       2001770057 as userId, \
+       '来给喜欢的太太表白吧' as question, \
+       array('太中','星期日','永夜星河','杰佣','九重紫','德哈','大梦归离','隐囚','瓶邪','观影体','猎罪图鉴','摄殓','柒七','理砂','快新','哈德','芥敦','秦彻','五夏','佐鸣','极禹','城翊','gb','桃子红了','葡萄紫了','恋与深空','忘羡','左邓','愚勘','车男主','lingorm','带卡','奎八','极恶老大','ggad','文字化化','双男主','带卡','藕饼','刃恒','文严文','第五人格','黑花','代号鸢','怪诞管理局','哈利波特','博君一肖','知妙','凪玲','闲泽','佑灰','凛冴','乔基','放学等我','十日终焉','雷安','魔道祖师','崩坏星穹铁道','弘叶题石','公钟','all洁','苏朱','祺我','咎安','oc','原神','乔基','砂理','时代少年团','南北','夏五') as tags, \
+       4 as cosplay, \
+       1734074171082 as createTime, \
+       0 as recomStatus, \
+       0 as 1dDiscussCount, \
+       0 as 3dDiscussCount, \
+       0 as 7dDiscussCount, \
+       0 as 30dDiscussCount, \
+       0 as 90dDiscussCount, \
+       0 as 1dScoreCount, \
+       0 as 3dScoreCount, \
+       9999999 as 7dScoreCount, \
+       0 as 30dScoreCount, \
+       0 as 90dScoreCount, \
+       0 as totalAnswerCount, \
+       0 as totalDiscussCount, \
+       0 as totalScoreCount, \
+       0 as 2dDiscussCount, \
+       0 as 2dScoreCount \
+"
+params= --partition ${azkaban.flow.1.days.ago} --id questionId --dest lofter_question_statistic_v1 --postfixsep --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 1

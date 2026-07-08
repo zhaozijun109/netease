@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01 = with vc_talk_info as (select user_id, \
+                                             character_id, \
+                                             character_type, \
+                                             sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 2), talk_cnt, 0))  as vc_chat_num_3, \
+                                             sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 6), talk_cnt, 0))  as vc_chat_num_7, \
+                                             sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 14), talk_cnt, 0)) as vc_chat_num_15, \
+                                             sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 29), talk_cnt, 0)) as vc_chat_num_30, \
+                                             max(fetter_nums)                                                       as fetter_nums \
+                                      from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                      where dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+                                      group by user_id, character_id, character_type), \
+                     vc_behavior as (select user_id, character_id, status as vc_shield_status, disturb_status as vc_disturb_status \
+                                     from (select user_id, \
+                                                  character_id, \
+                                                  status, \
+                                                  disturb_status, \
+                                                  row_number() over (partition by user_id,character_id order by update_time desc) as rk \
+                                           from vc.ods_db_vc_user_message_list_nd) \
+                                     where rk = 1), \
+                     pve_talk_info as (select userid                                                                    as user_id, \
+                                              roleid                                                                    as character_id, \
+                                              roledef                                                                   as character_type, \
+                                              sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 2), total_chats, 0))  as lofter_chat_num_3, \
+                                              sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 6), total_chats, 0))  as lofter_chat_num_7, \
+                                              sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 14), total_chats, 0)) as lofter_chat_num_15, \
+                                              sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}', 29), total_chats, 0)) as lofter_chat_num_30 \
+                                       from lofter.dws_pve_user_role_chats_di \
+                                       where dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+                                       group by userid, roleid, roledef) \
+                insert overwrite table vc.ads_pv_uc_action_info_dd PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x1.user_id, \
+                       x1.character_id, \
+                       x1.character_type, \
+                       x1.vc_chat_num_3, \
+                       x1.vc_chat_num_7, \
+                       x1.vc_chat_num_15, \
+                       x1.vc_chat_num_30, \
+                       x1.fetter_nums, \
+                       x2.vc_shield_status, \
+                       x2.vc_disturb_status, \
+                       'vc' as channel \
+                from vc_talk_info x1 \
+                         left join vc_behavior x2 on x1.user_id = x2.user_id and x1.character_id = x2.character_id \
+                union all \
+                select x3.user_id, \
+                       x3.character_id, \
+                       x3.character_type, \
+                       x3.lofter_chat_num_3, \
+                       x3.lofter_chat_num_7, \
+                       x3.lofter_chat_num_15, \
+                       x3.lofter_chat_num_30, \
+                       0     as fetter_nums, \
+                       0     as lofter_shield_status, \
+                       0     as lofter_disturb_status, \
+                       'pve' as channel \
+                from pve_talk_info x3 ;

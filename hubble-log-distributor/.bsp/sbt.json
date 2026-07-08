@@ -1,0 +1,1 @@
+{"name":"sbt","version":"1.6.2","bspVersion":"2.0.0-M5","languages":["scala"],"argv":["/Users/zhaozijun/.sdkman/candidates/java/1.8.0_431-oracle/jre/bin/java","-Xms100m","-Xmx100m","-classpath","/Users/zhaozijun/Scala/sbt-1.9.9/bin/sbt-launch.jar","-Dsbt.script=/Users/zhaozijun/Scala/sbt-1.9.9/bin/sbt","xsbt.boot.Boot","-bsp"]}

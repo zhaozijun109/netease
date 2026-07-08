@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=add jar hdfs://gy-cluster8/user/virtual_character/lib/wm-udx-assembly-0.3.10.jar
+hive.query.02=CREATE TEMPORARY FUNCTION base64_aes AS 'com.netease.wm.udf.common.Base64AesUDF'
+hive.query.03=\
+insert overwrite table vc.ads_underage_user_easy_fetch_verify_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select user_id, user_code, create_time as create_date,renzheng as is_verified, \
+    case WHEN length(id_card) = 18 THEN  \
+            year(current_date()) - \
+            year(to_date(substr(id_card, 7, 8), 'yyyyMMdd')) - \
+            CASE \
+                WHEN date_format(current_date(), 'MMdd') < substr(id_card, 11, 4) THEN 1 \
+                ELSE 0  \
+            END \
+    end as age \
+from( \
+    select x3.user_id, x3.user_code, x3.create_time, x3.renzheng,  \
+        if(x4.card_no is null,'',base64_aes(x4.card_no,'de')) as id_card \
+    from( \
+        select x1.user_id, x1.user_code, x1.create_time,  \
+            if(x2.real_auth_id > 0 ,'Y','N') as renzheng,  \
+            nvl(x2.real_auth_id,0) as real_auth_id \
+        from( \
+            select id, user_id, user_code, create_time \
+            from( \
+                select id, user_id, user_code,  \
+                    FROM_UNIXTIME(create_time,'yyyy-MM-dd') as create_time,  \
+                    row_number() over(partition by user_id order by create_time) as rk1 \
+                from( \
+                    select *,  \
+                        row_number() over(partition by user_id order by create_time) as rk  \
+                    from vc.ods_db_vc_user_real_auth_notice_nd \
+                )  \
+                where rk >= 3 \
+            )  \
+            where rk1 =1 \
+        ) x1 \
+        left join vc.ods_db_vc_user_account_nd x2  \
+        on x1.user_id = x2.id \
+    ) x3  \
+    left join vc.ods_db_vc_id_auth_nd x4  \
+    on x3.real_auth_id = x4.id \
+)

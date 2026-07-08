@@ -1,0 +1,47 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=60
+conf.spark.sql.shuffle.partitions=600
+conf.spark.sql.adaptive.enabled=true
+conf.spark.sql.adaptive.coalescePartitions.enabled=true
+conf.spark.sql.adaptive.skewJoin.enabled=true
+hive.query.01=insert overwrite table lofter_dm.ads_mbo_revenue_dd partition(dt = '${azkaban.flow.1.days.ago}', period) \
+select module, business, revenue_amount, revenue_trade_count, revenue_trade_uv, period \
+from ( \
+    select nvl(module, 'all') as module, \
+           nvl(business, 'all') as business, \
+           sum(money) filter (where in_day) as amt_day, \
+           count(distinct orderId, order_type) filter (where in_day) as cnt_day, \
+           count(distinct userId) filter (where in_day) as uv_day, \
+           sum(money) filter (where in_month) as amt_month, \
+           count(distinct orderId, order_type) filter (where in_month) as cnt_month, \
+           count(distinct userId) filter (where in_month) as uv_month, \
+           sum(money) as amt_year, \
+           count(distinct orderId, order_type) as cnt_year, \
+           count(distinct userId) as uv_year \
+    from ( \
+        select mbo_lv1_module as module, mbo_lv2_module as business, \
+               cast(orderId as string) as orderId, order_type, userId, money, \
+               (pay_date = '${azkaban.flow.1.days.ago}') as in_day, \
+               (pay_date >= trunc('${azkaban.flow.1.days.ago}', 'MM')) as in_month \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and money > 0 \
+              and pay_date <= '${azkaban.flow.1.days.ago}' \
+              and pay_date >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+        union all \
+        select '广告' as module, business, \
+               req_id as orderId, cast(positionId as string) as order_type, \
+               userId, money, \
+               (dt = '${azkaban.flow.1.days.ago}') as in_day, \
+               (dt >= trunc('${azkaban.flow.1.days.ago}', 'MM')) as in_month \
+        from lofter.dwd_user_ad_revenue_di \
+        where dt <= '${azkaban.flow.1.days.ago}' \
+              and dt >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+    ) t \
+    group by module, business \
+    grouping sets((module, business), (module), ()) \
+) agg \
+lateral view stack(3, \
+    'day',   amt_day,   cnt_day,   uv_day, \
+    'month', amt_month, cnt_month, uv_month, \
+    'year',  amt_year,  cnt_year,  uv_year \
+) s as period, revenue_amount, revenue_trade_count, revenue_trade_uv;

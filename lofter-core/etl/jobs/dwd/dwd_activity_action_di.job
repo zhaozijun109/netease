@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_activity_action_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select activityId, userId, mdaDeviceUdid as deviceUdid, occurTime, eventId \
+from ( \
+    select attributes['activityid'] as activityId,userId,attributes['clienthubbledeviceid'] as mdaDeviceUdid, occurTime, eventId \
+    from lofter.ods_mda_wap_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select params['activityId'] as activityId,userId,deviceUdid as mdaDeviceUdid, occurTime, eventId \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select attributes['activityid'] as activityId,userId,attributes['clienthubbledeviceid'] as mdaDeviceUdid, occurTime, eventId \
+    from lofter.ods_mda_web_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select attributes['activityid'] as activityId,userId,attributes['clienthubbledeviceid'] as mdaDeviceUdid, occurTime, eventId \
+    from vc.ods_mda_wap_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t \
+where length(activityId) > 0 and length(mdaDeviceUdid) > 0 \
+distribute by 1 \

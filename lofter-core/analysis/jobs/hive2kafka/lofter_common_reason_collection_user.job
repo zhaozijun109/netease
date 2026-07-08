@@ -1,0 +1,28 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query=" \
+select userId, collectionList \
+from ( \
+    select x.userId, collectionList, \
+           row_number() over (order by last_login_time desc) as rk \
+    from ( \
+        select nvl(a.userId, b.userId) as userId, \
+               collect_list(named_struct('collectionId', nvl(a.collectionId,b.collectionId), \
+                                         'reason', named_struct('UP0', a.reason, 'UP1', b.reason))) as collectionList \
+        from ( \
+            select userId, collectionId, post_count as reason \
+            from lofter_dm.ads_rec_collection_user_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) a \
+        full outer join ( \
+            select userId, collectionId, 0 as reason \
+            from lofter_dm.ads_rec_collection_user_follow_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.userId = b.userId and a.collectionId = b.collectionId \
+        group by 1 \
+    ) x \
+    left join (select accountId as userId, time as last_login_time from lofter.dws_evt_login_user_last_dd where dt = '${azkaban.flow.1.days.ago}' ) y on x.userId = y.userId \
+) t \
+where rk <= 5000000 \
+"
+params= --parallel 1 --topic LOFTER.COMMON.REASON.COLLECTION.USER --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

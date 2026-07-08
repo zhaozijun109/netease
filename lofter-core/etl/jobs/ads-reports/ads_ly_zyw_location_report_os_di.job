@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ly_zyw_location_report_os_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.os,a.groupid,expose_uv,expose_pv,click_uv,click_pv,download_uv,download_pv,  \
+downfinish_uv,installfinish_uv,materialid \
+from(  \
+select dt, groupid, materialid,os, \
+      count( distinct case when optype='expose' then userid  end )expose_uv ,  \
+      count( case when optype='expose' then userid  end )expose_pv,  \
+       count( distinct case when optype='click' then userid  end )  click_uv ,  \
+      count( case when optype='click' then userid  end )click_pv ,       \
+      count(distinct case when optype='downstart' then userid  end )download_uv ,  \
+      count( case when optype='downstart' then userid  end )download_pv ,  \
+      count(distinct case when optype='downfinish' then userid  end )  downfinish_uv ,       \
+      count(distinct case when optype='installfinish' then userid  end ) installfinish_uv   \
+from lofter.dwd_ad_resource_action_di    \
+where dt='${azkaban.flow.1.days.ago}' \
+group  by dt ,groupid ,materialid,os \
+order  by dt desc   \
+) a   \

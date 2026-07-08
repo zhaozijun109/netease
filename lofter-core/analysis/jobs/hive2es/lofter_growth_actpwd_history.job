@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select origin_actpwd as actpwd, count(distinct deviceUdid) as new_devices, '${azkaban.flow.1.days.ago}' as dt from lofter.dwd_device_growth_attribution_di where dt <='${azkaban.flow.1.days.ago}' and length(origin_actpwd) > 0 group by origin_actpwd "
+params= --partition ${azkaban.flow.1.days.ago} --id actpwd --dest lofter_growth_actpwd_history --atom --full

@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dws_vc_uc_talk_day_cnt_single_i_d partition (dt = '${azkaban.flow.1.days.ago}')  \
+              select um.user_id, \
+                     um.character_id, \
+                     max(um.character_name)                                                        as character_name, \
+                     max(um.fetter_nums)                                                           as fetter_nums, \
+                     count(distinct um.message_id)                                                 as talk_cnt, \
+                     sum(if(asset_type = 1, consume_nums, 0))                                      as energy_consume, \
+                     sum(if(sender = 2, 1, 0))                                                     as message_cnt, \
+                     sum(if(sender = 4 and sender_subtype_code in (1012, 1013, 1014, 1015), 1, 0)) as mmt_cnt, \
+                     max(x1.character_type)                                                        as character_type, \
+                     max(is_anonymity)                                                             as is_anonymity, \
+                     sum(if(asset_type = 1, nvl(free_energy, 0), 0))                               as free_energy, \
+                     sum(if(asset_type = 1, nvl(buy_energy, 0), 0))                                as buy_energy, \
+                     sum(if(asset_type = 1, nvl(reward_energy, 0), 0))                             as reward_energy, \
+                     sum(if(asset_type = 1 and sender = 2, consume_nums, 0))                       as message_consume, \
+                     sum(if(asset_type = 1 and sender = 4, consume_nums, 0))                       as interaction_consume, \
+                     sum(if(sender = 2 and nvl(consume_nums, 0) = 0, 1, 0))                        as free_message_cnt, \
+                     sum(if(sender = 4 and nvl(consume_nums, 0) = 0, 1, 0))                        as free_interaction_cnt, \
+                     sum(if(sender = 4 and sender_subtype_code in (1016, 1017, 1018, 1019), 1, 0)) as heart_cnt \
+              from vc.dwd_vc_uc_talk_info_i_d um \
+                       left join (select character_id, character_type \
+                                  from vc.dws_vc_character_behavior_info_a_d \
+                                  where dt = (select max(dt) from vc.dws_vc_character_behavior_info_a_d)) x1 \
+                                 on um.character_id = x1.character_id \
+                       left join (select user_id, is_anonymity \
+                                  from vc.dws_vc_user_behavior_info_a_d \
+                                  where dt = (select max(dt) from vc.dws_vc_user_behavior_info_a_d)) x2 on um.user_id = x2.user_id \
+              where sender in (2, 4) \
+                and type = 1 \
+                and dt = '${azkaban.flow.1.days.ago}' \
+              group by um.user_id, um.character_id;
+
+dependencies=dws_vc_character_behavior_info_a_d,dws_vc_user_behavior_info_a_d

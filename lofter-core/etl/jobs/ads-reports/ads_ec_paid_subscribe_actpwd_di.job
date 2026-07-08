@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_paid_subscribe_actpwd_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.order_cnt, b.order_trade_devices, b.order_trade_devices_money, c.new_devices, \
+       x.post_url, x.post_title, c.return_devices, \
+       y.first_pay_users, y.first_trade_money, \
+       z.id as actpwd_channel_id, \
+       if(a.actpwd like 'kol_channel_%', 1, 0) as is_mini \
+from ( \
+    select m.actpwd, m.channel as actpwd_channel, m.postid, m.blogId, n.blogNickName, \
+            count(distinct m.deviceUdid) as all_devices \
+    from ( \
+        select actpwd, channel, deviceUdid, itemId as postid, item_userId as blogId \
+        from lofter.dwd_growth_actpwd_access_di \
+        where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe > 0 \
+    ) m \
+    join lofter.dim_blog n on m.blogId = n.id \
+    group by m.actpwd, m.channel, m.postid, m.blogId, n.blogNickName \
+) a \
+left join ( \
+    select actpwd,count(order_id) as order_cnt,count(distinct deviceUdid) as order_trade_devices,sum(amount) order_trade_devices_money \
+    from lofter.dwd_paid_subscribe_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by actpwd \
+) b on a.actpwd = b.actpwd \
+left join ( \
+    select origin_actpwd, \
+           count(distinct if(device_type = 'new', deviceUdid, null)) as new_devices, \
+           count(distinct if(device_type = 'return_30', deviceUdid, null)) as return_devices \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by origin_actpwd \
+) c on a.actpwd = c.origin_actpwd \
+left join ( \
+   select id as postId, title as post_title, concat(blogName,'.lofter.com/post/',conv(blogId, 10, 16),'_',conv(id, 10, 16)) as post_url \
+   from lofter.dim_post \
+) x on a.postId = x.postId \
+left join ( \
+    select actpwd, count(a.userid) first_pay_users, sum(amount) first_trade_money \
+    from ( \
+        select userid,actpwd, amount \
+        from ( \
+            select userid, actpwd, amount, row_number() over (partition by userid order by pay_time asc) rk \
+            from lofter.dwd_paid_subscribe_order_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) a1 \
+        where rk = 1 and length(actpwd) > 0 \
+    ) a \
+    join ( \
+        select userid \
+        from ( \
+                select userid,pay_type, first_pay_time, \
+                       row_number() over (partition by userid order by first_pay_time asc) rk \
+                from lofter.dws_user_pay_type_info_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and pay_type not in ('免费礼物','直播-免费礼物','all') \
+        ) t \
+        where rk=1 and pay_type in ('博客订阅', '书城会员', '官方账号', '粉丝会员') and \
+              from_unixtime(cast(first_pay_time/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) b on a.userid = b.userid \
+    group by actpwd \
+) y on a.actpwd = y.actpwd \
+left join (select * from lofter.dim_kol_channel_dd where dt = '${azkaban.flow.1.days.ago}') z on a.actpwd_channel = z.channel

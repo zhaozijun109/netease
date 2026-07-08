@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,questionid,is_role_talk,questioncontent,talk_publisher,question_publisher,talk_pulishtime,talkid,talkcontent,tags,praise_cnt,comment_cnt from lofter_dm.ads_question_easy_fetch_talk_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_question_easy_fetch_talk_dd --partition '${azkaban.flow.1.days.ago}'  --batch 2000
+retries=0
+dependencies=ads_question_easy_fetch_talk_dd

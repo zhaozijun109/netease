@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_rec_content_understand_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select itemId, \
+       type, \
+       level1_tag, \
+       level2_tag, \
+       level3_tag, \
+       score \
+from( \
+    select itemId, \
+           type, \
+           level1_tag, \
+           level2_tag, \
+           level3_tag, \
+           score \
+    from( \
+        select itemId, \
+               type, \
+               level1_tag, \
+               level2_tag, \
+               level3_tag, \
+               score, \
+               row_number() over(partition by itemId, type order by dt desc) as rn \
+        from lofter.ods_rec_content_understand_log_di \
+        where dt <= '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rn = 1 \
+) tt

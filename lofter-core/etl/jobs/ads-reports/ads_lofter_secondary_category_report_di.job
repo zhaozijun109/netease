@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_lofter_secondary_category_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+level1_tag, \
+case when level2_tag is null or level2_tag='其他' then '汇总' else level2_tag end as level2_tag, \
+postnum, \
+uv \
+ from  \
+(select  \
+case when level1_tag is null then '未识别' \
+when level2_tag ='其他' then '其他' \
+else level1_tag end as level1_tag, \
+level2_tag , \
+count(distinct a.postid) as postnum, \
+count(distinct a.userid) as uv  \
+from  \
+(Select postid,userid \
+from  \
+lofter.dwd_post_publish_di \
+where dt='${azkaban.flow.1.days.ago}' \
+and post_content_type in ('文字','图片') \
+and post_publish_date ='${azkaban.flow.1.days.ago}' \
+group by postid,userid) a \
+left  join  \
+(SELECT itemid as postid,type,level1_tag,level2_tag  \
+from lofter.dwd_rec_content_understand_dd  \
+where dt='${azkaban.flow.1.days.ago}' and  \
+type in ('图文类目V2' ) \
+) b  \
+on a.postid=b.postid \
+group by case when level1_tag is null then '未识别' \
+when level2_tag ='其他' then '其他' \
+else level1_tag end,level2_tag \
+grouping sets ( \
+(case when level1_tag is null then '未识别' \
+when level2_tag ='其他' then '其他' \
+else level1_tag end,level2_tag), \
+(case when level1_tag is null then '未识别' \
+when level2_tag ='其他' then '其他' \
+else level1_tag end) \
+) \
+) a \
+group by level1_tag, \
+case when level2_tag is null or level2_tag='其他' then '汇总' else level2_tag end, \
+postnum, \
+uv \

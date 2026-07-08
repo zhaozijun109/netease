@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=\
+with ip_user_life_cycle_source as ( \
+    SELECT dt,ip,userid,user_type \
+    FROM lofter.dws_ip_user_life_cycle_dd \
+    WHERE user_type in ('新用户','潜力用户','成长期用户','成熟期用户') \
+    AND dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter_dm.ads_ip_potential_levelup_user_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select t1.dt,  \
+t1.ip,t1.user_type, \
+count(distinct t1.userid) as total_user, \
+  count(  \
+    DISTINCT CASE  \
+      WHEN t5.dt = date_add(t1.dt, 1)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1) THEN t5.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS level_up_1d,  \
+  count(  \
+    DISTINCT CASE  \
+      WHEN t5.dt between date_add(t1.dt, 1) and date_add(t1.dt, 6)  \
+      AND datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) THEN t5.userid  \
+      ELSE NULL  \
+    END  \
+  ) AS level_up_7d \
+from \
+( \
+    select dt,ip,userid,user_type from ip_user_life_cycle_source where user_type in ('新用户','潜力用户') \
+)t1 \
+left JOIN ( \
+    SELECT distinct dt,ip,userid \
+    FROM ip_user_life_cycle_source \
+    WHERE user_type in ('成长期用户','成熟期用户') \
+)  t5 on t1.userid=t5.userid and t1.ip =t5.ip \
+AND t5.dt BETWEEN date_add(t1.dt, 1)  \
+		AND date_add(t1.dt, 7)  \
+WHERE datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (1,6) \
+group by t1.dt,t1.ip,t1.user_type \
+grouping sets((t1.dt,t1.ip),(t1.dt,t1.ip,t1.user_type)) \

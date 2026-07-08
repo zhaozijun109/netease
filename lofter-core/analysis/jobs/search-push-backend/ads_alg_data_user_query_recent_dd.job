@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_alg_data_user_query_recent_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select itemId, \
+       userId, \
+       recId, \
+       itemType, \
+       articleType, \
+       scene, \
+       costTime, \
+       clickCount, \
+       negActionCount, \
+       commentCount, \
+       likeCount, \
+       shareCount, \
+       recommendCount, \
+       flowName, \
+       pos, \
+       day, \
+       payCount, \
+       module, \
+       recStartTime, \
+       query, \
+       flag, \
+       algWeight \
+from ( \
+    select itemId, \
+           userId, \
+           recId, \
+           itemType, \
+           articleType, \
+           scene, \
+           costTime, \
+           clickCount, \
+           negActionCount, \
+           commentCount, \
+           likeCount, \
+           shareCount, \
+           recommendCount, \
+           flowName, \
+           pos, \
+           day, \
+           payCount, \
+           module, \
+           recStartTime, \
+           query, \
+           flag, \
+           algWeight, \
+           row_number() over(partition by userId order by dt desc, recStartTime desc) as rn \
+    from lofter_dm.ads_alg_data_user_query_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+) t \
+where rn <= 1000
+dependencies=ads_alg_data_user_query_di

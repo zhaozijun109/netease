@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_protection_exempt_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId as postId, b.blogId as blogId, b.ip as tag \
+from ( \
+    select postId \
+    from ( \
+        select postId \
+        from lofter.dws_post_premium_di \
+        where dt='${azkaban.flow.1.days.ago}' and premium_date = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId \
+        from lofter_dm.ads_evt_paid_post_quality_dd \
+        where dt='${azkaban.flow.1.days.ago}' and `type` = '优质' \
+    ) x \
+) a \
+join ( \
+    select id, blogId, ip \
+    from lofter.dim_post \
+          lateral view explode(ips) t as ip \
+    where ip in ('原神','崩坏星穹铁道','恋与深空','庆余年','第五人格','光与夜之恋') \
+) b on a.postId = b.id \
+left join ( \
+    select postId, tag \
+    from lofter_dm.ads_tag_protection_exempt_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId and b.ip = c.tag \
+where c.postId is null \
+group by 1,2,3
+

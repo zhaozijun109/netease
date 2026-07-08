@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_detail_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select id,userId,name,blogName,blogNickName,postcount as post_pv,subscribedcount as subscribe_pv,    \
+                    subscribe_pv_new1d,subscribe_pv_new7d,subscribe_pv_new30d,url,tags,status,createDate,greatlevel  \
+              from  \
+              (select a.id,a.userid,a.name,a.status,greatlevel,a.createDate,b.blogname,b.blognickname,a.postcount,a.tags,a.subscribedcount,  \
+                    concat('https://www.lofter.com/front/blog/grain/detail?grainId=',a.id) url   \
+              from      \
+                    (   \
+                        select distinct id,userid,name,postcount,tags,subscribedcount,status,greatlevel,   \
+                            from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') createDate \
+                        from lofter_db_dump.ods_db_grain_info_nd    \
+                    )   a   \
+                    left join   \
+                    (   \
+                        select id,blogName,blogNickName \
+                        from lofter.dim_blog    \
+                    )   b   \
+                    on a.userid=b.id    \
+              )a    \
+              left join     \
+              (select createuserid,grainid, \
+                   count(distinct  case when from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' then userid end  ) subscribe_pv_new1d,    \
+                   count(distinct  case when from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then userid end ) subscribe_pv_new7d,    \
+                   count(distinct  case when from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then userid end ) subscribe_pv_new30d   \
+              from lofter_db_dump.ods_db_grain_follower_nd  \
+              group by  createuserid,grainid    \
+              )b    \
+              on a.userid=b.createuserid and a.id=b.grainid \
+              distribute by 1

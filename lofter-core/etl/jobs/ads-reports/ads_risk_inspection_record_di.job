@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_inspection_record_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT count(1) AS num \
+	,operator \
+	,ugctype \
+	,STATUS \
+	,optType \
+FROM lofter_db_dump.ods_db_risk_inspection_record_nd \
+WHERE from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY operator \
+	,ugctype \
+	,STATUS \
+	,optType

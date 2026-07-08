@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select collectionId as id, collectionId,subscribe_uv_7d as subscribeUv from lofter.dws_collection_dd where dt ='${azkaban.flow.1.days.ago}' and subscribe_uv_7d >= 20"
+params= --topic lofter.collection.latest.subscribe  --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

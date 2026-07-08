@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select ip as ipName, ip_type as ipModule, post_count_std as postTotal, post_count_7d as postIncreaseCount, if(zone == 'pay', 1, 0) isPaid, dt as statsDate from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}'  \
+union all \
+select tag as ipName, 'cp' as ipModule, post_count_std as postTotal, post_count_7d as postIncreaseCount, if(zone == 'pay', 1, 0) isPaid, dt as statsDate from lofter.dws_membership_cp_dd where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic LOFTER.MEMBERSHIP.IP.STATS.MESSAGE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

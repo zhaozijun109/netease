@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_image_market_stat_dd` PARTITION(`dt` = '${azkaban.flow.1.days.ago}') \
+SELECT productId AS itemId, \
+       0 AS itemType, \
+       COUNT(1) AS totalOrderCount, \
+       SUM(coin) AS totalOrderSales, \
+       SUM(CASE WHEN FROM_UNIXTIME(CAST(createtime/1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' THEN 1 ELSE 0 END) AS recent7DaysOrderCount, \
+       SUM(CASE WHEN FROM_UNIXTIME(CAST(createtime/1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' THEN coin ELSE 0 END) AS recent7DaysOrderSales \
+FROM lofter_db_dump.ods_db_image_market_product_order_nd \
+GROUP BY productId \
+UNION ALL \
+SELECT lootBoxId AS itemId, \
+       1 AS itemType, \
+       COUNT(1) AS totalOrderCount, \
+       SUM(coin) AS totalOrderSales, \
+       SUM(CASE WHEN FROM_UNIXTIME(CAST(createtime/1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' THEN 1 ELSE 0 END) AS recent7DaysOrderCount, \
+       SUM(CASE WHEN FROM_UNIXTIME(CAST(createtime/1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' THEN coin ELSE 0 END) AS recent7DaysOrderSales \
+FROM lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+GROUP BY lootBoxId
+dependencies=

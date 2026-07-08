@@ -1,0 +1,100 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_image_market_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*,b.blogid,b.name,c.blogname,c.url \
+from  \
+(select  \
+lootboxid as itemid,sum(coin) as coin,  \
+count(distinct userid ) as uv, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day, \
+'box' as type \
+from  \
+lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+where  \
+from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+group by lootboxid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')  \
+grouping sets((lootboxid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'))) \
+ \
+union \
+ \
+select productid as itemid,sum(coin) as coin, \
+count(distinct userid ) as uv, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,  \
+'product' as type \
+from  \
+lofter_db_dump.ods_db_image_market_product_order_nd \
+where  \
+from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+group by productid, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+grouping sets((productid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')),(from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'))) \
+ \
+union \
+ \
+select lootboxid as itemid,sum(coin) as coin,  \
+count(distinct userid ) as uv, '累计' as day,'box' as type \
+from  \
+lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+group by lootboxid \
+with cube \
+ \
+union \
+ \
+select productid as itemid,sum(coin) as coin, \
+count(distinct userid ) as uv, '累计' as day, 'product' as type \
+from  \
+lofter_db_dump.ods_db_image_market_product_order_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+group by productid \
+with cube \
+ \
+union \
+ \
+select 0 as itemid,sum(coin) as coin, \
+count(distinct userid) as uv,day,'汇总' as type \
+from \
+(select lootboxid as itemid,coin, userid , from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day \
+from  \
+lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+where  \
+from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+ \
+union all \
+ \
+select productid as itemid,coin,userid , from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day \
+from  \
+lofter_db_dump.ods_db_image_market_product_order_nd \
+where  \
+from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+) a \
+group by day \
+ \
+union \
+ \
+select 0 as itemid,sum(coin) as coin, \
+count(distinct userid) as uv,'累计' as  day,'汇总' as type \
+from \
+(select lootboxid as itemid,coin, userid \
+from  \
+lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+ \
+union all \
+ \
+select productid as itemid,coin,userid  \
+from  \
+lofter_db_dump.ods_db_image_market_product_order_nd \
+where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+) a \
+) a \
+ \
+left join \
+ \
+(select id,blogid,name \
+from lofter_db_dump.ods_db_image_market_product_nd) b  \
+ \
+on a.itemid=b.id  \
+ \
+left join \
+ \
+(select id,blogname ,concat('https://',blogname,'.lofter.com') as url \
+from lofter.dim_blog) c \
+ \
+on b.blogid=c.id

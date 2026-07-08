@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_easy_fetch_traffic_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select item_id,blog_id, \
+    conv(split(item_id,'_')[1],16,10) as postid, \
+    publish_day, \
+    nvl(sum(exposed_count),0) as exposed_count, \
+    nvl(sum(stay_count),0) as click_count, \
+    nvl(sum(hot),0) as hot, \
+    nvl(sum(core_user_exposed_count),0) as core_user_exposed_count, \
+    nvl(sum(core_user_stay_count),0) as core_user_stay_count, \
+    nvl(sum(core_user_action_count),0) as core_user_action_count, \
+    nvl(sum(if(flow_name in ('SearchNewArticle','RelatedNewArticle','FeedRecNewArticle','TagRecNewArticle'),exposed_count,0)),0) as cold_support_exposed_count, \
+    nvl(sum(if(flow_name in ('SearchNewArticle','RelatedNewArticle','FeedRecNewArticle','TagRecNewArticle'),stay_count,0)),0) as cold_support_click_count, \
+    nvl(sum(if(scene = 'attention',exposed_count,0)),0) as attention_exposed_count, \
+    nvl(sum(if(scene = 'attention',stay_count,0)),0)as attention_click_count, \
+    nvl(sum(if(scene = 'feed_rec',exposed_count,0)),0) as feed_rec_exposed_count, \
+    nvl(sum(if(scene = 'feed_rec',stay_count,0)),0) as feed_rec_click_count, \
+    nvl(sum(if(scene = 'feed_rec',core_user_exposed_count,0)),0) as feed_rec_core_exposed_count, \
+    nvl(sum(if(scene = 'feed_rec',core_user_stay_count,0)),0) as feed_rec_core_click_count, \
+    nvl(sum(if(scene = 'related_item',exposed_count,0)),0) as related_item_exposed_count, \
+    nvl(sum(if(scene = 'related_item',stay_count,0)),0) as related_item_click_count, \
+    nvl(sum(if(scene = 'related_item',core_user_exposed_count,0)),0) as related_item_core_exposed_count, \
+    nvl(sum(if(scene = 'related_item',core_user_stay_count,0)),0) as related_item_core_click_count, \
+    nvl(sum(if(scene = 'tag_rec',exposed_count,0)),0) as tag_rec_exposed_count, \
+    nvl(sum(if(scene = 'tag_rec',stay_count,0)),0) as tag_rec_click_count, \
+    nvl(sum(if(scene = 'tag_rec',core_user_exposed_count,0)),0) as tag_rec_core_exposed_count, \
+    nvl(sum(if(scene = 'tag_rec',core_user_stay_count,0)),0) as tag_rec_core_click_count, \
+    nvl(sum(if(scene = 'search',exposed_count,0)),0) as search_exposed_count, \
+    nvl(sum(if(scene = 'search',stay_count,0)),0) as search_click_count \
+from rec.rec_ecology_item_flow_stat_daily \
+where day = '${azkaban.flow.1.days.ago}' \
+group by item_id,blog_id,publish_day

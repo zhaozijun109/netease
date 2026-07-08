@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=\
+with actTagSource as ( \
+    select tag from lofter.dim_act_accompany_tag \
+) \
+insert overwrite table lofter.dwd_act_tag_big_event_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, tag, cnt, type \
+from( \
+    select userid, tag, count(distinct postId) as cnt, 'publish_post' as type \
+    from lofter.dwd_post_publish_di \
+    lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' and tag in (select tag from actTagSource) \
+    group by tag, userId \
+    union all \
+    select userId, tag, count(1) as cnt, 'send_hot' as type \
+    from lofter.dwd_post_hot_di \
+    lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' and tag in (select tag from actTagSource) and userId <> blogId \
+    group by userId, tag \
+    union all \
+    select blogId, tag, count(1) as cnt, 'receive_hot' as type \
+    from lofter.dwd_post_hot_di \
+    lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' and tag in (select tag from actTagSource) and userId <> blogId \
+    group by blogId, tag \
+    union all \
+    select userId, tag, count(distinct commentId) as cnt, 'send_comment' as type \
+    from lofter.dwd_post_response_di \
+    lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' and tag in (select tag from actTagSource) and userId <> blogId \
+    group by userId, tag \
+)
+dependencies=dwd_post_response_di,dwd_post_hot_di,dwd_post_publish_di

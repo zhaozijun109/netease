@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=with all_users as(select user_id,last_talk_date,talk_intervals,total_talks   \
+              from vc.dws_vc_user_behavior_info_a_d   \
+              where dt = '${azkaban.flow.1.days.ago}' and talk_intervals is not null and total_talks is not null)  \
+              insert OVERWRITE table vc.ads_vc_lose_user_talk_period_cnt_n_d PARTITION (dt='${azkaban.flow.1.days.ago}')  \
+              select x1.user_id,'DAY_7' as cat,subCat,x2.total_talks as value  \
+              from  \
+              (select user_id,max(dt) as last_talk_date,  \
+              case when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) = 1 then "1天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 3 then "3天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 7 then "7天未聊天"   \
+              else "active" end as subCat  \
+               from vc.dws_vc_uc_talk_day_cnt_single_i_d where dt > DATE_SUB('${azkaban.flow.1.days.ago}',7) group by user_id) x1  \
+              left join   \
+              all_users x2 on x1.user_id=x2.user_id where x2.last_talk_date != '${azkaban.flow.1.days.ago}' and x1.last_talk_date != '${azkaban.flow.1.days.ago}' \
+              union all  \
+              select x1.user_id,'DAY_15' as cat,subCat,x2.total_talks as value  \
+              from  \
+              (select user_id,max(dt) as last_talk_date,  \
+              case when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) = 1 then "1天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 3 then "3天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 7 then "7天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 15 then "15天未聊天"   \
+              else "active" end as subCat  \
+               from vc.dws_vc_uc_talk_day_cnt_single_i_d where dt > DATE_SUB('${azkaban.flow.1.days.ago}',15) group by user_id) x1  \
+              left join   \
+              all_users x2 on x1.user_id=x2.user_id where x2.last_talk_date != '${azkaban.flow.1.days.ago}' and x1.last_talk_date != '${azkaban.flow.1.days.ago}' \
+              union all  \
+              select x1.user_id,'DAY_30' as cat,subCat,x2.total_talks as value  \
+              from  \
+              (select user_id,max(dt) as last_talk_date,  \
+              case when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) = 1 then "1天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 3 then "3天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 7 then "7天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 15 then "15天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 30 then "30天未聊天"   \
+              else "active" end as subCat  \
+               from vc.dws_vc_uc_talk_day_cnt_single_i_d where dt > DATE_SUB('${azkaban.flow.1.days.ago}',30) group by user_id) x1  \
+              left join   \
+              all_users x2 on x1.user_id=x2.user_id where x2.last_talk_date != '${azkaban.flow.1.days.ago}' and x1.last_talk_date != '${azkaban.flow.1.days.ago}' \
+              union all  \
+              select x1.user_id,'DAY_90' as cat,subCat,x2.total_talks as value  \
+              from  \
+              (select user_id,max(dt) as last_talk_date,  \
+              case when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) = 1 then "1天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 3 then "3天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 7 then "7天未聊天"   \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 15 then "15天未聊天"  \
+              when DATEDIFF('${azkaban.flow.1.days.ago}',max(dt)) <= 30 then "30天未聊天"   \
+              else "active" end as subCat  \
+               from vc.dws_vc_uc_talk_day_cnt_single_i_d where dt > DATE_SUB('${azkaban.flow.1.days.ago}',90) group by user_id) x1  \
+              left join   \
+              all_users x2 on x1.user_id=x2.user_id where x2.last_talk_date != '${azkaban.flow.1.days.ago}' and x1.last_talk_date != '${azkaban.flow.1.days.ago}';

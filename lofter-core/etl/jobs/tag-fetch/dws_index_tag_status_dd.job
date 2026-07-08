@@ -1,0 +1,16 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_index_tag_status_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select tag, to_bitmap(postId) as forbid_post_bitmap, \
+       to_bitmap(userId) as forbid_user_bitmap \
+from ( \
+   select tag, \
+          if(type = 1, thirdId, null) as postId, \
+          if(type = 2, thirdId, null) as userId \
+   from lofter_db_dump.ods_db_tag_manager_operation_nd \
+   where status = 0 and type in (1, 2) \
+) a \
+group by tag \
+distribute by 1
+

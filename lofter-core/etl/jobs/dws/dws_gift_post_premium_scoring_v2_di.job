@@ -1,0 +1,368 @@
+type=sparksql
+hive.query.01=\
+with \
+  t2 ( \
+    select \
+      postid \
+    from \
+      lofter.dim_gift_post_return \
+    where \
+      blog_channel in (0, 1) \
+      and ispay_returngift in (0, 1) \
+      and publishdate between date_sub('${azkaban.flow.1.days.ago}', 90) \
+      and '${azkaban.flow.1.days.ago}' \
+      and auditstatus = 1 \
+      and status = 1 \
+      and ( \
+        review_status = -2 \
+        or ( \
+          review_status = -1 \
+          and array_contains (mark_tags, '引流') = 1 \
+        ) \
+      ) \
+    group by \
+      postid \
+  ), \
+  t1( \
+    select \
+      postid, \
+      contenttype, \
+      tutu_flg, \
+      ip, \
+      amount_flg, \
+      row_number() over( \
+        partition by tutu_flg, \
+        ip, \
+        amount_flg \
+        order by \
+          zonghe_score desc \
+      ) rk \
+    from \
+      ( \
+        select \
+          a.postid, \
+          a.contenttype, \
+          case \
+            when b.postid is not null then 1 \
+            else 0 \
+          end as tutu_flg, \
+          case \
+            when c.ip is null then '其他' \
+            else c.ip \
+          end ip, \
+          case \
+            when amount >= 50 \
+            and amount < 100 then '50~100' \
+            when amount >= 100 \
+            and amount < 200 then '100~200' \
+            when amount >= 200 \
+            and amount < 500 then '200~500' \
+            when amount >= 500 \
+            and amount < 1000 then '500~1000' \
+            when amount >= 1000 then '1000~' \
+            else 'other' \
+          end as amount_flg, \
+          zonghe_score \
+        from \
+          ( \
+            select \
+              postid, \
+              contenttype, \
+              (exposureuv / 1000 * qianbg_amount) as amount, \
+              ip, \
+              zonghe_score \
+            from \
+              lofter.dws_gift_post_premium_scoring_di LATERAL VIEW explode( \
+                case \
+                  when size(ips) < 1 then array('无ip归属') \
+                  else ips \
+                end \
+              ) t2 AS ip \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and blog_channel = 0 \
+          ) a \
+          left join ( \
+            select \
+              postid \
+            from \
+              lofter.dim_gift_post_return \
+            where \
+              return_gift_plantype = '图图有证' \
+            group by \
+              postid \
+          ) b on a.postid = b.postid \
+          left join ( \
+            select \
+              ip, \
+              contenttype \
+            from \
+              lofter.dws_gift_post_premium_ip_scoring_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              ip, \
+              contenttype \
+          ) c on a.ip = c.ip \
+          and a.contenttype = c.contenttype \
+          left join ( \
+            select \
+              postid \
+            from \
+              t2 \
+            group by \
+              postid \
+          ) d on a.postid = d.postid \
+        where \
+          d.postid is null \
+      ) a \
+  ) \
+insert overwrite table lofter.dws_gift_post_premium_scoring_v2_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.*, \
+  case \
+    when e.postid is not null then '低质' \
+    when e.postid is null \
+    and ( \
+      b.postid is not null \
+      or c.postid is not null \
+      or d.postid is not null \
+    ) \
+    and f.postid is not null \
+    and g.postid is null \
+    then '优质' \
+    else '其他' \
+  end as type, \
+  case \
+    when b.postid is not null then 1 \
+    else 0 \
+  end as model_flg, \
+  case \
+    when c.postid is not null then 1 \
+    else 0 \
+  end as fufei_flg, \
+  case \
+    when d.postid is not null then 1 \
+    else 0 \
+  end as recommend_flg, \
+  case \
+    when f.postid is not null then 1 \
+    else 0 \
+  end as bg_amount_flg \
+from \
+  ( \
+    select \
+postid \
+,blogid \
+,tags \
+,ips \
+,url \
+,recomstatus \
+,blogname \
+,blognickname \
+,styouzhiflg \
+,yinliuflg \
+,review_status \
+,contenttype \
+,exposureuv \
+,qianbg_amount \
+,liulan_fufei_rate \
+,furate \
+,zhenrate \
+,publishdate \
+,blog_channel \
+,recommendflg \
+,rec_reviewflg \
+,unlocktype \
+,collectionid \
+,provider_type \
+,bg_flg \
+,qianbg_amount_ln \
+,liulan_fufei_rate_ln \
+,furate_ln \
+,zhenrate_ln \
+,realbrowse_rate_ln \
+,hd_rate_ln \
+,zonghe_score \
+,rk \
+    from \
+      lofter.dws_gift_post_premium_scoring_detail_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+  ) a \
+  left join ( \
+    Select \
+      postid \
+    from \
+      lofter.dws_gift_post_premium_scoring_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and blog_channel = 0 \
+      and type = '优质' \
+    group by \
+      postid \
+  ) b on a.postid = b.postid \
+  left join ( \
+    select \
+      a.postid \
+    from \
+      ( \
+        select \
+          postid, \
+          contenttype, \
+          tutu_flg, \
+          ip, \
+          amount_flg, \
+          rk \
+        from \
+          t1 \
+      ) a \
+      join ( \
+        select \
+          tutu_flg, \
+          amount_flg, \
+          ip, \
+          max(rk) as num \
+        from \
+          t1 \
+        group by \
+          tutu_flg, \
+          amount_flg, \
+          ip \
+      ) b on a.tutu_flg = b.tutu_flg \
+      and a.ip = b.ip \
+      and a.amount_flg = b.amount_flg \
+    where \
+      ( \
+        a.tutu_flg = 0 \
+        and a.amount_flg = '50~100' \
+        and a.rk <= num / 10 * 1 \
+      ) \
+      or ( \
+        a.tutu_flg = 0 \
+        and a.amount_flg = '100~200' \
+        and a.rk <= num / 10 * 2.5 \
+      ) \
+      or ( \
+        a.tutu_flg = 0 \
+        and a.amount_flg = '200~500' \
+        and a.rk <= num / 10 * 3 \
+      ) \
+      or ( \
+        a.tutu_flg = 0 \
+        and a.amount_flg = '500~1000' \
+        and a.rk <= num / 10 * 3.5 \
+      ) \
+      or ( \
+        a.tutu_flg = 0 \
+        and a.amount_flg = '1000~' \
+        and a.rk <= num / 100 * 40 \
+      ) \
+      or ( \
+        a.tutu_flg = 1 \
+        and a.amount_flg = '50~100' \
+        and a.rk <= num / 10 * 4 \
+      ) \
+      or ( \
+        a.tutu_flg = 1 \
+        and a.amount_flg = '100~200' \
+        and a.rk <= num / 10 * 6 \
+      ) \
+      or ( \
+        a.tutu_flg = 1 \
+        and a.amount_flg = '200~500' \
+        and a.rk <= num / 10 * 8 \
+      ) \
+      or ( \
+        a.tutu_flg = 1 \
+        and a.amount_flg = '500~1000' \
+        and a.rk <= num / 100 * 80 \
+      ) \
+      or ( \
+        a.tutu_flg = 1 \
+        and a.amount_flg = '1000~' \
+        and a.rk <= num / 100 * 95 \
+      ) \
+    group by \
+      a.postid \
+  ) c on a.postid = c.postid \
+  left join ( \
+    select \
+      a.postid \
+    from \
+      ( \
+        select \
+          postid, \
+          contenttype, \
+          recommendflg \
+        from \
+          lofter.dws_gift_post_premium_scoring_di \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and blog_channel = 0 \
+      ) a \
+      left join ( \
+        select \
+          postid \
+        from \
+          t2 \
+        group by \
+          postid \
+      ) b on a.postid = b.postid \
+      left join ( \
+        select \
+          postid, \
+          sum(zhengfankui_uv) as zhengfankui_uv \
+        from \
+          lofter.dws_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          postid \
+        having \
+          zhengfankui_uv >= 20 \
+      ) c on a.postid = c.postid \
+    where \
+      b.postid is null \
+      and recommendflg > 0 \
+      and c.postid is not null \
+    group by \
+      a.postid \
+  ) d on a.postid = d.postid \
+  left join ( \
+    select \
+      postid \
+    from \
+      t2 \
+    group by \
+      postid \
+  ) e on a.postid = e.postid \
+  left join ( \
+    select \
+      postid \
+    from \
+      lofter.dws_gift_post_premium_scoring_di \
+    where \
+      exposureuv >= 3000 \
+      and (exposureuv / 1000 * qianbg_amount) >= 10 \
+    group by \
+      postid \
+  ) f on a.postid = f.postid \
+  left join \
+   (select postid \
+  from  \
+  lofter.dim_gift_post_return \
+  where \
+   auditstatus=1 \
+  and status=1 \
+  and  \
+  ( \
+  blog_channel in (1,2,3) or \
+  (contenttype='图片' and  review_status in (-1,-2,-3)) \
+  or( contenttype='文字' and  review_status in (0,-1,-2,-3)) \
+  or contenttype not in ('图片','文字') \
+  ) \
+  group by postid) g \
+  on a.postid=g.postid \
+
+dependencies=dws_gift_post_premium_scoring_di,dws_gift_post_return_dd,dws_gift_post_premium_scoring_detail_dd,dws_gift_post_premium_ip_scoring_dd

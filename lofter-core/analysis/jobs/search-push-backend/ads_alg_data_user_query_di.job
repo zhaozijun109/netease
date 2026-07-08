@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_alg_data_user_query_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select t1.itemId, \
+       t1.userId, \
+       t1.recId, \
+       itemType, \
+       articleType, \
+       scene, \
+       costTime, \
+       clickCount, \
+       negActionCount, \
+       commentCount, \
+       likeCount, \
+       shareCount, \
+       recommendCount, \
+       flowName, \
+       pos, \
+       day, \
+       payCount, \
+       '综合' as module, \
+       recStartTime, \
+       query, \
+       nvl(flag, 0) as flag, \
+       algWeight \
+from ( \
+    select item_id as itemId, \
+           user_id as userId, \
+           rec_id as recId, \
+           item_type as itemType, \
+           article_type as articleType, \
+           scene, \
+           cost_time as costTime, \
+           click_count as clickCount, \
+           neg_action_count as negActionCount, \
+           comment_count as commentCount, \
+           like_count as likeCount, \
+           share_count as shareCount, \
+           recommend_count as recommendCount, \
+           flow_name as flowName, \
+           nvl(pos, 0) as pos, \
+           day, \
+           nvl(pay_count, 0) as payCount \
+    from rec.alg_data_noblog_action_di_user_item where day = '${azkaban.flow.1.days.ago}' and scene = 'search' \
+) t1 \
+join ( \
+    select recId, recStartTime, ext['reqTag'] as query \
+    from rec.ods_lofter_noblog_rec_di where day = '${azkaban.flow.1.days.ago}' and req.sceneName = 'search' \
+) t2 \
+on t1.recId = t2.recId \
+left join ( \
+    select item_id as itemId, if(size(return_gift_plantypes) = 1 and array_contains(return_gift_plantypes, '图图有证'), 0, 1) as flag \
+    from rec.rec_lofter_features_article_gift_meta_v2 \
+    where day = '${azkaban.flow.1.days.ago}' and return_gift_type not in ('0', '1') \
+) t3 \
+on t1.itemId = t3.itemId \
+left join ( \
+    select item_id as itemId, \
+           rec_id as recId, \
+           sum(case when get_json_object(alg, '$.w') is not null and get_json_object(alg, '$.w') != '' then cast(get_json_object(alg, '$.w') as double) else 0.0 end ) as algWeight \
+           from rec.alg_data_noblog_action_di_user_item \
+           where day = '${azkaban.flow.1.days.ago}' and scene = 'search' \
+           group by item_id, rec_id \
+) t4 \
+on t1.itemId = t4.itemId and t1.recId = t4.recId

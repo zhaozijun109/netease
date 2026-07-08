@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_tag_filter_category_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select tag, \
+       cast(to_json(collect_set(struct(category, type))) as string) as categoryInfoList \
+from ( \
+    select tag, \
+           case when category = '漫画' then '条漫' \
+                when category = '连载' then '长文' \
+                when category = '短篇' then '一发完' \
+                when category = '捡手机' then '捡手机' \
+                when category = '种草-同人考据' then '我流考据' \
+                when category = '插画' then '插画' \
+                when category = '明星美图' then '饭拍/饭制' \
+                when category = '合集' then '合集' \
+                when category = '种草-其他' then '推文种草' \
+           end as category, \
+           case when category = '合集' then 1 else 0 end as type \
+    from ( \
+        select tag, category \
+        from rec.rec_tag_filter_category \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by tag, category \
+        having count(1) > 50 \
+    ) t1 \
+) t2 \
+group by tag
+
+
+
+
+
+
+
+
+
+
+
+
+
+

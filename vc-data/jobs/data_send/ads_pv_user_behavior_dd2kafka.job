@@ -1,0 +1,18 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select 'OM5593_LOSE_USER_COMEBACK_ASSET' as metricId, \
+                                user_id, \
+                                user_code, \
+                                user_type, \
+                                last_talk_date, \
+                                talk_intervals, \
+                                register_date, \
+                                last_active_date, \
+                                dt \
+                         from vc.ads_pv_user_behavior_dd \
+                         where dt = '${azkaban.flow.1.days.ago}' \
+                           and register_date = '${azkaban.flow.30.days.ago}' \
+                           and last_talk_date is null and last_active_date is null"
+
+params= --topic vc_comeback_asset_topic --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092
+

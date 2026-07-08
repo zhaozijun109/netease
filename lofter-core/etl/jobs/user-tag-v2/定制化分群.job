@@ -1,0 +1,53 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 定制化分群 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '定制化分群' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (select userId, '定制化分群' as tag, '回礼低意愿保护用户' as grp \
+                              from lofter_dm.ads_gift_return_neg_protect_user_group_di \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                         \
+                              union all \
+                         \
+                              select userId, '定制化分群' as tag, '低活用户' as grp \
+                              from lofter.dwd_user_low_active_di \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                         \
+                              union all \
+                         \
+                              select userId, '定制化分群' as tag, user_type as grp \
+                              from lofter.dwb_par_lofter_music_user_label_di \
+                              where pt_d = '${azkaban.flow.1.days.ago}' \
+                                and user_type in ('音乐新客', '音乐召回') \
+                         \
+                              union all \
+                         \
+                              select blogId as userId, '定制化分群' as tag, '回礼好评创作者' as grp \
+                              from lofter_dm.ads_gift_post_high_positive_vote_blogs_di \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                              group by 1 \
+                         \
+                              union all \
+                         \
+                              select userId, '定制化分群' as tag, '广告激励视频回礼文章扩容' as grp \
+                              from lofter_dm.ads_ad_video_extend_user_group_di \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                         \
+                              union all \
+                         \
+                              select userId, '定制化分群' as tag, '广告激励视频核心汇总' as grp \
+                              from lofter_dm.ads_ad_video_extend_core_user_group_di \
+                              where dt = '${azkaban.flow.1.days.ago}' \
+                         \
+                              union all \
+                         \
+                              select userId, '定制化分群' as tag, '云音乐会员积极互动鼓励' as grp \
+                              from lofter_dm.ads_act_music_interaction_present_di \
+                              where dt = '${azkaban.flow.1.days.ago}') "

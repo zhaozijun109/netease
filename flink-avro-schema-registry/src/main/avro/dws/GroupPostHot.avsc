@@ -1,0 +1,11 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "GroupPostHot",
+  "fields": [
+    {"name": "postId", "type": "long"},
+    {"name": "blogId", "type": "long"},
+    {"name": "teamId", "type": "long"},
+    {"name": "likeCount", "type": "long"}
+  ]
+}

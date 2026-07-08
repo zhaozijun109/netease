@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dwd.FactUserLoginJob
+params= --date ${azkaban.flow.1.days.ago} --output /user/da_lofter/warehouse/fact_user_login
+dependencies=

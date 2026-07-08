@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'comment_interaction') \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'comment_interaction' as policy, \
+       1 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, 5 as messageType, comment_hot as likes, comment_replies as comments, \
+           if(last_replied_blogid is not null, 1, 3) as commentInteractType, nvl(last_replied_blogid,last_interact_userid) as targetUserId, \
+           notify_commentId as commentId, notify_content as commentContent, notify_postId as commentPostId, notify_blogId as commentBlogId, \
+           notify_commenthot as commentlikes, otify_replyl2count as commentReplies \
+    from lofter_dm.ads_push_comment_interaction_di \
+    where dt='${azkaban.flow.current.date}' \
+) t \
+
+dependencies=ads_push_comment_interaction_di

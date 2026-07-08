@@ -1,0 +1,7 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select dt,nvl(blog_level,'') as blog_level,collection_post_type,scene,source1_scene,source2_scene,is_collection_new_user,expose_pv,realbrowse_pv,praise_pv,recommend_pv,reproduce_pv,subscribe_pv,comment_pv,share_pv,e2b_pv,expose_uv_bitmap,realbrowse_uv_bitmap,praise_uv_bitmap,recommend_uv_bitmap,reproduce_uv_bitmap,subscribe_uv_bitmap,comment_uv_bitmap,share_uv_bitmap,e2b_uv_bitmap,expose_collection_bitmap,realbrowse_collection_bitmap,praise_collection_bitmap,recommend_collection_bitmap,reproduce_collection_bitmap,subscribe_collection_bitmap,comment_collection_bitmap,share_collection_bitmap,e2b_collection_bitmap,is_collection_return_user from lofter.dws_collection_scene_agg_bm_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.dws_collection_scene_agg_bm_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=dws_collection_scene_agg_bm_di
+

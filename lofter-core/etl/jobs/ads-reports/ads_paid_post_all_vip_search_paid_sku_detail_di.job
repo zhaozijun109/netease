@@ -1,0 +1,91 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_all_vip_search_paid_sku_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+Select \
+  b.revenue_module, \
+  platform, \
+  vipdays, \
+  c.amount as price, \
+  count(distinct b.userid) as buy_uv, \
+  sum(c.amount) as money \
+from \
+  ( \
+    select \
+      userid, \
+      amount, \
+      order_id, \
+      postid, \
+      '书城会员' as revenue_module \
+    from \
+      lofter.dwd_paid_subscribe_order_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and order_type = 3 \
+      and is_internal_attribute_order = 0 \
+      and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      and actpwd is not null \
+    union \
+    select \
+      userid, \
+      amount, \
+      order_id, \
+      postid, \
+      '大会员' as revenue_module \
+    from \
+      lofter.dwd_membership_order_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and is_internal_attribute_order = 0 \
+      and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      and actpwd is not null \
+  ) b \
+  join ( \
+    select \
+      userid, \
+      paytype, \
+      id, \
+      platform, \
+      vipdays, \
+      amount, \
+      source, \
+      '书城会员' as revenue_module \
+    from \
+      lofter_db_dump.ods_db_trade_store_vip_order_nd \
+    where \
+      status = 1 \
+      and from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    union \
+    select \
+      userid, \
+      paytype, \
+      id, \
+      platform, \
+      vipdays, \
+      amount, \
+      source, \
+      '大会员' as revenue_module \
+    from \
+      lofter_db_dump.ods_db_trade_member_ship_order_nd \
+    where \
+      status = 1 \
+      and from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+  ) c on b.userid = c.userid \
+  and b.order_id = c.id \
+  join ( \
+    select \
+      userid \
+    from \
+      lofter.dwd_growth_actpwd_access_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and content_type = '单日志' \
+      and settlement_type in ('CPS') \
+      and actpwd is not null \
+      and itemid is not null \
+    group by \
+      userid \
+  ) a on a.userid = b.userid \
+group by \
+  b.revenue_module, \
+  platform, \
+  vipdays, \
+  c.amount \

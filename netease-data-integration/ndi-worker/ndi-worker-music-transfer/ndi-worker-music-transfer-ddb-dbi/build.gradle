@@ -1,0 +1,40 @@
+configurations {
+  ddb4_6
+}
+configurations {
+  ddb4_6_6
+}
+
+dependencies {
+  compileOnlyPackages.each { packageName ->
+    compileOnly packageName
+  }
+  compileOnly project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-common")
+  compileOnly fileTree(dir: 'lib/4.6', include: '*.jar')
+  implementation project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-jdbc")
+  implementation project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-mysql")
+  implementation packages.mysqlConnector
+  testImplementation packages.junit
+
+  ddb4_6 fileTree(dir: "lib/4.6", include: "*.jar")
+  ddb4_6_6 fileTree(dir: "lib/4.6.6", include: "*.jar")
+}
+
+task createPackageDir4_6_6(type: Copy) {
+  dependsOn "build"
+  from(configurations.ddb4_6_6)
+  into("build/package/4.6.6")
+}
+
+task createPackageDir4_6(type: Copy) {
+  dependsOn "build"
+  from(configurations.ddb4_6)
+  into("build/package/4.6")
+}
+
+task createPackageDir(type: Copy) {
+  dependsOn "build", createPackageDir4_6, createPackageDir4_6_6
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/")
+}

@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dwd_cold_ip_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select ip, \
+        count(distinct a.postId) as post_cnt_30d, \
+        count(distinct if(a.post_content_type = '文字', a.postId, null)) as text_post_cnt_30d, \
+        count(distinct if(a.post_content_type = '文字' and b.postId is not null, a.postId, null)) as text_pay_only_post_cnt_30d \
+    from ( \
+        select ip, postId, post_content_type \
+        from lofter.dwd_post_publish_di \
+            lateral view explode(post_ips) t1 as ip \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select postId \
+        from lofter.dim_gift_post_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and is_pay_return_gift = '2' and \
+            publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    group by 1 \
+    having post_cnt_30d <= 1000 and text_pay_only_post_cnt_30d < text_post_cnt_30d * 0.15 \
+) t \
+
+dependencies=dwd_post_publish_di

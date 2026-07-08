@@ -1,0 +1,9 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "VideoPlay",
+  "fields": [
+    {"name": "postId", "type": "long"},
+    {"name": "playCount", "type": "long"}
+  ]
+}

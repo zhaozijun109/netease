@@ -1,0 +1,121 @@
+type=sparksql
+hive.query.01= \
+WITH base_publish AS ( \
+    SELECT post_publish_date AS dt  \
+          ,ip \
+          ,userid AS author_userid \
+          ,postid \
+    FROM lofter.dwd_post_publish_di \
+    LATERAL VIEW explode_outer(post_ips) h AS ip \
+    WHERE post_publish_date = '${azkaban.flow.1.days.ago}' \
+      AND post_content_type = '视频' \
+      AND ip IS NOT NULL AND ip != '' \
+    GROUP BY post_publish_date, ip, userid, postid \
+) \
+, publish_data AS ( \
+    SELECT dt  \
+          ,ip \
+          ,COUNT(DISTINCT author_userid) AS cnt_pub_author_userid            \
+          ,COUNT(DISTINCT postid) AS cnt_pub_postid    \
+    FROM base_publish \
+    GROUP BY dt, ip \
+) \
+, base_browse AS ( \
+    SELECT b.dt  \
+          ,b.userid \
+          ,b.postid \
+          ,p.ip \
+          ,b.duration \
+          ,b.is_real \
+          ,b.is_video_finish \
+    FROM ( \
+        SELECT dt, userid, postid, duration, is_real, is_video_finish \
+        FROM lofter.dwd_post_browse_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND post_content_type = '视频' \
+          AND action_type = 'page_duration' \
+    ) b  \
+    INNER JOIN base_publish p ON b.dt = p.dt AND b.postid = p.postid \
+) \
+, browse_user_agg AS ( \
+    SELECT dt, ip, userid \
+          ,MAX(is_real) AS user_is_real \
+          ,MAX(is_video_finish) AS user_is_finish \
+    FROM base_browse \
+    GROUP BY dt, ip, userid \
+) \
+, browse_user_metrics AS ( \
+    SELECT dt, ip \
+          ,COUNT(1) AS cnt_pub_browse_userid    \
+          ,SUM(user_is_real) AS cnt_pub_valid_userid \
+          ,SUM(user_is_finish) AS cnt_pub_finish_userid \
+    FROM browse_user_agg \
+    GROUP BY dt, ip \
+) \
+, browse_vv_metrics AS ( \
+    SELECT dt, ip \
+          ,COUNT(1) AS cnt_pub_play_vv \
+          ,SUM(CASE WHEN duration >= 5000 THEN 1 ELSE 0 END) AS cnt_pub_play_5s_vv \
+          ,SUM(CASE WHEN duration >= 3000 THEN 1 ELSE 0 END) AS cnt_pub_play_3s_vv \
+          ,SUM(CASE WHEN is_video_finish = 1 THEN 1 ELSE 0 END) AS cnt_pub_play_finish_vv \
+    FROM base_browse \
+    GROUP BY dt, ip \
+) \
+, post_stats_metrics AS ( \
+    SELECT p.dt, p.ip \
+          ,SUM(s.browsepv) AS pub_browsepv \
+          ,SUM(s.realbrowsepv) AS pub_realbrowsepv \
+          ,SUM(s.sharepv) AS pub_sharepv \
+          ,SUM(s.pospraisepv) AS pub_pospraisepv \
+          ,SUM(s.poscommentpv) AS pub_poscommentpv \
+          ,SUM(s.posrecpv) AS pub_posrecpv \
+    FROM ( \
+        SELECT dt, ip, postid FROM base_publish GROUP BY 1,2,3 \
+    ) p \
+    INNER JOIN ( \
+        SELECT dt, postid \
+              ,MAX(browsepv) AS browsepv \
+              ,MAX(realbrowsepv) AS realbrowsepv \
+              ,MAX(sharepv) AS sharepv \
+              ,MAX(pospraisepv) AS pospraisepv \
+              ,MAX(poscommentpv) AS poscommentpv \
+              ,MAX(posrecpv) AS posrecpv \
+        FROM lofter.dws_post_base_stats_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY dt, postid \
+    ) s ON p.dt = s.dt AND p.postid = s.postid  \
+    GROUP BY p.dt, p.ip \
+) \
+, ip_spine AS ( \
+    SELECT dt, ip FROM publish_data group by 1,2 \
+) \
+, ip_mapping AS ( \
+    SELECT ip, categories \
+    FROM lofter.dim_ip_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter_dm.ads_video_ip_publish_stats_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+       base.ip  \
+      ,e.categories \
+      ,COALESCE(a.cnt_pub_author_userid, 0) AS cnt_pub_author_userid \
+      ,COALESCE(a.cnt_pub_postid, 0) AS cnt_pub_postid \
+      ,COALESCE(b.cnt_pub_browse_userid, 0) AS cnt_pub_browse_userid \
+      ,COALESCE(b.cnt_pub_valid_userid, 0) AS cnt_pub_valid_userid \
+      ,COALESCE(b.cnt_pub_finish_userid, 0) AS cnt_pub_finish_userid \
+      ,COALESCE(v.cnt_pub_play_vv, 0) AS cnt_pub_play_vv \
+      ,COALESCE(v.cnt_pub_play_5s_vv, 0) AS cnt_pub_play_5s_vv \
+      ,COALESCE(v.cnt_pub_play_3s_vv, 0) AS cnt_pub_play_3s_vv \
+      ,COALESCE(v.cnt_pub_play_finish_vv, 0) AS cnt_pub_play_finish_vv \
+      ,COALESCE(d.pub_browsepv, 0) AS pub_browsepv \
+      ,COALESCE(d.pub_realbrowsepv, 0) AS pub_realbrowsepv \
+      ,COALESCE(d.pub_sharepv, 0) AS pub_sharepv \
+      ,COALESCE(d.pub_pospraisepv, 0) AS pub_pospraisepv \
+      ,COALESCE(d.pub_poscommentpv, 0) AS pub_poscommentpv \
+      ,COALESCE(d.pub_posrecpv, 0) AS pub_posrecpv \
+FROM ip_spine base \
+LEFT JOIN publish_data a        ON base.dt = a.dt AND base.ip = a.ip \
+LEFT JOIN browse_user_metrics b ON base.dt = b.dt AND base.ip = b.ip \
+LEFT JOIN browse_vv_metrics v   ON base.dt = v.dt AND base.ip = v.ip \
+LEFT JOIN post_stats_metrics d  ON base.dt = d.dt AND base.ip = d.ip \
+LEFT JOIN ip_mapping e          ON base.ip = e.ip

@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dim_vc_character_info_a_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select id                                                         as character_id, \
+                       user_id                                                    as c_user_id, \
+                       creator_uid, \
+                       character_name, \
+                       description, \
+                       character_avatar, \
+                       character_back_img, \
+                       residence, \
+                       birthday, \
+                       case \
+                           when length(birthday) = 5 then -1 \
+                           when length(birthday) = 10 \
+                               then substr(birthday, 1, 4) end                    as birthday_year, \
+                       case \
+                           when length(birthday) = 5 then substr(birthday, 1, 2) \
+                           when length(birthday) = 10 \
+                               then substr(birthday, 6, 2) end                    as birthday_month, \
+                       case \
+                           when length(birthday) = 5 then substr(birthday, 4, 2) \
+                           when length(birthday) = 10 \
+                               then substr(birthday, 9, 2) end                    as birthday_day, \
+                       bot_setting, \
+                       ext_prompt, \
+                       front_tags, \
+                       backend_tags, \
+                       channel, \
+                       type, \
+                       weights, \
+                       score, \
+                       from_unixtime(audit_time, 'yyyy-MM-dd HH:mm:ss')           as audit_time, \
+                       status, \
+                       ext, \
+                       from_unixtime(create_time, 'yyyy-MM-dd HH:mm:ss')          as create_time, \
+                       from_unixtime(update_time, 'yyyy-MM-dd HH:mm:ss')          as update_time, \
+                       from_unixtime(valid_start_time, 'yyyy-MM-dd HH:mm:ss')     as valid_start_time, \
+                       character_dyn_back_img, \
+                       audience_type, \
+                       public_scope, \
+                       sex, \
+                       audit_status, \
+                       case when type = 0 then 'ogc' when type in (1,2) then 'ugc' end as character_type, \
+                       if(status = 1, 'Y', 'N')                                   as is_valid, \
+                       lofter_id                                                  as role_id \
+                from vc.ods_db_vc_character_nd;

@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_video_user_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+with browse_user as ( \
+    select \
+        userId, \
+        deviceUdid, \
+        sum(case when action_type = 'page_view'     then 1 else 0 end) as expose_pv, \
+        sum(case when action_type = 'page_duration' then 1 else 0 end) as play_pv, \
+        count(distinct case when action_type = 'page_duration' then postId end) as play_post_uv, \
+        sum(case when is_real = 1 then 1 else 0 end)                   as real_play_pv, \
+        sum(case when is_video_finish = 1 then 1 else 0 end)           as finish_play_pv, \
+        sum(if(is_real > 0, duration, 0))                              as real_play_time_ms, \
+        max(deviceOs)                                                  as deviceOs_b, \
+        max(appVersion)                                                as appVersion_b \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and post_content_type = '视频' \
+    group by userId, deviceUdid \
+), \
+play_user as ( \
+    select \
+        userId, \
+        deviceUdid, \
+        count(1)                                                       as play_session_count, \
+        count(distinct postId)                                         as play_post_distinct, \
+        sum(buffer_session_count)                                      as buffer_session_count, \
+        sum(buffer_time_ms)                                            as buffer_time_ms, \
+        sum(played_time_ms)                                            as played_time_ms, \
+        max(case when is_speedrate_used = 1 then 1 else 0 end)         as is_speedrate_used, \
+        max(deviceOs)                                                  as deviceOs_p, \
+        max(appVersion)                                                as appVersion_p \
+    from lofter.dwd_video_play_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId, deviceUdid \
+), \
+hot_user as ( \
+    select userId, count(1) as hot_pv \
+    from lofter.dwd_post_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) \
+select \
+    b.userId                                                       as userId, \
+    b.deviceUdid                                                   as deviceUdid, \
+    nvl(p.deviceOs_p, b.deviceOs_b)                                as deviceOs, \
+    nvl(p.appVersion_p, b.appVersion_b)                            as appVersion, \
+    nvl(b.expose_pv, 0)                                            as expose_pv, \
+    nvl(b.play_pv, 0)                                              as play_pv, \
+    nvl(b.play_post_uv, 0)                                         as play_post_uv, \
+    nvl(b.real_play_pv, 0)                                         as real_play_pv, \
+    nvl(b.finish_play_pv, 0)                                       as finish_play_pv, \
+    nvl(b.real_play_time_ms, 0)                                    as real_play_time_ms, \
+    nvl(p.play_session_count, 0)                                   as play_session_count, \
+    nvl(p.play_post_distinct, 0)                                   as play_post_distinct, \
+    nvl(p.buffer_session_count, 0)                                 as buffer_session_count, \
+    nvl(p.buffer_time_ms, 0)                                       as buffer_time_ms, \
+    nvl(p.played_time_ms, 0)                                       as played_time_ms, \
+    nvl(p.is_speedrate_used, 0)                                    as is_speedrate_used, \
+    nvl(h.hot_pv, 0)                                               as hot_pv \
+from browse_user b \
+left join play_user p \
+    on b.userId = p.userId and b.deviceUdid = p.deviceUdid \
+left join hot_user h \
+    on b.userId = h.userId \
+distribute by hash(b.userId) % 20
+dependencies=

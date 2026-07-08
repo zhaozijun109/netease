@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_keyword_rec_reason_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select keyword, reason, priority \
+from ( \
+    select keyword, reason, priority, \
+           row_number() over (partition by keyword order by priority) as priority_rk \
+    from lofter_dm.ads_search_keyword_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) ttt \
+where priority_rk = 1
+dependencies=ads_search_keyword_rec_reason_detail_di

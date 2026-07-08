@@ -1,0 +1,162 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=create temporary function html_text_length as 'com.netease.wm.udf.HtmlTextLength';
+hive.query.03=insert overwrite table lofter.dim_gift_post_return_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id, plantype, a.status, auditStatus, \
+    a.postid,createDate,text_length,image_count,drainage_flag, \
+    giftname,ispaynum,nopaynum, \
+    b.blogid,b.contentType,b.blogName,b.publishDate, \
+    c.return_gift_plantype, \
+    case when d.agreeTime>0 then from_unixtime(cast(d.agreeTime / 1000 AS BIGINT), 'yyyy-MM-dd')  else '' end  as  agreeDay, \
+    case when d.`type` is null then 0 else  d.`type` end as gift_ability_type, \
+    case when d.status is null then 0 else d.status end  as gift_ability_status, \
+    case when m.blogId is not null then 3 when j.authority_userId is not null then 2 when e.blogid is not null then 1 else 0 end as blog_channel, \
+    case when f.postid is null  then 0 else 1 end   as sign_flag, \
+    case when g.blogid is not null  then 1 \
+        when i.blogid is not null and g.blogid is  null then 2 \
+        else 0 end   as ugc_channel, \
+    case when a.isPayNum>0 and a.noPayNum>0 then 0 \
+        when a.isPayNum>0 and a.noPayNum=0 then 1 \
+        when a.isPayNum=0 and a.noPayNum>0 then 2 \
+        end as ispay_returngift, \
+    j.fans_vip_status,j.fans_vip_agree_day,j.fans_vip_close_day,j.is_authority,a.unlockType,nvl(h.collectionId,0) as collectionId, \
+    nvl(k.providerType,-1) as provider_type, \
+    accept_gift_flag, show_support_flag, hide_return_gift_preview_img, \
+    if(emote_package_id > 0, emote_package_id, null) as emote_package_id, \
+    if(dress_id > 0, dress_id, null) as dress_id, \
+    preview_image_count, reviewStatus as review_status, \
+    mark_tags \
+from ( \
+   select a.id,a.plantype,status,auditstatus,a.postid,createdate, \
+          text_length,if(image_count=-1,0,image_count) as image_count,drainage_flag,unlocktype, \
+          emote_package_id, dress_id, preview_image_count, \
+          concat_ws(',',collect_set(giftname)) as giftname, reviewStatus, \
+          count(case when ispay=1 then giftid else null end) as ispaynum, \
+          count(case when ispay=0 then giftid else null end ) as nopaynum \
+   from ( \
+       select a.*,b.giftname, b.ispay \
+       from ( \
+           select id,plantype,status,auditstatus,postid,regexp_replace(giftId,'\\\\[|\\\\]', '') as giftid, unlocktype, \
+                  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')  as createdate, \
+                  html_text_length(content) as text_length, \
+                  size(parse_array(get_json_object(imagejson,'$.images'))) as image_count, \
+                  case when content rlike '豆瓣|郫县|Douban|鹅组|微博|围脖|女厕所|🧣|大眼仔|wb|粪坑|渣浪|vb|QQ|qq|扣扣|球球|企鹅|丘丘号|南极贱畜|鹅厂|爱发电|afd|紫色鱼|紫色鱼鱼|💓⚡|紫蝾螈|晋江|兔区|驴江|垃圾场|jj|长佩|长佩文学城app|青花鱼论坛|贴吧|男厕所|恶臭聚集地|半次元|ACG爱好者社区|bcy|知乎|逼乎|B乎|资乎|故事乎|小蓝书|逼呼|废文|废文网|废文小站|SosadFun|B站|哔哩哔哩|bilibili|小破站|呷哺呷哺|噼里啪啦|发电厂|叔叔|陈睿|批站' then 1 else 0 end as drainage_flag, \
+                  cast(get_json_object(content, '$.emotePackageId') as bigint) as emote_package_id, \
+                  cast(get_json_object(content, '$.returnGiftDressId') as bigint) as dress_id, \
+                  size(parse_array(get_json_object(imagejson,'$.previewImages'))) as preview_image_count, \
+                  reviewStatus \
+           from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+               LATERAL VIEW explode(split(get_json_object(giftjson ,'$.giftIds') ,',')) t2 AS giftId \
+       ) a \
+       join ( \
+          select id, name as giftname, is_pay as ispay \
+          from lofter.dim_gift \
+       ) b on a.giftid = b.id \
+   ) a \
+   group by a.id,a.plantype,status,auditstatus,a.postid,createdate,text_length,image_count,drainage_flag,unlocktype, emote_package_id, dress_id, preview_image_count, reviewStatus \
+) a \
+join ( \
+  select id,blogid,contenttype,blogname,publishdate from lofter.dim_post \
+) b on a.postid=b.id \
+join ( \
+  select id,name as return_gift_plantype from lofter_db_dump.ods_db_trade_return_gift_type_nd \
+) c on a.plantype = c.id \
+left join ( \
+   select aa.userId,`type`,status,bb.agreetime \
+   from ( \
+       select a.userid,`type`,status,agreetime \
+       from ( \
+           select userid,`type`,status,agreetime, \
+                  rank() over(partition by userid order by  status desc, `type` desc ) as rk \
+           from ( \
+               select  userid,2 `type`, status,agreetime \
+               from lofter_db_dump.ods_db_trade_gift_account_nd \
+               where status in (1,2) \
+             union \
+               select userid,1 `type`, status,agreetime \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+               where status in (1,2) \
+           ) a \
+       ) a \
+       where a.rk = 1 \
+   ) aa \
+   left join ( \
+       select a1.userid,min(agreetime) as agreetime \
+       from ( \
+           select userid,agreetime \
+           from lofter_db_dump.ods_db_trade_gift_account_nd \
+           where status in (2) \
+         union \
+           select userid,agreetime \
+           from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+           where status in (2) \
+       ) a1 \
+       group by a1.userid \
+   ) bb on aa.userid=bb.userid \
+) d on b.blogid=d.userid \
+left join ( \
+   select id as blogid from lofter.dim_user where sourceType='PGC' \
+) e on b.blogid=e.blogid \
+left join ( \
+   select postid from lofter_db_dump.ods_db_post_hot_nd where publisheruserid=1943463653 and `type`=1 group by postid \
+) f on a.postid=f.postid \
+left join ( \
+   select blogid from lofter_db_dump.ods_db_user_following_nd  where userid=1943480819 group by blogid \
+) g on b.blogid=g.blogid   \
+left join ( \
+   select userid as blogid from lofter_db_dump.ods_db_cmb_business_introduction_nd \
+   where status=0 and level is not null group by userid \
+) i on b.blogid=i.blogid    \
+left join ( \
+   select nvl(a.userid, b.userId) as userId, \
+          a.fans_vip_status, \
+          a.fans_vip_agree_day, \
+          b.userId as authority_userId, \
+          case when fans_vip_status=10 then a.fans_vip_updateday end as fans_vip_close_day, \
+          case when b.userid is null then 0 else 1 end as is_authority \
+   from ( \
+       select userid,status as fans_vip_status, \
+              from_unixtime(cast(agreetime / 1000 AS BIGINT), 'yyyy-MM-dd') as fans_vip_agree_day, \
+              from_unixtime(cast(dbupdatetime AS BIGINT), 'yyyy-MM-dd') as fans_vip_updateday \
+       from lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+       where status in (2,10) \
+   ) a \
+   full outer join ( \
+       select cast(userid as bigint) as userid \
+       from lofter_db_dump.ods_db_admin_pub_data_nd LATERAL VIEW explode(split(content, ',')) t2 AS userid \
+       where name in ('book_store_blogIds', 'blogvip_ids') \
+       group by cast(userid as bigint) \
+   ) b on a.userid=b.userid \
+) j on b.blogid=j.userid \
+left join ( \
+   select postId, collectionId \
+   from lofter.bridge_collection_post \
+) h on a.postId = h.postId \
+left join ( \
+   select b.blogid,b.postid,providertype \
+   from ( \
+       select id,providertype from lofter_db_dump.ods_db_pfb_content_nd \
+   ) a \
+   join ( \
+      select contentid,postid,blogid from lofter_db_dump.ods_db_pfb_content_related_post_nd where status=0 \
+   ) b on a.id=b.contentid \
+   group by b.blogid,b.postid,providertype \
+) k on a.postId = k.postId and b.blogId = k.blogId \
+left join ( \
+   select blogid from lofter_db_dump.ods_db_post_pool_nd group by blogid \
+) m on b.blogId = m.blogId \
+left join ( \
+  select userid as blogId, \
+         cast(cast(get_json_object(setting, '$.acceptGiftFlag') as boolean) as int) as accept_gift_flag, \
+         cast(cast(get_json_object(setting, '$.showSupportFlag') as boolean) as int) as show_support_flag, \
+         cast(cast(get_json_object(setting, '$.hideReturnGiftPreviewImg') as boolean) as int) as hide_return_gift_preview_img \
+  from lofter_db_dump.ods_db_trade_gift_user_setting_nd \
+  group by 1, 2, 3, 4 \
+) n on b.blogId = n.blogId \
+left join ( \
+   select id, array_union(machineTags, personTags) as mark_tags \
+   from lofter.ods_risk_mark_return_gift_nd \
+) p on a.id = p.id \
+
+hive.query.04=create or replace view lofter.dim_gift_post_return as select * from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}';
+dependencies=dim_post,dim_user,bridge_collection_post,dim_gift

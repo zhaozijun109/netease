@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_user_post_talk_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       sum(if(opType='praise', 1, 0))       as praise_pv, \
+       sum(if(opType='comment', 1, 0))      as comment_pv, \
+       sum(if(opType='comment_like', 1, 0)) as comment_like_pv, \
+       sum(if(opType='share', 1, 0))        as share_pv, \
+       sum(if(opType='cp_score', 1, 0))     as cp_score_pv \
+from ( \
+    select userId, \
+           opType \
+    from lofter.dwd_post_talk_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, \
+           'comment' as opType \
+    from lofter.dwd_post_talk_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, \
+           'comment_like' as opType \
+    from ( \
+        select userId, \
+               postId \
+        from lofter_db_dump.ods_db_comment_hot_nd \
+        where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    join ( \
+        select talkId from lofter.dim_post_talk where lower(talkType) like '%answer%' or talkType = 'QUESTION_POST' \
+    ) t2 \
+    on t1.postId = t2.talkId \
+    union all \
+    select userId, \
+           'share' as opType \
+    from lofter.dwd_post_talk_share_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, \
+           'cp_score' as opType \
+    from lofter.dwd_post_talk_discuss_score_di \
+    where dt = '${azkaban.flow.1.days.ago}' and talkType = 'NOMINATESIGN_QUESTION' \
+) r1 \
+group by userId

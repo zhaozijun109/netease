@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select tag, userId, cnt as shipNum, 4 as source from lofter.dws_act_tag_ship_score_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic lofter.tag.user.ship.msg --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

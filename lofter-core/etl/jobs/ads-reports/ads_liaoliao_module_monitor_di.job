@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_liaoliao_module_monitor_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  itemType, \
+                      eventId, \
+                      COUNT(DISTINCT deviceUdid)                AS uv, \
+                      COUNT(deviceUdid)                         AS pv, \
+                      COUNT(DISTINCT deviceUdid,itemId)         AS item_uv, \
+                      COUNT(DISTINCT deviceUdid,params['text']) AS text_uv \
+              FROM lofter.ods_mda_app_partition_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' and actionType in ('cell_exposure', 'cell_click', 'page_view') and \
+                    eventId IN ('gc-7', 'gc-8', 'gc-11', 'gc-13', 'm1-1', 'gc-1') \
+              GROUP BY  itemType, \
+                        eventId \
+              GROUPING SETS((itemType , eventId), (eventId))

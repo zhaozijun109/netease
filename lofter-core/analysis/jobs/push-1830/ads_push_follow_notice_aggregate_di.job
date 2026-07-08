@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_follow_notice_aggregate_di partition(dt = '${azkaban.flow.current.date}') \
+select b.userId, \
+       count(distinct b.blogId) as update_blog_count, \
+       transform(sort_array(collect_list(struct(-b.real_pv as real_pv, b.blogId as blogId)), true), x -> x.blogId) as update_blogs_list \
+from ( \
+    select blogId \
+    from ( \
+        select *, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) rk \
+        from lofter.ods_binlog_post_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+             dt >= '${azkaban.flow.1.days.ago}' and \
+             from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH') >= '${azkaban.flow.1.days.ago} 18' and \
+             from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH') < '${azkaban.flow.current.date} 18' \
+    ) t \
+    where rk = 1 and _bin_op in (0,2) and \
+          valid = 0 and allowView = 0 and \
+          isPublished != 0 and type in (1,2,4) and \
+          from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH') >= '${azkaban.flow.1.days.ago} 18' and \
+          from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH') < '${azkaban.flow.current.date} 18' \
+) a \
+join ( \
+    select blogId, userId, real_pv \
+    from lofter_dm.ads_creator_active_fans_v2_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.blogId = b.blogId \
+group by 1 \

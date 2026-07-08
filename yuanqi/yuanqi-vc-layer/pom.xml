@@ -1,0 +1,61 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.netease.yuanqi</groupId>
+        <artifactId>yuanqi</artifactId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>yuanqi-vc-layer</artifactId>
+    <name>YuanQi : Vc Layer</name>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.yuanqi</groupId>
+            <artifactId>yuanqi-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- ES8 connector：vc-layer 写入新版 vcharacter ES 集群，与 lofter-layer 的 ES6 物理隔离 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-elasticsearch8</artifactId>
+            <version>${flink.connector.es.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              将 ES8 客户端、low-level rest-client 的所有类 relocate 到
+              com.netease.yuanqi.shaded.es8 命名空间，避免与 Flink 集群 lib 下可能存在的
+              旧版 elasticsearch-rest-client 发生 NoSuchMethodError。
+
+              不 relocate org.apache.flink.connector.elasticsearch.*：yuanqi-common 中
+              EsBaseSink 同时引用 ES6 / ES8 connector 的类（FailureHandler / Elasticsearch8AsyncSink 等），
+              若整体 relocate，单个 layer fat-jar 内只含其中一边的实现，会触发对方类的
+              ClassNotFoundException。connector 包名跟集群 lib 实际冲突概率很低，保持原名。
+
+              父 pom 的 relocations 已声明 combine.children="append"，此处仅追加 ES 客户端项。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.elasticsearch</pattern>
+                            <shadedPattern>com.netease.yuanqi.shaded.es8.org.elasticsearch</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>co.elastic.clients</pattern>
+                            <shadedPattern>com.netease.yuanqi.shaded.es8.co.elastic.clients</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

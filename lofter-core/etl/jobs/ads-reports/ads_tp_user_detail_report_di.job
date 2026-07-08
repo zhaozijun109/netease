@@ -1,0 +1,16 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tp_user_detail_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select a.label, a.blogid,a.settlement_revenue,blog_url,blog_nickname  \
+from(  \
+select  '收入'label, blogid,settlement_revenue  \
+from lofter_dm.ads_ad_resource_blog_revenue_di   \
+where dt='${azkaban.flow.1.days.ago}'     \
+union ALL   \
+select '打开开关' label,userid,openad  \
+from lofter_dm.ads_taitai_open_report_dd   \
+where dt='${azkaban.flow.1.days.ago}'      \
+and openad=1   \
+) a   \
+left join lofter.dws_par_creator_dd b on a.blogid=b.userid   \
+where b.dt='${azkaban.flow.1.days.ago}'
+dependencies=ads_taitai_open_report_dd

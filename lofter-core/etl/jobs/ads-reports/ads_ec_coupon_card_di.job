@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_coupon_card_di partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(a.id, b.id) as id, \
+       nvl(a.name, b.name) as name, \
+       nvl(a.couponname, b.couponname) as couponname, \
+       nvl(a.scene, b.scene) as scene, \
+       a.num_coupon get_nums,a.num_user get_users,b.num_coupon use_nums,b.num_user use_users,b.total_amount,b.total_preferential \
+from ( \
+    select case when a1.id is not null then a1.id else 'ALL' end id, \
+           a3.name, \
+           case when a1.name is not null then a1.name else 'ALL' end couponname, \
+           a1.scene,count(distinct a4.id) num_coupon,count(distinct a4.userid) num_user \
+    from ( \
+        select id,name,scene \
+        from lofter_db_dump.ods_db_benefit_new_coupon_nd \
+        where scene=1 \
+    ) a1 join ( \
+        select couponid,productid,preferentialamount \
+        from lofter_db_dump.ods_db_benefit_coupon_product_nd \
+    ) a2 on a1.id=a2.couponid \
+    join ( \
+        select chanceproductid,name,type cardpooltype \
+        from lofter_db_dump.ods_db_benefit_card_pool_nd \
+    ) a3 on a2.productid=a3.chanceproductid \
+    join ( \
+        select id,couponid,userid \
+        from lofter_db_dump.ods_db_benefit_coupon_user_nd \
+        where from_unixtime(cast(createtime as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) a4 on a1.id=a4.couponid \
+    group by a3.name,a1.name,a1.id,a1.scene \
+    grouping sets((a3.name,a1.id,a1.name,a1.scene),(a3.name,a1.scene)) \
+) a \
+full join ( \
+    select case when b1.id is not null then b1.id else 'ALL' end id,b3.name, \
+           case when b1.name is not null then b1.name else 'ALL' end couponname, \
+           b1.scene, \
+           count(distinct b4.id) num_coupon,count(distinct b4.userid) num_user,sum(b4.amount) total_amount,sum(b4.newcouponpreferential) total_preferential \
+    from ( \
+        select id,name,scene \
+        from lofter_db_dump.ods_db_benefit_new_coupon_nd \
+        where scene=1 \
+    ) b1 join ( \
+        select couponid,productid,preferentialamount \
+        from lofter_db_dump.ods_db_benefit_coupon_product_nd \
+    ) b2 on b1.id=b2.couponid \
+    join ( \
+        select chanceproductid,name,type cardpooltype \
+        from lofter_db_dump.ods_db_benefit_card_pool_nd \
+    ) b3 on b2.productid=b3.chanceproductid \
+    join ( \
+        select id,newcouponid couponid,buyerid userid,amount,newcouponpreferential \
+        from lofter_db_dump.ods_db_benefit_order_nd \
+        where status in (1,3,4) and \
+              from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) b4 on b1.id=b4.couponid \
+    group by b3.name,b1.name,b1.id,b1.scene \
+    grouping sets((b3.name,b1.id,b1.name,b1.scene),(b3.name,b1.scene)) \
+) b on a.id=b.id and a.name = b.name and a.couponname = b.couponname and a.scene=b.scene \
+distribute by 1

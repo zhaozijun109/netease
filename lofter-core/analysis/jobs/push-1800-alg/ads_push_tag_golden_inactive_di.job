@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_push_tag_golden_inactive_di partition(dt = '${azkaban.flow.current.date}') \
+select t1.userId, \
+       blogId, \
+       t1.postId, \
+       content, \
+       groupId \
+from ( \
+    select userId, \
+           blogId, \
+           postId, \
+           content, \
+           groupId \
+    from lofter_dm.ads_push_tag_golden_source_di \
+    where dt = '${azkaban.flow.current.date}' and groupId = 'inactive' \
+) t1 \
+left join ( \
+    select userId, postId from lofter_dm.ads_push_tag_golden_active_di where dt <= '${azkaban.flow.current.date}' \
+    union all \
+    select userId, postId from lofter_dm.ads_push_tag_golden_inactive_di where dt < '${azkaban.flow.current.date}' \
+) t2 on t1.userId = t2.userId and t1.postId = t2.postId \
+where t2.userId is null \

@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_premium_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, level, specialty_category, specialty_domain, posts_1d, posts_30d, fans, \
+       fans_exposure_uv, fans_exposure_pv, rec_exposure_pv, non_rec_exposure_pv, \
+       exposure_pv, click_pv, real_browse_play_pv, pos_hot_pv as hot_pv, \
+       fans_hot_uv, fans_response_uv, pos_comment_pv as response_pv, \
+       blog.blogNickName as blog_nickname, concat(blog.blogName, '.lofter.com') as blog_url, \
+       if(from_unixtime(cast(blog.createTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}', 1, 0) as is_1m_new_blog \
+from ( \
+    select userId, is_premium, is_premium_high_potential, is_premium_middle_potential, premium_posts_30d, \
+           premium_date, active_days_30d \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join lofter.dim_blog blog on a.userId = blog.id \
+left join ( \
+  select userId, level, element_at(post_top_categories,1) as specialty_category, element_at(post_top_domains,1) as specialty_domain, \
+         fans_std as fans \
+  from lofter.dws_par_creator_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \
+left join ( \
+  select userId, post_count as posts_1d \
+  from lofter.dws_par_creator_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b2 on a.userId = b2.userId \
+left join ( \
+  select post_userid as userId, \
+         count(distinct if(is_fans > 0, userId, null)) as fans_exposure_uv, \
+         sum(is_fans) as fans_exposure_pv, \
+         sum(is_rec) as rec_exposure_pv, \
+         sum(1 - is_rec) as non_rec_exposure_pv \
+  from lofter.dwd_post_expose_di \
+  where dt = '${azkaban.flow.1.days.ago}' and reaction is null \
+  group by post_userid \
+) c on a.userId = c.userId \
+left join ( \
+  select userId, sum(exposurePv) as exposure_pv, \
+         sum(clickPv) as click_pv, sum(nvl(realBrowsePv,0) + nvl(realPlayPv,0)) as real_browse_play_pv, \
+         sum(poshotpv) as pos_hot_pv, sum(poscommentpv) pos_comment_pv \
+  from lofter.dws_post_base_stats_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by userId \
+) d on a.userId = d.userId \
+left join ( \
+    select blogId as userId, count(distinct id) as posts_30d \
+    from lofter.dim_post \
+    where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+          isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") and \
+          publishDate >= '${azkaban.flow.30.days.ago}' and publishDate <= '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) e on a.userId = e.userId \
+left join ( \
+    select t1.blogId as userId, \
+           count(distinct case when action_type='send_hot' then t1.userid end ) as fans_hot_uv, \
+           count(distinct case when action_type='response' then t1.userid end ) as fans_response_uv \
+    from ( \
+        select publisherUserid as userId, blogId, 'send_hot' as action_type \
+        from lofter_db_dump.ods_db_post_hot_nd \
+        where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select publisherUserid as userId, blogId, 'response' as action_type \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    join ( \
+        select userid, blogId \
+        from lofter_db_dump.ods_db_user_following_nd \
+        where from_unixtime(cast(followTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) t2 on t1.blogId = t2.blogId and t1.userid=t2.userid \
+    group by t1.blogId \
+) f on a.userId = f.userId

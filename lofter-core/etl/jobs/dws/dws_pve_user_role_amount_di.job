@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_pve_user_role_amount_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT t1.userId, \
+       t1.roleId, \
+       t1.roleName, \
+       t1.roleDef, \
+       SUM(amount) AS total_amount \
+FROM ( \
+    SELECT  userId, \
+            roleId, \
+            roleName, \
+            CASE WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 0 THEN 'ogc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 10 THEN 'hc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 20 THEN 'pc' \
+                 WHEN roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4 THEN 'ugc' \
+                 ELSE '未知' \
+            END AS roleDef, \
+            amount \
+    FROM lofter.dwd_pve_user_amount_info_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+GROUP BY t1.userId, t1.roleId, t1.roleName, t1.roleDef

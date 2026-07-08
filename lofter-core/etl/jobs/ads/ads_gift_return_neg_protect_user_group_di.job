@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_return_neg_protect_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \ \
+select a.id as userId \
+from lofter.dim_user a \
+left join ( \
+    select x.userId \
+    from ( \
+        select user_id as userId \
+        from rec.rec_gift_low_acceptance_users_upload \
+        where  refuse_gift_user='1' and day = '${azkaban.flow.1.days.ago}' \
+        group by user_id \
+    ) x \
+    left join ( \
+        select userId \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and money > 0 \
+        group by 1 \
+    ) y on x.userId = y.userId \
+    where y.userId is null \
+) b on a.id = b.userId \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+    where type = 1 \
+    group by 1 \
+) c on a.id = c.userId \
+left join ( \
+    select a.userId, count(distinct a.blacklistblogid) as black_blog_count \
+    from lofter_db_dump.ods_db_blacklist_user_nd a \
+    join lofter_db_dump.ods_db_trade_pay_grade_nd b on a.blacklistblogid = b.userid \
+    group by 1 \
+    having black_blog_count >= 2 \
+) d on a.id = d.userId \
+where nvl(b.userId, nvl(c.userId, d.userId)) > 0 \

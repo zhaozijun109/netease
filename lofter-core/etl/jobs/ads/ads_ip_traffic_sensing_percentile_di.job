@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_traffic_sensing_percentile_di partition(dt='${azkaban.flow.1.days.ago}') \
+select ip, level, post_count, \
+       concat_ws(',', share_percentile) as share_percentile, \
+       concat_ws(',', rec_percentile) as rec_percentile, \
+       concat_ws(',', hot_percentile) as hot_percentile \
+from ( \
+    select ip, level, \
+           count(distinct a.postId) as post_count, \
+           percentile_approx(share, array(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1), 100) as share_percentile, \
+           percentile_approx(rec, array(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1), 100) as rec_percentile, \
+           percentile_approx(hot, array(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1), 100) as hot_percentile \
+    from ( \
+        select id as postId, element_at(tags, 1) as tag, userId \
+        from lofter.dim_post \
+        where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+              publishDate < '${azkaban.flow.3.days.ago}' and publishDate >= '${azkaban.flow.7.days.ago}' \
+    ) a \
+    join ( \
+        select postId \
+        from lofter_db_dump.ods_db_recommend_review_post_nd \
+        where recomStatus = '1' \
+        group by postId \
+    ) a1 on a.postId = a1.postId \
+    join ( \
+     select tag, ip from lofter.dwd_tag_ip_mapping_nd where ip_rank = 1 \
+    ) b on a.tag = b.tag \
+    left join ( \
+        select postId, sum(sharePv) share, sum(posRecPv) rec, sum(posHotPv) hot \
+        from lofter.dws_post_base_stats_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by postId \
+    ) c on a.postId = c.postId \
+    left join ( \
+       select userId, case when level in ('S', 'A', 'B') then 'S-B' when level in ('D', 'D*', 'C') then level else 'NEW' end as level from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) d on a.userId = d.userId \
+    group by ip, level \
+) t \
+distribute by 1

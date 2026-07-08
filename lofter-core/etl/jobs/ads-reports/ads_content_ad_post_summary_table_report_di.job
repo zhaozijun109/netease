@@ -1,0 +1,183 @@
+type = sparksql
+hive.query.01 =  \
+with post_detail as  \
+(  \
+select '激励广告' module,dt,postid ,blogid  \
+from lofter_dm.ads_ad_content_post_pool_di  \
+where dt='${azkaban.flow.1.days.ago}'  \
+and is_in_group_package > 0  \
+and is_deliverable > 0  \
+and module='激励广告'  \
+group by '激励广告' ,dt,postid ,blogid  \
+union   \
+select  '广告文'  module,dt,postid ,blogid  \
+from lofter_dm.ads_ad_content_ad_post_detail_di  \
+where  dt='${azkaban.flow.1.days.ago}'  \
+group by '广告文' ,dt,postid ,blogid  \
+)   \
+,  \
+post_deatil_v1 as (  \
+select a.module,a.postid,a.dt ,a.blogid  \
+from(  \
+select '粮票文' module,postid,dt ,blogid  \
+from lofter.dim_gift_post_return_dd   \
+where blog_channel in (0,1)  \
+and ispay_returngift in (0,1)  \
+and  status=1   \
+and  auditstatus=1  \
+and giftname like '%粮票%'  \
+and dt='${azkaban.flow.1.days.ago}'   \
+group by '粮票文' ,postid,dt ,blogid  \
+) a   \
+left join post_detail b on a.postid=b.postid and a.dt=b.dt   \
+where b.postid is  null   \
+group by 1,2,3,4  \
+  \
+union all   \
+select module,postid ,dt,blogid  \
+from post_detail   \
+group by 1,2,3 ,4  \
+)   \
+,  \
+table_detail as (  \
+select   \
+a.dt,a.module,  \
+a.postid,a.blogid,  \
+case when a.module='激励广告'  then b.bid_amount   \
+     when a.module='广告文' then c.ad_consume_amount   \
+     end ad_revenue,  \
+expose_pv,  \
+real_browse_pv,  \
+case when a.module='激励广告'  then b.bg_pv  \
+     when a.module='广告文' then c.ad_expose_pv  \
+     end ad_expose_pv,  \
+case when a.module='激励广告'  then b.unlock_count  \
+     when a.module='广告文' then c.unlock_pv   \
+     end ad_unlock_cnt,  \
+ unlock_cnt_liangpiao    ,  \
+ case when blog_channel=1 then 'pgc'   \
+      else 'ugc' end id_flag,  \
+gift_ability_status  \
+  \
+from (  \
+select dt,module,postid, blogid  \
+from post_deatil_v1   \
+group by 1 ,2,3,4  \
+) a   \
+left join   \
+(  \
+select   \
+a.dt,a.postid,a.module,  \
+bid_amount,bg_pv,click_pv,  \
+unlock_count  \
+from  \
+(  \
+select   \
+dt, 	      \
+postid,      \
+case positionId when 279600 then '激励广告'       \
+when 278625 then '广告文'       \
+when 278626 then '广告文'       \
+when 277629 then '视频合集' end as module,       \
+sum(bid_amount)/1000 as bid_amount,   \
+sum(is_bg) as bg_pv,       \
+sum(is_click) click_pv       \
+from lofter.dwd_ad_actions_v2_di       \
+where dt = '${azkaban.flow.1.days.ago}'    \
+and positionId in (279600,278625,278626)       \
+and (is_bg > 0 or is_click > 0)       \
+group by 1, 2,3      \
+) a   \
+left join       \
+(       \
+select       \
+module, dt,postid, count(distinct postId, userId) as unlock_count       \
+from lofter.dwd_ad_content_unlock_di       \
+where dt = '${azkaban.flow.1.days.ago}'        \
+group by 1, 2 ,3      \
+) b on a.dt = b.dt and a.module = b.module and a.postid=b.postid     \
+group by 1,2,3,4,5,6,7  \
+  \
+) b on a.dt=b.dt and a.postid=b.postid and  a.module=b.module   \
+  \
+left join   \
+(  \
+select   \
+dt,  \
+postid,  \
+'广告文' module,  \
+sum(ad_consume_amount)ad_consume_amount,  \
+sum(author_income) author_income,  \
+sum(ad_expose_pv)ad_expose_pv,  \
+sum(unlock_pv) unlock_pv  \
+from lofter_dm.ads_ad_content_ad_post_detail_di   \
+where dt = '${azkaban.flow.1.days.ago}'     \
+group by   \
+dt,  \
+postid,  \
+'广告文'   \
+) c on a.dt=c.dt and a.postid=c.postid and a.module=c.module   \
+left join   \
+(  \
+select   \
+dt,postid,count(1) expose_pv  \
+from lofter.dwd_post_expose_di  \
+where dt='${azkaban.flow.1.days.ago}'    \
+and reaction is null   \
+group by 1,2   \
+) d on a.dt=d.dt and a.postid=d.postid   \
+left join   \
+(  \
+select   \
+dt,  \
+postid,  \
+count(distinct userid) real_browse_uv,  \
+count( userid) real_browse_pv  \
+from lofter.dwd_post_browse_di  a   \
+where a.dt  ='${azkaban.flow.1.days.ago}'    \
+and a.action_type='page_duration'   \
+and post_content_type in ('文字','图片','视频')  \
+and  a.is_real=1   \
+group by 1,2   \
+) e on a.dt=e.dt and a.postid=e.postid   \
+left join   \
+(  \
+select   \
+from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')dt ,  \
+postid,  \
+sum(money)money,  \
+count(1) unlock_cnt_liangpiao  \
+from lofter.dwd_gift_post_unlock_dd  \
+where dt='${azkaban.flow.1.days.ago}'     \
+and ( ( from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'  ) )  \
+and unlock_method like '%粮票%'  \
+group by 1,2  \
+) f on a.dt=f.dt and a.postid=f.postid   \
+left join       \
+(      \
+select 	postid ,gift_ability_status ,  blog_channel  \
+from lofter.dim_gift_post_return        \
+group by 1 ,2,3      \
+) g on a.postid=g.postid       \
+  \
+)    \
+  \
+insert overwrite table lofter_dm.ads_content_ad_post_summary_table_report_di  partition(dt ='${azkaban.flow.1.days.ago}')     \
+select module,id_flag,  \
+gift_ability_status,  \
+count(distinct postid) ttl_post_cnt,  \
+count(distinct blogid) creator_cnt,  \
+count(distinct case when ad_revenue>0 then postid  end) ad_revenue_post_cnt,  \
+sum(ad_revenue) ad_revenue,  \
+count(distinct case when expose_pv>0 then postid end ) expose_post_cnt,  \
+sum(expose_pv)expose_pv,  \
+count(distinct case when real_browse_pv>0 then postid end ) real_browse_post_cnt,  \
+sum(real_browse_pv)real_browse_pv,  \
+count(distinct case when ad_expose_pv>0 then postid end) ad_expose_post_cnt,  \
+sum(ad_expose_pv)ad_expose_pv,  \
+count(distinct case when ad_unlock_cnt>0 then postid end ) ad_unlock_post_cnt,   \
+sum(ad_unlock_cnt)ad_unlock_cnt,  \
+count(distinct case when unlock_cnt_liangpiao>0 then postid end)unlock_cnt_liangpiao_post_cnt,  \
+sum(unlock_cnt_liangpiao)unlock_cnt_liangpiao    \
+from table_detail  \
+group by 1,2,3

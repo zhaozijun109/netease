@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ecology_easy_fetch_interact_grip_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select distinct a.postId, d.url as post_url, c.blogid as lucky_userId, c.blogname as lucky_blogname, c.blognickname as lucky_blognickname, concat('https://', c.blogname, '.lofter.com') as luck_blogurl \
+from ( \
+    select  id, blogid, postid \
+    from lofter_db_dump.ods_db_lucky_boy_config_nd \
+    where status=2  \
+    group by id,blogid,postid \
+) a \
+join ( \
+    select luckyboyid, blogid  \
+    from lofter_db_dump.ods_db_lucky_boy_result_nd  \
+    where status=0 \
+) b on a.id = b.luckyboyid \
+join ( \
+    select blogid ,blogname, blognickname  \
+    from lofter_db_dump.ods_db_blog_info_nd \
+) c on b.blogid = c.blogid \
+join lofter.dim_post d on a.postId = d.id

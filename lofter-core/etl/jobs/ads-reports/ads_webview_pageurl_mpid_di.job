@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_webview_pageurl_mpid_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+mpid, \
+mpversion, \
+case when name is null then '无'  \
+      else name end name \
+,case when dbupdatetime is null then '无'  \
+      else dbupdatetime end dbupdatetime \
+,case when currentversionid is null then '无'  \
+      else currentversionid end currentversionid \
+,appversion \
+,pv \
+,uv \
+from  \
+( \
+select  \
+mpid \
+,appversion \
+,mpversion \
+,count(deviceudid) pv \
+,count(distinct deviceudid) uv \
+from \
+lofter.dwd_evt_webview_index_di  \
+where  \
+dt ='${azkaban.flow.1.days.ago}' \
+and pageurl like '%lofter%' \
+and mpid is not null  \
+and mpid <> '' \
+group by  \
+mpid \
+,appversion \
+,mpversion \
+) t1     \
+       \
+left join  \
+(select  \
+appid \
+,name \
+,from_unixtime(dbupdatetime) dbupdatetime \
+,currentversionid  \
+from  \
+lofter_db_dump.ods_db_mp_application_nd \
+) t2 \
+on t1.mpid = t2.appid and t1.mpversion=t2.currentversionid \
+

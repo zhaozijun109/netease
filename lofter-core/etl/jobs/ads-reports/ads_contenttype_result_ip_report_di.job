@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_contenttype_result_ip_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select is_recom,contenttype,result,ip,count(distinct a.postid) as post_cnt \
+from (select id as postid,contenttype,ip,case when recomstatus = 1 then 1 else '' end as is_recom \
+from lofter.dim_post_article \
+lateral view explode(ips) t  as ip \
+where publishdate = '${azkaban.flow.1.days.ago}' \
+and ispublished = 1 and allowview = 0 and valid = 0 and contenttype in ('文字','图片','视频') \
+) a \
+left join  \
+(select item_id,result \
+from rec.content_sys_reg_output_tmp \
+where day <= '${azkaban.flow.1.days.ago}' \
+) b \
+on a.postid = cast(conv(split(b.item_id, '_')[1], 16, 10) as bigint) \
+group by is_recom,contenttype,result,ip \
+union  \
+select is_recom,contenttype,result,'所有IP去重' as ip,count(distinct a.postid) as post_cnt \
+from (select id as postid,contenttype,case when recomstatus = 1 then 1 else '' end as is_recom \
+from lofter.dim_post_article \
+where publishdate = '${azkaban.flow.1.days.ago}' \
+and ispublished = 1 and allowview = 0 and valid = 0 and contenttype in ('文字','图片','视频') \
+) a \
+left join  \
+(select item_id,result \
+from rec.content_sys_reg_output_tmp \
+where day <= '${azkaban.flow.1.days.ago}' \
+) b \
+on a.postid = cast(conv(split(b.item_id, '_')[1], 16, 10) as bigint) \
+group by is_recom,contenttype,result \

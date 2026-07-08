@@ -1,0 +1,240 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_human_sense_text_author_result_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+a.blogid, \
+a.publishdays, \
+a.postnum, \
+a.workhour_postnum, \
+a.workday_postnum, \
+b.self_response_postnum, \
+b.self_response_commentnum, \
+c.message_uv, \
+d.answernum, \
+e.fan_postnum, \
+f.callbackpostnum, \
+f.duobanben_postnum, \
+f.versionnum, \
+g.selfintro_flg, \
+h.all_blog_fannum, \
+h.follow_blognum, \
+j.mention_count, \
+j.mention_postnum, \
+k.level, \
+l.privilegelevel, \
+ CASE  \
+            WHEN  \
+            ((CAST(postnum AS DOUBLE)/publishdays >= 3 AND CAST(COALESCE(workhour_postnum,0) AS DOUBLE)/postnum >= 0.7 AND COALESCE(self_response_commentnum,0) = 0 AND COALESCE(message_uv,0) = 0) \
+              OR (CAST(postnum AS DOUBLE)/publishdays >= 5) \
+              OR (postnum >= 10 AND COALESCE(self_response_commentnum,0) = 0 AND COALESCE(message_uv,0) = 0 AND COALESCE(mention_count,0) = 0 AND COALESCE(answernum,0) = 0) \
+              OR (CAST(COALESCE(workhour_postnum,0) AS DOUBLE)/postnum >= 0.8 AND CAST(COALESCE(workday_postnum,0) AS DOUBLE)/postnum >= 0.8 AND postnum >= 5) \
+              OR (postnum >= 40))  \
+              and ((privilegelevel not in (0,1,2) or privilegelevel is null)  and (level not in ('S','A') or level is null)) \
+            THEN '灰产' \
+            WHEN (COALESCE(self_response_commentnum,0) > 0 AND COALESCE(message_uv,0) > 0) \
+              OR (COALESCE(self_response_commentnum,0) > 0 AND (COALESCE(duobanben_postnum,0) >= 1 OR COALESCE(fan_postnum,0) > 0)) \
+              OR ((COALESCE(self_response_commentnum,0) > 0 OR COALESCE(message_uv,0) > 0 OR COALESCE(answernum,0) > 0) AND CAST(COALESCE(workhour_postnum,0) AS DOUBLE)/postnum < 0.8) \
+              OR (COALESCE(follow_blognum,0) >= 10 AND COALESCE(fan_postnum,0) > 0 AND COALESCE(selfintro_flg,'空') != '空') \
+              or  (privilegelevel <3)  \
+              or  (level  in ('S','A')) \
+            THEN '真人' \
+            ELSE '待定' \
+        END AS user_label \
+from  \
+ \
+ \
+(Select userid as blogid,count(distinct dt) as publishdays, \
+count(distinct postid) as postnum, \
+count(distinct  case when   from_unixtime(cast(post_publish_time / 1000 AS BIGINT), 'HH') between 9 and 18 then postid else null end ) as workhour_postnum, \
+count(distinct  case when   DAYOFWEEK(dt)  between 2 and 6 then postid else null end ) as workday_postnum \
+from  \
+lofter.dwd_post_publish_di  \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and post_content_type='文字' \
+and userid not in  \
+(select blogid from  lofter.dim_gift_post_return where blog_channel>0 group by blogid ) \
+group by userid) a  \
+ \
+left join  \
+ \
+ \
+(select blogid, \
+count(distinct postid) as self_response_postnum, \
+count(distinct commentid) as self_response_commentnum \
+from  \
+lofter.dwd_post_response_di \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and (replyl1_commentid>0 or replyl2_commentid>0) \
+and userid=blogid \
+group by blogid) b  \
+ \
+on a.blogid=b.blogid \
+ \
+left join  \
+ \
+ \
+(select a.blogid,count(distinct a.otherblogid) as message_uv  \
+from  \
+(Select blogid,publishtime,otherblogid \
+from  \
+lofter_db_dump.ods_db_message_nd \
+where from_unixtime(cast(publishtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and issender=1 \
+group by blogid,publishtime,otherblogid \
+) a \
+join  \
+(Select blogid,publishtime,otherblogid \
+from  \
+lofter_db_dump.ods_db_message_nd \
+where from_unixtime(cast(publishtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and issender=1 \
+group by blogid,publishtime,otherblogid) b  \
+on a.blogid=b.otherblogid and a.otherblogid=b.blogid and a.publishtime>b.publishtime \
+group by a.blogid) c  \
+ \
+on a.blogid=c.blogid \
+ \
+left join  \
+ \
+ \
+ \
+(Select blogid , \
+count(distinct id) as answernum \
+from  \
+lofter.dwd_post_talk_publish_di \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and talktype like '%ANSWER%' \
+and valid=0 \
+and allowview=0 \
+group by blogid) d  \
+ \
+on a.blogid=d.blogid \
+ \
+left join  \
+ \
+ \
+(select  userid as blogid ,count(distinct a.postid) as fan_postnum \
+from  \
+(Select userid, postid \
+from  \
+lofter.dwd_post_publish_di \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and post_content_type='文字' \
+group by userid, postid) a  \
+join  \
+(SELECT  itemid as  postid from lofter.dwd_rec_content_understand_dd  \
+where dt='${azkaban.flow.1.days.ago}' and type='图文类目V2' \
+and level1_tag='泛内容' \
+group by itemid) b  \
+on a.postid=b.postid  \
+group by userid) e  \
+ \
+on a.blogid=e.blogid \
+ \
+left join  \
+ \
+ \
+(select userid as blogid,count(distinct postid) as  callbackpostnum , \
+sum(versionnum) as versionnum, \
+count(distinct case when versionnum>1 then postid else null end ) as duobanben_postnum \
+from  \
+(select  a.userid,a.postid,count(distinct b.version) as versionnum \
+from  \
+(Select userid, postid \
+from  \
+lofter.dwd_post_publish_di \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and post_content_type='文字' \
+group by userid, postid) a  \
+join  \
+( \
+select \
+          postid, \
+          blogid, \
+          version, \
+          createtime \
+        from \
+          lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+        where \
+          type = 0 \
+          and version > 0 \
+          and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between  date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+) b  \
+on a.postid=b.postid  \
+group by a.userid,a.postid) a \
+group by userid) f  \
+on a.blogid=f.blogid \
+ \
+left join  \
+ \
+ \
+(Select  blogid , \
+case when selfintro is null or  selfintro='' or selfintro=' '  then '空' \
+when selfintro like '%日更%' then '含日更' \
+else '其他' end  as selfintro_flg \
+FROM  \
+lofter_db_dump.ods_db_blog_info_nd) g  \
+ \
+on a.blogid=g.blogid \
+ \
+left join  \
+ \
+ \
+(Select userid as blogid,NVL(all_blog_fans,0) all_blog_fannum, \
+case when size(follow_blogs)>0 then  size(follow_blogs) else 0 end  as follow_blognum \
+FROM  \
+lofter.dws_par_user_base_dd \
+where  dt= '${azkaban.flow.1.days.ago}') h  \
+ \
+on a.blogid=h.blogid \
+ \
+left  join  \
+ \
+ \
+(select userid as blogid, \
+sum(mention_count) as mention_count, \
+count(distinct case when mention_count>0 then postid else null end ) as mention_postnum \
+from  \
+(select    \
+a.userid,a.postid, \
+SIZE(SPLIT(digest, 'loftermentionblogid')) - 1 AS mention_count \
+from  \
+(Select userid, postid \
+from  \
+lofter.dwd_post_publish_di \
+where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+and post_content_type='文字' \
+) a  \
+join  \
+(SELECT  \
+    id,blogid,digest \
+    from  \
+lofter_db_dump.ods_db_post_nd \
+where type=1 \
+) b  \
+on a.postid=b.id and a.userid=b.blogid \
+) a \
+group by userid) j  \
+on a.blogid=j.blogid \
+ \
+ \
+left join  \
+ \
+(select userid as blogid ,level \
+from  \
+lofter.dws_par_creator_dd  \
+where dt= '${azkaban.flow.1.days.ago}' \
+) k  \
+ \
+on a.blogid =k.blogid  \
+ \
+ \
+left join  \
+ \
+(select userid as blogid ,privilegelevel \
+from  \
+lofter.dws_par_user_base_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+) l  \
+on a.blogid =l.blogid  \

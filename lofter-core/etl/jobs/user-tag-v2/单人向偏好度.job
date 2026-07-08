@@ -1,0 +1,31 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 单人向偏好度
+retries=0
+conf.spark.execute.sql="select userId, \
+                               '单人向偏好度'                          as tag_name, \
+                               cat                                       as dim1, \
+                               ''                                        as dim2, \
+                               ''                                        as dim3, \
+                               ''                                        as dim4, \
+                               '1'                                       as grp, \
+                               value \
+                        from (    select userid as userId, \
+                                         '单人向偏好度' as tag, \
+                                         '消费' as cat, \
+                                         solo_purity_ratio as value \
+                                  from lofter_dm.ads_user_solo_preference_di \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                                    and user_type = 'consumer' \
+                                    and solo_purity_ratio is not null \
+                               \
+                                  union all \
+                               \
+                                  select userid as userId, \
+                                         '单人向偏好度' as tag, \
+                                         '创作' as cat, \
+                                         solo_purity_ratio as value \
+                                  from lofter_dm.ads_user_solo_preference_di \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                                    and user_type = 'creator' \
+                                    and solo_purity_ratio is not null ) "

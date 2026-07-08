@@ -1,0 +1,147 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.like_pv,reproduce_pv,recommend_pv,collect_pv,hot_pv,  \
+       valid_comment_pv,novalid_comment_pv,comment_pv,reply_comment_pv,comment_like_pv,  \
+       like_uv,reproduce_uv,recommend_uv,collect_uv,hot_uv,  \
+       valid_comment_uv,novalid_comment_uv,comment_uv,reply_comment_uv,comment_like_uv,  \
+       b.1v1_ask_pv,1v1_answer_pv,1v1_comment_pv,1v1_pv,1v1_like_pv,  \
+       1v1_ask_uv,1v1_answer_uv,1v1_comment_uv,1v1_uv,1v1_like_uv,  \
+       c.topic_ask_pv,topic_answer_pv,notopic_answer_pv,topic_comment_pv,topic_pv,topic_like_pv,  \
+       topic_ask_uv,topic_answer_uv,notopic_answer_uv,topic_comment_uv,topic_uv,topic_like_uv,  \
+       e.share_uv, share_pv,  \
+       f.free_gift_present_uv,free_gift_present_pv,  \
+       g.follow_uv,follow_pv,  \
+       d.first_like_uv,first_reproduce_uv,first_recommend_uv,first_collect_uv,first_comment_uv,  \
+       h.interactive_uv, h.interactive_uv/j.dau as interactive_ratio,  \
+       a.underscore_comment_pv, a.underscore_comment_uv, \
+       a.tag_subscribe_pv, a.tag_subscribe_uv, \
+       a.collection_subscribe_pv, collection_subscribe_uv, \
+       a.underscore_reply_pv, a.sweet_marks, a.bitter_marks, \
+       a.underscore_reply_uv, sweet_mark_uv, bitter_mark_uv, \
+       circle_comment_pv,circle_comment_uv,circle_comment_reply_pv,circle_comment_reply_uv \
+from ( \
+    select dt, sum(like_pv) as like_pv, sum(reproduce_pv) as reproduce_pv,  \
+       sum(recommend_pv) as recommend_pv, sum(collect_pv) as collect_pv,  \
+       sum(hot_pv) as hot_pv, sum(valid_comment_pv) as valid_comment_pv,  \
+       sum(novalid_comment_pv) as novalid_comment_pv, sum(comment_pv) as comment_pv,  \
+       sum(reply_comment_pv) as reply_comment_pv, sum(comment_like_pv) as comment_like_pv,  \
+       count(distinct if(like_pv > 0, userId, null)) as like_uv,  \
+       count(distinct if(reproduce_pv > 0, userId, null)) as reproduce_uv,  \
+       count(distinct if(recommend_pv > 0, userId, null)) as recommend_uv,  \
+       count(distinct if(collect_pv > 0, userId, null)) as collect_uv,  \
+       count(distinct if(hot_pv > 0, userId, null)) as hot_uv,  \
+       count(distinct if(valid_comment_pv > 0, userId, null)) as valid_comment_uv,  \
+       count(distinct if(novalid_comment_pv > 0, userId, null)) as novalid_comment_uv,  \
+       count(distinct if(comment_pv > 0, userId, null)) as comment_uv,  \
+       count(distinct if(reply_comment_pv > 0, userId, null)) as reply_comment_uv,  \
+       count(distinct if(comment_like_pv > 0, userId, null)) as comment_like_uv,  \
+       sum(underscore_comment_pv) as underscore_comment_pv, \
+       sum(tag_subscribe_pv) as tag_subscribe_pv, \
+       sum(collection_subscribe_pv) as collection_subscribe_pv, \
+       count(distinct if(underscore_comment_pv > 0, userId, null)) as underscore_comment_uv, \
+       count(distinct if(tag_subscribe_pv > 0, userId, null)) as tag_subscribe_uv, \
+       count(distinct if(collection_subscribe_pv > 0, userId, null)) as collection_subscribe_uv, \
+       sum(underscore_reply_pv) as underscore_reply_pv, \
+       sum(sweet_marks) as sweet_marks, \
+       sum(bitter_marks) as bitter_marks, \
+       count(distinct if(underscore_reply_pv > 0, userId, null)) as underscore_reply_uv, \
+       count(distinct if(sweet_marks > 0, userId, null)) as sweet_mark_uv, \
+       count(distinct if(bitter_marks > 0, userId, null)) as bitter_mark_uv, \
+       sum(circle_comment_pv) circle_comment_pv, \
+       count(distinct if(circle_comment_pv>0,userid,null)) circle_comment_uv, \
+       sum(circle_comment_reply_pv) circle_comment_reply_pv, \
+       count(distinct if(circle_comment_reply_pv>0,userid,null)) circle_comment_reply_uv \
+    from lofter.dws_par_user_interaction_di  \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+    group by dt \
+) a  \
+left join ( \
+    select dt,sum(ask_pv) as 1v1_ask_pv, sum(answer_pv) as 1v1_answer_pv,  \
+        sum(comment_pv) as 1v1_comment_pv, sum(ask_pv+answer_pv+comment_pv) as 1v1_pv,  \
+        sum(answer_like_pv+comment_like_pv) as 1v1_like_pv,  \
+        count(distinct if(ask_pv > 0, userId, null)) as 1v1_ask_uv,  \
+        count(distinct if(answer_pv > 0, userId, null)) as 1v1_answer_uv,  \
+        count(distinct if(comment_pv > 0, userId, null)) as 1v1_comment_uv,  \
+        count(distinct if(ask_pv+answer_pv+comment_pv > 0, userId, null)) as 1v1_uv,  \
+        count(distinct if(answer_like_pv+comment_like_pv > 0, userId, null)) as 1v1_like_uv  \
+    from lofter.dws_par_user_1v1_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) b on a.dt=b.dt  \
+left join ( \
+    select dt, sum(topic_ask_pv) as topic_ask_pv, sum(topic_answer_pv) as topic_answer_pv,  \
+         sum(notopic_answer_pv) as notopic_answer_pv, sum(comment_pv) as topic_comment_pv,  \
+         sum(topic_ask_pv+topic_answer_pv+notopic_answer_pv+comment_pv) as topic_pv,  \
+         sum(topic_answer_like_pv+topic_comment_like_pv) as topic_like_pv,  \
+         count(distinct if(topic_ask_pv > 0, userId, null)) as topic_ask_uv,  \
+         count(distinct if(topic_answer_pv > 0, userId, null)) as topic_answer_uv,  \
+         count(distinct if(notopic_answer_pv > 0, userId, null)) as notopic_answer_uv,  \
+         count(distinct if(comment_pv > 0, userId, null)) as topic_comment_uv,  \
+         count(distinct if(topic_ask_pv+topic_answer_pv+notopic_answer_pv+comment_pv > 0, userId, null)) as topic_uv,  \
+         count(distinct if(topic_answer_like_pv+topic_comment_like_pv > 0, userId, null)) as topic_like_uv  \
+    from lofter.dws_par_user_discuss_di  \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+    group by dt  \
+) c on a.dt=c.dt  \
+left join ( \
+    select dt,  \
+         count(distinct if(opType = 1, userId, null)) as first_like_uv,  \
+         count(distinct if(opType = 2, userId, null)) as first_reproduce_uv,  \
+         count(distinct if(opType = 3, userId, null)) as first_recommend_uv,  \
+         count(distinct if(opType = 4, userId, null)) as first_collect_uv,  \
+         count(distinct if(opType = 10, userId, null)) as first_comment_uv  \
+    from lofter.dws_user_first_interaction_dd  \
+    where dt = '${azkaban.flow.1.days.ago}' and opDate='${azkaban.flow.1.days.ago}'  \
+    group by dt  \
+) d on a.dt=d.dt  \
+left join ( \
+    select dt, count(distinct userId) share_uv, count(1) share_pv \
+    from lofter.dwd_post_share_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) e on a.dt=e.dt  \
+left join ( \
+    select from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') dt,  \
+         count(distinct sender) free_gift_present_uv, count(sender) free_gift_present_pv  \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and coin = 0  \
+    group by 1  \
+) f on a.dt = f.dt  \
+left join ( \
+    select from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') dt, count(distinct userId) follow_uv, count(userId) follow_pv  \
+    from lofter_db_dump.ods_db_user_following_nd  \
+    where from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'   \
+        and blogId not in (493676441, 502552131, 19002, 1956197847)  \
+    group by 1  \
+) g on a.dt = g.dt  \
+left join ( \
+    select a1.dt, count(distinct userId) as interactive_uv \
+    from ( \
+        select dt, userId  \
+        from lofter.dws_par_user_interaction_di  \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+             (nvl(hot_pv,0) + nvl(comment_pv,0) + nvl(reply_comment_pv,0) + nvl(comment_like_pv,0) + \
+              nvl(underscore_reply_pv,0) + nvl(sweet_marks,0) + nvl(bitter_marks,0) + nvl(tag_subscribe_pv,0) + \
+              nvl(free_gift_present_pv,0) + nvl(share_pv,0) + nvl(collection_subscribe_pv,0) ) > 0  \
+      union  \
+        select dt, userId  \
+        from lofter.dws_par_user_1v1_di  \
+        where dt = '${azkaban.flow.1.days.ago}'  \
+      union  \
+        select dt, userId  \
+        from lofter.dws_par_user_discuss_di  \
+        where dt = '${azkaban.flow.1.days.ago}'  \
+      union  \
+        select from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') dt, userId  \
+        from lofter_db_dump.ods_db_user_following_nd  \
+        where from_unixtime(cast(followtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+              and blogId not in (493676441, 502552131, 19002, 1956197847)  \
+    ) a1  \
+    group by dt  \
+) h on a.dt = h.dt  \
+left join ( \
+    select dt, count(distinct deviceUdid) as dau  \
+    from lofter.device_active  \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+    group by dt \
+) j on a.dt = j.dt

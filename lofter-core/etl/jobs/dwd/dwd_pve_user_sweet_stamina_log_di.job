@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_pve_user_sweet_stamina_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select r1.logId, \
+	   r1.userId, \
+	   r1.createTime, \
+	   r1.stamina, \
+	   r1.sweetCnt, \
+       r2.roleId, \
+       r2.pveUserId, \
+       r2.roleName, \
+	   r2.roleType, \
+	   r2.roleStatus, \
+	   r2.rolePublicView, \
+	   r2.roleCreatorUid \
+from ( \
+	select logId, \
+		   userId, \
+		   createTime, \
+		   stamina, \
+		   sweetCnt, \
+		   roleId \
+	from ( \
+		select t1.id as logId, \
+			   t1.userId, \
+			   t1.roleId, \
+			   t1.createTime, \
+			   t2.stamina, \
+			   t2.count as sweetCnt, \
+			   row_number() over(partition by t1.userid,t1.createTime order by t1.createTime-t2.createTime asc) as rn \
+		from ( \
+			select id,userId,roleId,dialogueIds,createTime,name,status,dbUpdateTime \
+			from lofter_db_dump.ods_db_pve_ugc_role_sweet_dialogue_nd \
+			where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+		) t1 \
+		left join ( \
+			select id,userId,stamina,`count`,createTime,dbUpdateTime \
+			from lofter_db_dump.ods_db_pve_sweet_dialogue_exchange_nd \
+			where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+			union all \
+			select id,userId,0 as stamina,cast(rewardName as bigint) as `count`,createTime,dbUpdateTime \
+			from lofter_db_dump.ods_db_paper_man_backend_reward_nd \
+			where rewardType = 14 \
+			and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		) t2 \
+		on t1.userId = t2.userId and t1.createTime >= t2.createTime \
+	) t3 \
+	where rn = 1 \
+) r1 \
+left join ( \
+	select id as roleId, \
+		   userId as pveUserId, \
+		   roleName, \
+		   type as roleType, \
+		   status as roleStatus, \
+		   publicView as rolePublicView, \
+		   creatorUid as roleCreatorUid \
+	from lofter_db_dump.ods_db_pve_role_info_nd \
+) r2 \
+on r1.roleId = r2.roleId

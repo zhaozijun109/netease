@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.ConfigDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.ConfigDO">
+    <id column="id" jdbcType="BIGINT" property="id"/>
+    <result column="prop" jdbcType="OTHER" property="prop"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler"/>
+    <result column="creat_time" jdbcType="TIMESTAMP" property="creatTime"/>
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime"/>
+    <result column="name" jdbcType="VARCHAR" property="name"/>
+    <result column="namespace" jdbcType="VARCHAR" property="namespace"/>
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, prop, creat_time, modify_time, `name`, namespace
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from config
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from config
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.ConfigDO">
+    insert into config (id, prop, creat_time,
+    modify_time, `name`, namespace
+    )
+    values (#{id,jdbcType=BIGINT},
+    #{prop,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+    #{creatTime,jdbcType=TIMESTAMP},
+    #{modifyTime,jdbcType=TIMESTAMP}, #{name,jdbcType=VARCHAR}, #{namespace,jdbcType=VARCHAR}
+    )
+  </insert>
+  <select id="selectByNamespaceAndName" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from config
+    where
+    namespace = #{namespace,jdbcType=VARCHAR}
+    and
+    `name` = #{name,jdbcType=VARCHAR}
+  </select>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ConfigDO">
+    insert into config
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="prop != null">
+        prop,
+      </if>
+      <if test="creatTime != null">
+        creat_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+      <if test="name != null">
+        `name`,
+      </if>
+      <if test="namespace != null">
+        namespace,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="prop != null">
+        #{prop,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="creatTime != null">
+        #{creatTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="name != null">
+        #{name,jdbcType=VARCHAR},
+      </if>
+      <if test="namespace != null">
+        #{namespace,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ConfigDO">
+    update config
+    <set>
+      <if test="prop != null">
+        prop = #{prop,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="creatTime != null">
+        creat_time = #{creatTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="name != null">
+        `name` = #{name,jdbcType=VARCHAR},
+      </if>
+      <if test="namespace != null">
+        namespace = #{namespace,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.ConfigDO">
+    update config
+    set prop = #{prop,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+    creat_time = #{creatTime,jdbcType=TIMESTAMP},
+    modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+    `name` = #{name,jdbcType=VARCHAR},
+    namespace = #{namespace,jdbcType=VARCHAR}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+</mapper>

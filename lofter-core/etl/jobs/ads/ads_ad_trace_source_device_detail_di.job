@@ -1,0 +1,49 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_ad_trace_source_device_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+select platform,advertiserid,proxy,media,aid,cid,type,is_new,deviceudid \
+from ( \
+    select dt,case when platform='android' then "Android" end platform,channel,media,advertiserid,is_new, \
+          deviceudid,"点击归因" as type,proxy,aid,cid \
+    from ( \
+       select dt,time,platform,matchtype,a.channel, case when newuserflag=true then 1  when  newuserflag=false then 0 end is_new, \
+       case when a.channel='GDT' then '广点通' \
+         when a.channel='bilibili' then '哔哩哔哩' \
+         when a.channel='music' then '麦穗' \
+         when a.channel='youdao' then '有道智选' \
+         when a.channel='toutiao' then '巨量引擎' \
+         else channel end as media, \
+       case when a.advertiserid is null and a.channel='GDT' then adid \
+            when a.advertiserid is null then subchannel else a.advertiserid \
+            end as advertiserId, \
+       b.proxy, \
+       campaignid,aid,cid, \
+       deviceid customudid, \
+       dadeviceid deviceudid \
+      from lofter.ods_log_ad_new_linkup_di a left outer join ( \
+        select distinct advertiserid, proxy \
+        from ( \
+            select advertiserid, proxy, \
+                   row_number() over (partition by appid, advertiserid order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+        ) cfg where cfg_rk = 1 \
+      ) b on a.advertiserid=b.advertiserid \
+      where dt='${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by  case when platform='android' then "Android" end,channel,media,advertiserid,is_new,proxy,aid,cid,deviceudid,dt \
+union all \
+    select dt, t1.deviceos platform,t1.appchannel channel,t2.media,t2.advertiserid, 1 as is_new, t1.deviceudid,"渠道归因" as type,proxy, \
+           null as aid, null as cid \
+    from ( \
+        select *, hour(from_unixtime(cast(firstaccesstime/1000 as bigint),'yyyy-MM-dd HH:mm:ss')) hour1 \
+        from lofter.device_new \
+        where dt='${azkaban.flow.1.days.ago}' \
+    ) t1 join ( \
+       select channelpackage appchannel,advertiserid,proxy,media from ( \
+         select channelpackage,advertiserid,proxy,media, \
+                row_number() over (partition by appid, channelpackage order by createTime desc) as cfg_rk \
+         from lofter_db_dump.ods_db_ad_channel_config_nd \
+         where channelpackage is not null and channelpackage<>'' \
+       ) cfg where cfg_rk = 1 \
+     )t2 on t1.appchannel=t2.appchannel \
+) ttt distribute by 1

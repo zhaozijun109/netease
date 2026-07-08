@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_usermark_stats_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       blogId, \
+       sum(if(opType = 1, 1, 0)) as sweet_marks, \
+       sum(if(opType = 2, 1, 0)) as bitter_marks, \
+       count(distinct userId) as totalUserNum, \
+       count(1) as totalCount, \
+       concat_ws(',', transform(sort_array(collect_set(struct(rank, pid)), true), x -> x.pid)) as pids, \
+       sum(if(opType = 3, 1, 0)) as haha_marks \
+from ( \
+    select postId, \
+           blogId, \
+           userId, \
+           pid, \
+           opType, \
+           rank \
+    from ( \
+        select t1.postId, \
+               t1.blogId, \
+               t1.userId, \
+               t1.pid, \
+               t1.opType, \
+               row_number() over(partition by t1.postId order by nvl(t2.interaction_pv, 0) desc) as rank \
+        from ( \
+            select postId, \
+                   blogId, \
+                   userId, \
+                   pid, \
+                   opType \
+            from lofter_db_dump.ods_db_p_comment_user_mark_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and opType in (1, 2, 3) \
+        ) t1 \
+        left join ( \
+            select postId, pid, interaction_pv from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' \
+        ) t2 \
+        on t1.postId = t2.postId and t1.pid = t2.pid \
+    ) t \
+    where rank <= 100 \
+) tt \
+group by postId, blogId
+

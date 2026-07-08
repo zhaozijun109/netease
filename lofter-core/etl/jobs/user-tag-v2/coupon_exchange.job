@@ -1,0 +1,122 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag coupon_exchange --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '糖果券消耗'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from ( \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_1'                  as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_1d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_1d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_7'                  as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_7d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_7d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_15'                 as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_15d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_15d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_30'                 as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_30d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_30d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_90'                 as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_90d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_90d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_180'                as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_180d as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_180d > 0 \
+                                          ) t \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'coupon_exchange'        as tag, \
+                                        'DAY_ALL'                as cat, \
+                                        case \
+                                            when coupon_count <= 20 then '0-20' \
+                                            when coupon_count <= 100 then '20-100' \
+                                            else '100及以上' end as grp \
+                                 from ( \
+                                          select userId, coupon_count_std as coupon_count \
+                                          from lofter.dws_par_user_coupon_exchange_dd \
+                                          where dt = '${azkaban.flow.1.days.ago}' \
+                                            and coupon_count_std > 0 \
+                                          ) t) "

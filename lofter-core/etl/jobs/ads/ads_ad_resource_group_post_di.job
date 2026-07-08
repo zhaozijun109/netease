@@ -1,0 +1,95 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_group_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.groupId, b.contentType, \
+       b.title, b.tags, b.ips, b.blogId, b.blogNickname, \
+       g.real_browse_pv, g.real_browse_uv, j.browse_duration, \
+       f.hot_pv, f.hd_pv, \
+       if(c1.postId is not null, 1, 0) as is_post_open_ad, \
+       if(c.openAd > 0, 1, 0) as is_blog_open_ad, \
+       d.expose_pv, d.expose_uv, \
+       e.click_pv, e.click_uv, \
+       k.maisui_settlement \
+from ( \
+    select groupId, postId \
+    from ( \
+        select groupId, postId \
+        from lofter_db_dump.ods_db_rta_ad_post_pool_nd \
+        where batchDate >= cast(replace('${azkaban.flow.2.days.ago}', '-', '') as bigint) \
+      union all \
+        select groupId, postId \
+        from lofter.dwd_ad_resource_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by 1, 2 \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select userId, openAd \
+    from lofter_db_dump.ods_db_rta_creator_ad_switch_nd \
+) c on b.blogId = c.userId \
+left join ( \
+    select postId \
+    from lofter_db_dump.ods_db_rta_ad_post_pool_nd \
+    where batchDate >= cast(replace('${azkaban.flow.2.days.ago}', '-', '') as bigint) \
+    group by 1 \
+) c1 on a.postId = c1.postId \
+left join ( \
+    select groupId, postId, sum(least(expose_pv, 6)) as expose_pv, count(distinct userId) expose_uv \
+    from ( \
+        select dt, postId, userId, groupId, count(1) as expose_pv \
+        from lofter.dwd_ad_resource_action_di \
+        where dt='${azkaban.flow.1.days.ago}' and opType = 'expose' \
+        group by 1, 2, 3, 4 \
+    ) t \
+    group by 1, 2 \
+) d on a.groupId = d.groupId and a.postId = d.postId \
+left join ( \
+    select groupId, postId, count(1) as click_pv, count(distinct userId) as click_uv \
+    from lofter.dwd_ad_resource_action_di \
+    where dt='${azkaban.flow.1.days.ago}' and opType = 'click' \
+    group by 1, 2 \
+) e on a.groupId = e.groupId and a.postId = e.postId \
+left join ( \
+    select postId, hot_pv, hd_pv \
+    from lofter.dws_post_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) f on a.postId = f.postId \
+left join ( \
+    select postId, real_browse_pv, real_browse_uv \
+    from lofter.dws_post_traffic_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) g on a.postId = g.postId \
+left join ( \
+    select userId, level, element_at(post_top_ips, 1) as creator_ip, fans_std \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) h on b.blogId = h.userId \
+left join ( \
+    select postId, sum(duration) / 1000 as browse_duration \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and postId > 0 \
+    group by 1 \
+) j on a.postId = j.postId \
+left join ( \
+    select postId, groupId, b.maisui_settlement_total * expose_pv / expose_pv_total as maisui_settlement \
+    from ( \
+        select *, sum(expose_pv) over () as expose_pv_total \
+        from ( \
+            select x.dt, x.postId, groupId, sum(least(expose_pv, 6)) expose_pv \
+            from ( \
+                select dt, postId, userId, groupId, count(1) as expose_pv  \
+                from lofter.dwd_ad_resource_action_di \
+                where dt='${azkaban.flow.1.days.ago}' and opType = 'expose' \
+                group by 1, 2, 3, 4 \
+            ) x \
+            join lofter.dim_post y on x.postId = y.id \
+            group by 1, 2, 3 \
+        ) t \
+    ) a \
+    join ( \
+        select dt, sum(maisui_settle_money) / 100 as maisui_settlement_total \
+        from lofter.ads_iad_lofter_info_flow_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.dt = b.dt \
+) k on a.postId = k.postId and a.groupId = k.groupId \

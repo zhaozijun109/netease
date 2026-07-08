@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_devicecnt_daily_di partition(dt='${azkaban.flow.1.days.ago}') \
+select channel, \
+count(distinct case when device_type in ('新增') then deviceudid end) as new_cnt, \
+count(distinct case when device_type in ('回流') then deviceudid end) as return_cnt, \
+count(distinct case when device_type in ('今日新增流失') then deviceudid end) as churn_cnt \
+from lofter_dm.ads_device_daily_status_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by 1 \
+
+dependencies=ads_device_daily_status_di

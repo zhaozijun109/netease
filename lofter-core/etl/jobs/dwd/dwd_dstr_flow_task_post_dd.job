@@ -1,0 +1,26 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=5
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dwd_dstr_flow_task_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select a.postId as postId, a.userId, a.projectId as flowTaskId, 0 as flowTaskType, b.name as flowTaskName, a.createTime, b.startTime, b.endTime, b.status, b.creator \
+    from ( \
+        select pp.projectId, p.userId, pp.postId, pp.createTime \
+        from lofter_db_dump.ods_db_dispatch_project_post_nd pp \
+             join lofter.dim_post p on pp.postId = p.id \
+        union all \
+        select projectId, userId, postId,createTime \
+        from lofter_db_dump.ods_db_dispatch_project_user_post_nd \
+    ) a left join lofter_db_dump.ods_db_dispatch_project_nd b on a.projectId=b.id \
+    union all \
+    select conv(regexp_extract(c.itemId, '(\\\\w+)_(\\\\w+)', 2), 16, 10) as postId, c.blogId as userId,d.id as flowTaskId, 1 as flowTaskType, d.name as flowTaskName, c.createTime, d.startTime, d.endTime, d.status, d.creator \
+    from lofter_db_dump.ods_db_dispatch_site_support_post_nd c \
+         join lofter_db_dump.ods_db_dispatch_site_support_nd d on c.supportId = d.id \
+) t \
+where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+distribute by 1

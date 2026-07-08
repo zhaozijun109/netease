@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_wmyzy_post_level1_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select split(category,'-')[0]  level1, \
+sum(exposurepv) exposurepv,   \
+sum(support_exposure_pv) support_exposure_pv,   \
+sum(centralized_exposure_pv) centralized_exposure_pv, \
+sum(clickpv) clickpv,   \
+sum(realpv) realpv,   \
+sum(support_induced_pv) support_induced_pv,   \
+sum(hotpv) hotpv,   \
+sum(commentpv) commentpv,  \
+sum(sharepv) sharepv,   \
+sum(gift_amount) gift_amount,   \
+sum(new_devices) new_devices,   \
+sum(prev_day_new_retain_devices) prev_day_new_retain_devices,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' then postid end) posts_1d,   \
+count(distinct case when is_premium_post=1 then postid end) premium_posts,   \
+count(distinct case when from_unixtime(cast(recom_review_time / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' then postid end) rec_posts,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' then blogid end) creators_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='S' then blogid end) creators_s_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='A' then blogid end) creators_a_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='B' then blogid end) creators_b_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='C' then blogid end) creators_c_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='D' then blogid end) creators_d_1d,   \
+count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and creator_level='D*' then blogid end) creators_dstar_1d   \
+from lofter_dm.ads_wmyzy_post_di \
+lateral view explode(split(categories,'\\\\|')) t1 as category \
+where dt='${azkaban.flow.1.days.ago}' \
+group by level1 \
+
+dependencies=ads_wmyzy_post_di

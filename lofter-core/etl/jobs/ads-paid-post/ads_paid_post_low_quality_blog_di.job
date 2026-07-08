@@ -1,0 +1,73 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_low_quality_blog_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  a.*, \
+  b.postnum, \
+  avgquality_percent, \
+  lowpostnum \
+from \
+  ( \
+    select \
+      blogid, \
+      30_all_postnum, \
+      jinfufei_postnum, \
+      NVL(30_day_trade_money, 0) as 30_day_trade_money, \
+      zonghe_taolu_changjing_huilinum \
+    from \
+      lofter_dm.ads_paid_post_blog_ai_low_quality_studio_target_detail_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and 30_all_postnum >= 80 \
+      and jinfufei_postnum / 30_all_postnum >= 0.8 \
+      and NVL(30_day_trade_money, 0) <= 1000 \
+  ) a \
+  left JOIN ( \
+    select \
+      a.blogid, \
+      count(distinct a.postid) as postnum, \
+      AVG(quality_percent) as avgquality_percent, \
+      count( \
+        distinct case \
+          when quality_percent <= 20 then postid \
+          else null \
+        end \
+      ) as lowpostnum \
+    from \
+      ( \
+        select \
+          dt, \
+          postid, \
+          max(quality_percent) as quality_percent, \
+          blogid \
+        from \
+          lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          dt, \
+          postid, \
+          blogid \
+      ) a \
+    group by \
+      a.blogid \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      userid, \
+      level \
+    from \
+      lofter.dws_par_creator_level_scoring_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+      userid, \
+      level \
+  ) c on a.blogid = c.userid \
+where \
+  ( \
+    zonghe_taolu_changjing_huilinum >= 6 \
+    or lowpostnum >= 5 \
+  ) \
+  and c.level not in ('S', 'A', 'B') \
+
+dependencies=ads_paid_post_blog_ai_low_quality_studio_target_detail_di,ads_paid_post_premium_scoring_group_normalization_di

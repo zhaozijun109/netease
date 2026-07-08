@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_video_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    p.postId, \
+    p.userId, \
+    v.blogId, \
+    p.post_publish_date                                            as publish_date, \
+    p.post_publish_time                                            as publish_time, \
+    v.video_type, \
+    v.duration_sec, \
+    v.size_bytes, \
+    v.vid, \
+    v.img_width, \
+    v.img_height, \
+    v.aspect_ratio, \
+    v.origin_url, \
+    v.hls_url, \
+    v.h265_url, \
+    v.video_first_img, \
+    v.video_img_url, \
+    v.is_imported, \
+    v.import_platform_type, \
+    v.post_tags                                                    as tags, \
+    v.post_ips                                                     as ips, \
+    v.post_domains                                                 as domains, \
+    p.post_title                                                   as title, \
+    v.caption, \
+    p.platform                                                     as client_type, \
+    p.is_user_first_post, \
+    p.is_pay_gift, \
+    v.movefrom \
+from ( \
+    select postId, userId, post_publish_date, post_publish_time, post_title, platform, \
+           is_user_first_post, is_pay_gift \
+    from lofter.dwd_post_publish_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and post_content_type = '视频' \
+) p \
+join ( \
+    select postId, blogId, video_type, duration_sec, size_bytes, vid, img_width, img_height, \
+           aspect_ratio, origin_url, hls_url, h265_url, video_first_img, video_img_url, \
+           is_imported, import_platform_type, post_tags, post_ips, post_domains, caption, movefrom \
+    from lofter.dim_video_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) v \
+on p.postId = v.postId \
+distribute by p.postId % 10
+dependencies=

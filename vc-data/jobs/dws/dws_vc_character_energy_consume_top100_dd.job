@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dws_vc_character_energy_consume_top100_dd partition(dt='${azkaban.flow.1.days.ago}') \
+                select x1.character_id, x1.character_name, x1.character_type, x1.energy_consume, x1.rk, x2.total_talk_cnt \
+                from (select character_id, character_name, character_type, energy_consume, rk \
+                      from (select character_id, \
+                                   character_name, \
+                                   character_type, \
+                                   energy_consume, \
+                                   dense_rank() over (partition by character_type order by energy_consume desc) as rk \
+                            from (select x1.character_id, x1.character_name, x1.character_type, sum(x1.energy_consume) as energy_consume \
+                                  from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                                           inner join vc.dws_vc_character_behavior_info_a_d x2 on x1.character_id = x2.character_id \
+                                      and x2.public_scope = 1 and x2.dt = '${azkaban.flow.1.days.ago}' \
+                                  where x1.dt >= '${azkaban.flow.7.days.ago}' \
+                                    and x2.character_type is not null \
+                                  group by x1.character_id, x1.character_name, x1.character_type)) \
+                      where rk <= 100) x1 \
+                         inner join vc.dws_vc_character_tabulate_data_view x2 on x1.character_id = x2.character_id
+
+dependencies=dws_vc_uc_talk_day_cnt_single_i_d,dws_vc_character_tabulate_data_a_d

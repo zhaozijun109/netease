@@ -1,0 +1,2 @@
+type=noop
+dependencies=ads_activity_device_retain_stats

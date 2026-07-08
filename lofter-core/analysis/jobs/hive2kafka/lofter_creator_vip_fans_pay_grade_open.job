@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId, if(is_public > 0, 'PAY_GRADE_TYPE_UP', 'PAY_GRADE_TYPE_HIDE') as openFrom from lofter_dm.ads_creator_vip_fans_open_entry_dd where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.FANS_VIP_INVITE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

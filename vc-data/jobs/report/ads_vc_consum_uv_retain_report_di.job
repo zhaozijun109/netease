@@ -1,0 +1,309 @@
+type = sparksql
+hive.query.01 = insert overwrite table vc_dm.ads_vc_consum_uv_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    base_date, \
+    period, \
+    COALESCE(new_consum_flag, 2) AS new_consum_flag, \
+    consum_uv, \
+    consum_uv_1d, \
+    consum_uv_2d, \
+    consum_uv_3d, \
+    consum_uv_7d, \
+    consum_uv_15d, \
+    consum_uv_30d, \
+    consum_chat_uv_1d, \
+    consum_chat_uv_2d, \
+    consum_chat_uv_3d, \
+    consum_chat_uv_7d, \
+    consum_chat_uv_15d, \
+    consum_chat_uv_30d, \
+    consum_active_uv_1d, \
+    consum_active_uv_2d, \
+    consum_active_uv_3d, \
+    consum_active_uv_7d, \
+    consum_active_uv_15d, \
+    consum_active_uv_30d \
+from \
+    ( \
+        select \
+            a.dt as base_date, \
+            datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+            CASE \
+                WHEN a.dt > b.dt THEN 0 \
+                ELSE 1 \
+            END AS new_consum_flag, \
+            count(distinct a.user_id) as consum_uv, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt = date_add(a.dt, 0) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_1d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt = date_add(a.dt, 1) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_2d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 2) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_3d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 6) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_7d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 14) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_15d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 29) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then c.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_uv_30d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt = date_add(a.dt, 0) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_1d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt = date_add(a.dt, 1) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_2d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 2) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_3d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 6) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_7d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 14) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_15d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when d.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 29) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then d.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_chat_uv_30d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt = date_add(a.dt, 0) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_1d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt = date_add(a.dt, 1) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_2d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 2) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_3d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 6) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_7d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 14) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_15d, \
+            COALESCE( \
+                count( \
+                    distinct case \
+                        when e.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 29) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then e.user_id \
+                    end \
+                ), \
+                0 \
+            ) as consum_active_uv_30d \
+        from \
+            ( \
+                select \
+                    dt, \
+                    user_id, \
+                    sum(order_price) as total_amount \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                    AND dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+                group by \
+                    dt, \
+                    user_id \
+            ) a \
+            left join ( \
+                select \
+                    user_id, \
+                    min(dt) as dt \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                group by \
+                    user_id \
+            ) b on a.user_id = b.user_id \
+            left join ( \
+                select \
+                    dt, \
+                    user_id, \
+                    sum(order_price) as total_amount \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                    AND dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+                group by \
+                    dt, \
+                    user_id \
+            ) c on a.user_id = c.user_id \
+            AND c.dt BETWEEN date_add(a.dt, 0) \
+            AND date_add(a.dt, 30) \
+            left join ( \
+                select \
+                    distinct dt, \
+                    user_id \
+                from \
+                    vc.dwd_vc_uc_talk_info_i_d \
+                where \
+                    sender = 2 \
+                    and dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) d on a.user_id = d.user_id \
+            AND d.dt BETWEEN date_add(a.dt, 0) \
+            AND date_add(a.dt, 30) \
+            left join ( \
+                select \
+                    dt, \
+                    user_id \
+                from \
+                    vc.dwd_device_active_di LATERAL VIEW explode( \
+                        case \
+                            when size(userids) < 1 then array(0) \
+                            else userids \
+                        end \
+                    ) t2 AS user_id \
+                where \
+                    user_id > 0 \
+                    and dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) e on a.user_id = e.user_id \
+            AND e.dt BETWEEN date_add(a.dt, 0) \
+            AND date_add(a.dt, 30) \
+        WHERE \
+            datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 2, 6, 14, 29) \
+        group by \
+            a.dt, \
+            CASE \
+                WHEN a.dt > b.dt THEN 0 \
+                ELSE 1 \
+            END grouping sets( \
+                ( \
+                    a.dt, \
+                    datediff('${azkaban.flow.1.days.ago}', a.dt) \
+                ), \
+                ( \
+                    a.dt, \
+                    datediff('${azkaban.flow.1.days.ago}', a.dt), \
+CASE \
+                        WHEN a.dt > b.dt THEN 0 \
+                        ELSE 1 \
+                    END \
+                ) \
+            ) \
+    ) t \

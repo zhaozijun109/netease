@@ -1,0 +1,104 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag product_type_pay --bitmap
+retries=0
+conf.spark.execute.sql = " select userid               as userId, \
+                                  'product_type_pay' as tag_name, \
+                                  cat                  as dim1, \
+                                  grp               as dim2, \
+                                  ''                   as dim3, \
+                                  ''                   as dim4, \
+                                  subcat                  as grp, \
+                                  ''                   as value \
+                           from (            select userId, cat, subcat, grp \
+                                             from ( \
+                                              \
+                                               select userId, 'DAY_7' as cat, \
+                                                      case when col2 < 10 then 'COUNT_1_10' \
+                                                           when col2 < 50 then 'COUNT_10_50' \
+                                                           when col2 < 100 then 'COUNT_50_100' \
+                                                           when col2 < 200 then 'COUNT_100_200' \
+                                                           when col2 < 300 then 'COUNT_200_300' \
+                                                           else 'COUNT_300' end as subcat, \
+                                                     col1 as grp \
+                                               from ( \
+                                                   select userId, \
+                                                          inline(array(named_struct('col1', 'market', 'col2', market_sale_amount_7d), named_struct('col1', 'card', 'col2', card_sale_amount_7d))) \
+                                                   from lofter.dws_par_user_ec_dd \
+                                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                               ) a \
+                                               where col2 > 0 \
+                                              \
+                                               union all \
+                                              \
+                                               select userId, 'DAY_15' as cat, \
+                                                      case when col2 < 10 then 'COUNT_1_10' \
+                                                           when col2 < 50 then 'COUNT_10_50' \
+                                                           when col2 < 100 then 'COUNT_50_100' \
+                                                           when col2 < 200 then 'COUNT_100_200' \
+                                                           when col2 < 300 then 'COUNT_200_300' \
+                                                           else 'COUNT_300' end as subcat, \
+                                                     col1 as grp \
+                                               from ( \
+                                                   select userId, \
+                                                          inline(array(named_struct('col1', 'market', 'col2', market_sale_amount_15d), named_struct('col1', 'card', 'col2', card_sale_amount_15d))) \
+                                                   from lofter.dws_par_user_ec_dd \
+                                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                               ) a \
+                                               where col2 > 0 \
+                                              \
+                                               union all \
+                                              \
+                                                 select userId, 'DAY_30' as cat, \
+                                                      case when col2 < 10 then 'COUNT_1_10' \
+                                                           when col2 < 50 then 'COUNT_10_50' \
+                                                           when col2 < 100 then 'COUNT_50_100' \
+                                                           when col2 < 200 then 'COUNT_100_200' \
+                                                           when col2 < 300 then 'COUNT_200_300' \
+                                                           else 'COUNT_300' end as subcat, \
+                                                     col1 as grp \
+                                               from ( \
+                                                   select userId, \
+                                                          inline(array(named_struct('col1', 'market', 'col2', market_sale_amount_30d), named_struct('col1', 'card', 'col2', card_sale_amount_30d))) \
+                                                   from lofter.dws_par_user_ec_dd \
+                                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                               ) a \
+                                               where col2 > 0 \
+                                              \
+                                               union all \
+                                              \
+                                               select userId, 'DAY_90' as cat, \
+                                                      case when col2 < 10 then 'COUNT_1_10' \
+                                                           when col2 < 50 then 'COUNT_10_50' \
+                                                           when col2 < 100 then 'COUNT_50_100' \
+                                                           when col2 < 200 then 'COUNT_100_200' \
+                                                           when col2 < 300 then 'COUNT_200_300' \
+                                                           else 'COUNT_300' end as subcat, \
+                                                     col1 as grp \
+                                               from ( \
+                                                   select userId, \
+                                                          inline(array(named_struct('col1', 'market', 'col2', market_sale_amount_90d), named_struct('col1', 'card', 'col2', card_sale_amount_90d))) \
+                                                   from lofter.dws_par_user_ec_dd \
+                                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                               ) a \
+                                               where col2 > 0 \
+                                              \
+                                               union all \
+                                              \
+                                               select userId, 'DAY_180' as cat, \
+                                                      case when col2 < 10 then 'COUNT_1_10' \
+                                                           when col2 < 50 then 'COUNT_10_50' \
+                                                           when col2 < 100 then 'COUNT_50_100' \
+                                                           when col2 < 200 then 'COUNT_100_200' \
+                                                           when col2 < 300 then 'COUNT_200_300' \
+                                                           else 'COUNT_300' end as subcat, \
+                                                     col1 as grp \
+                                               from ( \
+                                                   select userId, \
+                                                          inline(array(named_struct('col1', 'market', 'col2', market_sale_amount_180d), named_struct('col1', 'card', 'col2', card_sale_amount_180d))) \
+                                                   from lofter.dws_par_user_ec_dd \
+                                                   where dt = '${azkaban.flow.1.days.ago}' \
+                                               ) a \
+                                               where col2 > 0 \
+                                             ) \
+                                             where userId > 0L   ) "

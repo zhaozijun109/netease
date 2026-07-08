@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_pve_user_active_7d_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userid from lofter.dws_pve_user_action_di \
+where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' group by userid;

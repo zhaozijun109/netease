@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=\
+insert overwrite table lofter_dm.ads_push_easy_fetch_paid_post_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select distinct a.userid,  \
+    newflg, \
+    consume_post_30d, \
+    consume_ips, \
+    real_browse_post_ids, \
+    if(b.userid is null, '无', '有') as is_history_gift,  \
+    if(c.userid is null, '无', '有') as is_history_paid, \
+    if(e.userid is null, '无', '有') as is_real_pv_7d \
+from ( \
+    select userid, \
+        case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) <= 30 then '是' \
+        else '否' end as  newflg \
+    from lofter.dws_par_user_base_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+        and  login_days_30d >= 1 \
+) a \
+left join ( \
+    select userid \
+    from lofter.dws_gift_user_revenue_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and stat_period='all' \
+    and gift_type=1 \
+    group by userid \
+) b on a.userid=b.userid \
+left join ( \
+    select userid \
+    from lofter.dws_gift_user_revenue_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and stat_period='all' \
+    group by userid \
+) c on a.userid=c.userid \
+left join ( \
+select userid, post_30d as consume_post_30d, concat_ws(',',collect_set(ip)) as consume_ips \
+    from lofter.dws_ip_user_consume_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by userid, post_30d \
+) d on a.userid=d.userid \
+left join ( \
+    select userid, \
+        BASE64(to_bitmap(postId)) as real_browse_post_ids \
+    from lofter.dwd_post_browse_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}' ,6)   and  '${azkaban.flow.1.days.ago}' \
+    and action_type='page_duration' and is_real = 1 \
+    group by userid \
+) e on a.userid=e.userid

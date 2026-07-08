@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_new_attribution_content_di partition(dt='${azkaban.flow.1.days.ago}') \
+select x.content_type, p.title, p.tags, p.url, x.itemid, \
+       nvl(b.new_device_cnt,0) as new_device_cnt, \
+       nvl(c.valid_declare_cnt,0) as valid_declare_cnt \
+from ( \
+    select '单日志' as content_type,id as itemid,concat_ws(',', tags) tags,title,concat('https://',blogname,'.lofter.com/post/',lower(conv(blogId, 10, 16)),'_',lower(conv(id, 10, 16))) as url \
+    from lofter.dim_post \
+    union all \
+    select '合集' as content_type,id as itemid,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) url \
+    from lofter_db_dump.ods_db_post_collection_nd \
+    union all \
+    select '粮单' as content_type,id as itemid,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) url \
+    from lofter_db_dump.ods_db_grain_info_nd \
+) x \
+join ( \
+         select if(instr(lofterid,'_') > 0, conv(split(lofterid, '_')[1], 16,10), cast(lofterid as bigint)) as itemid \
+         from lofter_db_dump.ods_db_grain_officer_declare_nd \
+         where status = 1 and from_unixtime(cast(updateTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+         group by 1 \
+) a on x.itemid = a.itemid \
+left join ( \
+     	select content_type, itemId, count(distinct deviceUdid) as new_device_cnt \
+     	from ( \
+     	   select land_nonrec_content_type as content_type, land_nonrec_itemid as itemId, deviceUdid \
+     	   from lofter.dwd_device_growth_attribution_di \
+     	   where device_type='new' and dt='${azkaban.flow.1.days.ago}' and land_nonrec_itemid > 0 \
+     	) t \
+     	group by content_type, itemid \
+) b on x.itemid = b.itemid and x.content_type = b.content_type \
+left join ( \
+    select if(instr(lofterid,'_') > 0, conv(split(lofterid, '_')[1], 16,10), cast(lofterid as bigint)) as itemid, count(distinct id) as valid_declare_cnt \
+    from lofter_db_dump.ods_db_grain_officer_declare_nd \
+    where status = 1 and from_unixtime(cast(updateTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) c on x.itemid = c.itemid \
+left join ( \
+     select '单日志' as content_type, id,concat_ws(',', tags) tags,title,concat('https://',blogname,'.lofter.com/post/',conv(blogId, 10, 16),'_',conv(id, 10, 16)) as url \
+     from lofter.dim_post \
+     union all \
+     select '合集' as content_type, id,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) url \
+     from lofter_db_dump.ods_db_post_collection_nd \
+     union all \
+     select '粮单' as content_type, id,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) url \
+     from lofter_db_dump.ods_db_grain_info_nd \
+     union all \
+     select '活动' as content_type, activityId id,'null' as tags,activityName title,urlKeyWords as url \
+     from lofter_db_dump.ods_db_act_activity_effect_base_config_nd \
+) p on b.itemid = p.id and b.content_type = p.content_type \
+where b.new_device_cnt > 0 or c.valid_declare_cnt > 0

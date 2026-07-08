@@ -1,0 +1,38 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag IP下单条评论字数 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               'IP下单条评论字数'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, 'IP下单条评论字数' as tag, ip as cat, grp \
+                                  from ( \
+                                      select a.userId, b.ip, \
+                                          case when a.comment_size < 15 then '1-15' \
+                                              when a.comment_size < 30 then '15-30' \
+                                              when a.comment_size < 60 then '30-60' \
+                                              else '60及以上' end as grp \
+                                      from ( \
+                                          select id, postId, publisherUserid as userId, length(content) as comment_size \
+                                          from lofter_db_dump.ods_db_post_response_nd \
+                                          where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                                              from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 365) \
+                                      ) a \
+                                      join ( \
+                                          select id as postId, ip \
+                                          from lofter.dim_post \
+                                              lateral view explode(ips) as ip \
+                                      ) b on a.postId = b.postId \
+                                      left join ( \
+                                          select comment_id \
+                                          from rec.rec_data_ecology_neg_comment_minning \
+                                          where day <= '${azkaban.flow.1.days.ago}' and is_neg_comment = 1 \
+                                      ) c on a.id = c.comment_id \
+                                      where a.comment_size > 0 and c.comment_id is null \
+                                      group by 1, 2, 3 \
+                                  ) t ) "

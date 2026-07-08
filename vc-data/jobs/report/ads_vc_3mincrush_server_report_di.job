@@ -1,0 +1,141 @@
+type = sparksql
+hive.query.01 = INSERT OVERWRITE TABLE vc_dm.ads_vc_3mincrush_server_report_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+WITH day_crush_user_event AS ( \
+SELECT FROM_UNIXTIME(create_time, 'yyyy-MM-dd') AS dt \
+,sub_event_type \
+,count(DISTINCT user_id) AS user_cnt \
+,count(0) AS record_cnt \
+FROM vc.ods_db_vc_user_event_task_info_nd \
+WHERE event_type = 4 \
+AND sub_event_type IN (8) \
+AND STATUS = 4 \
+and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(create_time, 'yyyy-MM-dd') \
+,sub_event_type \
+) \
+,day_crush_character_event AS ( \
+SELECT FROM_UNIXTIME(create_time, 'yyyy-MM-dd') AS dt \
+,sub_event_type \
+,count(DISTINCT user_id) AS user_cnt \
+,count(0) AS record_cnt \
+FROM vc.ods_db_vc_user_event_task_info_nd \
+WHERE event_type = 4 \
+AND sub_event_type IN (7) \
+AND STATUS = 4 \
+and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(create_time, 'yyyy-MM-dd') \
+,sub_event_type \
+) \
+,day_order AS ( \
+SELECT order_date AS dt \
+,count(0) order_cnt \
+,sum(order_price) AS price_cnt \
+FROM vc.dwd_vc_order_i_d \
+WHERE item_id = 200001 \
+AND dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY order_date \
+) \
+,day_income AS ( \
+SELECT FROM_UNIXTIME(income_time, 'yyyy-MM-dd') AS dt \
+,scene \
+,sum(amount) AS income_amount_cnt \
+,count(0) AS income_record_cnt \
+FROM vc.ods_db_vc_user_income_record_nd \
+WHERE reward_id = 4 \
+AND reward_type = 1 \
+AND FROM_UNIXTIME(income_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(income_time, 'yyyy-MM-dd') \
+,scene \
+ORDER BY dt \
+) \
+,day_income_free AS ( \
+SELECT FROM_UNIXTIME(income_time, 'yyyy-MM-dd') AS dt \
+,scene \
+,sum(amount) AS income_amount_cnt \
+,count(0) AS income_record_cnt \
+FROM vc.ods_db_vc_user_income_record_nd \
+WHERE reward_id = 4 \
+AND scene = 1 \
+AND reward_type = 1 \
+AND FROM_UNIXTIME(income_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(income_time, 'yyyy-MM-dd') \
+,scene \
+ORDER BY dt \
+) \
+,day_income_pay AS ( \
+SELECT FROM_UNIXTIME(income_time, 'yyyy-MM-dd') AS dt \
+,scene \
+,sum(amount) AS income_amount_cnt \
+,count(0) AS income_record_cnt \
+FROM vc.ods_db_vc_user_income_record_nd \
+WHERE reward_id = 4 \
+AND scene = 2 \
+AND reward_type = 1 \
+AND FROM_UNIXTIME(income_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(income_time, 'yyyy-MM-dd') \
+,scene \
+ORDER BY dt \
+) \
+,day_income_share AS ( \
+SELECT FROM_UNIXTIME(income_time, 'yyyy-MM-dd') AS dt \
+,scene \
+,sum(amount) AS income_amount_cnt \
+,count(0) AS income_record_cnt \
+FROM vc.ods_db_vc_user_income_record_nd \
+WHERE reward_id = 4 \
+AND scene = 6 \
+AND reward_type = 1 \
+AND FROM_UNIXTIME(income_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(income_time, 'yyyy-MM-dd') \
+,scene \
+ORDER BY dt \
+) \
+,day_cost_crush AS ( \
+SELECT FROM_UNIXTIME(create_time, 'yyyy-MM-dd') AS dt \
+,asset_type \
+,sum(amount) AS cost_cnt \
+FROM vc.ods_db_vc_user_asset_consume_flow_nd \
+WHERE scene = 8 \
+AND asset_type = 4 \
+and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(create_time, 'yyyy-MM-dd') \
+,asset_type \
+ORDER BY dt \
+) \
+,day_cost_energy AS ( \
+SELECT FROM_UNIXTIME(create_time, 'yyyy-MM-dd') AS dt \
+,asset_type \
+,sum(amount) AS cost_cnt \
+FROM vc.ods_db_vc_user_asset_consume_flow_nd \
+WHERE scene = 8 \
+AND asset_type = 1 \
+and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY FROM_UNIXTIME(create_time, 'yyyy-MM-dd') \
+,asset_type \
+ORDER BY dt \
+) \
+ \
+ \
+ \
+ \
+SELECT a.user_cnt AS crush_user_user_cnt \
+,a.record_cnt AS crush_user_record_cnt \
+,c.user_cnt AS crush_role_user_cnt \
+,c.record_cnt AS crush_role_record_cnt \
+,d.order_cnt \
+,d.price_cnt \
+,e.income_amount_cnt AS free_amount_cnt \
+,f.income_amount_cnt AS pay_amount_cnt \
+,g.income_amount_cnt AS invite_amount_cnt \
+,g.income_record_cnt AS invite_record_cnt \
+,h.cost_cnt AS crush_times_cost \
+,i.cost_cnt AS crush_energy_cost \
+FROM  day_crush_user_event a \
+LEFT JOIN day_crush_character_event c ON a.dt = c.dt \
+LEFT JOIN day_order d ON a.dt = d.dt \
+LEFT JOIN day_income_free e ON a.dt = e.dt \
+LEFT JOIN day_income_pay f ON a.dt = f.dt \
+LEFT JOIN day_income_share g ON a.dt = g.dt \
+LEFT JOIN day_cost_crush h ON a.dt = h.dt \
+LEFT JOIN day_cost_energy i ON a.dt = i.dt \
+where a.dt = '${azkaban.flow.1.days.ago}' \

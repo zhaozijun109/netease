@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_device_session_v2_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select deviceUdid, appVersion, appChannel, deviceOs, \
+       count(distinct deviceUdid) as sessionCount, \
+       if(sum(sessionTime) <= 0, 0, sum(sessionTime)) as sessionTime \
+from ( \
+    select deviceUdid, appVersion, appChannel, deviceOs, sessionUuid, \
+           occurTime - prevOccurTime as sessionTime \
+    from ( \
+         select deviceUdid, appVersion, appChannel, deviceOs, sessionUuid, \
+                occurTime, \
+                lag(occurTime,1) over (partition by deviceUdid,appVersion,appChannel,deviceOs, sessionUuid order by occurTime) prevOccurTime \
+         from lofter.ods_mda_app_partition_di \
+         where dt = '${azkaban.flow.1.days.ago}' and length(deviceUdid) > 0 and length(sessionUuid) > 0 \
+    ) t1 \
+    where (occurTime - prevOccurTime) < 30 * 60 * 1000 and (occurTime - prevOccurTime) > 0 \
+  union all \
+    select deviceUdid, appVersion, appChannel, deviceOs, sessionUuid, \
+           prevOccurTime - occurTime as sessionTime \
+    from ( \
+        select deviceUdid, appVersion, appChannel, deviceOs, sessionUuid, eventId, \
+               occurTime, \
+               lag(occurTime,1) over (partition by deviceUdid,appVersion,appChannel,deviceOs, sessionUuid order by occurTime) prevOccurTime \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actionType = 'system' and length(deviceUdid) > 0 and length(sessionUuid) > 0 and eventId in ('z-8888', 'z-6666') \
+    ) t2 \
+    where (occurTime - prevOccurTime) < 30 * 60 * 1000 and (occurTime - prevOccurTime) > 0 and eventId = 'z-8888' \
+) t \
+group by deviceUdid, appVersion, appChannel, deviceOs
+
+dependencies=

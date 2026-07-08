@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_distribute_ip_category_list_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.name, c.list_type, c.period_type, a.grainId, b.postId, b.blogId, b.list_rank \
+from ( \
+    select tag as name, grainId, distinctId \
+    from lofter_db_dump.ods_db_grain_create_log_resync_nd \
+    where createStatus = 2 and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.current.date}' \
+) a \
+join ( \
+    select grainId, postId, blogId, row_number() over (partition by grainId order by createTime) as list_rank \
+    from lofter_db_dump.ods_db_grain_post_resync_nd \
+    where status = 0 \
+) b on a.grainId = b.grainId \
+join ( \
+    select distinctId, listSource as list_source, listType as list_type, listName as list_name, periodType as period_type \
+    from lofter_dm.ads_grain_auto_generate_list_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by distinctId, listSource, listType, listName, periodType \
+) c on a.distinctId = c.distinctId

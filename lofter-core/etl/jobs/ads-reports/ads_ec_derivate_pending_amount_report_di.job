@@ -1,0 +1,240 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ec_derivate_pending_amount_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    'legu' AS channel, \
+    'ToB' AS channel_type, \
+    COALESCE(b.supplierType, r.supplierType, d.supplierType) AS supplierType, \
+    CAST(ROUND(COALESCE(r.refund_amount, 0), 2) AS DECIMAL(20,2)) AS refund_amount, \
+    CAST(ROUND(COALESCE(b.base_amount, 0), 2) AS DECIMAL(20,2)) AS base_amount, \
+    CAST(ROUND(COALESCE(d.delivered_amount, 0), 2) AS DECIMAL(20,2)) AS delivered_amount, \
+    CAST(ROUND(COALESCE(b.base_amount, 0) - COALESCE(r.refund_amount, 0) - COALESCE(d.delivered_amount, 0), 2) AS DECIMAL(20,2)) AS pending_amount \
+FROM ( \
+     SELECT \
+         pd.typename AS supplierType, \
+         SUM(COALESCE(po.amount, 0)) AS base_amount \
+     FROM lofter_db_dump.ods_db_derive_purchase_order_nd po \
+          INNER JOIN lofter_db_dump.ods_db_derive_partner_nd p \
+                     ON po.partnerid = p.id \
+          INNER JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd \
+                     ON p.partnerdiscountid = pd.id \
+     WHERE po.status = 2 \
+       AND po.verifytime > 0 \
+       AND from_unixtime(cast(po.verifytime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+     GROUP BY pd.typename \
+     ) b \
+     LEFT JOIN ( \
+               SELECT \
+                   pd.typename AS supplierType, \
+                   SUM(COALESCE(pasd.purchaseprice, 0) * COALESCE(pasd.qty, 0)) AS refund_amount \
+               FROM lofter_db_dump.ods_db_derive_purchase_after_sale_order_nd paso \
+                    JOIN ( \
+                         SELECT \
+                             aftersaleorderid, \
+                             purchaseorderitemid, \
+                             s.qty, \
+                             purchaseprice \
+                         FROM lofter_db_dump.ods_db_derive_purchase_after_sale_detail_nd \
+                                  LATERAL VIEW explode( \
+      array( \
+        named_struct('biz_type', 'return', 'qty', returncount) \
+      ) \
+    ) t AS s \
+                         WHERE s.qty <> 0 \
+                           AND status IN (2, 3) \
+                           AND deliveredcount > 0 \
+               ) pasd \
+                         ON paso.id = pasd.aftersaleorderid \
+                    JOIN lofter_db_dump.ods_db_derive_purchase_order_item_nd poi \
+                         ON pasd.purchaseorderitemid = poi.id \
+                    JOIN lofter_db_dump.ods_db_derive_partner_nd p \
+                         ON p.id = poi.partnerid \
+                    JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd \
+                         ON p.partnerdiscountid = pd.id \
+               WHERE paso.createtime > 0 \
+                 AND paso.status IN (2, 3) \
+                 AND p.status = 0 \
+                 AND p.id <> 5007 \
+                 AND pd.status = 0 \
+                 AND from_unixtime(cast(paso.createtime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+               GROUP BY pd.typename \
+) r \
+               ON b.supplierType = r.supplierType \
+     LEFT JOIN ( \
+               SELECT \
+                   pd.typename AS supplierType, \
+                   SUM(COALESCE(dod.deliveredcount, 0) * COALESCE(poi.purchaseprice, 0)) AS delivered_amount \
+               FROM lofter_db_dump.ods_db_derive_deliver_order_nd do \
+                    INNER JOIN lofter_db_dump.ods_db_derive_deliver_order_detail_nd dod \
+                               ON do.id = dod.deliverorderid \
+                                   AND dod.purchaseorderitemid > 0 \
+                    INNER JOIN lofter_db_dump.ods_db_derive_purchase_order_item_nd poi \
+                               ON poi.id = dod.purchaseorderitemid \
+                    INNER JOIN lofter_db_dump.ods_db_derive_partner_nd p \
+                               ON poi.partnerid = p.id \
+                    INNER JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd \
+                               ON p.partnerdiscountid = pd.id \
+               WHERE do.parentdeliverorderid > 0 \
+                 AND do.deliverytype = 2 \
+                 AND do.status IN (2, 3, 4, 5, 6) \
+                 AND do.deliverytime > 0 \
+                 AND p.id <> 5007 \
+                 AND p.status = 0 \
+                 AND pd.status = 0 \
+                 AND from_unixtime(cast(do.deliverytime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+               GROUP BY pd.typename \
+) d \
+               ON b.supplierType = d.supplierType \
+UNION ALL \
+SELECT \
+    b.channel_type AS channel, \
+    'ToC' AS channel_type, \
+    b.supplier_type AS supplier_type, \
+    CAST(ROUND(COALESCE(r.refund_amount, 0), 2) AS DECIMAL(20,2)) AS refund_amount, \
+    CAST(ROUND(COALESCE(b.base_amount, 0), 2) AS DECIMAL(20,2)) AS base_amount, \
+    CAST(ROUND(COALESCE(d.delivered_amount, 0), 2) AS DECIMAL(20,2)) AS delivered_amount, \
+    CAST(ROUND(COALESCE(b.base_amount, 0) - COALESCE(r.refund_amount, 0) - COALESCE(d.delivered_amount, 0), 2) AS DECIMAL(20,2)) AS pending_amount \
+FROM ( \
+     SELECT \
+         supplier_type, \
+         channel_type, \
+         SUM(COALESCE(payamount, 0)) AS base_amount \
+     FROM ( \
+          SELECT \
+              a.id AS orderid, \
+              IF(c.orderfrom = 'legu_mini', '小程序', 'LOFTER') AS supplier_type, \
+              IF(d1.purchasesupplierid = 7639000, 'legu', 'nolegu') AS channel_type, \
+              ROUND(MAX(a.amount), 2) AS payamount \
+          FROM lofter_db_dump.ods_db_benefit_order_nd a \
+               JOIN lofter_db_dump.ods_db_benefit_order_product_nd b \
+                    ON a.id = b.orderid \
+               JOIN lofter_db_dump.ods_db_benefit_trade_nd c \
+                    ON a.tradeid = c.id \
+               JOIN lofter_db_dump.ods_db_benefit_product_info_nd d1 \
+                    ON b.productid = d1.id \
+          WHERE c.status <> 3 \
+            AND a.paytime > 0 \
+            AND c.amount > 0 \
+            AND c.deletestatus = 0 \
+            AND from_unixtime(cast(a.paytime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+          GROUP BY a.id, IF(c.orderfrom = 'legu_mini', '小程序', 'LOFTER'), IF(d1.purchasesupplierid = 7639000, 'legu', 'nolegu') \
+          ) g \
+     GROUP BY supplier_type, channel_type \
+     ) b \
+     LEFT JOIN ( \
+               SELECT \
+                   supplier_type, \
+                   channel_type, \
+                   SUM(COALESCE(refund_amount, 0)) AS refund_amount \
+               FROM ( \
+                    SELECT \
+                        IF(t.orderfrom = 'legu_mini', '小程序', 'LOFTER') AS supplier_type, \
+                        CASE \
+                            WHEN pi2.purchasesupplierid IS NOT NULL THEN IF(pi2.purchasesupplierid = 7639000, 'legu', 'nolegu') \
+                            ELSE IF(o.supplierid = 7639000, 'legu', 'nolegu') \
+                            END AS channel_type, \
+                        CAST(GET_JSON_OBJECT(er.single, '$.refundPrice') AS double) AS refund_amount \
+                    FROM ( \
+                         SELECT \
+                             br.orderid, \
+                             br.finishtime, \
+                             br.status, \
+                             br.productinfo, \
+                             single \
+                         FROM lofter_db_dump.ods_db_benefit_refund_nd br \
+                             LATERAL VIEW explode( \
+        split( \
+          regexp_replace( \
+            regexp_replace( \
+              regexp_replace(br.productinfo, '\\\\s+', ''), \
+              '^\\\\$|\\\\$$', \
+              '' \
+            ), \
+            '\\\\}\\\\,\\\\{', \
+            '};{' \
+          ), \
+          ';' \
+        ) \
+      ) t1 AS single \
+                         ) er \
+                         JOIN lofter_db_dump.ods_db_benefit_order_nd o \
+                              ON er.orderid = o.id \
+                         JOIN lofter_db_dump.ods_db_benefit_trade_nd t \
+                              ON o.tradeid = t.id \
+                         LEFT JOIN lofter_db_dump.ods_db_benefit_product_info_nd pi2 \
+                                   ON CAST(GET_JSON_OBJECT(er.single, '$.productId') AS bigint) = pi2.id \
+                    WHERE er.status = 3 \
+                      AND er.finishtime > 0 \
+                      AND er.productinfo IS NOT NULL \
+                      AND o.deliverytime > 0 \
+                      AND o.status = 3 \
+                      AND t.deletestatus = 0 \
+                      AND o.producttype IN (3, 9) \
+                      AND from_unixtime(cast(er.finishtime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                    ) rr \
+               GROUP BY supplier_type, channel_type \
+) r \
+               ON b.supplier_type = r.supplier_type \
+                   AND b.channel_type = r.channel_type \
+     LEFT JOIN ( \
+               SELECT \
+                   supplier_type, \
+                   channel_type, \
+                   SUM(COALESCE(revenue_amount, 0)) AS delivered_amount \
+               FROM ( \
+                    SELECT \
+                        orderid, \
+                        supplier_type, \
+                        channel_type, \
+                        deliverymode, \
+                        CASE \
+                            WHEN deliverymode = 1 THEN SUM(delivered_amount) \
+                            WHEN deliverymode = 2 THEN MAX(delivered_amount) \
+                            END AS revenue_amount \
+                    FROM ( \
+                         SELECT \
+                             a.id AS orderid, \
+                             IF(c.orderfrom = 'legu_mini', '小程序', 'LOFTER') AS supplier_type, \
+                             IF(d1.purchasesupplierid = 7639000, 'legu', 'nolegu') AS channel_type, \
+                             a.deliverymode, \
+                             CASE \
+                                 WHEN a.deliverymode = 2 THEN a.amount \
+                                 WHEN a.deliverymode = 1 THEN \
+                                     (COALESCE(e.num, 0) * b.storeprice) \
+                                         - (COALESCE(e.num, 0) * COALESCE(b.newcouponpreferential, 0) / GREATEST(b.productnum, 1)) \
+                                         - (COALESCE(e.num, 0) * COALESCE(b.bountypreferential, 0) / GREATEST(b.productnum, 1)) \
+                                         - (COALESCE(e.num, 0) * COALESCE(b.hongbaopreferential, 0) / GREATEST(b.productnum, 1)) \
+                                 END AS delivered_amount \
+                         FROM lofter_db_dump.ods_db_benefit_order_nd a \
+                              JOIN lofter_db_dump.ods_db_benefit_order_product_nd b \
+                                   ON a.id = b.orderid \
+                              JOIN lofter_db_dump.ods_db_benefit_trade_nd c \
+                                   ON a.tradeid = c.id \
+                              JOIN lofter_db_dump.ods_db_benefit_product_info_nd d1 \
+                                   ON b.productid = d1.id \
+                              LEFT JOIN ( \
+                                        SELECT \
+                                            orderid, \
+                                            productid, \
+                                            SUM(num) AS num \
+                                        FROM lofter_db_dump.ods_db_benefit_order_product_delivery_nd \
+                                        WHERE status = 0 \
+                                          AND from_unixtime(cast(deliverytime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                                        GROUP BY orderid, productid \
+                         ) e \
+                                        ON a.id = e.orderid \
+                                            AND b.productid = e.productid \
+                         WHERE a.deliverymode IN (1, 2) \
+                           AND a.status = 4 \
+                           AND a.deliverytime > 0 \
+                           AND c.deletestatus = 0 \
+                           AND c.amount > 0 \
+                           AND a.producttype IN (3, 6, 9) \
+                           AND from_unixtime(cast(a.deliverytime / 1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                         ) pr \
+                    GROUP BY orderid, supplier_type, channel_type, deliverymode \
+                    ) dr \
+               GROUP BY supplier_type, channel_type \
+) d \
+               ON b.supplier_type = d.supplier_type \
+                   AND b.channel_type = d.channel_type

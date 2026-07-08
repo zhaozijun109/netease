@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter.dws_post_support_di partition(dt='${azkaban.flow.1.days.ago}')	\
+select a.postId, \
+       support_exposure_pv, \
+       support_induced_pv \
+from ( \
+    select postId, count(1) support_exposure_pv \
+    from lofter.dwd_post_expose_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_support > 0 and reaction is null and \
+          post_content_type in ('文字','视频','图片') \
+    group by postId \
+) a \
+left join ( \
+    select postId, count(1) as support_induced_pv \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_support_induced > 0 and is_real > 0 \
+    group by postId \
+) b on a.postId = b.postId

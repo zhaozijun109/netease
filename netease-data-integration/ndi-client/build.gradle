@@ -1,0 +1,84 @@
+apply plugin: "java"
+apply plugin: "scala"
+
+sourceSets {
+  main {
+    scala {
+      srcDirs = ["src/main/scala", "src/main/java"]
+    }
+    java {
+      srcDirs = []
+    }
+  }
+
+  test {
+    scala {
+      srcDirs = ["src/test/scala", "src/test/java"]
+    }
+    java {
+      srcDirs = []
+    }
+  }
+}
+
+sourceCompatibility = 1.8
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation packages.scalaLibrary
+  implementation packages.yarnClient
+  implementation packages.hadoopCommon
+  implementation packages.slf4jLog4j
+  implementation packages.json4s
+  implementation packages.fluentHC
+  testImplementation group: 'junit', name: 'junit', version: '4.12'
+}
+
+task createPackageDir {
+  file("build/package/ndi-client/conf").mkdirs()
+  file("build/package/ndi-client/lib").mkdirs()
+  file("build/package/ndi-client/bin").mkdirs()
+}
+
+task copyLib(type: Copy) {
+  dependsOn build, createPackageDir
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/ndi-client/lib")
+}
+
+task copyConf(type: Copy) {
+  dependsOn build, createPackageDir
+  from("src/main/conf")
+  into("build/package/ndi-client/conf/")
+}
+
+task copyBin(type: Copy) {
+  dependsOn build, createPackageDir
+  from("src/main/bin")
+  into("build/package/ndi-client/bin/")
+}
+
+task copyWorkerMusicTransfer(type: Copy) {
+  dependsOn ":ndi-worker:ndi-worker-music-transfer:createPackageTar"
+  from("../ndi-worker/ndi-worker-music-transfer/build/package/music-transfer")
+  into("build/package/ndi-client/music-transfer")
+}
+
+task createPackageTar(type: Tar) {
+  dependsOn copyConf, copyLib, copyBin, copyWorkerMusicTransfer
+  compression Compression.GZIP
+  from("build/package/")
+  archiveBaseName = "ndi-client"
+  archiveExtension = "tar.gz"
+  archiveVersion = "${project.property("ndi-version")}"
+  destinationDirectory = file("build")
+
+  doFirst {
+    createVersionFile(file("build/package/ndi-client/VERSION"))
+  }
+}
+

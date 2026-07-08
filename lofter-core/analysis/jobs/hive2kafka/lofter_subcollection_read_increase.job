@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId,collectionId,postId,blogId,occurTime,dt from lofter.dws_collection_subscribe_user_browse_latest_di where dt='${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.HIST.subcollection.readlog.increase --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

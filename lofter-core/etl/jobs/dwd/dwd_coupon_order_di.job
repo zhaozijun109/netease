@@ -1,0 +1,93 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_coupon_order_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select m.orderId, m.userId, m.payTime, m.amount, m.postId, m.actpwd, m.deviceUdid, m.actpwd_channel, m.actpwd_search_time, \
+       n.blogId, m.activity_name, m.platform \
+from ( \
+    select a.orderId, a.userId, a.payTime, a.amount, \
+           if(scene = 1 and (is_ugc_new_user_pay = 0 or nvl(a.settlement_type, b.settlement_type) = 'UGC'), nvl(a.postId, b.postId), null) as postId, \
+           if(scene = 1 and (is_ugc_new_user_pay = 0 or nvl(a.settlement_type, b.settlement_type) = 'UGC'), nvl(a.actpwd, b.actpwd), null) as actpwd, \
+           if(scene = 1 and (is_ugc_new_user_pay = 0 or nvl(a.settlement_type, b.settlement_type) = 'UGC'), nvl(a.deviceUdid, b.deviceUdid), null) as deviceUdid, \
+           if(scene = 1 and (is_ugc_new_user_pay = 0 or nvl(a.settlement_type, b.settlement_type) = 'UGC'), nvl(a.actpwd_channel, b.actpwd_channel), null) as actpwd_channel, \
+           if(scene = 1 and (is_ugc_new_user_pay = 0 or nvl(a.settlement_type, b.settlement_type) = 'UGC'), nvl(a.actpwd_search_time, b.actpwd_search_time), null) as actpwd_search_time, \
+           activity_name, a.platform \
+    from ( \
+        select x.orderId, x.userId, x.payTime, x.amount, scene, x.postId, \
+               y.actpwd, y.deviceUdid, y.channel as actpwd_channel, y.time as actpwd_search_time, \
+               y.settlement_type, x.is_ugc_new_user_pay, x.activity_name, \
+               row_number() over (partition by x.orderId order by y.time desc) as actpwd_search_rk, \
+               x.platform \
+        from ( \
+            select a.orderId, a.payTime, if(a.postId > 0, a.postId, b.postId) as postId, amount, a.userId, \
+                   a.scene, \
+                   if(c.productId is not null, 1, a.is_ugc_new_user_pay) as is_ugc_new_user_pay, \
+                   nvl(d.activity_name, concat('券包活动:', a.productId)) as activity_name, \
+                   row_number() over (partition by a.orderId order by b.exchangeTime) as exchange_rk, \
+                   a.platform \
+            from ( \
+                select id as orderId, finishTime payTime, postId, amount, userId, scene, \
+                       if(productId in (100001, 100002), 1, 0) as is_ugc_new_user_pay, productId, platform \
+                from lofter_db_dump.ods_db_trade_coupon_order_nd \
+                where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+            ) a \
+            left join ( \
+                select userId, postId, exchangeTime \
+                from lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+                where postId > 0 and status = 1 and type = 1 \
+            ) b on a.userId = b.userId and b.exchangeTime > a.payTime and a.payTime < b.exchangeTime + 3600000 \
+            left join ( \
+                select id as productId \
+                from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+                where scene = 1 \
+            ) c on a.productId = c.productId \
+            left join ( \
+                select x.id as productId, max(nvl(z.name, x.activity_name)) as activity_name \
+                from ( \
+                     select id, case scene when 0 then '常驻券包' when 2 then '拉新券包' end as activity_name \
+                     from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+                ) x \
+                join ( \
+                     select targetId, actId from lofter_db_dump.ods_db_paid_content_activity_reward_nd where where type = 8 \
+                ) y on x.id = y.targetId \
+                join ( \
+                    select id, name \
+                    from lofter_db_dump.ods_db_paid_content_activity_nd \
+                    where parentActId = 0 \
+                    union all \
+                    select b.id as id, a.name as name \
+                    from lofter_db_dump.ods_db_paid_content_activity_nd a \
+                         join lofter_db_dump.ods_db_paid_content_activity_nd b on a.id = b.parentactId \
+                    where a.parentActId = 0 and b.parentActId > 0 \
+                ) z on y.actId = z.id \
+                group by 1 \
+            ) d on a.productId = d.productId \
+        ) x \
+        left join ( \
+            select userId, actpwd, channel, deviceUdid, time, itemId as postId, settlement_type \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  content_type = '单日志' and is_paid_subscribe = 0 \
+        ) y on x.userId = y.userId and x.postId = y.postId and x.payTime > y.time and x.payTime <= y.time + 86400000 \
+        where x.exchange_rk = 1 \
+    ) a \
+    left join ( \
+        select a.orderId, b.postId, b.actpwd, b.deviceUdid, b.channel as actpwd_channel, b.time as actpwd_search_time, \
+               b.settlement_type, \
+               row_number() over (partition by a.orderId order by b.time desc) as actpwd_search_rk \
+        from ( \
+            select id as orderId, finishTime payTime, postId, amount, userId \
+            from lofter_db_dump.ods_db_trade_coupon_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+        ) a \
+        join ( \
+            select userId, actpwd, channel, deviceUdid, time, itemId as postId, settlement_type \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  content_type = '单日志' and is_paid_subscribe = 0 \
+        ) b on a.userId = b.userId and a.payTime > b.time and a.payTime <= b.time + 86400000 \
+        join lofter.dim_gift_post c on b.postId = c.postId \
+        where c.platform_type = '图文UGC' \
+    ) b on a.orderId = b.orderId \
+    where a.actpwd_search_rk = 1 and (b.orderId is null or b.actpwd_search_rk = 1) \
+) m \
+left join lofter.dim_post n on m.postId = n.id
+dependencies=dwd_growth_actpwd_access_di

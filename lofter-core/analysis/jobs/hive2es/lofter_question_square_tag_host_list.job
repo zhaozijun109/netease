@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select tag as id,tag,tagType,discuss_count,question_count,rank,dt from lofter_dm.ads_question_square_tag_host_list_di where dt='${azkaban.flow.1.days.ago}'  and rank<=100"
+params= --partition ${azkaban.flow.1.days.ago}  --dest lofter_question_square_tag_host_list --postfixsep --full --atom

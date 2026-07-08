@@ -1,0 +1,100 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tp_creater_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select   \
+a.rta_sponsorid,  \
+a.positionid,  \
+a.dsp_channel,  \
+a.contenttype,  \
+a.cnt_post_ad_req,  \
+a.realbrowsepv_ad_req,  \
+a.cnt_post_ad_bg,  \
+a.realbrowsepv_ad_bg,  \
+b.bg_pv,   \
+b.click_pv,   \
+b.ad_revenue   \
+  \
+from(  \
+select   \
+dt,  \
+rta_sponsorid,  \
+positionid,  \
+dsp_channel,  \
+contenttype,  \
+count(distinct case when is_request=1 then  postid end) cnt_post_ad_req,  \
+sum(case when is_request=1  then realbrowsepv end) realbrowsepv_ad_req,  \
+count(distinct case when is_bg=1 then  postid end) cnt_post_ad_bg,  \
+sum(case when is_bg=1  then realbrowsepv end) realbrowsepv_ad_bg  \
+  \
+from(  \
+select   \
+a.dt,  \
+a.rta_sponsorid,  \
+a.positionid,  \
+a.dsp_channel,  \
+a.contenttype,  \
+a.is_request,  \
+a.is_bg ,  \
+a.postid ,  \
+c.realbrowsepv  \
+from(  \
+select dt,  \
+case when rta_sponsorid is null then '未知'  \
+     else rta_sponsorid end rta_sponsorid,  \
+positionid,  \
+case when dspId=5002 then '麦穗'  \
+     else '如愿sdk' end dsp_channel,  \
+contenttype,  \
+is_request,  \
+is_bg ,  \
+postid   \
+from  lofter.dwd_ad_actions_v2_di  a  \
+join lofter.dim_post b on a.postid=b.id   \
+where dt='${azkaban.flow.1.days.ago}'     \
+and positionid in ('147004')  \
+and is_request=1  \
+group by 1,2 ,3,4,5,6,7,8  \
+) a   \
+  \
+left join   \
+(  \
+select dt,postid,	  \
+realbrowsepv  \
+from lofter.dws_post_base_stats_di  \
+where  dt ='${azkaban.flow.1.days.ago}'     \
+  \
+) c on a.dt=c.dt and a.postid=c.postid  \
+) a   \
+group by 1,2,3,4,5  \
+  \
+) a   \
+left join   \
+(  \
+select   \
+dt,  \
+case when rta_sponsorid is null then '未知'  \
+     else rta_sponsorid end rta_sponsorid,  \
+positionid,  \
+dsp_channel,   \
+contentType,  \
+sum(bgPv) as bg_pv,   \
+sum(clickPv) as click_pv,   \
+sum(bid_amount) / 1000 as ad_revenue   \
+from (  \
+select dt,  \
+cast(get_json_object(ext['bizTracking'], '$.postId') as bigint) as postId,  \
+ext['rta_sponsorId']  rta_sponsorid ,  \
+ if(dspId = '5002', '麦穗', '如愿sdk') as dsp_channel, positionid,bgPv,clickpv,bid_amount  \
+ from lofter.dwd_ad_actions_di  a   \
+ where dt = '${azkaban.flow.1.days.ago}'     \
+ and (bgPv > 0 or clickPv > 0)   \
+ and positionId in ('147004')  \
+  ) a  \
+  join lofter.dim_post b on a.postId = b.id  \
+ where postId > 0   \
+  \
+ group by 1, 2 ,3,4,5  \
+) b on  a.dt=b.dt  \
+and a.rta_sponsorid=b.rta_sponsorid  \
+and a.positionid=b.positionid  \
+and a.dsp_channel=b.dsp_channel  \
+and a.contenttype=b.contenttype  \

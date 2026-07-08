@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dwd_user_ad_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+    select a.userId, a.postId, b.blogId, bid_amount / 1000 as money, \
+           case when positionId in (279600, 278625, 278626, 277629, 277630) then '激励广告解锁' \
+                when (positionId in ('147004') and dspId not in ('5002')) then '贴片广告' \
+                else '效果广告' end as revenue_module, \
+           request_time, from_unixtime(cast(request_time/1000 as bigint),'yyyy-MM-dd') as request_date, \
+           ((positionId = 147004 and dspId not in ('5002')) or positionId = 279600 ) as is_paid_post, \
+           if(positionId in (279600, 278625, 278626, 277629, 277630) or category = 'REWARDVIDEO', '激励广告', '效果广告') as business, \
+           req_id, positionId, position_name \
+    from ( \
+            select * \
+            from lofter.dwd_ad_actions_v2_di \
+            where dt = '${azkaban.flow.1.days.ago}' and appId = '6ED29071' and is_bg > 0 and dspId != 1 \
+    ) a \
+    left join lofter.dim_post b on a.postId = b.id \

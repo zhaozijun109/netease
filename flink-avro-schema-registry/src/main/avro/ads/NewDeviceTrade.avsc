@@ -1,0 +1,13 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "NewDeviceTrade",
+  "fields": [
+    {"name": "deviceId", "type": "string"},
+    {"name": "orderId", "type": "long"},
+    {"name": "orderType", "type": "int"},
+    {"name": "payTime", "type": "long"},
+    {"name": "orderAmount", "type": "double"},
+    {"name": "actionId", "type": "long"}
+  ]
+}

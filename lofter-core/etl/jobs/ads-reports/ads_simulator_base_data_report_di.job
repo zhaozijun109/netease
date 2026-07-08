@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=  \
+with simulator_info as \
+( \
+  select dt, source, user_id, category_label, \
+    count(distinct name) as simulator_cnt, \
+    count(message_id) as simulator_message_cnt, \
+    sum(total_consume) as simulator_total_consume, \
+    sum(case when source = 1 then buy_nums else 0 end) as simulator_buy_nums \
+  from lofter_dm.ads_pve_simulator_talk_info_i_report_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+    and scene = 'SIMULATOR_CHAT' \
+  group by dt, source, user_id, category_label \
+) \
+insert overwrite table lofter_dm.ads_simulator_base_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  COALESCE(source, 3) as source, \
+  simulator_chat_uv, \
+  simulator_cnt, \
+  simulator_message_cnt, \
+  simulator_total_consume, \
+  simulator_buy_nums, \
+  COALESCE(category_label, '全部') as category_label \
+from \
+( \
+  select source, category_label, \
+    count(distinct user_id) as simulator_chat_uv, \
+    sum(simulator_cnt) as simulator_cnt, \
+    sum(simulator_message_cnt) as simulator_message_cnt, \
+    sum(simulator_total_consume) as simulator_total_consume, \
+    sum(simulator_buy_nums) as simulator_buy_nums \
+  from simulator_info \
+  group by source, category_label \
+  grouping sets( \
+    (source, category_label), \
+    (category_label), \
+    (source), \
+    () \
+  ) \
+) a
+
+dependencies=ads_pve_simulator_talk_info_i_report_di

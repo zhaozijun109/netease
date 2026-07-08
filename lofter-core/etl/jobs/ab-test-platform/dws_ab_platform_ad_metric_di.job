@@ -1,0 +1,161 @@
+type=sparksql
+hive.query.01= \
+WITH exp_users_month AS (  \
+    SELECT  \
+        user_id AS userId,  \
+        dt AS exp_date,  \
+        appId,  \
+        sceneId,  \
+        exp_id,  \
+        bucket_id  \
+    FROM lofter.dwd_ab_platform_exp_user_di  \
+    WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 29) AND '${azkaban.flow.1.days.ago}'  \
+    GROUP BY user_id, dt, appId, sceneId, exp_id, bucket_id  \
+),  \
+ad_user_mapping AS ( \
+    SELECT \
+        userid AS userId, \
+        positionid, \
+        dt, \
+        bgpv, \
+        clickpv, \
+        bid_amount, \
+        winpv \
+    FROM lofter.dwd_ad_actions_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+        AND positionid IN ('279600', '147004') \
+        AND userid IS NOT NULL \
+), \
+ad_button_source AS ( \
+    SELECT CAST(userid AS BIGINT) AS userId, eventid \
+    FROM lofter.ods_mda_app_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND eventid IN ('g3-101', 'g3-102') \
+      AND userid IS NOT NULL AND userid > 0 \
+      AND params['unlockActionType'] = 'cloudMusicAd' \
+), \
+ad_button_metric AS ( \
+    SELECT userId, '${azkaban.flow.1.days.ago}' AS ad_date, \
+        SUM(CASE WHEN eventid = 'g3-101' THEN 1 ELSE 0 END) AS btn_expose_pv, \
+        MAX(CASE WHEN eventid = 'g3-101' THEN 1 ELSE 0 END) AS btn_expose_uv, \
+        SUM(CASE WHEN eventid = 'g3-102' THEN 1 ELSE 0 END) AS btn_click_pv, \
+        MAX(CASE WHEN eventid = 'g3-102' THEN 1 ELSE 0 END) AS btn_click_uv \
+    FROM ad_button_source \
+    GROUP BY userId \
+), \
+ad_incentive_source AS (  \
+    SELECT  \
+        userId,  \
+        dt AS ad_date,  \
+        SUM(bgpv) AS expose_pv,  \
+        MAX(IF(bgpv > 0, 1, 0)) AS expose_uv,  \
+        SUM(clickpv) AS unlock_pv,  \
+        MAX(IF(clickpv > 0, 1, 0)) AS unlock_uv,  \
+        SUM(CASE WHEN bgpv > 0 THEN bid_amount ELSE 0 END) / 1000.0 AS cost_amount  \
+    FROM ad_user_mapping  \
+    WHERE positionid = '279600'  \
+    GROUP BY userId, dt  \
+),  \
+ad_patch_source AS (  \
+    SELECT  \
+        userId,  \
+        dt AS ad_date,  \
+        SUM(bgpv) AS expose_pv,  \
+        MAX(IF(bgpv > 0, 1, 0)) AS expose_uv,  \
+        SUM(clickpv) AS click_pv,  \
+        MAX(IF(clickpv > 0, 1, 0)) AS click_uv,  \
+        SUM(CASE WHEN bgpv > 0 THEN bid_amount ELSE 0 END) / 1000.0 AS cost_amount  \
+    FROM ad_user_mapping  \
+    WHERE positionid = '147004'  \
+    GROUP BY userId, dt  \
+),  \
+ad_biz_unlock_source AS ( \
+    SELECT userid AS userId, dt AS ad_date, \
+        COUNT(1) AS biz_unlock_pv, MAX(1) AS biz_unlock_uv \
+    FROM lofter.dwd_ad_content_unlock_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' AND userid IS NOT NULL AND userid > 0 \
+      AND module = '激励广告' \
+    GROUP BY userid, dt \
+), \
+ad_sdk_unlock_source AS ( \
+    SELECT CAST(userid AS BIGINT) AS userId, dt AS ad_date, \
+        COUNT(1) AS sdk_unlock_pv, MAX(1) AS sdk_unlock_uv, \
+        SUM(NVL(bid_amount, 0.0)) AS total_cost_amount \
+    FROM lofter.dwd_ad_content_unlock_sdk_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' AND userid IS NOT NULL AND userid > 0 \
+      AND module = '激励广告' \
+    GROUP BY CAST(userid AS BIGINT), dt \
+), \
+atomic_metric AS (  \
+    SELECT  \
+        a.userId,  \
+        a.exp_date AS base_date,  \
+        a.bucket_id,  \
+		a.exp_id,  \
+        NVL(b.expose_pv, 0) AS ad_incentive_expose_pv,  \
+        NVL(b.expose_uv, 0) AS ad_incentive_expose_uv,  \
+        NVL(b.unlock_pv, 0) AS ad_incentive_unlock_pv,  \
+        NVL(b.unlock_uv, 0) AS ad_incentive_unlock_uv,  \
+        NVL(b.cost_amount, 0) AS ad_incentive_cost_amount,  \
+        NVL(c.expose_pv, 0) AS ad_patch_expose_pv,  \
+        NVL(c.expose_uv, 0) AS ad_patch_expose_uv,  \
+        NVL(c.click_pv, 0) AS ad_patch_click_pv,  \
+        NVL(c.click_uv, 0) AS ad_patch_click_uv,  \
+        NVL(c.cost_amount, 0) AS ad_patch_cost_amount,  \
+        NVL(d.btn_expose_pv, 0) AS ad_btn_expose_pv,  \
+        NVL(d.btn_expose_uv, 0) AS ad_btn_expose_uv,  \
+        NVL(d.btn_click_pv, 0) AS ad_btn_click_pv,  \
+        NVL(d.btn_click_uv, 0) AS ad_btn_click_uv,  \
+        NVL(e.biz_unlock_pv, 0) AS ad_biz_unlock_pv,  \
+        NVL(e.biz_unlock_uv, 0) AS ad_biz_unlock_uv,  \
+        NVL(f.sdk_unlock_pv, 0) AS ad_sdk_unlock_pv,  \
+        NVL(f.sdk_unlock_uv, 0) AS ad_sdk_unlock_uv,  \
+        NVL(f.total_cost_amount, 0) AS ad_total_cost_amount  \
+    FROM (SELECT userId, exp_date, bucket_id, exp_id FROM exp_users_month WHERE exp_date = '${azkaban.flow.1.days.ago}') a  \
+    LEFT JOIN ad_incentive_source b  \
+        ON a.userId = b.userId AND a.exp_date = b.ad_date  \
+    LEFT JOIN ad_patch_source c  \
+        ON a.userId = c.userId AND a.exp_date = c.ad_date  \
+    LEFT JOIN ad_button_metric d  \
+        ON a.userId = d.userId AND a.exp_date = d.ad_date  \
+    LEFT JOIN ad_biz_unlock_source e  \
+        ON a.userId = e.userId AND a.exp_date = e.ad_date  \
+    LEFT JOIN ad_sdk_unlock_source f  \
+        ON a.userId = f.userId AND a.exp_date = f.ad_date  \
+)  \
+INSERT OVERWRITE TABLE lofter.dws_ab_platform_ad_metric_di  \
+PARTITION (dt = '${azkaban.flow.1.days.ago}')  \
+SELECT  \
+    userId AS userid,  \
+    base_date,  \
+    bucket_id,  \
+    metric,  \
+    dimension,  \
+    dimension_value,  \
+    metric_value,  \
+	exp_id  \
+FROM atomic_metric  \
+LATERAL VIEW INLINE(  \
+    ARRAY(  \
+        STRUCT('ad_incentive_expose_pv', '全部', 'ALL', CAST(ad_incentive_expose_pv AS DOUBLE)),  \
+        STRUCT('ad_incentive_expose_uv', '全部', 'ALL', CAST(ad_incentive_expose_uv AS DOUBLE)),  \
+        STRUCT('ad_incentive_unlock_pv', '全部', 'ALL', CAST(ad_incentive_unlock_pv AS DOUBLE)),  \
+        STRUCT('ad_incentive_unlock_uv', '全部', 'ALL', CAST(ad_incentive_unlock_uv AS DOUBLE)),  \
+        STRUCT('ad_incentive_cost_amount', '全部', 'ALL', CAST(ad_incentive_cost_amount AS DOUBLE)),  \
+        STRUCT('ad_patch_expose_pv', '全部', 'ALL', CAST(ad_patch_expose_pv AS DOUBLE)),  \
+        STRUCT('ad_patch_expose_uv', '全部', 'ALL', CAST(ad_patch_expose_uv AS DOUBLE)),  \
+        STRUCT('ad_patch_click_pv', '全部', 'ALL', CAST(ad_patch_click_pv AS DOUBLE)),  \
+        STRUCT('ad_patch_click_uv', '全部', 'ALL', CAST(ad_patch_click_uv AS DOUBLE)),  \
+        STRUCT('ad_patch_cost_amount', '全部', 'ALL', CAST(ad_patch_cost_amount AS DOUBLE)),  \
+        STRUCT('ad_btn_expose_pv', '全部', 'ALL', CAST(ad_btn_expose_pv AS DOUBLE)),  \
+        STRUCT('ad_btn_expose_uv', '全部', 'ALL', CAST(ad_btn_expose_uv AS DOUBLE)),  \
+        STRUCT('ad_btn_click_pv', '全部', 'ALL', CAST(ad_btn_click_pv AS DOUBLE)),  \
+        STRUCT('ad_btn_click_uv', '全部', 'ALL', CAST(ad_btn_click_uv AS DOUBLE)),  \
+        STRUCT('ad_biz_unlock_pv', '全部', 'ALL', CAST(ad_biz_unlock_pv AS DOUBLE)),  \
+        STRUCT('ad_biz_unlock_uv', '全部', 'ALL', CAST(ad_biz_unlock_uv AS DOUBLE)),  \
+        STRUCT('ad_sdk_unlock_pv', '全部', 'ALL', CAST(ad_sdk_unlock_pv AS DOUBLE)),  \
+        STRUCT('ad_sdk_unlock_uv', '全部', 'ALL', CAST(ad_sdk_unlock_uv AS DOUBLE)),  \
+        STRUCT('ad_total_cost_amount', '全部', 'ALL', CAST(ad_total_cost_amount AS DOUBLE))  \
+    )  \
+) t AS metric, dimension, dimension_value, metric_value
+dependencies=dwd_ab_platform_exp_user_di

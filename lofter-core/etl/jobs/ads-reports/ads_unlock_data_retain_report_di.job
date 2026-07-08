@@ -1,0 +1,41 @@
+type = sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_unlock_data_retain_report_di partition(dt ='${azkaban.flow.1.days.ago}')   \
+select  \
+a.dt date1, \
+case when c.userid is not null then '广告解锁' \
+     else '大盘' end flag,   \
+count(distinct a.userid) active_uv, \
+count(distinct case when  a.dt=date_sub(b.dt,1) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =1 then b.userid end)  active_uv_1d, \
+count(distinct case when   a.dt=date_sub(b.dt,2) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =2 then b.userid end)  active_uv_3d, \
+count(distinct case when   a.dt=date_sub(b.dt,6) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =6 then b.userid end)  active_uv_7d, \
+count(distinct case when   a.dt=date_sub(b.dt,14) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =14 then b.userid end)  active_uv_15d, \
+count(distinct case when  a.dt=date_sub(b.dt,29) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =29 then b.userid end)  active_uv_30d \
+ \
+from  \
+( \
+select userid, dt \
+from lofter.dwd_user_active_di b  \
+where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+group by 1,2 \
+) a  \
+left join  \
+( \
+select userid, dt \
+from lofter.dwd_user_active_di b  \
+where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+group by 1,2 \
+) b on a.userid=b.userid and a.dt<b.dt  \
+left join  \
+( \
+select   \
+from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd')dt ,  \
+userid , \
+count(distinct postId, userId) as unlock_count  \
+from lofter_db_dump.ods_db_trade_ad_reward_complete_nd  \
+where (from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}'  and '${azkaban.flow.1.days.ago}'  )  \
+group by 1,2 \
+) c on a.userid=c.userid and a.dt=c.dt \
+ \
+where datediff('${azkaban.flow.1.days.ago}' ,a.dt ) in (1,2,6,14,29) \
+group by 1 ,2 \

@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_lighthouse_support_blog_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId as blogId \
+from ( \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_nd \
+    where status = 1 \
+  union all \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_v2_nd \
+    where status = 1 \
+) a \
+join ( \
+    select userId, level, \
+        case when level='D*' then 30 \
+            when level='D' then 60 \
+            when level='C' then 90 end as support_period \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and level in ('D*','D','C') \
+) b on a.userId = b.userId \
+where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(a.joinTime/1000 as bigint), 'yyyy-MM-dd')) < b.support_period \
+group by 1

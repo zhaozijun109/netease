@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_tag_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select tag, \
+       sum(browse) browse_count, \
+       sum(publish) publish_count, \
+       sum(response) response_count, \
+       sum(hot) as hot, \
+       sum(share) as share_count, \
+       sum(discuss) as discuss_count \
+from ( \
+    select tag, 1 as browse, 0 as publish, 0 as response, 0 as hot, 0 as share, 0 as discuss \
+    from lofter.dwd_post_browse_di \
+        lateral view explode(post_tags) as tag \
+    where dt='${azkaban.flow.1.days.ago}' and is_real > 0 \
+  union all \
+    select tag, 0 as browse, 1 as publish, 0 as response, 0 as hot, 0 as share, 0 as discuss \
+    from lofter.dwd_post_publish_di \
+        lateral view explode(post_tags) as tag \
+    where dt='${azkaban.flow.1.days.ago}' \
+  union all \
+    select tag, 0 as browse, 0 as publish, 1 as response, 0 as hot, 0 as share, 0 as discuss \
+    from lofter.dwd_post_response_di \
+        lateral view explode(post_tags) as tag \
+    where dt='${azkaban.flow.1.days.ago}' \
+  union all \
+    select tag, 0 as browse, 0 as publish, 0 as response, 1 as hot, 0 as share, 0 as discuss \
+    from lofter.dwd_post_hot_di \
+        lateral view explode(post_tags) as tag \
+    where dt='${azkaban.flow.1.days.ago}' \
+  union all \
+    select tag, 0 as browse, 0 as publish, 0 as response, 0 as hot, 1 as share, 0 as discuss \
+    from lofter.dwd_post_share_di \
+        lateral view explode(post_tags) as tag \
+    where dt='${azkaban.flow.1.days.ago}' \
+  union all \
+    select tag, 0 as browse, 0 as publish, 0 as response, 0 as hot, 0 as share, 1 as discuss \
+    from ( \
+        select id, tag \
+        from lofter_db_dump.ods_db_ask_question_nd \
+            lateral view explode(split(tags, ',')) as tag \
+        where type = 3 and status > 0 \
+    ) a \
+    join ( \
+        select id, questionId \
+        from lofter_db_dump.ods_db_ask_answer_post_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) b on a.id = b.questionId \
+) t \
+where length(tag) > 0 \
+group by tag

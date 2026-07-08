@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_black_low_quality_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select  a.userId \
+from ( \
+    select userId, source, type, \
+           rank() over (partition by userId order by source asc) as rk \
+    from ( \
+        select a.blogid as userId,  \
+               case when datediff(date_sub('${azkaban.flow.1.days.ago}',1),lastHitDate) > 30 or b.userId is not null  then '白' else '黑' end as type, \
+               3 as source  \
+        from ( \
+            select blogid, max(dt) as lastHitDate \
+            from lofter.dwd_user_black_hit_rule_di \
+            where dt between  date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+            group by blogid \
+        ) a \
+        left join ( \
+            select userId from lofter.dwd_user_white_list_dd \
+            where dt='${azkaban.flow.1.days.ago}' and type not in ('首发30日内','流失60日以上') \
+            group by userId \
+        ) b on a.blogid=b.userId \
+        group by 1,2,3  \
+      union \
+        select a.userId ,'黑' as type,1 as source   \
+        from ( \
+            select userId from lofter_db_dump.ods_db_media_account_import_nd where platformType in (0,2) group by userId \
+          union \
+            select blogid as userId from lofter_db_dump.ods_db_robot_blog_info_nd group by blogid \
+        ) a \
+        group by 1,2,3 \
+      union \
+        select blogid as  userId,'黑' as type,2 as source \
+        from lofter_db_dump.ods_db_recommend_black_nd where type = 0 \
+        group by 1,2,3 \
+    ) t \
+) a \
+left join ( \
+    select  cast(trim(blogId) as bigint) as blogId \
+    from lofter_db_dump.ods_db_admin_pub_data_nd \
+         lateral view explode(split(content, ',')) as blogId \
+    where name in ('blogvip_ids', 'book_store_blogIds') and cast(trim(blogId) as bigint) > 0 \
+    group by 1 \
+) b on a.userId = b.blogId \
+left join ( \
+    select userid \
+    from lofter.zq_lofter_recommend_white_user \
+) c on a.userId = c.userid \
+where a.rk=1 and a.type='黑' and b.blogId is null and c.userid is null \
+group by a.userId \
+distribute by 1
+dependencies=dwd_user_black_hit_rule_di
+

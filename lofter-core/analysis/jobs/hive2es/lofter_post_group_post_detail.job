@@ -1,0 +1,12 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+    select postId,blog_level,content_type,category,ip,growth_level,growth_level_max,explosive_level_max,new_users,new_users_30d, \
+           new_users_7d,new_users_1d,new_users_ratio,share,hot,pay_users,pay_users_gift,pay_users_fans,pay_users_vip,pay_amount, \
+           pay_amount_gift,pay_amount_fans,pay_amount_vip,pay_users_cvr,pay_users_cvr_gift,pay_users_cvr_fans,pay_users_cvr_vip, \
+           paid_post_expose,paid_post_click,real_browse,real_browse_uv,avg_revenue_1k_expose,hot_7d,hot_30d,like,recommend, \
+           commment,support_traffic_ratio,hot_uptick_max_7d,hot_uptick_max_30d,hd_ratio,is_premium_post,is_premium_creator,expose,long_comment,dt \
+    from lofter_dm.ads_post_group_post_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_post_group_post_detail --atom

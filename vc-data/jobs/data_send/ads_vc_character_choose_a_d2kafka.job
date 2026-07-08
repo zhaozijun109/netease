@@ -1,0 +1,10 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select character_id                                       as itemId, \
+                                case \
+                                    when character_type = 'ogc' then 'APP_PVE' \
+                                    when character_type = 'ugc' then 'UGC_PVE' end as itemType \
+                         from vc.ads_vc_character_choose_a_d \
+                         where dt = '${azkaban.flow.1.days.ago}' and index_feed_status = 1 and status = 1"
+
+params= --topic rec_bdms_app_pve_pool --servers lofter-kafka-recommend1.gy.ntes:9092,lofter-kafka-recommend2.gy.ntes:9092,lofter-kafka-recommend3.gy.ntes:9092

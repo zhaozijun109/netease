@@ -1,0 +1,236 @@
+type = sparksql
+hive.query.01 = insert overwrite table vc_dm.ads_vc_device_retain_data_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    a.base_date, \
+    a.deviceos, \
+    a.period, \
+    a.active_device, \
+    a.active_device_1d, \
+    a.active_device_2d, \
+    a.active_device_7d, \
+    a.active_device_15d, \
+    a.active_device_30d, \
+    b.new_device, \
+    b.new_device_1d, \
+    b.new_device_2d, \
+    b.new_device_7d, \
+    b.new_device_15d, \
+    b.new_device_30d, \
+    c.return_device, \
+    c.return_device_1d, \
+    c.return_device_2d, \
+    c.return_device_7d, \
+    c.return_device_15d, \
+    c.return_device_30d \
+from \
+    ( \
+        select \
+            t1.dt as base_date, \
+            COALESCE(t1.deviceos,'Total') as deviceos, \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+            count(distinct t1.deviceudid) as active_device, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 0) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t2.deviceudid \
+                end \
+            ) as active_device_1d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 1) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t2.deviceudid \
+                end \
+            ) as active_device_2d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 6) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t2.deviceudid \
+                end \
+            ) as active_device_7d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 14) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t2.deviceudid \
+                end \
+            ) as active_device_15d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 29) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t2.deviceudid \
+                end \
+            ) as active_device_30d \
+        from \
+            ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_active_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            left join ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_active_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t2 on t1.deviceudid = t2.deviceudid \
+            and t1.deviceos = t2.deviceos \
+            AND t2.dt BETWEEN date_add(t1.dt, 0) \
+            AND date_add(t1.dt, 30) \
+        WHERE \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 6, 14, 29) \
+        group by \
+            t1.dt, \
+            t1.deviceos \
+		grouping sets((t1.dt),(t1.dt,t1.deviceos)) \
+    ) a \
+    left join ( \
+        select \
+            t1.dt as base_date, \
+            COALESCE(t1.deviceos,'Total') as deviceos, \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+            count(distinct t1.deviceudid) as new_device, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 0) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t2.deviceudid \
+                end \
+            ) as new_device_1d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 1) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t2.deviceudid \
+                end \
+            ) as new_device_2d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 6) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t2.deviceudid \
+                end \
+            ) as new_device_7d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 14) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t2.deviceudid \
+                end \
+            ) as new_device_15d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 29) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t2.deviceudid \
+                end \
+            ) as new_device_30d \
+        from \
+            ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_new_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            left join ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_active_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t2 on t1.deviceudid = t2.deviceudid \
+            and t1.deviceos = t2.deviceos \
+            AND t2.dt BETWEEN date_add(t1.dt, 0) \
+            AND date_add(t1.dt, 30) \
+        WHERE \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 6, 14, 29) \
+        group by \
+            t1.dt, \
+            t1.deviceos \
+		grouping sets((t1.dt),(t1.dt,t1.deviceos)) \
+    ) b on a.base_date = b.base_date \
+    and a.deviceos = b.deviceos \
+    and a.period = b.period \
+    left join ( \
+        select \
+            t1.dt as base_date, \
+            COALESCE(t1.deviceos,'Total') as deviceos, \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+            count(distinct t1.deviceudid) as return_device, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 0) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t2.deviceudid \
+                end \
+            ) as return_device_1d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 1) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t2.deviceudid \
+                end \
+            ) as return_device_2d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 6) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t2.deviceudid \
+                end \
+            ) as return_device_7d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 14) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t2.deviceudid \
+                end \
+            ) as return_device_15d, \
+            count( \
+                distinct case \
+                    when t2.dt = date_add(t1.dt, 29) \
+                    and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t2.deviceudid \
+                end \
+            ) as return_device_30d \
+        from \
+            ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_return_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            left join ( \
+                select \
+                    dt, \
+                    deviceos, \
+                    deviceudid \
+                from \
+                    vc.dwd_device_active_di \
+                where \
+                    dt BETWEEN '${azkaban.flow.30.days.ago}' \
+                    AND '${azkaban.flow.1.days.ago}' \
+            ) t2 on t1.deviceudid = t2.deviceudid \
+            and t1.deviceos = t2.deviceos \
+            AND t2.dt BETWEEN date_add(t1.dt, 0) \
+            AND date_add(t1.dt, 30) \
+        WHERE \
+            datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 6, 14, 29) \
+        group by \
+            t1.dt, \
+            t1.deviceos \
+		grouping sets((t1.dt),(t1.dt,t1.deviceos)) \
+    ) c on a.base_date = c.base_date \
+    and a.deviceos = c.deviceos \
+    and a.period = c.period \

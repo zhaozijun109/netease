@@ -1,0 +1,25 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select a.*, b.blogName as blogName, b.blogNickName as blogNickName, b.bigAvaImg as bigAvaImg, c.postCount as postCount \
+from ( \
+    select blogId as userId, 1 as rankType, support_score as rankData, rank as rankNo, cast(replace(dt,'-','') as int) as day \
+    from lofter_dm.ads_creator_gift_support_score_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select blogId as userId, 2 as rankType, score as rankData, rank as rankNo, cast(replace(dt,'-','') as int) as day \
+    from lofter_dm.ads_creator_gift_positive_feedback_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join lofter_db_dump.ods_db_blog_info_nd b on a.userId = b.blogId \
+join ( \
+    select blogId, count(1) as postCount \
+    from lofter.dim_post \
+    where publishDate <= '${azkaban.flow.1.days.ago}' and \
+          publishDate >= '${azkaban.flow.30.days.ago}' and \
+          valid = 0 and allowView = 0 and isPublished = true and \
+          contentType in ('图片', '文字', '视频') \
+    group by 1 \
+) c on a.userId = c.blogId \
+"
+params= --topic LOFTER.CREATOR_RANK --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

@@ -1,0 +1,110 @@
+type=sparksql
+hive.query.01=\
+with creators as ( \
+  select userId \
+  from ( \
+      select userId \
+      from lofter_db_dump.ods_db_trade_pay_grade_nd \
+      where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= date_sub('${azkaban.flow.1.days.ago}', 89) \
+    union all \
+      select x.userId as userId \
+      from ( \
+        select post_id as postId, blog_id as userId, result as tag \
+        from rec.content_reg_payed_title_classify_output2 \
+        where day <= '${azkaban.flow.1.days.ago}' and classify = 1 \
+      ) x \
+      join ( \
+        select postId, sum(money) money \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and postId > 0 and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+      ) y on x.postId = y.postId \
+      where case when x.tag in ('文学型', '普通型', '综合普通型') then y.money >= 100 \
+                when x.tag in ('普通场景型', '套路场景型') then y.money between 200 and 1000 end \
+  ) t \
+  group by 1 \
+) \
+insert overwrite table lofter_dm.ads_gift_commentator_post_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogId \
+from ( \
+    select a.id as postId, a.blogId as blogId \
+    from lofter.dim_post a \
+    join creators a0 on a.blogId = a0.userId \
+    join ( \
+      select postId from lofter.dim_gift_post_return_dd where dt='${azkaban.flow.1.days.ago}' and text_length >= 1000 \
+    ) a1 on a.id = a1.postId \
+    join ( \
+      select postId from lofter.dwd_post_length_dd where dt='${azkaban.flow.1.days.ago}' and words_count >= 2500 \
+    ) a2 on a.id = a2.postId \
+    join ( \
+        select postId \
+        from lofter.dws_post_interaction_dd \
+        where dt='${azkaban.flow.1.days.ago}' and hot between 30 and 1000 \
+    ) b on a.id = b.postId \
+    join ( \
+        select postId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            return_gift_plantype in ('彩蛋', '隐藏结局', '甜剧场') \
+        group by 1 \
+    ) c on a.id = c.postId \
+    left join ( \
+        select postId, count(distinct publisherUserid) valid_comment_uv \
+        from ( \
+            select  *, \
+                    if(length(regexp_replace(content,'\\\\[.*?\\\\]','')) > 20,1,0) AS is_valid, \
+                    ROW_NUMBER() over(PARTITION BY publisherUserid,postId,id ORDER BY _bin_op_time DESC, _bin_op_seqno DESC) AS rk \
+            from lofter.ods_binlog_post_response_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        ) t \
+        where `_bin_op` in (0,2) and rk = 1 and is_valid = 1 \
+        group by 1 \
+        having valid_comment_uv > 10 \
+    ) d on a.id = d.postId \
+    left join ( \
+        select postId, quality_comment_std from lofter.dws_post_misc_dd where dt = '${azkaban.flow.1.days.ago}' and quality_comment_std > 3 \
+    ) e on a.id = e.postId \
+    left join ( \
+      select postId \
+      from lofter.dim_gift_post_return_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and \
+            (review_status = -2  or \
+              array_contains(mark_tags, '截断') or \
+              array_contains(mark_tags, '低性价比')) \
+      group by 1 \
+    ) f on a.id = f.postId \
+    left join ( \
+        select post_id as postId \
+        from rec.content_reg_payed_title_classify_output2 \
+        where day <= '${azkaban.flow.1.days.ago}' and classify = 1 and \
+          result in ('擦边型', '同质化套路场景型') \
+    ) g on a.id = g.postId \
+    left join ( \
+        select x.postId \
+        from ( \
+            select post_id as postId, result as tag \
+            from rec.content_reg_payed_title_classify_output2 \
+            where day <= '${azkaban.flow.1.days.ago}' and classify = 1 and \
+                result in ('普通型', '文学型', '综合普通型', '普通场景型', '套路场景型') \
+            group by 1, 2 \
+        ) x \
+        left join ( \
+            select postId \
+            from lofter.dws_post_interaction_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                  (nvl(like_cnt,0) * 5 + nvl(recommend_cnt,0) * 15 +nvl(comment_cnt,0) *15 + nvl(reproduce_cnt,0) *25 + nvl(collect_cnt,0)*25 + nvl(share_cnt_30d,0) * 25) >= 100 \
+        ) y on x.postId = y.postId \
+        where x.tag in ('普通型', '文学型', '综合普通型') or y.postId is not null \
+    ) h on a.id = h.postId \
+    where a.contentType = '文字' and \
+          a.valid = 0 and a.allowView = 0 and a.isPublished = true and \
+          datediff('${azkaban.flow.1.days.ago}', a.publishDate) <= 20 and \
+          nvl(d.postId, nvl(e.postId, f.postId)) is null \
+    group by 1, 2 \
+  union all \
+    select a.postId as postId, b.blogId as blogId \
+    from lofter.ods_log_commentator_operation_post_pool_nd a \
+    join lofter.dim_post b on a.postId = b.id \
+) t \
+group by 1, 2 \

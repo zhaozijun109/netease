@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(blogId, '-', userId) as id, userId, blogid as targetUserId, cast(fans_attraction as bigint) as recent30FansAttraction, present_gift as recent30PresentGift, cast(gift_score as bigint) as recent30PresentGiftAttraction, cast(share_score as bigint) as shareAttraction, cast(comment_score as bigint) as longCommentAttraction, cast(like_score as bigint) as likeAttraction from lofter_dm.ads_creator_vip_circle_privilege_di where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_fans_private_condition --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 4
+dependencies=

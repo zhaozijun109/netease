@@ -1,0 +1,161 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=100
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter.dws_post_traffic_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', expose_pv, 0)) as expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, expose_pv, 0)) as expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, expose_pv, 0)) as expose_pv_15d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, expose_pv, 0)) as expose_pv_30d, \
+       bitmap_count(bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', expose_device_bitmap, null))) as expose_uv_1d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, expose_device_bitmap, null))) as expose_uv_7d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, expose_device_bitmap, null))) as expose_uv_15d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, expose_device_bitmap, null))) as expose_uv_30d, \
+       bitmap_count(bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', real_browse_device_bitmap, null))) as browse_uv_1d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, real_browse_device_bitmap, null))) as browse_uv_7d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, real_browse_device_bitmap, null))) as browse_uv_15d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, real_browse_device_bitmap, null))) as browse_uv_30d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', real_browse_pv, 0)) as browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, real_browse_pv, 0)) as browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, real_browse_pv, 0)) as browse_pv_15d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, real_browse_pv, 0)) as browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, discovery_click_pv, 0)) as discovery_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, discovery_click_pv, 0)) as discovery_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, discovery_click_pv, 0)) as discovery_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, related_article_click_pv, 0)) as related_article_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, related_article_click_pv, 0)) as related_article_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, related_article_click_pv, 0)) as related_article_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_discovery_click_pv, 0)) as tag_discovery_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_discovery_click_pv, 0)) as tag_discovery_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_discovery_click_pv, 0)) as tag_discovery_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_new_click_pv, 0)) as tag_new_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_new_click_pv, 0)) as tag_new_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_new_click_pv, 0)) as tag_new_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_hot_click_pv, 0)) as tag_hot_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_hot_click_pv, 0)) as tag_hot_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_hot_click_pv, 0)) as tag_hot_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, collection_click_pv, 0)) as collection_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, collection_click_pv, 0)) as collection_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, collection_click_pv, 0)) as collection_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, attention_click_pv, 0)) as attention_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, attention_click_pv, 0)) as attention_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, attention_click_pv, 0)) as attention_click_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, click_pv, 0)) as click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, click_pv, 0)) as click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, click_pv, 0)) as click_pv_90d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, expose_device_bitmap, null))) as expose_uv_90d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, real_browse_device_bitmap, null))) as browse_uv_90d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, click_device_bitmap, null))) as click_uv_7d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, click_device_bitmap, null))) as click_uv_30d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, click_device_bitmap, null))) as click_uv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', real_browse_duration, 0)) as real_browse_duration_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, real_browse_duration, 0)) as real_browse_duration_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, real_browse_duration, 0)) as real_browse_duration_15d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, real_browse_duration, 0)) as real_browse_duration_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, real_browse_duration, 0)) as real_browse_duration_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', dislike_pv, 0)) as dislike_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, dislike_pv, 0)) as dislike_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, dislike_pv, 0)) as dislike_pv_15d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, dislike_pv, 0)) as dislike_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, dislike_pv, 0)) as dislike_pv_90d, \
+       bitmap_count(bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', dislike_uv_bitmap, null))) as dislike_uv_1d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, dislike_uv_bitmap, null))) as dislike_uv_7d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, dislike_uv_bitmap, null))) as dislike_uv_15d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, dislike_uv_bitmap, null))) as dislike_uv_30d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, dislike_uv_bitmap, null))) as dislike_uv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', click_pv, 0)) as click_pv_1d, \
+       bitmap_count(bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', click_device_bitmap, null))) as click_uv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, expose_pv, 0)) as expose_pv_90d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, real_browse_pv, 0)) as browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', discovery_click_pv, 0)) as discovery_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', related_article_click_pv, 0)) as related_article_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_discovery_click_pv, 0)) as tag_discovery_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_new_click_pv, 0)) as tag_new_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_hot_click_pv, 0)) as tag_hot_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', collection_click_pv, 0)) as collection_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', attention_click_pv, 0)) as attention_click_pv_1d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', discovery_expose_pv, 0)) as discovery_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, discovery_expose_pv, 0)) as discovery_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, discovery_expose_pv, 0)) as discovery_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, discovery_expose_pv, 0)) as discovery_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', related_article_expose_pv, 0)) as related_article_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, related_article_expose_pv, 0)) as related_article_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, related_article_expose_pv, 0)) as related_article_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, related_article_expose_pv, 0)) as related_article_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_discovery_expose_pv, 0)) as tag_discovery_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_discovery_expose_pv, 0)) as tag_discovery_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_discovery_expose_pv, 0)) as tag_discovery_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_discovery_expose_pv, 0)) as tag_discovery_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_new_expose_pv, 0)) as tag_new_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_new_expose_pv, 0)) as tag_new_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_new_expose_pv, 0)) as tag_new_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_new_expose_pv, 0)) as tag_new_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_hot_expose_pv, 0)) as tag_hot_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_hot_expose_pv, 0)) as tag_hot_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_hot_expose_pv, 0)) as tag_hot_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_hot_expose_pv, 0)) as tag_hot_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', collection_expose_pv, 0)) as collection_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, collection_expose_pv, 0)) as collection_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, collection_expose_pv, 0)) as collection_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, collection_expose_pv, 0)) as collection_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', attention_expose_pv, 0)) as attention_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, attention_expose_pv, 0)) as attention_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, attention_expose_pv, 0)) as attention_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, attention_expose_pv, 0)) as attention_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', discovery_real_browse_pv, 0)) as discovery_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, discovery_real_browse_pv, 0)) as discovery_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, discovery_real_browse_pv, 0)) as discovery_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, discovery_real_browse_pv, 0)) as discovery_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', related_article_real_browse_pv, 0)) as related_article_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, related_article_real_browse_pv, 0)) as related_article_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, related_article_real_browse_pv, 0)) as related_article_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, related_article_real_browse_pv, 0)) as related_article_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_discovery_real_browse_pv, 0)) as tag_discovery_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_discovery_real_browse_pv, 0)) as tag_discovery_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_discovery_real_browse_pv, 0)) as tag_discovery_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_discovery_real_browse_pv, 0)) as tag_discovery_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_new_real_browse_pv, 0)) as tag_new_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_new_real_browse_pv, 0)) as tag_new_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_new_real_browse_pv, 0)) as tag_new_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_new_real_browse_pv, 0)) as tag_new_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', tag_hot_real_browse_pv, 0)) as tag_hot_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, tag_hot_real_browse_pv, 0)) as tag_hot_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, tag_hot_real_browse_pv, 0)) as tag_hot_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, tag_hot_real_browse_pv, 0)) as tag_hot_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', collection_real_browse_pv, 0)) as collection_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, collection_real_browse_pv, 0)) as collection_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, collection_real_browse_pv, 0)) as collection_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, collection_real_browse_pv, 0)) as collection_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', attention_real_browse_pv, 0)) as attention_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, attention_real_browse_pv, 0)) as attention_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, attention_real_browse_pv, 0)) as attention_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, attention_real_browse_pv, 0)) as attention_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', search_click_pv, 0)) as search_click_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, search_click_pv, 0)) as search_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, search_click_pv, 0)) as search_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, search_click_pv, 0)) as search_click_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', videolist_click_pv, 0)) as videolist_click_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, videolist_click_pv, 0)) as videolist_click_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, videolist_click_pv, 0)) as videolist_click_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, videolist_click_pv, 0)) as videolist_click_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', search_expose_pv, 0)) as search_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, search_expose_pv, 0)) as search_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, search_expose_pv, 0)) as search_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, search_expose_pv, 0)) as search_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', videolist_expose_pv, 0)) as videolist_expose_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, videolist_expose_pv, 0)) as videolist_expose_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, videolist_expose_pv, 0)) as videolist_expose_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, videolist_expose_pv, 0)) as videolist_expose_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', search_real_browse_pv, 0)) as search_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, search_real_browse_pv, 0)) as search_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, search_real_browse_pv, 0)) as search_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, search_real_browse_pv, 0)) as search_browse_pv_90d, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', videolist_real_browse_pv, 0)) as videolist_browse_pv_1d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, videolist_real_browse_pv, 0)) as videolist_browse_pv_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, videolist_real_browse_pv, 0)) as videolist_browse_pv_30d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, videolist_real_browse_pv, 0)) as videolist_browse_pv_90d \
+from lofter.dws_post_traffic_di \
+where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',89) \
+group by postId
+dependencies=dws_post_traffic_di

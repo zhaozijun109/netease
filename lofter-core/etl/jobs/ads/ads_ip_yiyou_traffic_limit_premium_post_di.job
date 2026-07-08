@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01= \
+with gaozhiliang_post as ( \
+    select a.postid,a.blogid, \
+        case when b.postid is null then 0 else 1 end as youzhi_shentai_flg, \
+        words_count,photo_count \
+    from ( \
+        select postid,blogid \
+        from lofter.dim_gift_post_return \
+        where array_contains (mark_tags,'非截断')=1 \
+        and ispay_returngift in (0,1) \
+        and contenttype='文字' \
+        group by postid,blogid \
+    ) a \
+    left join ( \
+        select postid \
+        from lofter.dws_post_premium_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) b on a.postid=b.postid \
+    left join ( \
+        select  postid,words_count,photo_count \
+        from lofter.dwd_post_length_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) c on a.postid=c.postid \
+) \
+insert overwrite table lofter_dm.ads_ip_yiyou_traffic_limit_premium_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postid \
+from ( \
+    select postid,words_count,youzhi_shentai_flg \
+    from gaozhiliang_post \
+    group by postid,words_count,youzhi_shentai_flg \
+) a \
+left join ( \
+    select postid \
+    from ( \
+        select postid,(favoritecount + reblogcount + sharecount + subscribecount) as hot \
+        from lofter_db_dump.ods_db_post_count_nd \
+    ) a \
+    where  hot>=100 \
+    group by postid \
+) b on a.postid=b.postid \
+where words_count>=3000 or youzhi_shentai_flg=1 or b.postid is not null \
+group by a.postid \

@@ -1,0 +1,335 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_summer_control_post_blog_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.id, \
+  a.blogid, \
+  case when type='2等级' then 'p1' else 'p1-2' end as type \
+from \
+  ( \
+    select \
+      a.id, \
+      a.blogid, \
+      '2等级' as type, \
+      2 level \
+    from \
+      ( \
+        select \
+          id, \
+          blogid \
+        from \
+          lofter.risk_lofter_history_post_renshen_type2_8 \
+        union \
+        select \
+          id, \
+          blogid \
+        from \
+          lofter.risk_lofter_history_post_renshen_type2_9 \
+        union \
+        select \
+          id, \
+          blogid \
+        from \
+          lofter.risk_lofter_history_post_renshen_type2_10 \
+      ) a \
+      join ( \
+        select \
+          id, \
+          blogid \
+        from \
+          lofter.dim_post \
+        where \
+          valid = 0 \
+          and allowview = 0 \
+        group by \
+          id, \
+          blogid \
+      ) b on a.id = b.id \
+    union \
+    select \
+      a.id, \
+      a.blogid, \
+      '3到14等级' as type, \
+      level \
+    from \
+      ( \
+        select \
+          id, \
+          blogid, \
+          level \
+        from \
+          ( \
+            SELECT \
+              postid, \
+              max(level) as level \
+            FROM \
+              lofter_db_dump.ods_db_risk_antispam_post_tmp_nd \
+            WHERE \
+              taskid in ( \
+                131579, \
+                135502, \
+                136500, \
+                131580, \
+                134579, \
+                131581, \
+                131582, \
+                135503, \
+                131583, \
+                135504, \
+                136501, \
+                134580 \
+              ) \
+              and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '2023-11-01' \
+              and level in (1, 2) \
+              and machine = 1 \
+            group by \
+              postid \
+          ) a \
+          join ( \
+            select \
+              id, \
+              blogid \
+            from \
+              lofter.dim_post \
+            where \
+              valid = 0 \
+              and allowview = 0 \
+            group by \
+              id, \
+              blogid \
+          ) b on a.postid = b.id \
+        group by \
+          id, \
+          blogid, \
+          level \
+      ) a \
+  ) a \
+where \
+  level = 2 \
+group by \
+  a.id, \
+  a.blogid, \
+  case when type='2等级' then 'p1' else 'p1-2' end \
+union \
+select \
+  b.id , \
+  b.blogid, \
+  'p2' as type \
+from \
+  ( \
+    select \
+      blogid \
+    from \
+      ( \
+        select \
+          a.blogid, \
+          count(distinct a.uuid) as uuid_num, \
+          count(distinct a.postid) as post_num, \
+          count( \
+            distinct case \
+              when b.status = 2 then a.uuid \
+              else null \
+            end \
+          ) as unpass_uuid_num, \
+          count( \
+            distinct case \
+              when b.status = 2 then a.postid \
+              else null \
+            end \
+          ) as unpass_postid_num \
+        from \
+          ( \
+            select \
+              uuid, \
+              bussinessType as posttype, \
+              blogid, \
+              bussinessid as postid, \
+              priority as level, \
+              createtime, \
+              version \
+            from \
+              lofter.ods_log_anti_spam_copy_di \
+            where \
+              bizInfo = 'genPostLog' \
+              and dt between date_sub('${azkaban.flow.1.days.ago}', 89) \
+              and '${azkaban.flow.1.days.ago}' \
+              and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 89) \
+              and '${azkaban.flow.1.days.ago}' \
+          ) a \
+          join ( \
+            select \
+              b.postid, \
+              b.blogid, \
+              b.version, \
+              b.status, \
+              b.uuid, \
+              b.createtime, \
+              b.operator \
+            from \
+              ( \
+                select \
+                  postid, \
+                  blogid, \
+                  version, \
+                  status, \
+                  get_json_object(get_json_object(content, "$.callback"), "$.uuId") as uuid, \
+                  createtime, \
+                  operator, \
+                  rank() over( \
+                    partition by get_json_object(get_json_object(content, "$.callback"), "$.uuId") \
+                    order by \
+                      createtime desc \
+                  ) as rk \
+                from \
+                  lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+                where \
+                  type = 0 \
+                  and version > 0 \
+                  and status in (0, 2, 3) \
+                  and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 89) \
+                  and '${azkaban.flow.1.days.ago}' \
+              ) b \
+            where \
+              b.rk = 1 \
+          ) b on a.uuid = b.uuid \
+          and a.blogid = b.blogid \
+          and a.postid = b.postid \
+          and a.version = b.version \
+        group by \
+          a.blogid \
+      ) a \
+    where \
+      ( \
+        post_num >= 11 \
+        and unpass_uuid_num / uuid_num >= 0.5 \
+        and unpass_postid_num > 2 \
+      ) \
+    group by \
+      blogid \
+  ) a \
+  join ( \
+    select \
+      id, \
+      blogid, \
+      publishdate \
+    from \
+      lofter.dim_post \
+    where \
+      valid = 0 \
+      and allowview = 0 \
+  ) b on a.blogid = b.blogid \
+  left join ( \
+    select \
+      a.* \
+    from \
+      ( \
+        Select \
+          postid, \
+          blogid, \
+          '优质付费' as type \
+        from \
+          lofter.dws_gift_post_premium_scoring_dd \
+        where \
+          type = '优质' \
+          and dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          postid, \
+          blogid \
+      ) a \
+      join ( \
+        select \
+          id \
+        from \
+          lofter.dim_post \
+        where \
+          recomstatus = 1 \
+        group by \
+          id \
+      ) b on a.postid = b.id \
+    union \
+    Select \
+      postid, \
+      userid as blogid, \
+      '优质生态' as type \
+    from \
+      lofter.dws_post_premium_di \
+    where \
+      dt >= '2024-01-01' \
+    group by \
+      postid, \
+      userid \
+  ) c on b.id = c.postid \
+  left join ( \
+    Select \
+      userid as blogid, \
+      '高等级创作者' as type \
+    from \
+      lofter.dws_par_creator_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and level in ('S', 'A') \
+    group by \
+      userid \
+    union \
+    select \
+      userid as blogid, \
+      '达人' as type \
+    from \
+      lofter.dws_par_user_base_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and privilegelevel < 2 \
+      and userid not in ( \
+        Select \
+          blogid \
+        from \
+          lofter.dim_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and blog_channel = 1 \
+        group by \
+          blogid \
+      ) \
+    group by \
+      userid \
+  ) d on a.blogid = d.blogid \
+where \
+  c.postid is null \
+  and d.blogid is null \
+group by \
+  b.id, \
+  b.blogid \
+union \
+select \
+  b.id, \
+  b.blogid, \
+  'p3' as type \
+from \
+  ( \
+    select \
+      blogid \
+    from \
+      lofter.dws_user_security_level_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and grade = 2 \
+    group by \
+      blogid \
+  ) a \
+  join ( \
+    select \
+      id, \
+      blogid, \
+      publishdate \
+    from \
+      lofter.dim_post \
+    where \
+      valid = 0 \
+      and allowview = 0 \
+    group by \
+      id, \
+      blogid, \
+      publishdate \
+  ) b on a.blogid = b.blogid \
+group by \
+  b.id, \
+  b.blogid \

@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_collection_scene_bm_di partition(dt='${azkaban.flow.1.days.ago}') \
+         select a.collectionId,nvl(a.scene,'') as scene,nvl(a.source1_scene,'') as source1_scene,nvl(a.source2_scene,'') as source2_scene, a.is_collection_new_user, \
+                expose_pv,realbrowse_pv,praise_pv,recommend_pv,reproduce_pv,subscribe_pv,comment_pv,share_pv,e2b_pv,   \
+                expose_uv_bitmap,realbrowse_uv_bitmap,praise_uv_bitmap,recommend_uv_bitmap,reproduce_uv_bitmap,subscribe_uv_bitmap,   \
+                comment_uv_bitmap,share_uv_bitmap,e2b_uv_bitmap,a.is_collection_return_user   \
+         from   \
+         (select collectionId,scene,source1_scene,source2_scene,is_collection_new_user,is_collection_return_user,   \
+                count(case when action_type='expose' then deviceudid end ) expose_pv,   \
+                count(case when action_type='browse' and is_real=1 then deviceudid end ) realbrowse_pv,   \
+                count(case when action_type='praise' then deviceudid end ) praise_pv,   \
+                count(case when action_type='recommend' then deviceudid end ) recommend_pv,   \
+                count(case when action_type='reproduce' then deviceudid end ) reproduce_pv,   \
+                count(case when action_type='subscribe' then deviceudid end ) subscribe_pv,   \
+                count(case when action_type='comment' then deviceudid end ) comment_pv,   \
+                count(case when action_type='share' then deviceudid end ) share_pv,   \
+                to_bitmap(case when action_type='expose' then userId end ) expose_uv_bitmap,   \
+                to_bitmap(case when action_type='browse' and is_real=1 then userId end ) realbrowse_uv_bitmap,   \
+                to_bitmap(case when action_type='praise' then userId end ) praise_uv_bitmap,   \
+                to_bitmap(case when action_type='recommend' then userId end ) recommend_uv_bitmap,   \
+                to_bitmap(case when action_type='reproduce' then userId end ) reproduce_uv_bitmap,   \
+                to_bitmap(case when action_type='subscribe' then userId end ) subscribe_uv_bitmap,   \
+                to_bitmap(case when action_type='comment' then userId end ) comment_uv_bitmap,   \
+                to_bitmap(case when action_type='share' then userId end ) share_uv_bitmap   \
+         from lofter.dwd_post_collection_di   \
+         where dt='${azkaban.flow.1.days.ago}'   \
+         group by collectionId,scene,source1_scene,source2_scene,is_collection_new_user,is_collection_return_user) a   \
+         left join (   \
+         select  t2.collectionId,t2.scene,t2.source1_scene,t2.source2_scene,t2.is_collection_new_user,t2.is_collection_return_user,   \
+                count(1) as e2b_pv,   \
+                to_bitmap(t2.userId) as e2b_uv_bitmap   \
+         from   \
+         (   \
+         select postid,scene,deviceudid,occurtime   \
+         from lofter.dwd_post_collection_di   \
+         where dt='${azkaban.flow.1.days.ago}' and action_type='expose'   \
+         ) t1   \
+         join   \
+         (   \
+         select collectionId,postid,scene,source1_scene,source2_scene,is_collection_new_user,is_collection_return_user,deviceudid,occurtime,userId   \
+         from lofter.dwd_post_collection_di   \
+         where dt='${azkaban.flow.1.days.ago}' and  action_type='browse' and is_real=1   \
+         ) t2   \
+         on t1.deviceudid=t2.deviceudid and t1.scene=t2.source1_scene and t1.postid=t2.postid and t2.occurtime-t1.occurtime between 0 and 30000   \
+         group by t2.collectionId,t2.scene,t2.source1_scene,t2.source2_scene,t2.is_collection_new_user,t2.is_collection_return_user   \
+         ) b   \
+         on a.collectionId=b.collectionId and a.scene=b.scene and a.source1_scene=b.source1_scene and a.source2_scene=b.source2_scene  \
+         and a.is_collection_new_user=b.is_collection_new_user  and a.is_collection_return_user=b.is_collection_return_user  \
+         distribute by collectionId % 5

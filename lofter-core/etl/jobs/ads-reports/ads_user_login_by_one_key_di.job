@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_login_by_one_key_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select eventid,deviceos,appversion,   \
+              	params['isLogin'] as is_login_suc,params['isGetnumber'] as is_getnumber_suc,    \
+              	case when devicenetwork='wifi' then 'wifi' else 'no_wifi' end as network_type,  \
+              	count( deviceudid) as pv,count(distinct deviceudid) as uv   \
+              from lofter.ods_mda_app_partition_di    \
+              where eventid in ('z7-7','z7-8') and dt='${azkaban.flow.1.days.ago}'  \
+              group by 1,2,3,4,5,6  \
+              distribute by 1

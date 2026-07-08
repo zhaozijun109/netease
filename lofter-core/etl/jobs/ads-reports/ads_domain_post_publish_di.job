@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_domain_post_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select domainName, count(distinct postId) as postNum, count(distinct blogId) as postUv, count(distinct if(iscitedPost = true, postId, null)) as postCitedNum \
+from ( \
+    select a.*, nvl(b.domainName, 'else') as domainName \
+    from ( \
+            select id as postId, blogid, domainId,isblogauthenticated, contentType, iscitedPost, movefrom \
+            from lofter.dim_post lateral view explode(domains) t as domainId \
+            where publishdate='${azkaban.flow.1.days.ago}' and ispublished=true and isforbidden=false \
+    ) a left join lofter.dim_domain b on a.domainId = b.id \
+) t \
+where moveFrom is null or moveFrom not like 'blogmove2018%' \
+group by domainName \
+distribute by 1

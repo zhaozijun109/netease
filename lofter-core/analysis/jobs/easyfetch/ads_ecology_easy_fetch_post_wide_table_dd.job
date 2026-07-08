@@ -1,0 +1,827 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=100
+conf.spark.executor.cores=4
+conf.spark.sql.shuffle.partitions=800
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+with postPlanType as ( \
+    select postId \
+    from ( \
+        select postId, grainId from lofter_db_dump.ods_db_grain_plan_post_nd where status = 0 \
+    ) a \
+    join ( \
+        select id from lofter_db_dump.ods_db_grain_info_nd where status = 0 and endTime >= unix_timestamp('${azkaban.flow.1.days.ago}', 'yyyy-MM-dd') * 1000 \
+    ) b \
+    on a.grainId = b.id \
+    group by postId \
+), \
+contentUnderstand as ( \
+    select itemId, \
+           type, \
+           level1_tag, \
+           level2_tag \
+    from lofter.dwd_rec_content_understand_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and type in ('图文类目V2', '视频类目', '非作品向文章类目') \
+), \
+postCollectionSource as ( \
+    select t1.postId, \
+           t1.collectionId, \
+           t2.collectionTags, \
+           t2.collectionBlogId, \
+           t2.cover_url as collectionCoverUrl, \
+           t2.collectionName, \
+           t2.collectionType, \
+           t2.creatorCount, \
+           t2.postCount, \
+           t2.postCollectionHot, \
+           t2.collectionViewCount, \
+           t2.collectionBlogLevel, \
+           t2.collection_post_type as collectionPostType, \
+           t2.subscribe_uv_acc as collection_subscribe_uv_acc, \
+           t2.subscribe_uv_1d as collection_subscribe_uv_1d, \
+           t2.subscribe_uv_7d as collection_subscribe_uv_7d, \
+           t2.subscribe_uv_30d as collection_subscribe_uv_30d, \
+           t2.update_post_1d as collection_update_post_1d, \
+           t2.update_post_7d as collection_update_post_7d, \
+           t2.update_post_30d as collection_update_post_30d, \
+           t2.is_recommend as collection_is_recommend, \
+           t2.hot_7d as collection_hot_7d, \
+           t2.hot_1k_post as collection_hot_1k_post, \
+           t2.hot_1w_post as collection_hot_1w_post, \
+           t2.is_stable_update as collection_is_stable_update, \
+           t2.browse_uv_7d as collection_browse_uv_7d, \
+           t2.underscore_comment_pv as collection_underscore_comment_pv, \
+           t2.sweet_pv as collection_sweet_pv, \
+           t2.bitter_pv as collection_bitter_pv, \
+           t2.subscribe_uv_3d as collection_subscribe_uv_3d, \
+           t2.detail_browse_uv_3d as collection_detail_browse_uv_3d, \
+           t2.subscribe_uv_90d as collection_subscribe_uv_90d \
+    from lofter.bridge_collection_post t1 \
+    left join ( \
+        select collectionId, \
+               tags as collectionTags, \
+               blogId as collectionBlogId, \
+               cover_url, \
+               name as collectionName, \
+               collectionType, \
+               creatorCount, \
+               postCount, \
+               postCollectionHot, \
+               viewcount as collectionViewCount, \
+               blog_level as collectionBlogLevel, \
+               collection_post_type, \
+               subscribe_uv_acc, \
+               subscribe_uv_1d, \
+               subscribe_uv_7d, \
+               subscribe_uv_30d, \
+               update_post_1d, \
+               update_post_7d, \
+               update_post_30d, \
+               is_recommend, \
+               hot_7d, \
+               hot_1k_post, \
+               hot_1w_post, \
+               is_stable_update, \
+               browse_uv_7d, \
+               underscore_comment_pv, \
+               sweet_pv, \
+               bitter_pv, \
+               subscribe_uv_3d, \
+               detail_browse_uv_3d, \
+               subscribe_uv_90d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and status = 0 \
+    ) t2 \
+    on t1.collectionId = t2.collectionId \
+) \
+insert overwrite table lofter_dm.ads_ecology_easy_fetch_post_wide_table_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.postId, \
+       t1.blogId, \
+       t1.blogName, \
+       t1.title, \
+       t1.publishDate, \
+       t1.publishDateTime, \
+       t1.tags, \
+       t1.contentType, \
+       t1.domains, \
+       t1.isBlogAuthenticated, \
+       t1.userPostIndex, \
+       t1.blogNickname, \
+       t1.ips, \
+       t1.url, \
+       t1.is_book_store, \
+       t1.recomStatus, \
+       t1.importPlatformType, \
+       t2.words_count, \
+       t2.photo_count, \
+       t2.contain_link, \
+       t2.contain_text, \
+       t2.contain_image, \
+       t3.photoInfo, \
+       t4.videoInfo, \
+       if(t5.postId is not null, 1, 0) as postPlanStatus, \
+       if(t6.postId is not null, 1, 0) as postUnderscoreCommentStatus, \
+       t7.planTypes as postGiftPlanType, \
+       t8.level2_tag as postUnderstandCategory, \
+       t9.level1_tag as postUnderstandStyle, \
+       t10.collectionId, \
+       t10.collectionTags, \
+       t10.collectionBlogId, \
+       t10.collectionCoverUrl, \
+       t10.collectionName, \
+       t10.collectionType, \
+       t10.creatorCount, \
+       t10.postCount, \
+       t10.postCollectionHot, \
+       t10.collectionViewCount, \
+       t10.collectionBlogLevel, \
+       t10.collectionPostType, \
+       t10.collection_subscribe_uv_acc, \
+       t10.collection_subscribe_uv_1d, \
+       t10.collection_subscribe_uv_7d, \
+       t10.collection_subscribe_uv_30d, \
+       t10.collection_update_post_1d, \
+       t10.collection_update_post_7d, \
+       t10.collection_update_post_30d, \
+       t10.collection_is_recommend, \
+       t10.collection_hot_7d, \
+       t10.collection_hot_1k_post, \
+       t10.collection_hot_1w_post, \
+       t10.collection_is_stable_update, \
+       t10.collection_browse_uv_7d, \
+       t10.collection_underscore_comment_pv, \
+       t10.collection_sweet_pv, \
+       t10.collection_bitter_pv, \
+       t10.collection_subscribe_uv_3d, \
+       t10.collection_detail_browse_uv_3d, \
+       t10.collection_subscribe_uv_90d, \
+       t11.level as creatorLevel, \
+       t11.blog_url, \
+       t11.is_cp, \
+       t11.is_imported, \
+       t11.import_platform_type as creator_import_platform_type, \
+       t11.is_in_contract, \
+       t11.post_count_std, \
+       t11.post_first_date, \
+       t11.post_last_date, \
+       t11.post_top_categories, \
+       t11.post_top_domains, \
+       t11.post_top_ips, \
+       t11.post_top10_ips, \
+       t11.post_top_tags, \
+       t11.post_top10_tags, \
+       t11.fans_std, \
+       t11.active_last_date, \
+       t11.gift_open_time, \
+       t11.fans_vip_open_time, \
+       t11.post_main_content_type, \
+       t11.gift_income_std, \
+       t11.receive_hot_std, \
+       t11.receive_comment_cnt, \
+       t11.collection_subscribe_uv, \
+       t12.creatorStatus, \
+       t13.creatorPostStatus, \
+       t14.auth_domain_ids, \
+       t14.auth_domain_names, \
+       t14.privilegeLevel, \
+       t15.securityReviewDateTime, \
+       t16.recommendReviewDateTime, \
+       timestampdiff(MINUTE, cast(t1.publishDateTime as timestamp), cast(t16.recommendReviewDateTime as timestamp)) as reviewIntervalMinutesTime, \
+       t17.reasons, \
+       t18.clickPv, \
+       t18.clickUv, \
+       t18.browsePv, \
+       t18.browseUv, \
+       t18.exposurePv, \
+       t18.exposureUv, \
+       t18.realBrowsePv, \
+       t18.realBrowseUv, \
+       t18.browseTime, \
+       t18.realBrowseTime, \
+       t18.realBrowseNewUv, \
+       t18.playPv, \
+       t18.playUv, \
+       t18.playtime, \
+       t18.playProgress, \
+       t18.realPlayPv, \
+       t18.realPlayUv, \
+       t18.realPlaytime, \
+       t18.realPlayProgress, \
+       t18.finishPlayPv, \
+       t18.finishPlayUv, \
+       t18.realFinishPlayPv, \
+       t18.realFinishPlayUv, \
+       t18.negFeedbackPv, \
+       t18.negFeedbackUv, \
+       t18.sharePv, \
+       t18.shareUv, \
+       t18.posPraisePv, \
+       t18.posPraiseUv, \
+       t18.negPraisePv, \
+       t18.negPraiseUv, \
+       t18.posRecUv, \
+       t18.posRecPv, \
+       t18.negRecPv, \
+       t18.negRecUv, \
+       t18.posReproducePv, \
+       t18.posReproduceUv, \
+       t18.negReproducePv, \
+       t18.negReproduceUv, \
+       t18.posSubscribePv, \
+       t18.posSubscribeUv, \
+       t18.negSubscribePv, \
+       t18.negSubscribeUv, \
+       t18.posHotPv, \
+       t18.posHotUv, \
+       t18.negHotPv, \
+       t18.negHotUv, \
+       t18.posCommentPv, \
+       t18.posCommentUv, \
+       t18.negCommentPv, \
+       t18.negCommentUv, \
+       t18.hdPv, \
+       t18.hdUv, \
+       t18.rewardUv, \
+       t18.rewardAmount, \
+       t18.freeGiftUv, \
+       t18.freeGiftAmount, \
+       t18.chargeGiftUv, \
+       t18.chargeGiftAmount, \
+       t18.centralizedExposurePv, \
+       t18.centralizedExposureUv, \
+       t18.nonCentralizedExposurePv, \
+       t18.nonCentralizedExposureUv, \
+       t18.valid_response, \
+       t18.support_exposure_pv, \
+       t18.support_induced_pv, \
+       t19.interaction_pv, \
+       t19.underscore_comment_pv, \
+       t19.sweet_pv, \
+       t19.bitter_pv, \
+       t19.interaction_pv_1d, \
+       t19.interaction_pv_7d, \
+       t19.interaction_pv_15d, \
+       t19.interaction_pv_30d, \
+       t19.interaction_pv_90d, \
+       t19.underscore_comment_pv_1d, \
+       t19.underscore_comment_pv_7d, \
+       t19.underscore_comment_pv_15d, \
+       t19.underscore_comment_pv_30d, \
+       t19.underscore_comment_pv_90d, \
+       t19.sweet_pv_1d, \
+       t19.sweet_pv_7d, \
+       t19.sweet_pv_15d, \
+       t19.sweet_pv_30d, \
+       t19.sweet_pv_90d, \
+       t19.bitter_pv_1d, \
+       t19.bitter_pv_7d, \
+       t19.bitter_pv_15d, \
+       t19.bitter_pv_30d, \
+       t19.bitter_pv_90d, \
+       t20.like_cnt, \
+       t20.reproduce_cnt, \
+       t20.recommend_cnt, \
+       t20.collect_cnt, \
+       t20.hot_uv, \
+       t20.hot, \
+       t20.comment_uv, \
+       t20.comment_cnt, \
+       t20.comment_uv_1d, \
+       t20.comment_cnt_1d, \
+       t20.long_comment_cnt_std, \
+       t20.long_comment_cnt_1d, \
+       t20.long_comment_cnt_7d, \
+       t20.long_comment_cnt_15d, \
+       t20.long_comment_cnt_30d, \
+       t20.hot_7d, \
+       t20.hot_15d, \
+       t20.hot_30d, \
+       t20.hot_90d, \
+       t20.hot_365d, \
+       t20.comment_cnt_7d, \
+       t20.comment_cnt_15d, \
+       t20.comment_cnt_30d, \
+       t20.valid_comment_cnt, \
+       t20.valid_comment_cnt_7d, \
+       t20.valid_comment_cnt_15d, \
+       t20.valid_comment_cnt_30d, \
+       t20.like_cnt_1d, \
+       t20.like_cnt_7d, \
+       t20.like_cnt_15d, \
+       t20.like_cnt_30d, \
+       t20.recommend_cnt_1d, \
+       t20.recommend_cnt_7d, \
+       t20.recommend_cnt_15d, \
+       t20.recommend_cnt_30d, \
+       t20.collect_cnt_1d, \
+       t20.collect_cnt_7d, \
+       t20.collect_cnt_15d, \
+       t20.collect_cnt_30d, \
+       t20.share_cnt_1d, \
+       t20.share_cnt_7d, \
+       t20.share_cnt_15d, \
+       t20.share_cnt_30d, \
+       t20.valid_comment_cnt_1d, \
+       t21.expose_pv_1d, \
+       t21.expose_pv_7d, \
+       t21.expose_pv_15d, \
+       t21.expose_pv_30d, \
+       t21.expose_uv_1d, \
+       t21.expose_uv_7d, \
+       t21.expose_uv_15d, \
+       t21.expose_uv_30d, \
+       t21.browse_uv_1d, \
+       t21.browse_uv_7d, \
+       t21.browse_uv_15d, \
+       t21.browse_uv_30d, \
+       t21.browse_pv_1d, \
+       t21.browse_pv_7d, \
+       t21.browse_pv_15d, \
+       t21.browse_pv_30d, \
+       t21.discovery_click_pv_7d, \
+       t21.discovery_click_pv_30d, \
+       t21.discovery_click_pv_90d, \
+       t21.related_article_click_pv_7d, \
+       t21.related_article_click_pv_30d, \
+       t21.related_article_click_pv_90d, \
+       t21.tag_discovery_click_pv_7d, \
+       t21.tag_discovery_click_pv_30d, \
+       t21.tag_discovery_click_pv_90d, \
+       t21.tag_new_click_pv_7d, \
+       t21.tag_new_click_pv_30d, \
+       t21.tag_new_click_pv_90d, \
+       t21.tag_hot_click_pv_7d, \
+       t21.tag_hot_click_pv_30d, \
+       t21.tag_hot_click_pv_90d, \
+       t21.collection_click_pv_7d, \
+       t21.collection_click_pv_30d, \
+       t21.collection_click_pv_90d, \
+       t21.attention_click_pv_7d, \
+       t21.attention_click_pv_30d, \
+       t21.attention_click_pv_90d, \
+       t21.click_pv_7d, \
+       t21.click_pv_30d, \
+       t21.click_pv_90d, \
+       t21.expose_uv_90d, \
+       t21.browse_uv_90d, \
+       t21.click_uv_7d, \
+       t21.click_uv_30d, \
+       t21.click_uv_90d, \
+       t21.real_browse_duration_1d, \
+       t21.real_browse_duration_7d, \
+       t21.real_browse_duration_15d, \
+       t21.real_browse_duration_30d, \
+       t21.real_browse_duration_90d, \
+       t21.dislike_pv_1d, \
+       t21.dislike_pv_7d, \
+       t21.dislike_pv_15d, \
+       t21.dislike_pv_30d, \
+       t21.dislike_pv_90d, \
+       t21.dislike_uv_1d, \
+       t21.dislike_uv_7d, \
+       t21.dislike_uv_15d, \
+       t21.dislike_uv_30d, \
+       t21.dislike_uv_90d, \
+       t22.support_induced_pv_7d, \
+       t22.support_induced_pv_15d, \
+       t22.support_induced_pv_30d, \
+       t22.support_induced_pv_90d, \
+       t23.dislikeReasons, \
+       if(t24.postId is not null, 1, 0) as brush_hot_status, \
+       t25.money, \
+       t25.money_1d, \
+       t25.money_7d, \
+       t25.money_15d, \
+       t25.money_30d, \
+       t25.money_90d, \
+       t26.ad_money, \
+       t26.ad_money_1d, \
+       t26.ad_money_7d, \
+       t26.ad_money_15d, \
+       t26.ad_money_30d, \
+       t26.ad_money_90d \
+from ( \
+    select id as postId, \
+           blogId, \
+           blogName, \
+           title, \
+           publishDate, \
+           from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH:mm:ss') as publishDateTime, \
+           tags, \
+           contentType, \
+           domains, \
+           isBlogAuthenticated, \
+           userPostIndex, \
+           blogNickname, \
+           ips, \
+           url, \
+           is_book_store, \
+           recomStatus, \
+           importPlatformType \
+    from lofter.dim_post_article \
+    where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false \
+    and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+) t1 \
+left join ( \
+    select postId, \
+           max(words_count) as words_count, \
+           max(photo_count) as photo_count, \
+           max(contain_link) as contain_link, \
+           max(contain_text) as contain_text, \
+           max(contain_image) contain_image \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) t2 \
+on t1.postId = t2.postId \
+left join ( \
+    select id as postId, photoLinks as photoInfo from lofter_db_dump.ods_db_photo_post_nd \
+) t3 \
+on t1.postId = t3.postId \
+left join ( \
+    select id as postId, videoType, embed as videoInfo from lofter_db_dump.ods_db_video_post_nd \
+) t4 \
+on t1.postId = t4.postId \
+left join postPlanType t5 \
+on t1.postId = t5.postId \
+left join ( \
+    select id as postId from lofter_db_dump.ods_db_post_nd where (featureSetting & shiftleft(1L, 1)) > 0L \
+) t6 \
+on t1.postId = t6.postId \
+left join ( \
+    select postId, concat_ws(',', collect_set(planType)) as planTypes from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+) t7 \
+on t1.postId = t7.postId \
+left join ( \
+    select itemId as postId, level2_tag from contentUnderstand where type in ('图文类目V2', '视频类目') \
+) t8 \
+on t1.postId = t8.postId \
+left join ( \
+    select itemId as postId, level1_tag from contentUnderstand where type in ('非作品向文章类目') \
+) t9 \
+on t1.postId = t9.postId \
+left join postCollectionSource t10 \
+on t1.postId = t10.postId \
+left join ( \
+    select userId, \
+           level, \
+           blog_url, \
+           is_cp, \
+           is_imported, \
+           import_platform_type, \
+           is_in_contract, \
+           post_count_std, \
+           post_first_date, \
+           post_last_date, \
+           post_top_categories, \
+           post_top_domains, \
+           post_top_ips, \
+           post_top10_ips, \
+           post_top_tags, \
+           post_top10_tags, \
+           fans_std, \
+           active_last_date, \
+           gift_open_time, \
+           fans_vip_open_time, \
+           post_main_content_type, \
+           gift_income_std, \
+           receive_hot_std, \
+           receive_comment_cnt, \
+           collection_subscribe_uv \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t11 \
+on t1.blogId = t11.userId \
+left join ( \
+    select blogId, \
+           creatorStatus \
+    from lofter_dm.ads_creator_ecology_identity_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t12 \
+on t1.blogId = t12.blogId \
+left join ( \
+    select userId, \
+           case when is_first_publish > 0 then '首次发文用户' \
+                when is_first_publish = 0 and is_active_creator > 0 then '持续发文用户' \
+                when is_first_publish = 0 and is_active_creator = 0 then '回流发文用户' \
+           end as creatorPostStatus \
+    from ( \
+        select userId, \
+               max(is_first_publish) as is_first_publish, \
+               max(is_active_creator) as is_active_creator \
+        from lofter.dws_par_creator_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and post_count > 0 \
+        group by userId \
+    ) t \
+) t13 \
+on t1.blogId = t13.userId \
+left join ( \
+    select userId, \
+           auth_domain_ids, \
+           auth_domain_names, \
+           privilegeLevel \
+    from lofter.dws_par_user_base_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t14 \
+on t1.blogId = t14.userId \
+left join ( \
+    select postId, \
+           from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd HH:mm:ss') as securityReviewDateTime \
+    from lofter_db_dump.ods_db_post_personal_passed_nd \
+    where status = 0 \
+) t15 \
+on t1.postId = t15.postId \
+left join ( \
+    select postId, \
+           from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd HH:mm:ss') as recommendReviewDateTime \
+    from ( \
+        select postId, \
+               createTime, \
+               row_number() over(partition by postId order by createTime) as rn \
+        from lofter_db_dump.ods_db_recommend_post_state_log_nd \
+        where recomStatusBf = 0 and recomStatus in (1, -1) \
+    ) t \
+    where rn = 1 \
+) t16 \
+on t1.postId = t16.postId \
+left join ( \
+    select postId, reasons from lofter_db_dump.ods_db_recommend_review_post_nd \
+) t17 \
+on t1.postId = t17.postId \
+left join ( \
+    select postId, \
+           clickPv, \
+           clickUv, \
+           browsePv, \
+           browseUv, \
+           exposurePv, \
+           exposureUv, \
+           realBrowsePv, \
+           realBrowseUv, \
+           browseTime, \
+           realBrowseTime, \
+           realBrowseNewUv, \
+           playPv, \
+           playUv, \
+           playtime, \
+           playProgress, \
+           realPlayPv, \
+           realPlayUv, \
+           realPlaytime, \
+           realPlayProgress, \
+           finishPlayPv, \
+           finishPlayUv, \
+           realFinishPlayPv, \
+           realFinishPlayUv, \
+           negFeedbackPv, \
+           negFeedbackUv, \
+           sharePv, \
+           shareUv, \
+           posPraisePv, \
+           posPraiseUv, \
+           negPraisePv, \
+           negPraiseUv, \
+           posRecUv, \
+           posRecPv, \
+           negRecPv, \
+           negRecUv, \
+           posReproducePv, \
+           posReproduceUv, \
+           negReproducePv, \
+           negReproduceUv, \
+           posSubscribePv, \
+           posSubscribeUv, \
+           negSubscribePv, \
+           negSubscribeUv, \
+           posHotPv, \
+           posHotUv, \
+           negHotPv, \
+           negHotUv, \
+           posCommentPv, \
+           posCommentUv, \
+           negCommentPv, \
+           negCommentUv, \
+           hdPv, \
+           hdUv, \
+           rewardUv, \
+           rewardAmount, \
+           freeGiftUv, \
+           freeGiftAmount, \
+           chargeGiftUv, \
+           chargeGiftAmount, \
+           centralizedExposurePv, \
+           centralizedExposureUv, \
+           nonCentralizedExposurePv, \
+           nonCentralizedExposureUv, \
+           valid_response, \
+           support_exposure_pv, \
+           support_induced_pv \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t18 \
+on t1.postId = t18.postId \
+left join ( \
+    select postId, \
+           sum(interaction_pv) as interaction_pv, \
+           sum(underscore_comment_pv) as underscore_comment_pv, \
+           sum(sweet_pv) as sweet_pv, \
+           sum(bitter_pv) as bitter_pv, \
+           sum(interaction_pv_1d) as interaction_pv_1d, \
+           sum(interaction_pv_7d) as interaction_pv_7d, \
+           sum(interaction_pv_15d) as interaction_pv_15d, \
+           sum(interaction_pv_30d) as interaction_pv_30d, \
+           sum(interaction_pv_90d) as interaction_pv_90d, \
+           sum(underscore_comment_pv_1d) as underscore_comment_pv_1d, \
+           sum(underscore_comment_pv_7d) as underscore_comment_pv_7d, \
+           sum(underscore_comment_pv_15d) as underscore_comment_pv_15d, \
+           sum(underscore_comment_pv_30d) as underscore_comment_pv_30d, \
+           sum(underscore_comment_pv_90d) as underscore_comment_pv_90d, \
+           sum(sweet_pv_1d) as sweet_pv_1d, \
+           sum(sweet_pv_7d) as sweet_pv_7d, \
+           sum(sweet_pv_15d) as sweet_pv_15d, \
+           sum(sweet_pv_30d) as sweet_pv_30d, \
+           sum(sweet_pv_90d) as sweet_pv_90d, \
+           sum(bitter_pv_1d) as bitter_pv_1d, \
+           sum(bitter_pv_7d) as bitter_pv_7d, \
+           sum(bitter_pv_15d) as bitter_pv_15d, \
+           sum(bitter_pv_30d) as bitter_pv_30d, \
+           sum(bitter_pv_90d) as bitter_pv_90d \
+    from lofter.dws_post_highlight_comment_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) t19 \
+on t1.postId = t19.postId \
+left join ( \
+    select postId, \
+           like_cnt, \
+           reproduce_cnt, \
+           recommend_cnt, \
+           collect_cnt, \
+           hot_uv, \
+           hot, \
+           comment_uv, \
+           comment_cnt, \
+           comment_uv_1d, \
+           comment_cnt_1d, \
+           long_comment_cnt_std, \
+           long_comment_cnt_1d, \
+           long_comment_cnt_7d, \
+           long_comment_cnt_15d, \
+           long_comment_cnt_30d, \
+           hot_7d, \
+           hot_15d, \
+           hot_30d, \
+           hot_90d, \
+           hot_365d, \
+           comment_cnt_7d, \
+           comment_cnt_15d, \
+           comment_cnt_30d, \
+           valid_comment_cnt, \
+           valid_comment_cnt_7d, \
+           valid_comment_cnt_15d, \
+           valid_comment_cnt_30d, \
+           like_cnt_1d, \
+           like_cnt_7d, \
+           like_cnt_15d, \
+           like_cnt_30d, \
+           recommend_cnt_1d, \
+           recommend_cnt_7d, \
+           recommend_cnt_15d, \
+           recommend_cnt_30d, \
+           collect_cnt_1d, \
+           collect_cnt_7d, \
+           collect_cnt_15d, \
+           collect_cnt_30d, \
+           share_cnt_1d, \
+           share_cnt_7d, \
+           share_cnt_15d, \
+           share_cnt_30d, \
+           valid_comment_cnt_1d \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t20 \
+on t1.postId = t20.postId \
+left join ( \
+    select postId, \
+           expose_pv_1d, \
+           expose_pv_7d, \
+           expose_pv_15d, \
+           expose_pv_30d, \
+           expose_uv_1d, \
+           expose_uv_7d, \
+           expose_uv_15d, \
+           expose_uv_30d, \
+           browse_uv_1d, \
+           browse_uv_7d, \
+           browse_uv_15d, \
+           browse_uv_30d, \
+           browse_pv_1d, \
+           browse_pv_7d, \
+           browse_pv_15d, \
+           browse_pv_30d, \
+           discovery_click_pv_7d, \
+           discovery_click_pv_30d, \
+           discovery_click_pv_90d, \
+           related_article_click_pv_7d, \
+           related_article_click_pv_30d, \
+           related_article_click_pv_90d, \
+           tag_discovery_click_pv_7d, \
+           tag_discovery_click_pv_30d, \
+           tag_discovery_click_pv_90d, \
+           tag_new_click_pv_7d, \
+           tag_new_click_pv_30d, \
+           tag_new_click_pv_90d, \
+           tag_hot_click_pv_7d, \
+           tag_hot_click_pv_30d, \
+           tag_hot_click_pv_90d, \
+           collection_click_pv_7d, \
+           collection_click_pv_30d, \
+           collection_click_pv_90d, \
+           attention_click_pv_7d, \
+           attention_click_pv_30d, \
+           attention_click_pv_90d, \
+           click_pv_7d,click_pv_30d, \
+           click_pv_90d, \
+           expose_uv_90d, \
+           browse_uv_90d, \
+           click_uv_7d, \
+           click_uv_30d, \
+           click_uv_90d, \
+           real_browse_duration_1d, \
+           real_browse_duration_7d, \
+           real_browse_duration_15d, \
+           real_browse_duration_30d, \
+           real_browse_duration_90d, \
+           dislike_pv_1d, \
+           dislike_pv_7d, \
+           dislike_pv_15d, \
+           dislike_pv_30d, \
+           dislike_pv_90d, \
+           dislike_uv_1d, \
+           dislike_uv_7d, \
+           dislike_uv_15d, \
+           dislike_uv_30d, \
+           dislike_uv_90d \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t21 \
+on t1.postId = t21.postId \
+left join ( \
+    select postId, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, support_induced_pv, 0)) as support_induced_pv_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, support_induced_pv, 0)) as support_induced_pv_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, support_induced_pv, 0)) as support_induced_pv_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, support_induced_pv, 0)) as support_induced_pv_90d \
+    from lofter.dws_post_support_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',89) and '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) t22 \
+on t1.postId = t22.postId \
+left join ( \
+    select postId, \
+           cast(to_json(transform(sort_array(collect_list(struct(uv, markType))), x -> struct(x.markType as dislikeType, x.uv))) as string) as dislikeReasons \
+    from ( \
+        select cast(showId as bigint) as postId, \
+               markType, \
+               count(distinct userId) as uv \
+        from lofter_db_dump.ods_db_recommend_user_mark_nd \
+        where showType = 1 and showId is not null \
+        group by showId, markType \
+    ) t \
+    group by postId \
+) t23 \
+on t1.postId = t23.postId \
+left join ( \
+    select postId from lofter.dwd_risk_brush_hot_suspect_post_rank_posts_di where dt <= '${azkaban.flow.1.days.ago}' \
+) t24 \
+on t1.postId = t24.postId \
+left join ( \
+    select postId, \
+           sum(money) as money, \
+           sum(if(pay_date = '${azkaban.flow.1.days.ago}', money, 0)) as money_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 7, money, 0)) as money_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 15, money, 0)) as money_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 30, money, 0)) as money_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 90, money, 0)) as money_90d \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) t25 \
+on t1.postId = t25.postId \
+left join ( \
+    select postId, \
+           sum(money) as ad_money, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', money, 0)) as ad_money_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, money, 0)) as ad_money_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, money, 0)) as ad_money_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, money, 0)) as ad_money_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, money, 0)) as ad_money_90d \
+    from lofter.dwd_user_ad_revenue_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and postId is not null and postId > 0 \
+    group by postId \
+) t26 \
+on t1.postId = t26.postId
+hive.query.06=create or replace view lofter_dm.ads_ecology_easy_fetch_post_wide_table_view as select * from lofter_dm.ads_ecology_easy_fetch_post_wide_table_dd where dt = '${azkaban.flow.1.days.ago}';

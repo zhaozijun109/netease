@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select row_number() over(order by level,rk) as id,row_number() over(order by level,rk) as rkAll,dt,postId,blogId,publishDate,url,source,hdPv,score,rk,level from lofter.dws_hot_article_stat_di where dt='${azkaban.flow.1.days.ago}' and flag = 1 "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_hot_article_stat --postfixsep --full --atom

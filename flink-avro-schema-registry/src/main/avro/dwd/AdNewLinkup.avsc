@@ -1,0 +1,13 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "AdNewLinkup",
+  "fields": [
+    {"name": "actionId", "type": "long"},
+    {"name": "deviceId", "type": "string"},
+    {"name": "newUserFlag", "type": "boolean"},
+    {"name": "time", "type": "long"},
+    {"name": "dadeviceId", "type": "string"},
+    {"name": "appId", "type": ["null", "string"], "default": null}
+  ]
+}

@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_comment_vip_copy_di partition(dt = '${azkaban.flow.1.days.ago}') \
+              select id commentId, publishtime commentTime, commentUserId, commentHot, content, postId, blogId, contentType, title, tags  \
+              from (  \
+                  select t1.id, t1.publishtime, t1.postid, t1.blogId, commentHot, commentUserId, content, contenttype, title, tags,  \
+                      case when t2.contenttype = '图片' and t1.commenthot >= 188 then t1.commenthot  \
+                           when t2.contenttype = '文字' and t1.commenthot >= 50 then t1.commenthot  \
+                           when t2.contenttype = '视频' and t1.commenthot >= 100 then t1.commenthot  \
+                      else 0 end num  \
+                  from (  \
+                      select id, postid, blogId, publisheruserid as commentUserId, content, commenthot, publishtime  \
+                      from lofter_db_dump.ods_db_post_response_nd  \
+                      where from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+                            length(content) > 0 and \
+                            publisherUserid in (518771260,2184267518,818111591,3490871,2165346273,1294080224,1949218619,2035112618,500297560,2200690594,2235294876,2063897948,833342130,2098303327,1281221967,1274546684,521592789,516476329,1967617120,1266789322,836067126,1958878837,1265610469,522579712,1981960992,1263450183,1977567474,1974349256,1950933935,1265480218,1988541930,1998718167,1950475627,817102819,2235738466,1981037916,2025063508,1269071664,2011152194,1943777072,1966721541,831516164,499656105,1988602043,1957405471,2164102830,541549849,829760946,2096941711,1277236408,2041440836,516847937,498302100,2002347570,2154084638,2227591899,2145336414,1974458285,1967703440,832832506,1989352935,824639092,2007504775,824382769,491586301,818295156,2143789207,1948514760,2053041477,1954643044,1977789487,2135590943,1277458907,2223045470,818209587,2198884126,2180033541,2083154135,1957107260,827639453,534375892,2017830204,1967156457,1991803141,2032624698,832703461,1282812877,1274695586,1991959415,1947898351,1964388159) \
+                  ) t1 join (  \
+                      select id postid, contenttype, title, concat_ws(',',tags) as tags  \
+                      from lofter.dim_post  \
+                      where ispublished = true and isforbidden = false and iscitedpost = false  \
+                      and allowview = 0  \
+                      and contenttype in ("图片","文字","视频")  \
+                      and isactivityautopost = 0 and isimported = 0 and ismoved = 0  \
+                  ) t2 on t1.postid = t2.postid  \
+              ) t  \
+              distribute by 1

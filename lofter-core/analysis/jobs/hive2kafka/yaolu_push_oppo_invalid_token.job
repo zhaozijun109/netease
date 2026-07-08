@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select pushChannel, token, pushGroupId, messageId, result from lofter_dm.ads_push_oppo_invalid_tokens_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic yaolu.push.oppo.invalid.token --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

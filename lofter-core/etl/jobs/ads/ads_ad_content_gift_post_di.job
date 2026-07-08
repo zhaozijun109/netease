@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_gift_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.ad_unlock_switch_on_users, b.shield_post_count, b.shield_blog_count, b.group_package_post_count, b.deliverable_post_count, b.ad_request_post_count, \
+    c.group_package_browse_pv, c.deliverable_browse_pv, d.ad_request_browse_pv, b.ad_expose_post_count, d.ad_expose_browse_pv \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(distinct userId) as ad_unlock_switch_on_users \
+    from ( \
+        select *, row_number() over (partition by userId order by operateTime desc) as rk \
+        from lofter_db_dump.ods_db_trade_ad_unlock_user_setting_log_nd \
+        where from_unixtime(cast(operateTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            settingType = 'AUTHOR_AD_UNLOCK_SWITCH' \
+    ) t \
+    where rk = 1 and settingValue = 'ON' \
+) a \
+left join ( \
+    select dt, \
+        count(distinct if(is_post_shield_on > 0, postId, null)) as shield_post_count, \
+        count(distinct if(is_post_shield_on > 0, blogId, null)) as shield_blog_count, \
+        count(distinct if(is_in_group_package > 0, postId, null)) as group_package_post_count, \
+        count(distinct if(is_in_group_package > 0 and is_deliverable > 0, postId, null)) as deliverable_post_count, \
+        count(distinct if(is_ad_request > 0, postId, null)) as ad_request_post_count, \
+        count(distinct if(is_ad_expose > 0, postId, null)) as ad_expose_post_count \
+    from lofter_dm.ads_ad_content_post_pool_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.dt = b.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+            sum(if(x.is_in_group_package > 0, 1, 0)) as group_package_browse_pv, \
+            sum(if(x.is_in_group_package > 0 and x.is_deliverable > 0, 1, 0)) as deliverable_browse_pv \
+    from ( \
+        select * \
+        from lofter_dm.ads_ad_content_post_pool_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    join ( \
+        select * \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+    ) y on x.postId = y.postId \
+) c on a.dt = c.dt \
+left join ( \
+     select '${azkaban.flow.1.days.ago}' as dt, \
+            sum(if(x.is_request > 0, 1, 0)) as ad_request_browse_pv, \
+            sum(if(x.is_bg > 0, 1, 0)) as ad_expose_browse_pv \
+     from ( \
+        select userId, postId, max(is_request) as is_request, max(is_bg) as is_bg \
+        from lofter.dwd_ad_actions_v2_di \
+        where dt = '${azkaban.flow.1.days.ago}' and positionId = 279600 and is_request > 0 \
+        group by 1, 2 \
+     ) x \
+     join ( \
+        select * \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+     ) y on x.postId = y.postId and x.userId = y.userId \
+) d on a.dt = d.dt \
+
+dependencies=ads_ad_content_post_pool_di

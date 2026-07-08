@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE project>
+
+<project basedir="." default="deploy" name="ai-service">
+  <property name="compress.dir" value="compressed"/>
+  <property name="node" value="/home/appops/nvm-script/node20"/>
+  <property name="npm" value="/home/appops/nvm-script/npm20"/>
+  <property name="configEnv" value="test"/>
+
+  <!-- 1. 安装依赖 -->
+  <target name="pnpmInstall">
+    <echo message="env: ${env}"/>
+    <echo message="envGroup: ${envGroup}"/>
+
+    <echo message="node version:"/>
+    <exec dir="./" executable="${node}" failonerror="true">
+      <arg line="-v"/>
+    </exec>
+    <echo message="npm version:"/>
+    <exec dir="./" executable="${npm}" failonerror="true">
+      <arg line="-v"/>
+    </exec>
+
+    <echo message="begin npm setup"/>
+    <exec dir="./" executable="${npm}" failonerror="true">
+        <arg line="run"/>
+        <arg line="setup"/>
+    </exec>
+  </target>
+
+  <!-- 2. 拷贝环境配置 -->
+  <target name="copyEnv">
+    <echo message="copy .env.${configEnv} to .env"/>
+    <copy file=".env.${configEnv}" tofile=".env" overwrite="true"/>
+  </target>
+
+  <!-- 3. 生成 Prisma Client -->
+  <target name="prismaGenerate">
+    <echo message="begin prisma generate"/>
+    <exec dir="./" executable="${npm}" failonerror="true">
+      <arg line="exec -- pnpm prisma generate"/>
+    </exec>
+  </target>
+
+  <!-- 4. 构建 Next.js (standalone 模式) -->
+  <target name="pnpmBuild">
+    <echo message="begin pnpm build"/>
+    <exec dir="./" executable="${npm}" failonerror="true">
+      <arg line="exec -- pnpm run build"/>
+    </exec>
+  </target>
+
+  <!-- 5. 清理旧的构建产物 -->
+  <target name="clean">
+    <delete dir="${compress.dir}"/>
+  </target>
+
+  <!-- 6. 打包部署产物 -->
+  <target name="compress">
+    <mkdir dir="${compress.dir}"/>
+    <antcall target="cp"/>
+  </target>
+
+  <target name="cp">
+    <!-- standalone 产物（包含 server.js 和最小化 node_modules） -->
+    <!-- pnpm 软链接结构中存在悬空链接，先清理再复制 -->
+    <exec dir="./" executable="bash" failonerror="true">
+      <arg value="-c"/>
+      <arg value="find .next/standalone -xtype l -delete &amp;&amp; cp -r .next/standalone/. ${compress.dir}/"/>
+    </exec>
+
+    <!-- 静态资源（standalone 模式不会自动包含） -->
+    <mkdir dir="${compress.dir}/.next/static"/>
+    <copy todir="${compress.dir}/.next/static" overwrite="true">
+      <fileset dir=".next/static"/>
+    </copy>
+
+    <!-- public 目录 -->
+    <mkdir dir="${compress.dir}/public"/>
+    <copy todir="${compress.dir}/public" overwrite="true">
+      <fileset dir="public"/>
+    </copy>
+
+    <!-- Prisma schema（运行时可能需要） -->
+    <mkdir dir="${compress.dir}/prisma"/>
+    <copy todir="${compress.dir}/prisma" overwrite="true">
+      <fileset dir="prisma"/>
+    </copy>
+
+    <!-- 环境配置 -->
+    <copy todir="${compress.dir}" overwrite="true">
+      <fileset file=".env"/>
+    </copy>
+
+    <!-- 启动/停止脚本 -->
+    <mkdir dir="${compress.dir}/server/bootstrap"/>
+    <copy todir="${compress.dir}/server/bootstrap" overwrite="true">
+      <fileset dir="server/bootstrap"/>
+    </copy>
+  </target>
+
+  <!-- 完整部署流程 -->
+  <target name="deploy">
+    <echo message="begin auto deploy......"/>
+    <!-- 清除上次打包遗留的 compressed，避免与源码一起被 TS/工具误扫 -->
+    <antcall target="clean"/>
+    <antcall target="pnpmInstall"/>
+    <antcall target="copyEnv"/>
+    <antcall target="prismaGenerate"/>
+    <antcall target="pnpmBuild"/>
+    <antcall target="clean"/>
+    <antcall target="compress"/>
+  </target>
+</project>

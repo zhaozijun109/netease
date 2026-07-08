@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-angel</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-3rd</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-mllib-local</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.binary.version}</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-tools</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-psf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-mllib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-graph</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>spark-on-angel-mllib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>spark-on-angel-graph</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+        </dependency>
+    </dependencies>
+</project>

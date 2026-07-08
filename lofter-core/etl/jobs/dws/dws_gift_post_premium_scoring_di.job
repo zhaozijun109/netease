@@ -1,0 +1,489 @@
+type=sparksql
+hive.query.01=\
+with \
+  t1 as ( \
+    select \
+      a.*, \
+      row_number() over ( \
+        partition by ip, \
+        contenttype, \
+        ispay_returngift, \
+        days \
+        order by \
+          zonghe_score desc \
+      ) as rk \
+    from \
+      ( \
+        select \
+          a.postid, \
+          blogid, \
+          contenttype, \
+          exposureuv, \
+          case \
+            when c.ip is null then '其他' \
+            else c.ip \
+          end ip, \
+          b.ispay_returngift, \
+          case \
+            when days < 4 \
+            and exposureuv >= 500 then '0~3' \
+            when days between 4 and 7 \
+            and exposureuv >= 1000 then '4~7' \
+            when days between 8 and 30 \
+            and exposureuv >= 2000 then '8~30' \
+            when days >= 31 \
+            and exposureuv >= 3000 then '31~' \
+            else 'other' \
+          end as days, \
+          zonghe_score, \
+          qianbg_amount_ln \
+        from \
+          ( \
+            select \
+              postid, \
+              blogid, \
+              ip, \
+              contenttype, \
+              zonghe_score, \
+              datediff(dt, publishdate) as days, \
+              review_status, \
+              qianbg_amount_ln, \
+              exposureuv \
+            from \
+              lofter.dws_gift_post_premium_scoring_detail_dd LATERAL VIEW explode( \
+                case \
+                  when size(ips) < 1 then array('无ip归属') \
+                  else ips \
+                end \
+              ) t2 AS ip \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and yinliuflg = 0 \
+              and review_status >= 0 \
+              and blog_channel = 0 \
+          ) a \
+          join ( \
+            select \
+              postid, \
+              ispay_returngift \
+            from \
+              lofter.dim_gift_post_return_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and ispay_returngift in (0, 1) \
+              and auditstatus = 1 \
+              and status = 1 \
+            group by \
+              postid, \
+              ispay_returngift \
+          ) b on a.postid = b.postid \
+          left join ( \
+            select \
+              postid \
+            from \
+              lofter.dim_gift_post_return_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and ispay_returngift in (0, 1) \
+              and auditstatus = 1 \
+              and status = 1 \
+              and return_gift_plantype in ('图图有证') \
+            group by \
+              postid \
+          ) d on a.postid = d.postid \
+          left join ( \
+            select \
+              count(distinct postid) as num, \
+              ip \
+            from \
+              lofter.dws_gift_post_premium_scoring_detail_dd LATERAL VIEW explode( \
+                case \
+                  when size(ips) < 1 then array('无ip归属') \
+                  else ips \
+                end \
+              ) t2 AS ip \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and ip != '无ip归属' \
+            group by \
+              ip \
+            order by \
+              num desc \
+            limit \
+              300 \
+          ) c on a.ip = c.ip \
+        where \
+          (a.review_status > 0) \
+          or ( \
+            a.contenttype = '图片' \
+            and d.postid is not null \
+          ) \
+        group by \
+          1, \
+          2, \
+          3, \
+          4, \
+          5, \
+          6, \
+          7, \
+          8, \
+          9 \
+      ) a \
+    where \
+      days != 'other' \
+  ), \
+  t2 as ( \
+    select \
+      a.postid, \
+      blogid, \
+      tags, \
+      ips, \
+      url, \
+      recomstatus, \
+      blogname, \
+      blognickname, \
+      styouzhiflg, \
+      yinliuflg, \
+      review_status, \
+      a.contenttype, \
+      exposureuv, \
+      qianbg_amount, \
+      liulan_fufei_rate, \
+      furate, \
+      zhenrate, \
+      publishdate, \
+      blog_channel, \
+      recommendflg, \
+      rec_reviewflg, \
+      unlocktype, \
+      collectionid, \
+      provider_type, \
+      a.bg_flg, \
+      qianbg_amount_ln, \
+      liulan_fufei_rate_ln, \
+      furate_ln, \
+      zhenrate_ln, \
+      realbrowse_rate_ln, \
+      hd_rate_ln, \
+      zonghe_score, \
+      rk, \
+      case \
+        when b.postid is not null then '优质' \
+        when ( \
+          yinliuflg < 0 \
+          or review_status < 0 \
+        ) then '低质' \
+        else '其他' \
+      end as type \
+    from \
+      ( \
+        select \
+          * \
+        from \
+          lofter.dws_gift_post_premium_scoring_detail_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+      ) a \
+      left join ( \
+        select \
+          a.postid \
+        from \
+          ( \
+            select \
+              * \
+            from \
+              t1 \
+          ) a \
+          join ( \
+            select \
+              * \
+            from \
+              ( \
+                select \
+                  a.ip, \
+                  a.contenttype, \
+                  a.ispay_returngift, \
+                  a.days, \
+                  case \
+                    when b.zonghe_score is not null then b.zonghe_score \
+                    else a.zonghe_score \
+                  end as zonghe_score \
+                from \
+                  ( \
+                    select \
+                      b.ip, \
+                      b.contenttype, \
+                      b.ispay_returngift, \
+                      b.days, \
+                      min(zonghe_score) as zonghe_score \
+                    from \
+                      ( \
+                        select \
+                          * \
+                        from \
+                          t1 \
+                      ) a \
+                      join ( \
+                        select \
+                          ip, \
+                          contenttype, \
+                          ispay_returngift, \
+                          days, \
+                          max(rk) as allrk \
+                        from \
+                          t1 \
+                        group by \
+                          ip, \
+                          contenttype, \
+                          ispay_returngift, \
+                          days \
+                      ) b on a.contenttype = b.contenttype \
+                      and a.ispay_returngift = b.ispay_returngift \
+                      and a.ip = b.ip \
+                      and a.days = b.days \
+                      and ( \
+                        ( \
+                          a.ip != '其他' \
+                          and a.rk <= allrk / (10 / 2) \
+                        ) \
+                        or ( \
+                          a.ip = '其他' \
+                          and a.rk <= allrk / (10 / 2) \
+                        ) \
+                      ) \
+                    where \
+                      ( \
+                        ( \
+                          a.contenttype = '文字' \
+                          and a.qianbg_amount_ln >= 1 \
+                        ) \
+                        or ( \
+                          a.contenttype = '图片' \
+                          and a.qianbg_amount_ln >= 0.8 \
+                        ) \
+                      ) \
+                    group by \
+                      b.ip, \
+                      b.contenttype, \
+                      b.ispay_returngift, \
+                      b.days \
+                  ) a \
+                  left join ( \
+                    select \
+                      ip, \
+                      contenttype, \
+                      ispay_returngift, \
+                      days, \
+                      zonghe_score \
+                    from \
+                      lofter.dws_gift_post_premium_ip_scoring_dd \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                  ) b on a.ip = b.ip \
+                  and a.contenttype = b.contenttype \
+                  and a.ispay_returngift = b.ispay_returngift \
+                  and a.days = b.days \
+              ) a \
+          ) b on a.ip = b.ip \
+          and a.contenttype = b.contenttype \
+          and a.ispay_returngift = b.ispay_returngift \
+          and a.days = b.days \
+        where \
+          a.zonghe_score >= b.zonghe_score \
+        group by \
+          a.postid \
+      ) b on a.postid = b.postid \
+  ) insert overwrite table lofter.dws_gift_post_premium_scoring_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.postid, \
+  blogid, \
+  tags, \
+  ips, \
+  url, \
+  recomstatus, \
+  blogname, \
+  blognickname, \
+  styouzhiflg, \
+  yinliuflg, \
+  review_status, \
+  a.contenttype, \
+  exposureuv, \
+  qianbg_amount, \
+  liulan_fufei_rate, \
+  furate, \
+  zhenrate, \
+  publishdate, \
+  blog_channel, \
+  recommendflg, \
+  rec_reviewflg, \
+  unlocktype, \
+  collectionid, \
+  provider_type, \
+  a.bg_flg, \
+  qianbg_amount_ln, \
+  liulan_fufei_rate_ln, \
+  furate_ln, \
+  zhenrate_ln, \
+  realbrowse_rate_ln, \
+  hd_rate_ln, \
+  zonghe_score, \
+  rk, \
+  case \
+    when type = '优质' \
+    or ( \
+      ( \
+        fufei_zonghe_tiyan_level + fufei_jieduan_level + fufei_st_level \
+      ) > 0 \
+      and postid1 is not null \
+      and postid2 is null \
+      and postid3 is null \
+    ) then '优质' \
+    when type = '低质' then '低质' \
+    else '其他' \
+  end as type, \
+  fufei_zonghe_tiyan_level, \
+  fufei_jieduan_level, \
+  fufei_st_level \
+from \
+  ( \
+    select \
+      a.*, \
+      case \
+        when ( \
+          qianbg_amount_ln >= t1_qianbg_amount_ln \
+          or liulan_fufei_rate_ln >= t1_liulan_fufei_rate_ln \
+        ) \
+        and (zonghe_tiyan_ln >= t2_zonghe_tiyan_ln) \
+        and ( \
+          ( \
+            a.contenttype = '文字' \
+            and zonghe_tiyan_ln >= 7 \
+            and qianbg_amount_ln >= 1.4 \
+          ) \
+          or ( \
+            a.contenttype = '图片' \
+            and zonghe_tiyan_ln >= 10 \
+            and qianbg_amount_ln >= 1.6 \
+          ) \
+        ) then 1 \
+        else 0 \
+      end as fufei_zonghe_tiyan_level, \
+      case \
+        when ( \
+          qianbg_amount_ln >= t2_qianbg_amount_ln \
+          or liulan_fufei_rate_ln >= t2_liulan_fufei_rate_ln \
+        ) \
+        and b.postid is not null \
+        and zonghe_tiyan_ln >= 7 \
+        and qianbg_amount_ln >= 2 then 1 \
+        else 0 \
+      end as fufei_jieduan_level, \
+      case \
+        when ( \
+          qianbg_amount_ln >= t3_qianbg_amount_ln \
+          or liulan_fufei_rate_ln >= t3_liulan_fufei_rate_ln \
+        ) \
+        and ( \
+          zonghe_tiyan_ln >= t1_zonghe_tiyan_ln \
+          or styouzhiflg = 1 \
+        ) \
+        and zonghe_tiyan_ln >= 8 \
+        and qianbg_amount_ln >= 1.1 then 1 \
+        else 0 \
+      end as fufei_st_level, \
+      d.postid as postid1, \
+      e.postid as postid2, \
+      f.postid as postid3 \
+    from \
+      ( \
+        select \
+          *, \
+          ( \
+            furate_ln + zhenrate_ln + realbrowse_rate_ln + hd_rate_ln \
+          ) as zonghe_tiyan_ln \
+        from \
+          t2 \
+      ) a \
+      left join ( \
+        select \
+          postid \
+        from \
+          lofter.dim_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and array_contains (mark_tags, '非截断') = 1 \
+        group by \
+          postid \
+      ) b on a.postid = b.postid \
+      left join ( \
+        select \
+          contenttype, \
+          bg_flg, \
+          percentile(qianbg_amount_ln, 0.9) as t1_qianbg_amount_ln, \
+          percentile(qianbg_amount_ln, 0.8) as t2_qianbg_amount_ln, \
+          percentile(qianbg_amount_ln, 0.7) as t3_qianbg_amount_ln, \
+          percentile(liulan_fufei_rate_ln, 0.9) as t1_liulan_fufei_rate_ln, \
+          percentile(liulan_fufei_rate_ln, 0.8) as t2_liulan_fufei_rate_ln, \
+          percentile(liulan_fufei_rate_ln, 0.7) as t3_liulan_fufei_rate_ln, \
+          percentile( \
+            ( \
+              furate_ln + zhenrate_ln + realbrowse_rate_ln + hd_rate_ln \
+            ), \
+            0.4 \
+          ) as t2_zonghe_tiyan_ln, \
+          percentile( \
+            ( \
+              furate_ln + zhenrate_ln + realbrowse_rate_ln + hd_rate_ln \
+            ), \
+            0.9 \
+          ) as t1_zonghe_tiyan_ln \
+        from \
+          t2 \
+        where \
+          type in ('优质', '其他') \
+        group by \
+          contenttype, \
+          bg_flg \
+      ) c on a.contenttype = c.contenttype \
+      and a.bg_flg = c.bg_flg \
+      left join ( \
+        select \
+          id as postid \
+        from \
+          lofter.dim_post \
+        where \
+          valid = 0 \
+          and allowview = 0 \
+        group by \
+          id \
+      ) d on a.postid = d.postid \
+      left join ( \
+        select \
+          postid \
+        from \
+          lofter.dws_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and jiesuo_uv < 3 \
+          and zhengfankui_uv < 3 \
+        group by \
+          postid \
+      ) e on a.postid = e.postid \
+      left join ( \
+        select \
+          postid \
+        from \
+          lofter.dim_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and status = 1 \
+          and auditstatus = 1 \
+          and review_status in (-1, -2) \
+        group by \
+          postid \
+      ) f on a.postid = f.postid \
+  ) a \
+where \
+  contenttype in ('图片', '文字', '视频', '长文章') \
+
+dependencies=dws_gift_post_premium_ip_scoring_dd,dws_gift_post_premium_scoring_detail_dd,dws_gift_post_return_dd

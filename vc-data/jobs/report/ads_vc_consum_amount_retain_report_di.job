@@ -1,0 +1,146 @@
+type = sparksql
+hive.query.01 = insert overwrite table vc_dm.ads_vc_consum_amount_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    base_date, \
+    period, \
+    COALESCE(new_consum_flag, 2) as new_consum_flag, \
+    total_amount, \
+    total_amount_1d, \
+    total_amount_2d, \
+    total_amount_3d, \
+    total_amount_7d, \
+    total_amount_15d, \
+    total_amount_30d \
+from \
+    ( \
+        select \
+            a.dt as base_date, \
+            datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+            CASE \
+                WHEN a.dt > b.dt THEN 0 \
+                ELSE 1 \
+            END AS new_consum_flag, \
+            sum(a.total_amount) as total_amount, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt = date_add(a.dt, 0) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_1d, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt = date_add(a.dt, 1) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_2d, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 2) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_3d, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 6) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_7d, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 14) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_15d, \
+            COALESCE( \
+                sum( \
+                    case \
+                        when c.dt between date_add(a.dt, 1) \
+                        and date_add(a.dt, 29) \
+                        and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then c.total_amount \
+                    end \
+                ), \
+                0 \
+            ) as total_amount_30d \
+        from \
+            ( \
+                select \
+                    dt, \
+                    user_id, \
+                    sum(order_price) as total_amount \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                group by \
+                    dt, \
+                    user_id \
+            ) a \
+            left join ( \
+                select \
+                    user_id, \
+                    min(dt) as dt \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                group by \
+                    user_id \
+            ) b on a.user_id = b.user_id \
+            left join ( \
+                select \
+                    dt, \
+                    user_id, \
+                    sum(order_price) as total_amount \
+                from \
+                    vc.dwd_vc_order_i_d \
+                where \
+                    order_status = 2 \
+                    and is_test_user = 'N' \
+                group by \
+                    dt, \
+                    user_id \
+            ) c on a.user_id = c.user_id \
+            AND c.dt BETWEEN date_add(a.dt, 0) \
+            AND date_add(a.dt, 30)  \
+        WHERE \
+            datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 2, 6, 14, 29) \
+        group by \
+            a.dt, \
+            CASE \
+                WHEN a.dt > b.dt THEN 0 \
+                ELSE 1 \
+            END grouping sets( \
+                ( \
+                    a.dt, \
+                    datediff('${azkaban.flow.1.days.ago}', a.dt) \
+                ), \
+                ( \
+                    a.dt, \
+                    datediff('${azkaban.flow.1.days.ago}', a.dt), \
+CASE \
+                        WHEN a.dt > b.dt THEN 0 \
+                        ELSE 1 \
+                    END \
+                ) \
+            ) \
+    ) t \

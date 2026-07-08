@@ -1,0 +1,50 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "RecActionDto",
+  "fields": [
+    {"name": "appName", "type": ["null", "string"], "aliases": ["a"]},
+    {"name": "logFile", "type": ["null", "boolean"], "aliases": ["lf"]},
+    {"name": "scene", "type": ["null", "string"],"aliases": ["s"]},
+    {"name": "account", "type": ["null", "string"],"aliases": ["ac"]},
+    {"name": "itemId", "type": ["null", "string"], "aliases": ["ii"]},
+    {"name": "itemType", "type": ["null", "string"], "aliases": ["it"]},
+    {"name": "rating", "type": ["null", "int"], "aliases": ["r"]},
+    {"name": "text", "type": ["null", "string"], "aliases": ["tx"]},
+    {"name": "time", "type": "long", "aliases": ["t"]},
+    {"name": "cost", "type": ["null", "long"], "aliases": ["cst"]},
+    {"name": "progress", "type": ["null", "double"], "aliases": ["pg"]},
+    {"name": "platform", "type": ["null", "int"], "aliases": ["p"]},
+    {
+      "name": "algInfoExtDto",
+      "type": ["null", {
+        "type": "record",
+        "name": "AlgInfo",
+        "fields": [
+          {"name": "algName", "type": ["null", "string"]},
+          {"name": "taskId", "type": ["null", "string"]}
+        ]
+      }]
+    },
+    {"name": "recId", "type": ["null", "string"], "aliases": ["ri"]},
+    {
+      "name": "extData",
+      "type": ["null", {
+        "type": "record",
+        "name": "ExtData",
+        "fields": [
+          {"name": "relatedItemType", "type": ["null", "string"]},
+          {"name": "repeat", "type": ["null", "int"]},
+          {"name": "eventId", "type": ["null", "string"]},
+          {"name": "ad", "type": ["null", "string"]},
+          {"name": "queryName", "type": ["null", "string"]}
+        ]
+      }]
+    },
+    {"name": "appVersion", "type": ["null", "string"], "aliases": ["av"]},
+    {"name": "source", "type": ["null", "string"], "aliases": ["so"]},
+    {"name": "refer", "type": ["null", "string"], "aliases": ["ref"]},
+    {"name": "sourceLink", "type": ["null", "string"], "aliases": ["sl"]},
+    {"name": "eventId", "type": ["null", "string"], "aliases": ["ei"]}
+  ]
+}

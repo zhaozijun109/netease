@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_paid_subscribe_actpwd_channel_funnel_di partition(dt='${azkaban.flow.1.days.ago}') \
+select m.actpwd_channel, m.all_devices, m.actpwd_trade_devices, m.actpwd_trade_amount, \
+       x.new_devices, y.id as actpwd_channel_id, m.is_mini \
+from ( \
+    select a.channel as actpwd_channel, \
+           if(a.actpwd like 'kol_channel_%', 1, 0) as is_mini, \
+           count(distinct a.deviceUdid) as all_devices, \
+           count(distinct b.deviceUdid) as actpwd_trade_devices, \
+           sum(b.actpwd_trade_amount) as actpwd_trade_amount \
+    from ( \
+        select actpwd,channel,deviceUdid \
+        from lofter.dwd_growth_actpwd_access_di \
+        where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe > 0 \
+    ) a \
+    left join ( \
+        select actpwd_search as actpwd, deviceUdid, \
+               sum(amount) as actpwd_trade_amount \
+        from lofter.dwd_paid_subscribe_order_di lateral view explode(actpwd_search_list) t as actpwd_search \
+        where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        group by actpwd_search, deviceUdid \
+    ) b on a.deviceUdid = b.deviceUdid and a.actpwd = b.actpwd \
+    group by 1, 2 \
+) m \
+left join ( \
+    select origin_channel, \
+           if(origin_actpwd like 'kol_channel_%', 1, 0) as is_mini, \
+           count(distinct deviceUdid) as new_devices \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' and device_type='new' \
+    group by 1, 2 \
+) x on m.actpwd_channel = x.origin_channel and m.is_mini = x.is_mini \
+left join (select * from lofter.dim_kol_channel_dd where dt = '${azkaban.flow.1.days.ago}') y on m.actpwd_channel = y.channel

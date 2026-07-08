@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_creator_month_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select count(distinct a.blogid) as total_users, \
+           count(distinct b.userid) as active_users, \
+           count(distinct c.blogid) as post_users, \
+           sum(post) as post_count \
+    from ( \
+        select userId as blogid \
+        from lofter.dws_par_creator_dd \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' and \
+              level is not null \
+        group by blogid \
+    ) a left join ( \
+        select userid \
+        from lofter.device_active \
+        lateral view explode(userIds) myTable as userid \
+        where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) b on a.blogid=b.userid \
+    left join ( \
+        select blogid,count(distinct id) post \
+        from lofter.dim_post \
+        where publishDate >= '${azkaban.flow.30.days.ago}' and publishDate <= '${azkaban.flow.1.days.ago}' and \
+              isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+              isMoved = 0 and isActivityAutoPost=0 and isImported=0 and \
+              contentType in ("图片","文字","视频") \
+        group by blogid \
+    ) c on a.blogid=c.blogid
+dependencies=

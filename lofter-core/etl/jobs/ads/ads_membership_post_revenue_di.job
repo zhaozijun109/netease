@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_membership_post_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.* \
+from ( \
+    select a.postId, a.blogId, \
+        cast(((a.settlement_post_score / total_settlement_post_score) * (total_revenue - nvl(kol_cost,0)) * b.settlement_ratio) as  DECIMAL(10, 4)) as revenue, \
+        d.order_count, cast(d.order_amount as  DECIMAL(10, 4)) as order_amount, \
+        '${azkaban.flow.2.days.ago}' as settlement_date, \
+        settlement_post_score, total_settlement_post_score, total_revenue, kol_cost as total_kol_cost, \
+        b.settlement_ratio \
+    from ( \
+        select dt, postId, blogId, max(revenue_post_score) as settlement_post_score \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.2.days.ago}' and revenue_post_score > 0 \
+        group by 1, 2, 3 \
+    ) a \
+    join ( \
+        select '${azkaban.flow.2.days.ago}' as dt, sum(amount) as total_revenue, cast(0.35 as decimal(10,4)) as settlement_ratio \
+        from ( \
+            select postId, vipdays, (amount - channeldivision - fee) / vipdays as amount, finishTime \
+            from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+            where status = 1 and \
+                date_add(from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') ,cast((vipdays-1) as int)) >= '${azkaban.flow.2.days.ago}' and \
+                from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.2.days.ago}' \
+        ) t \
+    ) b on a.dt = b.dt \
+    join ( \
+        select dt, sum(revenue_post_score) as total_settlement_post_score \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.2.days.ago}' and revenue_post_score > 0 \
+        group by 1 \
+    ) c on a.dt = c.dt \
+    left join ( \
+            select postId, \
+                count(distinct id) as order_count, \
+               sum(amount) as order_amount \
+            from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+            where status = 1 and \
+                from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' \
+            group by 1 \
+    ) d on a.postId = d.postId \
+    left join ( \
+        select '${azkaban.flow.2.days.ago}' as dt, sum(b.unitCost / a.vip_days) as kol_cost \
+        from ( \
+            select vip_days, cast(from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyyMMdd') as bigint) as settlement_day \
+            from lofter.dwd_membership_order_di \
+            where dt <= '${azkaban.flow.2.days.ago}' and order_type = 6 and actpwd is not null and \
+                  date_add(from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd'), cast((vip_days-1) as int)) >= '${azkaban.flow.2.days.ago}' and \
+                  from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.2.days.ago}' \
+        ) a \
+        join ( \
+            select date, max(unitCost / 100) as unitCost \
+            from lofter_db_dump.ods_db_kol_attribution_order_cost_nd \
+            where settlementType = 'CPS' \
+            group by 1 \
+        ) b on a.settlement_day = b.date \
+    ) e on a.dt = e.dt \
+) a \
+join (select postId from lofter.dim_membership_post_vip_dd where dt = '${azkaban.flow.2.days.ago}' group by 1) b on a.postId = b.postId \
+where a.revenue > 0.05 \

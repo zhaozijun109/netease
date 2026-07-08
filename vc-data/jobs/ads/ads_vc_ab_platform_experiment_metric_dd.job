@@ -1,0 +1,80 @@
+type=sparksql
+hive.query.01=\
+with source_table as( \
+    SELECT exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value,metric_value \
+    FROM vc.dws_ab_platform_experiment_metric_di \
+), \
+metric_source as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'exp_uv_avg' then metric_value  end) as exp_uv_avg, \
+        max(case when metric = 'exp_uv_sum' then metric_value  end) as exp_uv_sum, \
+        max(case when metric = 'exp_pv_avg' then metric_value  end) as exp_pv_avg, \
+        max(case when metric = 'exp_pv_sum' then metric_value  end) as exp_pv_sum, \
+        max(case when metric = 'vc_gmv_avg' then metric_value  end) as vc_gmv_avg, \
+        max(case when metric = 'vc_gmv_sum' then metric_value  end) as vc_gmv_sum, \
+        max(case when metric = 'vc_arpu_avg' then metric_value  end) as vc_arpu_avg, \
+        max(case when metric = 'vc_arpu_sum' then metric_value  end) as vc_arpu_sum, \
+        max(case when metric = 'vc_arppu_avg' then metric_value  end) as vc_arppu_avg, \
+        max(case when metric = 'vc_arppu_sum' then metric_value  end) as vc_arppu_sum, \
+        max(case when metric = 'vc_pay_money_avg' then metric_value  end) as vc_pay_money_avg, \
+        max(case when metric = 'vc_pay_money_sum' then metric_value  end) as vc_pay_money_sum, \
+        max(case when metric = 'vc_pay_uv_avg' then metric_value  end) as vc_pay_uv_avg, \
+        max(case when metric = 'vc_pay_uv_sum' then metric_value  end) as vc_pay_uv_sum, \
+        max(case when metric = 'vc_visit_uv_avg' then metric_value  end) as vc_visit_uv_avg, \
+        max(case when metric = 'vc_visit_uv_sum' then metric_value  end) as vc_visit_uv_sum, \
+        max(case when metric = 'vc_chat_uv_avg' then metric_value  end) as vc_chat_uv_avg, \
+        max(case when metric = 'vc_chat_uv_sum' then metric_value  end) as vc_chat_uv_sum, \
+        max(case when metric = 'vc_chat_rounds_avg' then metric_value  end) as vc_chat_rounds_avg, \
+        max(case when metric = 'vc_chat_rounds_sum' then metric_value  end) as vc_chat_rounds_sum, \
+        max(case when metric = 'vc_roles_cnt_avg' then metric_value  end) as vc_roles_cnt_avg, \
+        max(case when metric = 'vc_roles_cnt_sum' then metric_value  end) as vc_roles_cnt_sum, \
+        max(case when metric = 'vc_visit_retain_6d_avg' then metric_value  end) as vc_visit_retain_6d_avg, \
+        max(case when metric = 'vc_visit_retain_6d_sum' then metric_value  end) as vc_visit_retain_6d_sum, \
+        max(case when metric = 'vc_visit_retain_1d_avg' then metric_value  end) as vc_visit_retain_1d_avg, \
+        max(case when metric = 'vc_visit_retain_1d_sum' then metric_value  end) as vc_visit_retain_1d_sum, \
+        max(case when metric = 'vc_visit2chat_rate_uv_avg' then metric_value  end) as vc_visit2chat_rate_uv_avg, \
+        max(case when metric = 'vc_visit2chat_rate_uv_avg' then metric_value  end) as vc_visit2chat_rate_uv_sum, \
+        max(case when metric = 'vc_chat2pay_rate_uv_avg' then metric_value  end) as vc_chat2pay_rate_uv_avg, \
+        max(case when metric = 'vc_chat2pay_rate_uv_sum' then metric_value  end) as vc_chat2pay_rate_uv_sum, \
+        max(case when metric = 'vc_visit2pay_rate_uv_avg' then metric_value  end) as vc_visit2pay_rate_uv_avg, \
+        max(case when metric = 'vc_visit2pay_rate_uv_sum' then metric_value  end) as vc_visit2pay_rate_uv_sum \
+    from source_table \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+) \
+insert overwrite table vc.ads_vc_ab_platform_experiment_metric_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select exp_date,t1.appid,sceneid,exp_id,bucket_id,dimension,dimension_value,t2.name as group_name,t3.appname,t4.scenename, \
+    exp_uv_sum, \
+    exp_pv_avg, \
+    exp_pv_sum, \
+    vc_gmv_sum, \
+    nvl(vc_gmv_sum / exp_uv_sum,0) as vc_arpu, \
+    nvl(vc_gmv_sum / vc_pay_uv_sum,0) as vc_arppu, \
+    vc_pay_money_avg, \
+    vc_pay_uv_avg, \
+    vc_pay_uv_sum, \
+    vc_chat_uv_sum, \
+    vc_chat_rounds_avg, \
+    vc_chat_rounds_sum, \
+    vc_roles_cnt_avg, \
+    vc_roles_cnt_sum, \
+    vc_visit_uv_avg, \
+    vc_visit_uv_sum, \
+    vc_visit_retain_6d_avg, \
+    vc_visit_retain_1d_avg, \
+    nvl(vc_pay_uv_sum/vc_visit_uv_sum,0.0) as vc_visit2pay_rate, \
+    nvl(vc_chat_uv_sum/vc_visit_uv_sum,0.0) as vc_visit2chat_rate, \
+    nvl(vc_pay_uv_sum/vc_chat_uv_sum,0.0) as vc_chat2pay_rate \
+from metric_source as t1 \
+left join( \
+    select id,expid,name \
+    from vc.ods_db_ab_exp_group_nd \
+)t2 on t1.exp_id = t2.expid and t1.bucket_id = t2.id \
+left join( \
+    select id,appname \
+    from vc.ods_db_ab_app_nd \
+)t3 on t1.appid = t3.id \
+left join( \
+    select id,appid,scenename \
+    from vc.ods_db_ab_flow_scene_nd \
+)t4 on t1.appid = t4.appid and t1.sceneid = t4.id \
+order by exp_date desc,appid desc,sceneid desc,exp_id desc,bucket_id asc

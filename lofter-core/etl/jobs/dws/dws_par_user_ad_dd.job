@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_ad_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, count, 0)) video_grain_ticket_7d, \
+       sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, count, 0)) video_grain_ticket_15d, \
+       sum(count) video_grain_ticket_30d \
+from ( \
+    select userId, from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, count \
+    from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          type in (10,24,48) \
+) t \
+where dt >= '${azkaban.flow.30.days.ago}' \
+group by 1 \

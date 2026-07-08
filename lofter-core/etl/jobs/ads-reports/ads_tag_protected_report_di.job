@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_protected_report_di partition (dt='${azkaban.flow.1.days.ago}') \
+SELECT tag,count(1) as pv \
+from \
+lofter.ods_log_tag_protected_log_di \
+where dt='${azkaban.flow.1.days.ago}' \
+group by tag \

@@ -1,0 +1,192 @@
+type=sparksql
+hive.query.01= \
+with source_data as( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+   from lofter.dwd_ab_platform_exp_user_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by 1 , 2, 3, 4, 5, 6 \
+), \
+paid_source as( \
+    select postId from lofter.dim_gift_post_return group by postid \
+), \
+metric_source1 as( \
+    select a.*,scene,is_free,post_content_type,aggregateId,expose_pv,expose_uv,click_pv,click_uv,neg_action_pv, neg_action_uv \
+    from source_data a \
+    left join( \
+        select userId,scene,is_free,post_content_type,grouping__id as aggregateId, \
+            count(1) as expose_pv, \
+            1 as expose_uv, \
+            count(if(reaction = 'click',1,null)) as click_pv, \
+            max(if(reaction = 'click',1,0)) as click_uv, \
+            count(if(reaction = 'dislike',1,null)) as neg_action_pv, \
+            max(if(reaction = 'dislike',1,0)) as neg_action_uv \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free,reaction \
+            from( \
+                select userId,postId,post_content_type,detail_scene_level_1 as scene,reaction \
+                from lofter.dwd_post_expose_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_scene_level_1 in('tag','search','discovery','related_article') \
+            union all \
+                select userId,postId,post_content_type,if(detail_scene_level_2='tag_sub_cate_rec','tag_discovery',detail_scene_level_2) as scene,reaction \
+                from lofter.dwd_post_expose_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_scene_level_2 in('tag_hot','tag_new','tag_discovery','tag_sub_cate_rec') \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,scene,is_free,post_content_type \
+        grouping sets((userId,scene),(userId,scene,is_free),(userId,scene,post_content_type)) \
+    )b on a.userId = b.userId \
+), \
+metric_source2 as( \
+    select a.*,scene,is_free,post_content_type,aggregateId,browse_pv,browse_uv,real_browse_pv,real_browse_uv,browse_duration \
+    from source_data a \
+    left join( \
+        select userId,scene,is_free,post_content_type,grouping__id as aggregateId, \
+            count(if(action_type = 'page_view' and is_real = 0,1,null)) as browse_pv, \
+            max(if(action_type = 'page_view' and is_real = 0,1,0)) as browse_uv, \
+            count(if(action_type = 'page_duration' and is_real > 0,1,null)) as real_browse_pv, \
+            max(if(action_type = 'page_duration' and is_real > 0,1,0)) as real_browse_uv, \
+            sum(if(action_type = 'page_duration',duration,null)) as browse_duration \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free \
+            from( \
+                select userId,postId,is_real,duration,post_content_type,detail_source1_scene_level_1 as scene,action_type \
+                from lofter.dwd_post_browse_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_1 in('tag','search','discovery','related_article') \
+            union all \
+                select userId,postId,is_real,duration,post_content_type,if(detail_source1_scene_level_2='tag_sub_cate_rec','tag_discovery',detail_source1_scene_level_2) as scene,action_type \
+                from lofter.dwd_post_browse_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_2 in('tag_hot','tag_new','tag_discovery', 'tag_sub_cate_rec') \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,scene,is_free,post_content_type \
+        grouping sets((userId,scene),(userId,scene,is_free),(userId,scene,post_content_type)) \
+    )b on a.userId = b.userId \
+), \
+metric_source3 as( \
+    select a.*,scene,is_free,post_content_type,aggregateId,interaction_pv,interaction_uv \
+    from source_data a \
+    left join( \
+        select userId,scene,is_free,post_content_type,grouping__id as aggregateId, \
+            count(1) as interaction_pv, \
+            1 as interaction_uv \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free \
+            from( \
+                select userid, postid, post_content_type, detail_source1_scene_level_1 as scene \
+                from lofter.dwd_post_hot_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_1 in('tag','search','discovery','related_article') \
+            union all \
+                select userid, postid, post_content_type, if(detail_source1_scene_level_2='tag_sub_cate_rec','tag_discovery',detail_source1_scene_level_2) as scene \
+                from lofter.dwd_post_hot_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_2 in('tag_hot','tag_new','tag_discovery','tag_sub_cate_rec') \
+            union all \
+                select userid, postid, post_content_type, detail_source1_scene_level_1 as scene \
+                from lofter.dwd_post_response_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_1 in('tag','search','discovery','related_article') \
+            union all \
+                select userid, postid, post_content_type, if(detail_source1_scene_level_2='tag_sub_cate_rec','tag_discovery',detail_source1_scene_level_2) as scene \
+                from lofter.dwd_post_response_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_2 in('tag_hot','tag_new','tag_discovery','tag_sub_cate_rec') \
+            union all \
+                select userid, postid, post_content_type, detail_source1_scene_level_1 as scene \
+                from lofter.dwd_post_share_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_1 in('tag','search','discovery','related_article') \
+            union all \
+                select userid, postid, post_content_type, if(detail_source1_scene_level_2='tag_sub_cate_rec','tag_discovery',detail_source1_scene_level_2) as scene \
+                from lofter.dwd_post_share_di \
+                where dt = '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_2 in('tag_hot','tag_new','tag_discovery','tag_sub_cate_rec') \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,scene,is_free,post_content_type \
+        grouping sets((userId,scene),(userId,scene,is_free),(userId,scene,post_content_type)) \
+    )b on a.userId = b.userId \
+) \
+insert overwrite table lofter.dws_ab_platform_ecology_scene_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    scene, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' when '视频' then 'VIDEO' end) \
+    end as dimension_value \
+from metric_source1 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('expose_pv' AS metric, CAST(expose_pv AS BIGINT) AS metric_value), \
+        STRUCT('expose_uv' AS metric, CAST(expose_uv AS BIGINT) AS metric_value), \
+        STRUCT('click_pv' AS metric, CAST(click_pv AS BIGINT) AS metric_value), \
+        STRUCT('click_uv' AS metric, CAST(click_uv AS BIGINT) AS metric_value), \
+        STRUCT('neg_action_pv' AS metric, CAST(neg_action_pv AS BIGINT) AS metric_value), \
+        STRUCT('neg_action_uv' AS metric, CAST(neg_action_uv AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    scene, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' when '视频' then 'VIDEO' end) \
+    end as dimension_value \
+from metric_source2 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('browse_pv' AS metric, CAST(browse_pv AS BIGINT) AS metric_value), \
+        STRUCT('browse_uv' AS metric, CAST(browse_uv AS BIGINT) AS metric_value), \
+        STRUCT('real_browse_pv' AS metric, CAST(real_browse_pv AS BIGINT) AS metric_value), \
+        STRUCT('real_browse_uv' AS metric, CAST(real_browse_uv AS BIGINT) AS metric_value), \
+        STRUCT('browse_duration' AS metric, CAST(browse_duration AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    scene, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' when '视频' then 'VIDEO' end) \
+    end as dimension_value \
+from metric_source3 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('interaction_pv' AS metric, CAST(interaction_pv AS BIGINT) AS metric_value), \
+        STRUCT('interaction_uv' AS metric, CAST(interaction_uv AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info
+dependencies=dwd_ab_platform_exp_user_di

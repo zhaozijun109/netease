@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.UserTagClickHouseLoad
+conf.spark.source.query="select dt, tag, grp, bitmap from lofter_dm.ads_post_tag_group_level1_bitmap_dd where dt = '${azkaban.flow.1.days.ago}' and tag is not null and grp is not null "
+params=--dest lofter.post_portrait_level1 --tagCount 3
+retries=0
+dependencies=ads_post_tag_group_level1_bitmap_dd

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+conf.spark.dynamicAllocation.maxExecutors=25
+class=com.netease.lofter.etl.dws.UserSecurityLevelStats
+params=--date ${azkaban.flow.1.days.ago}

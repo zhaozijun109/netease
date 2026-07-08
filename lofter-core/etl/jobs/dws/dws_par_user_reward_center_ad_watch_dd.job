@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_par_user_reward_center_ad_watch_dd \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT userId, \
+       is_anonymous, \
+       ad_watch_count_1d, \
+       ad_watch_count_7d, \
+       ad_watch_count_15d, \
+       ad_watch_count_30d, \
+       ad_watch_count_90d, \
+       ad_watch_count_180d, \
+       ad_watch_count_total \
+FROM ( \
+    SELECT a.userId, \
+           nvl(u.isanonymous, 0) as is_anonymous, \
+           count(if(dt = '${azkaban.flow.1.days.ago}', 1, null)) as ad_watch_count_1d, \
+           count(if(dt >= '${azkaban.flow.7.days.ago}', 1, null)) as ad_watch_count_7d, \
+           count(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, null)) as ad_watch_count_15d, \
+           count(if(dt >= '${azkaban.flow.30.days.ago}', 1, null)) as ad_watch_count_30d, \
+           count(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, 1, null)) as ad_watch_count_90d, \
+           count(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, 1, null)) as ad_watch_count_180d, \
+           count(1) as ad_watch_count_total \
+    FROM ( \
+        SELECT userId, dt \
+        FROM lofter.dwd_ad_reward_task_complete_di \
+        WHERE dt <= '${azkaban.flow.1.days.ago}' \
+          AND task_pay_type = 1 \
+          AND userId > 0 \
+    ) a \
+    LEFT JOIN lofter.dim_user u ON a.userId = u.id \
+    GROUP BY a.userId, u.isanonymous \
+) t \
+DISTRIBUTE BY 1

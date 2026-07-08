@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table vc.ads_vc_user_expire_assets_push_di partition(dt='${azkaban.flow.current.date}') \
+select t1.userId, \
+       t2.asset, \
+       t3.props, \
+       t4.benefit \
+from ( \
+    select id as userId from vc.ods_db_vc_user_account_nd where account_type in (1, 3) and status = 0 \
+) t1 \
+left join ( \
+    select userId, \
+           cast(to_json(collect_set(struct(type, value))) as string) as asset \
+    from ( \
+        select user_id as userId, \
+               asset_type as type, \
+               sum(left_amount) as value \
+        from vc.ods_db_vc_user_asset_left_nd \
+        where asset_type in (1, 2, 3) and valid_type = 2 and left_amount > 0 and \
+              valid_end_time >= unix_timestamp(concat('${azkaban.flow.current.date}', ' 12:00:00')) and \
+              valid_end_time < unix_timestamp(concat(date_add('${azkaban.flow.current.date}', 1), ' 12:00:00')) \
+        group by user_id, asset_type \
+    ) t \
+    group by userId \
+) t2 \
+on t1.userId = t2.userId \
+left join ( \
+    select userId, \
+           cast(to_json(collect_set(struct(type, value))) as string) as props \
+    from ( \
+        select user_id as userId, \
+               props_type as type, \
+               sum(amount) as value \
+        from vc.ods_db_vc_user_props_nd \
+        where props_type = 2 and valid_type = 2 and amount > 0 and \
+              valid_end_time >= unix_timestamp(concat('${azkaban.flow.current.date}', ' 12:00:00')) and \
+              valid_end_time < unix_timestamp(concat(date_add('${azkaban.flow.current.date}', 1), ' 12:00:00')) \
+        group by user_id, props_type \
+    ) t \
+    group by userId \
+) t3 \
+on t1.userId = t3.userId \
+left join ( \
+    select userId, \
+           cast(to_json(collect_set(struct(type, value))) as string) as benefit \
+    from ( \
+        select user_id as userId, \
+               benefit_type as type, \
+               count(1) as value \
+        from vc.ods_db_vc_user_benefits_nd \
+        where benefit_type in (1,2,3,4,5,6,7,8,9,10,11,12,13) and status = 1 and \
+              valid_end_time >= unix_timestamp(concat('${azkaban.flow.current.date}', ' 12:00:00')) and \
+              valid_end_time < unix_timestamp(concat(date_add('${azkaban.flow.current.date}', 1), ' 12:00:00')) \
+        group by user_id, benefit_type \
+    ) t \
+    group by userId \
+) t4 \
+on t1.userId = t4.userId \
+where t2.asset is not null or t3.props is not null or t4.benefit is not null

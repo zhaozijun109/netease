@@ -1,0 +1,63 @@
+type=sparksql
+hive.query.01=\
+insert OVERWRITE table lofter_dm.ads_ad_form_conversion_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(a.business, b.business) as business \
+, nvl(a.expose_pv, 0) as expose_pv \
+, nvl(a.click_pv, 0) as click_pv \
+, nvl(a.expose_uv, 0) as expose_uv \
+, nvl(a.click_uv, 0) as click_uv \
+, nvl(b.landing_uv, 0) as landing_uv \
+from \
+( \
+    select f.business \
+    , sum(t.is_bg) as expose_pv \
+    , sum(t.is_click) as click_pv \
+    , count(distinct if(t.is_bg > 0, cast(t.userid as string), null)) as expose_uv \
+    , count(distinct if(t.is_click > 0, cast(t.userid as string), null)) as click_uv \
+    from \
+    ( \
+        select adid, userid, is_bg, is_click \
+        from lofter.dwd_ad_actions_v2_di \
+        where dt = '${azkaban.flow.1.days.ago}' and positionid = 147001 \
+    ) t \
+    join \
+    ( \
+        select adid \
+        , case when name like '%权益中心%' then '权益中心' \
+               when name like '%破次元%' then '破次元' \
+               when name like '%里世界%' then '里世界' \
+               when name like '%星匣%' then '星匣' \
+               when name like '%拼图%' then '拼图' \
+               when name like '%AI互动小说%' then 'AI互动小说' \
+               else '其他' end as business \
+        from lofter_db_dump.ods_db_ad_form_nd \
+        where positionid = 147001 \
+    ) f on t.adid = f.adid \
+    group by f.business \
+) a \
+full outer join \
+( \
+    select business \
+    , count(distinct userid) as landing_uv \
+    from \
+    ( \
+        select userid \
+        , case when url like '%reward-center%' then '权益中心' \
+               when url like '%vcharacter%' then '破次元' \
+               when url like '%pve-boyfriends%' or url like '%play-chat%' then '里世界' \
+               when url like '%virtualoverapp%' then '星匣' \
+               when url like '%puzzle%' then '拼图' \
+               when url like '%story-theater%' then 'AI互动小说' \
+               else '其他' end as business \
+        from \
+        ( \
+            select userid, GET_JSON_OBJECT(params['ext'], '$.target_url') as url \
+            from lofter.ods_mda_app_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+              and eventid = 'b1-45' \
+              and params['pos'] = '11' \
+              and GET_JSON_OBJECT(params['ext'], '$.target_url') is not null \
+        ) u \
+    ) v \
+    group by business \
+) b on a.business = b.business \

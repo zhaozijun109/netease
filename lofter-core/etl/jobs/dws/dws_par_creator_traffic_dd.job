@@ -1,0 +1,228 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=200
+conf.spark.executor.cores=4
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=insert overwrite table lofter.dws_par_creator_traffic_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId, \
+    count(distinct if(a.publishDate <= '${azkaban.flow.1.days.ago}' and a.publishDate >= '${azkaban.flow.7.days.ago}', b.postId, null)) as post_count_7d, \
+    count(distinct if(a.publishDate <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', a.publishDate) < 15 , b.postId, null)) as post_count_15d, \
+    count(distinct b.postId) as post_count_30d, \
+    sum(distinct if(a.publishDate <= '${azkaban.flow.1.days.ago}' and a.publishDate >= '${azkaban.flow.7.days.ago}' and b.postId is not null, c.browse_pv_7d, 0)) as new_post_browse_pv_7d, \
+    sum(distinct if(a.publishDate <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', a.publishDate) < 15 and b.postId is not null, c.browse_pv_15d, 0)) as new_post_browse_pv_15d, \
+    sum(distinct if(a.publishDate <= '${azkaban.flow.1.days.ago}' and b.postId is not null, c.browse_pv_30d, 0)) as new_post_browse_pv_30d, \
+    sum(browse_pv_7d) browse_pv_7d, \
+    sum(browse_pv_15d) as browse_pv_15d, \
+    sum(browse_pv_30d) as browse_pv_30d, \
+    sum(discovery_click_pv_7d) as discovery_click_pv_7d, \
+    sum(discovery_click_pv_30d) as discovery_click_pv_30d, \
+    sum(discovery_click_pv_90d) as discovery_click_pv_90d, \
+    sum(related_article_click_pv_7d) as related_article_click_pv_7d, \
+    sum(related_article_click_pv_30d) as related_article_click_pv_30d, \
+    sum(related_article_click_pv_90d) as related_article_click_pv_90d, \
+    sum(tag_discovery_click_pv_7d) as tag_discovery_click_pv_7d, \
+    sum(tag_discovery_click_pv_30d) as tag_discovery_click_pv_30d, \
+    sum(tag_discovery_click_pv_90d) as tag_discovery_click_pv_90d, \
+    sum(tag_new_click_pv_7d) as tag_new_click_pv_7d, \
+    sum(tag_new_click_pv_30d) as tag_new_click_pv_30d, \
+    sum(tag_new_click_pv_90d) as tag_new_click_pv_90d, \
+    sum(tag_hot_click_pv_7d) as tag_hot_click_pv_7d, \
+    sum(tag_hot_click_pv_30d) as tag_hot_click_pv_30d, \
+    sum(tag_hot_click_pv_90d) as tag_hot_click_pv_90d, \
+    sum(collection_click_pv_7d) as collection_click_pv_7d, \
+    sum(collection_click_pv_30d) as collection_click_pv_30d, \
+    sum(collection_click_pv_90d) as collection_click_pv_90d, \
+    sum(attention_click_pv_7d) as attention_click_pv_7d, \
+    sum(attention_click_pv_30d) as attention_click_pv_30d, \
+    sum(attention_click_pv_90d) as attention_click_pv_90d, \
+    sum(click_pv_7d) as click_pv_7d, \
+    sum(click_pv_30d) as click_pv_30d, \
+    sum(click_pv_90d) as click_pv_90d, \
+    bitmap_count(bitmap_union(expose_device_bitmap_7d)) as post_expose_uv_7d, \
+    bitmap_count(bitmap_union(expose_device_bitmap_30d)) as post_expose_uv_30d, \
+    bitmap_count(bitmap_union(expose_device_bitmap_90d)) as post_expose_uv_90d, \
+    bitmap_count(bitmap_union(click_device_bitmap_7d)) as post_click_uv_7d, \
+    bitmap_count(bitmap_union(click_device_bitmap_30d)) as post_click_uv_30d, \
+    bitmap_count(bitmap_union(click_device_bitmap_90d)) as post_click_uv_90d, \
+    bitmap_count(bitmap_union(real_browse_device_bitmap_7d)) as post_real_browse_uv_7d, \
+    bitmap_count(bitmap_union(real_browse_device_bitmap_30d)) as post_real_browse_uv_30d, \
+    bitmap_count(bitmap_union(real_browse_device_bitmap_90d)) as post_real_browse_uv_90d, \
+    sum(support_induced_pv_7d) as post_support_induced_pv_7d, \
+    sum(support_induced_pv_30d) as post_support_induced_pv_30d, \
+    sum(support_induced_pv_90d) as post_support_induced_pv_90d, \
+    sum(support_induced_pv_1d) as post_support_induced_pv_1d, \
+    bitmap_count(bitmap_union(expose_device_bitmap_1d)) as post_expose_uv_1d, \
+    bitmap_count(bitmap_union(click_device_bitmap_1d)) as post_click_uv_1d, \
+    bitmap_count(bitmap_union(real_browse_device_bitmap_1d)) as post_real_browse_uv_1d, \
+    sum(expose_pv_1d) as expose_pv_1d, \
+    sum(expose_pv_7d) as expose_pv_7d, \
+    sum(expose_pv_30d) as expose_pv_30d, \
+    sum(expose_pv_90d) as expose_pv_90d, \
+    sum(browse_pv_90d) as browse_pv_90d, \
+    sum(click_pv_1d) as click_pv_1d, \
+    sum(browse_pv_1d) as browse_pv_1d, \
+    sum(discovery_click_pv_1d) as discovery_click_pv_1d, \
+    sum(related_article_click_pv_1d) as related_article_click_pv_1d, \
+    sum(tag_discovery_click_pv_1d) as tag_discovery_click_pv_1d, \
+    sum(tag_new_click_pv_1d) as tag_new_click_pv_1d, \
+    sum(tag_hot_click_pv_1d) as tag_hot_click_pv_1d, \
+    sum(collection_click_pv_1d) as collection_click_pv_1d, \
+    sum(attention_click_pv_1d) as attention_click_pv_1d, \
+    sum(discovery_expose_pv_1d) as discovery_expose_pv_1d, \
+    sum(discovery_expose_pv_7d) as discovery_expose_pv_7d, \
+    sum(discovery_expose_pv_30d) as discovery_expose_pv_30d, \
+    sum(discovery_expose_pv_90d) as discovery_expose_pv_90d, \
+    sum(related_article_expose_pv_1d) as related_article_expose_pv_1d, \
+    sum(related_article_expose_pv_7d) as related_article_expose_pv_7d, \
+    sum(related_article_expose_pv_30d) as related_article_expose_pv_30d, \
+    sum(related_article_expose_pv_90d) as related_article_expose_pv_90d, \
+    sum(tag_discovery_expose_pv_1d) as tag_discovery_expose_pv_1d, \
+    sum(tag_discovery_expose_pv_7d) as tag_discovery_expose_pv_7d, \
+    sum(tag_discovery_expose_pv_30d) as tag_discovery_expose_pv_30d, \
+    sum(tag_discovery_expose_pv_90d) as tag_discovery_expose_pv_90d, \
+    sum(tag_new_expose_pv_1d) as tag_new_expose_pv_1d, \
+    sum(tag_new_expose_pv_7d) as tag_new_expose_pv_7d, \
+    sum(tag_new_expose_pv_30d) as tag_new_expose_pv_30d, \
+    sum(tag_new_expose_pv_90d) as tag_new_expose_pv_90d, \
+    sum(tag_hot_expose_pv_1d) as tag_hot_expose_pv_1d, \
+    sum(tag_hot_expose_pv_7d) as tag_hot_expose_pv_7d, \
+    sum(tag_hot_expose_pv_30d) as tag_hot_expose_pv_30d, \
+    sum(tag_hot_expose_pv_90d) as tag_hot_expose_pv_90d, \
+    sum(collection_expose_pv_1d) as collection_expose_pv_1d, \
+    sum(collection_expose_pv_7d) as collection_expose_pv_7d, \
+    sum(collection_expose_pv_30d) as collection_expose_pv_30d, \
+    sum(collection_expose_pv_90d) as collection_expose_pv_90d, \
+    sum(attention_expose_pv_1d) as attention_expose_pv_1d, \
+    sum(attention_expose_pv_7d) as attention_expose_pv_7d, \
+    sum(attention_expose_pv_30d) as attention_expose_pv_30d, \
+    sum(attention_expose_pv_90d) as attention_expose_pv_90d, \
+    sum(discovery_browse_pv_1d) as discovery_browse_pv_1d, \
+    sum(discovery_browse_pv_7d) as discovery_browse_pv_7d, \
+    sum(discovery_browse_pv_30d) as discovery_browse_pv_30d, \
+    sum(discovery_browse_pv_90d) as discovery_browse_pv_90d, \
+    sum(related_article_browse_pv_1d) as related_article_browse_pv_1d, \
+    sum(related_article_browse_pv_7d) as related_article_browse_pv_7d, \
+    sum(related_article_browse_pv_30d) as related_article_browse_pv_30d, \
+    sum(related_article_browse_pv_90d) as related_article_browse_pv_90d, \
+    sum(tag_discovery_browse_pv_1d) as tag_discovery_browse_pv_1d, \
+    sum(tag_discovery_browse_pv_7d) as tag_discovery_browse_pv_7d, \
+    sum(tag_discovery_browse_pv_30d) as tag_discovery_browse_pv_30d, \
+    sum(tag_discovery_browse_pv_90d) as tag_discovery_browse_pv_90d, \
+    sum(tag_new_browse_pv_1d) as tag_new_browse_pv_1d, \
+    sum(tag_new_browse_pv_7d) as tag_new_browse_pv_7d, \
+    sum(tag_new_browse_pv_30d) as tag_new_browse_pv_30d, \
+    sum(tag_new_browse_pv_90d) as tag_new_browse_pv_90d, \
+    sum(tag_hot_browse_pv_1d) as tag_hot_browse_pv_1d, \
+    sum(tag_hot_browse_pv_7d) as tag_hot_browse_pv_7d, \
+    sum(tag_hot_browse_pv_30d) as tag_hot_browse_pv_30d, \
+    sum(tag_hot_browse_pv_90d) as tag_hot_browse_pv_90d, \
+    sum(collection_browse_pv_1d) as collection_browse_pv_1d, \
+    sum(collection_browse_pv_7d) as collection_browse_pv_7d, \
+    sum(collection_browse_pv_30d) as collection_browse_pv_30d, \
+    sum(collection_browse_pv_90d) as collection_browse_pv_90d, \
+    sum(attention_browse_pv_1d) as attention_browse_pv_1d, \
+    sum(attention_browse_pv_7d) as attention_browse_pv_7d, \
+    sum(attention_browse_pv_30d) as attention_browse_pv_30d, \
+    sum(attention_browse_pv_90d) as attention_browse_pv_90d, \
+    sum(search_click_pv_1d) as search_click_pv_1d, \
+    sum(search_click_pv_7d) as search_click_pv_7d, \
+    sum(search_click_pv_30d) as search_click_pv_30d, \
+    sum(search_click_pv_90d) as search_click_pv_90d, \
+    sum(videolist_click_pv_1d) as videolist_click_pv_1d, \
+    sum(videolist_click_pv_7d) as videolist_click_pv_7d, \
+    sum(videolist_click_pv_30d) as videolist_click_pv_30d, \
+    sum(videolist_click_pv_90d) as videolist_click_pv_90d, \
+    sum(search_expose_pv_1d) as search_expose_pv_1d, \
+    sum(search_expose_pv_7d) as search_expose_pv_7d, \
+    sum(search_expose_pv_30d) as search_expose_pv_30d, \
+    sum(search_expose_pv_90d) as search_expose_pv_90d, \
+    sum(videolist_expose_pv_1d) as videolist_expose_pv_1d, \
+    sum(videolist_expose_pv_7d) as videolist_expose_pv_7d, \
+    sum(videolist_expose_pv_30d) as videolist_expose_pv_30d, \
+    sum(videolist_expose_pv_90d) as videolist_expose_pv_90d, \
+    sum(search_browse_pv_1d) as search_browse_pv_1d, \
+    sum(search_browse_pv_7d) as search_browse_pv_7d, \
+    sum(search_browse_pv_30d) as search_browse_pv_30d, \
+    sum(search_browse_pv_90d) as search_browse_pv_90d, \
+    sum(videolist_browse_pv_1d) as videolist_browse_pv_1d, \
+    sum(videolist_browse_pv_7d) as videolist_browse_pv_7d, \
+    sum(videolist_browse_pv_30d) as videolist_browse_pv_30d, \
+    sum(videolist_browse_pv_90d) as videolist_browse_pv_90d \
+from lofter.dim_post_article a \
+left join ( \
+    select postId \
+    from lofter.dwd_post_publish_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',89) \
+    group by postId \
+) b on a.id = b.postId \
+left join ( \
+    select postId, browse_pv_7d, browse_pv_15d, browse_pv_30d, \
+           discovery_click_pv_7d,discovery_click_pv_30d,discovery_click_pv_90d, \
+           related_article_click_pv_7d,related_article_click_pv_30d,related_article_click_pv_90d, \
+           tag_discovery_click_pv_7d,tag_discovery_click_pv_30d,tag_discovery_click_pv_90d, \
+           tag_new_click_pv_7d,tag_new_click_pv_30d,tag_new_click_pv_90d, \
+           tag_hot_click_pv_7d,tag_hot_click_pv_30d,tag_hot_click_pv_90d, \
+           collection_click_pv_7d,collection_click_pv_30d,collection_click_pv_90d, \
+           attention_click_pv_7d,attention_click_pv_30d,attention_click_pv_90d, \
+           click_pv_7d,click_pv_30d,click_pv_90d,expose_pv_1d,expose_pv_7d,expose_pv_30d,expose_pv_90d,browse_pv_90d, \
+           click_pv_1d,browse_pv_1d,discovery_click_pv_1d,related_article_click_pv_1d, \
+           tag_discovery_click_pv_1d,tag_new_click_pv_1d,tag_hot_click_pv_1d,collection_click_pv_1d,attention_click_pv_1d, \
+           discovery_expose_pv_1d,discovery_expose_pv_7d,discovery_expose_pv_30d,discovery_expose_pv_90d, \
+           related_article_expose_pv_1d,related_article_expose_pv_7d,related_article_expose_pv_30d,related_article_expose_pv_90d, \
+           tag_discovery_expose_pv_1d,tag_discovery_expose_pv_7d,tag_discovery_expose_pv_30d,tag_discovery_expose_pv_90d, \
+           tag_new_expose_pv_1d,tag_new_expose_pv_7d,tag_new_expose_pv_30d,tag_new_expose_pv_90d, \
+           tag_hot_expose_pv_1d,tag_hot_expose_pv_7d,tag_hot_expose_pv_30d,tag_hot_expose_pv_90d, \
+           collection_expose_pv_1d,collection_expose_pv_7d,collection_expose_pv_30d,collection_expose_pv_90d, \
+           attention_expose_pv_1d,attention_expose_pv_7d,attention_expose_pv_30d,attention_expose_pv_90d, \
+           discovery_browse_pv_1d,discovery_browse_pv_7d,discovery_browse_pv_30d,discovery_browse_pv_90d, \
+           related_article_browse_pv_1d,related_article_browse_pv_7d,related_article_browse_pv_30d,related_article_browse_pv_90d, \
+           tag_discovery_browse_pv_1d,tag_discovery_browse_pv_7d,tag_discovery_browse_pv_30d,tag_discovery_browse_pv_90d, \
+           tag_new_browse_pv_1d,tag_new_browse_pv_7d,tag_new_browse_pv_30d,tag_new_browse_pv_90d, \
+           tag_hot_browse_pv_1d,tag_hot_browse_pv_7d,tag_hot_browse_pv_30d,tag_hot_browse_pv_90d, \
+           collection_browse_pv_1d,collection_browse_pv_7d,collection_browse_pv_30d,collection_browse_pv_90d, \
+           attention_browse_pv_1d,attention_browse_pv_7d,attention_browse_pv_30d,attention_browse_pv_90d, \
+           search_click_pv_1d,search_click_pv_7d,search_click_pv_30d,search_click_pv_90d, \
+           videolist_click_pv_1d,videolist_click_pv_7d,videolist_click_pv_30d,videolist_click_pv_90d, \
+           search_expose_pv_1d,search_expose_pv_7d,search_expose_pv_30d,search_expose_pv_90d, \
+           videolist_expose_pv_1d,videolist_expose_pv_7d,videolist_expose_pv_30d,videolist_expose_pv_90d, \
+           search_browse_pv_1d,search_browse_pv_7d,search_browse_pv_30d,search_browse_pv_90d, \
+           videolist_browse_pv_1d,videolist_browse_pv_7d,videolist_browse_pv_30d,videolist_browse_pv_90d \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.id = c.postId \
+left join ( \
+    select postId, \
+           bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', expose_device_bitmap, null)) as expose_device_bitmap_1d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, expose_device_bitmap, null)) as expose_device_bitmap_7d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, expose_device_bitmap, null)) as expose_device_bitmap_30d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, expose_device_bitmap, null)) as expose_device_bitmap_90d, \
+           bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', click_device_bitmap, null)) as click_device_bitmap_1d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, click_device_bitmap, null)) as click_device_bitmap_7d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, click_device_bitmap, null)) as click_device_bitmap_30d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, click_device_bitmap, null)) as click_device_bitmap_90d, \
+           bitmap_union(if(dt = '${azkaban.flow.1.days.ago}', real_browse_device_bitmap, null)) as real_browse_device_bitmap_1d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, real_browse_device_bitmap, null)) as real_browse_device_bitmap_7d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, real_browse_device_bitmap, null)) as real_browse_device_bitmap_30d, \
+           bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, real_browse_device_bitmap, null)) as real_browse_device_bitmap_90d \
+    from lofter.dws_post_traffic_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',89) \
+    group by postId \
+) d \
+on a.id = d.postId \
+left join ( \
+    select postId, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', support_induced_pv, null)) as support_induced_pv_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, support_induced_pv, 0)) as support_induced_pv_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, support_induced_pv, 0)) as support_induced_pv_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, support_induced_pv, 0)) as support_induced_pv_90d \
+    from lofter.dws_post_support_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',89) \
+    group by postId \
+) e \
+on a.id = e.postId \
+where (b.postId is not null or c.expose_pv_90d > 0) \
+group by 1
+dependencies=dws_post_traffic_dd,dws_post_traffic_di,dws_post_support_di

@@ -1,0 +1,2 @@
+type=noop
+dependencies=ods_log_antispam_callback

@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_liaoliao_active_remain_di PARTITION(dt = '${azkaban.flow.1.days.ago}', period) \
+              SELECT  '${azkaban.flow.2.days.ago}' AS baseDate, \
+                      COUNT(DISTINCT b.deviceUdid) AS deviceRetain, \
+                      2                            AS period \
+              FROM \
+              ( \
+              	SELECT  DISTINCT deviceUdid \
+              	FROM lofter.dwd_liaoliao_mda_base \
+              	WHERE dt = '${azkaban.flow.2.days.ago}' \
+              ) a \
+              LEFT JOIN \
+              ( \
+              	SELECT  DISTINCT deviceUdid \
+              	FROM lofter.dwd_liaoliao_mda_base \
+              	WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) b \
+              ON a.deviceUdid = b.deviceUdid \
+              UNION ALL \
+              SELECT  '${azkaban.flow.7.days.ago}' AS baseDate, \
+                      COUNT(DISTINCT d.deviceUdid) AS deviceRetain, \
+                      7                            AS period \
+              FROM \
+              ( \
+              	SELECT  DISTINCT deviceUdid \
+              	FROM lofter.dwd_liaoliao_mda_base \
+              	WHERE dt = '${azkaban.flow.7.days.ago}' \
+              ) c \
+              LEFT JOIN \
+              ( \
+              	SELECT  DISTINCT deviceUdid \
+              	FROM lofter.dwd_liaoliao_mda_base \
+              	WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) d \
+              ON c.deviceUdid = d.deviceUdid
+

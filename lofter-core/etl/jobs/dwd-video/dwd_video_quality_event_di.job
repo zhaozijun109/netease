@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_video_quality_event_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    reqId, \
+    postId, \
+    userId, \
+    deviceUdid, \
+    deviceOs, \
+    deviceModel, \
+    appVersion, \
+    createtime                                                     as event_time, \
+    scene, \
+    switch_type, \
+    from_quality, \
+    to_quality, \
+    case \
+        when switch_type = 'init' then 'none' \
+        when from_quality is null or from_quality = '' then 'none' \
+        when to_quality   is null or to_quality   = '' then 'none' \
+        when from_quality not rlike '^[0-9]+x[0-9]+$' then 'unknown' \
+        when to_quality   not rlike '^[0-9]+x[0-9]+$' then 'unknown' \
+        else case \
+            when cast(split(to_quality,   'x')[1] as int) \
+               > cast(split(from_quality, 'x')[1] as int) then 'up' \
+            when cast(split(to_quality,   'x')[1] as int) \
+               < cast(split(from_quality, 'x')[1] as int) then 'down' \
+            else 'same' \
+        end \
+    end                                                            as direction, \
+    current_position_ms, \
+    duration_in_from_quality_ms, \
+    estimated_bandwidth_kbps, \
+    buffer_duration_ms \
+from ( \
+    select \
+        params['reqId']                                            as reqId, \
+        cast(params['postId'] as bigint)                           as postId, \
+        userId, \
+        deviceUdid, \
+        deviceOs, \
+        deviceModel, \
+        appVersion, \
+        cast(params['createtime'] as bigint)                       as createtime, \
+        params['trackerScene']                                     as scene, \
+        get_json_object(params['ext'], '$.type')                                  as switch_type, \
+        get_json_object(params['ext'], '$.fromQuality')                           as from_quality, \
+        get_json_object(params['ext'], '$.toQuality')                             as to_quality, \
+        cast(get_json_object(params['ext'], '$.currentPositionMs')      as bigint) as current_position_ms, \
+        cast(get_json_object(params['ext'], '$.durationInFromQualityMs') as bigint) as duration_in_from_quality_ms, \
+        cast(get_json_object(params['ext'], '$.estimatedBandwidthKbps') as bigint) as estimated_bandwidth_kbps, \
+        cast(get_json_object(params['ext'], '$.bufferDurationMs')       as bigint) as buffer_duration_ms \
+    from lofter.ods_mda_app_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and eventId = 'm7-9' \
+      and length(deviceUdid) > 0 \
+      and params['reqId'] is not null and params['reqId'] <> '' \
+) t \
+distribute by hash(reqId) % 20
+dependencies=

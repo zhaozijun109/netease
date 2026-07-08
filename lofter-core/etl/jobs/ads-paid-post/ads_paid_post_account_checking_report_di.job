@@ -1,0 +1,126 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_account_checking_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select coin_buy_count, coin_deliver_count, coin_consume_count, coupon_buy_count, coupon_exchange_count, coupon_unlock_count, iap_pay_completion_rate, \
+       coupon_buy_exchange_count \
+from ( \
+    select from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(coinCount) as coin_buy_count from  lofter_db_dump.ods_db_trade_buy_coin_order_nd where from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' group by 1 \
+) a \
+left join ( \
+    select from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(delta) as coin_deliver_count from lofter_db_dump.ods_db_trade_coin_balance_log_nd where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and delta>0 group by 1 \
+) b on a.dt = b.dt \
+left join ( \
+    select from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(-delta) as coin_consume_count from lofter_db_dump.ods_db_trade_coin_balance_log_nd where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and delta<0 group by 1 \
+) c on a.dt = c.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, sum(coupon_count) as coupon_buy_count \
+    from ( \
+        select sum(b.coupon_count) as coupon_count \
+        from ( \
+            SELECT id,tradeid, sum(count) over (partition by tradeId) as coupon_count \
+            FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+            WHERE scene IN (2) \
+                AND type = 3 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        ) b \
+        JOIN ( \
+            SELECT id,coin \
+            FROM lofter_db_dump.ods_db_trade_coupon_coin_order_nd \
+            WHERE STATUS = 1 \
+        ) c ON b.tradeid = c.id \
+    union all \
+        select sum(count) as coupon_count \
+        from ( \
+            SELECT b.*, c.amount AS MONEY \
+            FROM ( \
+                SELECT id,tradeid, \
+                       sum(count) over (partition by tradeid) as count \
+                FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+                WHERE tradeid > 0 AND scene NOT IN (2) AND type = 3 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            ) b \
+            JOIN ( \
+                SELECT id, (amount - channeldivision) AS amount \
+                FROM lofter_db_dump.ods_db_trade_coupon_order_nd \
+                WHERE STATUS = 1 \
+            ) c ON b.tradeid = c.id \
+          UNION ALL \
+            SELECT id,count,tradeid,MONEY \
+            FROM ( \
+                SELECT b.* \
+                    ,c.amount AS MONEY \
+                    ,row_number() OVER ( \
+                        PARTITION BY b.id \
+                        ,b.userid \
+                        ,b.createtime ORDER BY (b.createtime - c.finishtime) ASC \
+                        ) AS rk \
+                FROM ( \
+                    SELECT id,userid,amount,tradeid,scene,createtime,expiretime, \
+                           sum(count) over (partition by tradeid) as count \
+                    FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+                    WHERE tradeid = 0 \
+                        AND scene NOT IN (2) \
+                        AND type = 3 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                ) b \
+                LEFT JOIN ( \
+                    SELECT id,userid,postid,(amount - channeldivision) AS amount,finishtime \
+                    FROM lofter_db_dump.ods_db_trade_coupon_order_nd \
+                    WHERE STATUS = 1 \
+                ) c ON b.userid = c.userid AND b.createtime >= c.finishtime \
+            ) a \
+            WHERE a.rk = 1 \
+        ) t \
+    union all \
+        select sum(nvl(nvl(d.grantCount, c.total_count), b.count * 30)) as coupon_count \
+        from ( \
+            select id, userId, tradeId, \
+                   sum(count) over (partition by tradeId) as count \
+            from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+            where type in (7, 12) and scene in (9, 13, 15) and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        ) b \
+        join ( \
+            select id, userId, amount, \
+                productId, \
+                case productId \
+                   when 16003 then  9 \
+                   when 5003 then  9 \
+                   when 14003  then 12 \
+                   when 21001  then 15 \
+                   when 21002  then 18 \
+                   when 22001  then 21 \
+                   when 5004  then 24 \
+                   when 25001 then  9 \
+                   when 6003 then  9 \
+                   when 6004  then 12 \
+                   when 6005  then 15 \
+                   when 23001  then 18 \
+                   when 12007  then 21 \
+                   when 23002  then 24 \
+                end as total_count \
+            from lofter_db_dump.ods_db_trade_coupon_card_order_nd \
+        ) c on b.tradeId = c.id \
+        left join ( \
+            select id, cast(get_json_object(subProducts, '$[0].grantCount') as bigint) as grantCount \
+            from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+            where type = 1 \
+        ) d on c.productId = d.id \
+    ) t \
+) d on a.dt = d.dt \
+left join ( \
+    select  from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(`count`) as coupon_exchange_count from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.dt = e.dt \
+left join ( \
+    select from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as dt, count(1) as coupon_unlock_count \
+    from lofter.dwd_gift_post_unlock_dd where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' group by 1 \
+) f on a.dt = f.dt \
+left join ( \
+    select from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(if(status = 21, 1, 0)) /  count(1) as iap_pay_completion_rate \
+    from lofter_db_dump.ods_db_trade_order_nd \
+    where payType = 4 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) g on a.dt = g.dt \
+left join ( \
+    select from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as dt, sum(count) as coupon_buy_exchange_count \
+    from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+    where type = 3 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) h on a.dt = h.dt \

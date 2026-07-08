@@ -1,0 +1,78 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_new_user_first_pay_days_report_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  createday, \
+  koulin_flg, \
+  datediff(first_pay_date, createday) as period, \
+  case \
+    when b.first_pay_date is null then '未付费' \
+    when datediff(first_pay_date, createday) = 0   then '当日' \
+    when datediff(first_pay_date, createday) > 0 \
+    and datediff(first_pay_date, createday) <= 6 \
+     then '1~7日' \
+    when datediff(first_pay_date, createday) > 6 \
+    and datediff(first_pay_date, createday) <= 13 \
+     then '8~14日' \
+    when datediff(first_pay_date, createday) > 13 \
+    and datediff(first_pay_date, createday) <= 29 \
+    then '15~30日' \
+    else 'other' \
+  end as flg, \
+  count(distinct a.userid) as uv0, \
+  sum( \
+    case \
+      when first_pay_date >= createday then datediff(first_pay_date, createday) \
+      else 0 \
+    end \
+  ) as days \
+from \
+  ( \
+    select \
+      userid, \
+      createday, \
+      koulin_flg \
+    from \
+      lofter_dm.ads_paid_post_active_user_lifecycle_income_channel_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and active_flg = 'new' \
+    and createday=dt \
+    group by \
+      userid, \
+      createday, \
+      koulin_flg \
+  ) a \
+  left join ( \
+    select \
+      userid, \
+      first_pay_date \
+    from \
+      lofter_dm.ads_paid_post_revenue_module_user_first_last_date_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and revenue_module = '礼物解锁' \
+    group by \
+      userid, \
+      first_pay_date \
+  ) b on a.userid = b.userid \
+  and first_pay_date >= createday \
+group by \
+  createday, \
+  koulin_flg, \
+ case \
+    when b.first_pay_date is null then '未付费' \
+    when datediff(first_pay_date, createday) = 0   then '当日' \
+    when datediff(first_pay_date, createday) > 0 \
+    and datediff(first_pay_date, createday) <= 6 \
+     then '1~7日' \
+    when datediff(first_pay_date, createday) > 6 \
+    and datediff(first_pay_date, createday) <= 13 \
+     then '8~14日' \
+    when datediff(first_pay_date, createday) > 13 \
+    and datediff(first_pay_date, createday) <= 29 \
+    then '15~30日' \
+    else 'other' \
+  end, \
+datediff(first_pay_date, createday) \
+
+
+dependencies=ads_paid_post_active_user_lifecycle_income_channel_di,ads_paid_post_revenue_module_user_first_last_date_dd

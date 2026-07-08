@@ -1,0 +1,10 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select 1 as msgType, 1 as dealType, postId, blogId, \
+       brush_hot as brushHot, hot_1d as dayHot, cast((brush_hot_ratio * 100) as bigint) as brushHotRate, \
+       is_pay_post as pay, cast(income * 100 as bigint) as income, rule \
+from lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic lofter.brush.hot.msg --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

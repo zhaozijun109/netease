@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter.dws_post_pay_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.postId, \
+      sum(if(b.userId is null, a.money,0)) as non_public_unlock_money, \
+      sum(if(b.userId is null, 1,0)) as non_public_unlock_pv, \
+      bitmap_count(to_bitmap(if(b.userId is null, a.userId,null))) as non_public_unlock_uv, \
+      to_bitmap(if(b.userId is null, a.userId,null)) as non_public_unlock_user_bitmap, \
+      sum(if(b.userId is not null, a.money,0)) as public_unlock_money, \
+      sum(if(b.userId is not null, 1,0)) as public_unlock_pv, \
+      bitmap_count(to_bitmap(if(b.userId is not null, 1,0))) as public_unlock_uv, \
+      to_bitmap(if(b.userId is not null, a.userId, null)) as public_unlock_user_bitmap, \
+      sum(if(c.userId is not null, a.money,0)) as fans_unlock_money, \
+      sum(if(c.userId is not null, 1,0)) as fans_unlock_pv \
+from ( \
+   select blogId, postId, userId, money \
+   from lofter.dwd_gift_post_unlock_dd \
+   where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+         from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+   select postId, userId \
+   from lofter.dwd_post_expose_di \
+   where dt = '${azkaban.flow.1.days.ago}' and \
+      ((is_rec = 1 and scene <> 'search') or scene = 'tag') and reaction = 'click' \
+   group by 1, 2 \
+) b on a.postId = b.postId and a.userId = b.userId \
+left join lofter_db_dump.ods_db_user_following_nd c on a.blogId = c.blogId and a.userId = c.userId \
+group by 1, 2 \

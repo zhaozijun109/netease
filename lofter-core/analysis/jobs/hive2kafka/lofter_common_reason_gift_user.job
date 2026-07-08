@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select userId, blog, collection from lofter_dm.ads_gift_bc_user_relation_di where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic LOFTER.COMMON.REASON.GIFT.USER --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

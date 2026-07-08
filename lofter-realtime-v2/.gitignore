@@ -1,0 +1,17 @@
+.cache
+.classpath
+.idea/*
+.metadata
+.settings
+.project
+target
+*.class
+*.iml
+*.swp
+*.jar
+*.log
+*.pyc
+.DS_Store
+*.ipr
+*.iws
+*dependency-reduced-pom.xml

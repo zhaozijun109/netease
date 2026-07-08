@@ -1,0 +1,2 @@
+{"rid": "8cded415143744bf8cba0e6be4aa21ca", "user_id": "835104216", "item_id": "1f325330_2b5b4fd70", "ctr": 1,"cvr": 0, "cost_time": 0, "session_length": 0.0, "weight": 1, "is_train": "eval", "position": 0}
+{"rid": "8cded415143744bf8cba0e6be4aa21ca", "user_id": "835104216", "item_id": "1cdb9a7f_2b4e870fa", "ctr": 0,"cvr": 1, "cost_time": 0, "session_length": 0.0, "weight": 1, "is_train": "train", "position": 1.0}

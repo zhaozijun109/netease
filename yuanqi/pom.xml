@@ -1,0 +1,1026 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.netease.yuanqi</groupId>
+    <artifactId>yuanqi</artifactId>
+    <version>0.1-SNAPSHOT</version>
+
+    <name>YuanQi :</name>
+    <packaging>pom</packaging>
+    <description>The Streaming Warehouse For YuanQi</description>
+    <url>https://g.hz.netease.com/yuanqi-streaming-warehouse</url>
+    <inceptionYear>2025</inceptionYear>
+
+    <modules>
+        <module>yuanqi-common</module>
+        <module>yuanqi-lofter-layer</module>
+        <module>yuanqi-ycy-layer</module>
+        <module>yuanqi-vc-layer</module>
+        <module>yuanqi-unified-layer</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <target.java.version>1.8</target.java.version>
+        <maven.compiler.source>${target.java.version}</maven.compiler.source>
+        <maven.compiler.target>${target.java.version}</maven.compiler.target>
+        <test.unit.pattern>**/*Test.*</test.unit.pattern>
+        <test.skip.coverage>true</test.skip.coverage>
+        <yuanqi.forkCount>1C</yuanqi.forkCount>
+        <yuanqi.reuseForks>true</yuanqi.reuseForks>
+        <jackson.version>2.15.3</jackson.version>
+        <slf4j.version>1.7.36</slf4j.version>
+        <log4j.version>2.17.1</log4j.version>
+        <junit5.version>5.9.1</junit5.version>
+        <mockito.version>3.4.6</mockito.version>
+        <assertj.version>3.23.1</assertj.version>
+        <yuanqi.shaded.version>1.0</yuanqi.shaded.version>
+
+        <!-- Development Dependencies -->
+        <dts.sdk.version>3.9.0</dts.sdk.version>
+        <flink.shaded.guava.version>31.1-jre-17.0</flink.shaded.guava.version>
+        <flink.shaded.netty.version>4.1.100.Final-20.0</flink.shaded.netty.version>
+        <flink.version>1.20.1</flink.version>
+        <flink.connector.kafka.version>3.4.0-1.20</flink.connector.kafka.version>
+        <flink.connector.jdbc.version>3.3.0-1.20</flink.connector.jdbc.version>
+        <flink.connector.es.version>3.1.0-1.20</flink.connector.es.version>
+        <flink.connector.mysql.cdc.version>3.3.0</flink.connector.mysql.cdc.version>
+        <flink.connector.redis.version>1.4.3</flink.connector.redis.version>
+        <hadoop.version>2.10.2</hadoop.version>
+        <mysql.version>8.0.27</mysql.version>
+        <!-- <kafka.version>2.4.1</kafka.version> -->
+        <kafka.version>3.4.0</kafka.version>
+        <rs.version>2.2.117</rs.version>
+        <druid.version>1.2.27</druid.version>
+        <caffeine.version>2.9.3</caffeine.version>
+        <!-- <jedis.version>5.1.5</jedis.version> -->
+        <roaringbitmap.version>1.3.0</roaringbitmap.version>
+        <clickhouse.version>0.7.1</clickhouse.version>
+        <lettuce.version>6.8.1.RELEASE</lettuce.version>
+
+        <!-- Protobuf Compile -->
+        <lightproto.version>0.4</lightproto.version>
+        <protobuf.version>3.25.5</protobuf.version>
+        <snappy.version>1.1.8.4</snappy.version>
+        <netty.version>4.1.56.Final</netty.version>
+        <chill.protobuf.version>0.10.0</chill.protobuf.version>
+        <!-- Parquet Writer -->
+        <parquet.protobuf.version>1.15.2</parquet.protobuf.version>
+        <parquet.avro.version>1.15.2</parquet.avro.version>
+        <parquet.hadoop.version>1.15.2</parquet.hadoop.version>
+        <avro.version>1.11.4</avro.version>
+        <hadoop.lzo.version>0.4.20</hadoop.lzo.version>
+
+        <!-- Code Format -->
+        <spotless.version>2.27.1</spotless.version>
+        <spotless.scalafmt.version>3.4.3</spotless.scalafmt.version>
+        <spotless.delimiter>package</spotless.delimiter>
+
+        <argLine/>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.backend</groupId>
+            <artifactId>dts-sdk</artifactId>
+            <version>${dts.sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>junit</groupId>
+                    <artifactId>junit</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>xmlpull</groupId>
+                    <artifactId>xmlpull</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.lz4</groupId>
+                    <artifactId>lz4-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.netease.backend</groupId>
+                    <artifactId>dts-kafka-clients-0.9</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.netease.backend</groupId>
+                    <artifactId>dts-kafka-clients-0.10</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.netease.backend</groupId>
+                    <artifactId>dts-kafka-clients-2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.netease.yaolu.lofter</groupId>
+            <artifactId>rs-basic-upload-parse</artifactId>
+            <version>${rs.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.netease.yaolu.lofter</groupId>
+            <artifactId>rs-basic-util</artifactId>
+            <version>${rs.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.netease.yaolu.lofter</groupId>
+            <artifactId>rs-basic-bean</artifactId>
+            <version>${rs.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.netease.yaolu.lofter</groupId>
+            <artifactId>rs-basic-music-feature</artifactId>
+            <version>${rs.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>${mysql.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid</artifactId>
+            <version>${druid.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-runtime-web</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-clients</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-shaded-guava</artifactId>
+            <version>${flink.shaded.guava.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-shaded-netty</artifactId>
+            <version>${flink.shaded.netty.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-runtime</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-java</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-java</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-planner_2.12</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-api-java-bridge</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-runtime</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-kafka</artifactId>
+            <version>${flink.connector.kafka.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka-clients</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-jdbc</artifactId>
+            <version>${flink.connector.jdbc.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-elasticsearch6</artifactId>
+            <version>${flink.connector.es.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-elasticsearch8</artifactId>
+            <version>${flink.connector.es.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-files</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-mysql-cdc</artifactId>
+            <version>${flink.connector.mysql.cdc.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.jeff-zou</groupId>
+            <artifactId>flink-connector-redis</artifactId>
+            <!-- <classifier>jar-with-dependencies</classifier> -->
+            <version>${flink.connector.redis.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-statebackend-rocksdb</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-state-processor-api</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-parquet</artifactId>
+            <version>${flink.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-hadoop</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-protobuf</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-hadoop-compatibility_2.12</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-avro</artifactId>
+            <version>${flink.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>${avro.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-avro</artifactId>
+            <version>${parquet.avro.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>it.unimi.dsi</groupId>
+                    <artifactId>fastutil</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-protobuf</artifactId>
+            <version>${parquet.protobuf.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>it.unimi.dsi</groupId>
+                    <artifactId>fastutil</artifactId>
+                </exclusion>
+            </exclusions>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop</artifactId>
+            <version>${parquet.hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>it.unimi.dsi</groupId>
+                    <artifactId>fastutil</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-core-asl</artifactId>
+                </exclusion>
+            </exclusions>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hadoop.gplcompression</groupId>
+            <artifactId>hadoop-lzo</artifactId>
+            <version>${hadoop.lzo.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>${kafka.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>${snappy.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${protobuf.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.twitter</groupId>
+            <artifactId>chill-protobuf</artifactId>
+            <version>${chill.protobuf.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.esotericsoftware.kryo</groupId>
+                    <artifactId>kryo</artifactId>
+                </exclusion>
+            </exclusions>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>${caffeine.version}</version>
+        </dependency>
+
+        <!--        <dependency>-->
+        <!--            <groupId>redis.clients</groupId>-->
+        <!--            <artifactId>jedis</artifactId>-->
+        <!--            <version>${jedis.version}</version>-->
+        <!--        </dependency>-->
+
+        <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>${roaringbitmap.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>${clickhouse.version}</version>
+            <classifier>all</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>${lettuce.version}</version>
+        </dependency>
+
+        <!--        <dependency>-->
+        <!--            <groupId>com.github.splunk.lightproto</groupId>-->
+        <!--            <artifactId>lightproto-code-generator</artifactId>-->
+        <!--            <version>${lightproto.version}</version>-->
+        <!--        </dependency>-->
+
+        <!--        <dependency>-->
+        <!--            <groupId>com.github.splunk.lightproto</groupId>-->
+        <!--            <artifactId>lightproto</artifactId>-->
+        <!--            <version>${lightproto.version}</version>-->
+        <!--            <type>pom</type>-->
+        <!--        </dependency>-->
+
+        <!-- 'javax.annotation' classes like '@Nullable' -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+        </dependency>
+
+        <!-- test dependencies -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <type>jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Logging API -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- This manages the 'javax.annotation' annotations (JSR305) -->
+            <dependency>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
+                <version>1.3.9</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j-impl</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <!-- API bridge between log4j 1 and 2 -->
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-1.2-api</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.12.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.15.1</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit5.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>central-maven2</name>
+            <url>https://repo1.maven.org/maven2/</url>
+        </repository>
+        <repository>
+            <id>lofter-releases</id>
+            <name>lofter-releases</name>
+            <url>https://maven-lofter.hz.netease.com/content/repositories/releases</url>
+        </repository>
+        <repository>
+            <id>lofter-snapshots</id>
+            <name>lofter-snapshots</name>
+            <url>https://maven-lofter.hz.netease.com/content/repositories/snapshots</url>
+        </repository>
+        <repository>
+            <id>hy-releases</id>
+            <name>hy-releases</name>
+            <url>http://mvn.hz.netease.com/artifactory/libs-releases</url>
+        </repository>
+        <repository>
+            <id>hy-snapshots</id>
+            <name>hy-snapshots</name>
+            <url>http://mvn.hz.netease.com/artifactory/libs-snapshots</url>
+        </repository>
+    </repositories>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>2.4</version><!--$NO-MVN-MAN-VER$-->
+                <configuration>
+                    <archive>
+                        <!-- Globally exclude maven metadata, because it may accidentally bundle files we don't intend to -->
+                        <addMavenDescriptor>false</addMavenDescriptor>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <configuration>
+                    <filesets>
+                        <fileset>
+                            <directory>${project.basedir}</directory>
+                            <includes>
+                                <include>dependency-reduced-pom.xml</include>
+                            </includes>
+                        </fileset>
+                    </filesets>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+
+            <!--surefire for unit tests and integration tests-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M5</version>
+                <configuration>
+                    <forkCount>${yuanqi.forkCount}</forkCount>
+                    <reuseForks>${yuanqi.reuseForks}</reuseForks>
+                    <trimStackTrace>false</trimStackTrace>
+                    <systemPropertyVariables>
+                        <forkNumber>0${surefire.forkNumber}</forkNumber>
+                        <project.basedir>${project.basedir}</project.basedir>
+                        <!--suppress MavenModelInspection -->
+                        <test.randomization.seed>${test.randomization.seed}
+                        </test.randomization.seed>
+                        <!-- for junit5 -->
+                        <junit.jupiter.extensions.autodetection.enabled>true
+                        </junit.jupiter.extensions.autodetection.enabled>
+                        <!-- Enabled the parallel test execution feature. -->
+                        <!-- Tests and test classes can be enabled for concurrent execution using @Execution(ExecutionMode.CONCURRENT). -->
+                        <junit.jupiter.execution.parallel.enabled>true
+                        </junit.jupiter.execution.parallel.enabled>
+                        <!-- Tests are by default executed by a single thread; parallel execution is opt-in. -->
+                        <junit.jupiter.execution.parallel.mode.default>same_thread
+                        </junit.jupiter.execution.parallel.mode.default>
+                        <!-- Tests suites are by default executed by a single thread; parallel execution is opt-in. -->
+                        <junit.jupiter.execution.parallel.mode.classes.default>same_thread
+                        </junit.jupiter.execution.parallel.mode.classes.default>
+                        <!-- automatically adjust parallelism based on available cpu/processor cores-->
+                        <junit.jupiter.execution.parallel.config.strategy>dynamic
+                        </junit.jupiter.execution.parallel.config.strategy>
+                    </systemPropertyVariables>
+                    <argLine>@{argLine} -Xms256m -Xmx2048m -Dmvn.forkNumber=${surefire.forkNumber}
+                        -XX:+UseG1GC
+                    </argLine>
+                </configuration>
+                <executions>
+                    <!--execute all the unit tests-->
+                    <execution>
+                        <id>default-test</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>${test.unit.pattern}</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                    <!--execute all the integration tests-->
+                    <execution>
+                        <id>integration-tests</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>**/*.*</include>
+                            </includes>
+                            <excludes>
+                                <exclude>${test.unit.pattern}</exclude>
+                            </excludes>
+                            <reuseForks>false</reuseForks>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Jacoco for test code coverage -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-maven</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.1.1,)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>${target.java.version}</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>dependency-convergence</id>
+                        <!-- disabled by default as it interacts badly with shade-plugin -->
+                        <phase>none</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <dependencyConvergence/>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <relocations combine.children="append">
+                        <relocation>
+                            <pattern>org.apache.kafka</pattern>
+                            <shadedPattern>${groupId}.org.apache.kafka</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>okio</pattern>
+                            <shadedPattern>${groupId}.okio</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>okhttp3</pattern>
+                            <shadedPattern>${groupId}.okhttp3</shadedPattern>
+                        </relocation>
+                    </relocations>
+                    <artifactSet>
+                        <excludes>
+                            <!-- <exclude>org.apache.flink:flink-parquet</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-s*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-t*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-core*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-f*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-o*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-a*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-m*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-r*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-q*</exclude> -->
+                            <!-- <exclude>org.apache.flink:flink-java</exclude> -->
+                            <!-- <exclude>org.apache.hadoop:*</exclude> -->
+                            <exclude>log4j:log4j</exclude>
+                            <exclude>org.slf4j:*</exclude>
+                            <exclude>org.scala-lang:*</exclude>
+                            <exclude>org.scala-lang.modules:*</exclude>
+                            <exclude>com.typesafe.akka:*</exclude>
+                        </excludes>
+                    </artifactSet>
+                    <!-- This section contains the core configuration that is applied to every jar that we create.-->
+                    <filters combine.children="append">
+                        <filter>
+                            <artifact>*</artifact>
+                            <excludes>
+                                <!-- Globally exclude log4j.properties from our JAR files. -->
+                                <exclude>log4j.properties</exclude>
+                                <exclude>log4j2.properties</exclude>
+                                <exclude>log4j-test.properties</exclude>
+                                <exclude>log4j2-test.properties</exclude>
+                                <!-- Do not copy the signatures in the META-INF folder.
+                                Otherwise, this might cause SecurityExceptions when using the JAR. -->
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                                <exclude>**/META-INF/maven/?*/?*/**</exclude>
+                                <exclude>module-info.class</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <transformers combine.children="append">
+                        <!-- The service transformer is needed to merge META-INF/services files -->
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                        <!-- The ApacheNoticeResourceTransformer collects and aggregates NOTICE files -->
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                            <projectName>YuanQi</projectName>
+                            <encoding>UTF-8</encoding>
+                        </transformer>
+                    </transformers>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>shade-yuanqi</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadeTestJar>false</shadeTestJar>
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.0</version>
+                    <configuration>
+                        <source>${target.java.version}</source>
+                        <target>${target.java.version}</target>
+                        <useIncrementalCompilation>false</useIncrementalCompilation>
+                        <compilerArgs>
+                            <arg>-Xpkginfo:always</arg>
+                        </compilerArgs>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>3.6.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>9.3</version>
+                        </dependency>
+                    </dependencies>
+                    <executions>
+                        <execution>
+                            <id>validate</id>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <excludes>**/avro/**/*.java,**/proto/**/*.java</excludes>
+                        <suppressionsLocation>/tools/maven/suppressions.xml</suppressionsLocation>
+                        <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                        <configLocation>/tools/maven/checkstyle.xml</configLocation>
+                        <logViolationsToConsole>true</logViolationsToConsole>
+                        <failOnViolation>true</failOnViolation>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <version>${spotless.version}</version>
+                    <configuration>
+                        <java>
+                             <excludes>
+                                 <exclude>src/main/java/**/avro/**/*.java</exclude>
+                                 <exclude>src/main/java/**/proto/**/*.java</exclude>
+                             </excludes>
+                            <googleJavaFormat>
+                                <version>1.7</version>
+                                <style>AOSP</style>
+                            </googleJavaFormat>
+
+                            <!-- \# refers to the static imports -->
+                            <!-- <importOrder> -->
+                            <!--     <order> -->
+                            <!--         com.netease,,javax,java,scala,\# -->
+                            <!--     </order> -->
+                            <!-- </importOrder> -->
+                            <removeUnusedImports/>
+                        </java>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>spotless-check</id>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+
+                <!-- Pin the version of the maven shade plugin -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

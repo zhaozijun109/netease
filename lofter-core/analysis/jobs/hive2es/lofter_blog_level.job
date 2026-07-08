@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select userId as blogId, level from lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}' and level is not null"
+params= --partition ${azkaban.flow.1.days.ago} --id blogId --dest lofter_blog_level --full --atom

@@ -1,0 +1,74 @@
+type=sparksql
+hive.query.01=\
+with group_posts as ( \
+    select y.postId as postId \
+    from ( \
+        select postPackageId as job_id \
+        from lofter_db_dump.ods_db_rta_config_post_package_nd \
+        where configKey = 'return.gift.ad.config' and status = 1 \
+    ) x \
+    join ( \
+        select job_id, postId \
+        from lofter.dwd_post_group_post_list_di \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) y on x.job_id = y.job_id \
+    group by 1 \
+), \
+deliverable_posts as ( \
+    select postId \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 and giftName like '%糖果%' and giftName not like '%粮票%' \
+    group by 1 \
+), \
+shield_posts as ( \
+    select postId \
+    from lofter_db_dump.ods_db_trade_ad_unlock_post_setting_nd \
+    where settingType = 'SHIELD_AD_UNLOCK' and value = '1' and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+), \
+ad_request_posts as ( \
+    select postId \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId = 279600 and is_request > 0 \
+    group by 1 \
+), \
+ad_expose_posts as ( \
+    select postId \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId = 279600 and is_bg > 0 \
+    group by 1 \
+) \
+insert overwrite table lofter_dm.ads_ad_content_post_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select '激励广告' as module, a.postId, b.blogId, \
+       if(c.userId is not null, 1, 0) as is_user_switch_on, \
+       if(f.postId is not null and d.postId is null, 1, 0) as is_deliverable, \
+       if(d.postId is not null, 1, 0) as is_post_shield_on, \
+       if(e.postId is not null, 1, 0) as is_in_group_package, \
+       if(g.postId is not null, 1, 0) as is_ad_request, \
+       if(h.postId is not null, 1, 0) as is_ad_expose \
+from ( \
+    select postId from group_posts \
+    union \
+    select postId from deliverable_posts \
+    union \
+    select postId from shield_posts \
+    union \
+    select postId from ad_request_posts \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select userId \
+    from ( \
+        select *, row_number() over (partition by userId order by operateTime desc) as rk \
+        from lofter_db_dump.ods_db_trade_ad_unlock_user_setting_log_nd \
+        where from_unixtime(cast(operateTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            settingType = 'AUTHOR_AD_UNLOCK_SWITCH' \
+    ) t \
+    where rk = 1 and settingValue = 'ON' \
+) c on b.blogId = c.userId \
+left join shield_posts d on a.postId = d.postId \
+left join group_posts e on a.postId = e.postId \
+left join deliverable_posts f on a.postId = f.postId \
+left join ad_request_posts g on a.postId = g.postId \
+left join ad_expose_posts h on a.postId = h.postId \

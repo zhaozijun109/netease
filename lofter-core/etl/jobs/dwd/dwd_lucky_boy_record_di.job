@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_lucky_boy_record_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tmp1.luckyBoyId, \
+       tmp1.postId, \
+       tmp1.blogId as join_blogId, \
+       tmp1.joinAction, \
+       tmp1.sequence, \
+       tmp1.notifyOnPublish, \
+       tmp1.createTime, \
+       tmp2.blogId as publish_blogId, \
+       tmp2.joinAction as publish_joinAction, \
+       tmp2.needFollow, \
+       tmp2.publishTime, \
+       tmp2.publishType, \
+       tmp2.status, \
+       tmp2.count, \
+       tmp2.isPublished, \
+       tmp2.resetTimes, \
+       tmp2.type \
+from ( \
+        select luckyBoyId, \
+               postId, \
+               blogId, \
+               joinAction, \
+               sequence, \
+               notifyOnPublish, \
+               createTime \
+        from lofter_db_dump.ods_db_lucky_boy_join_record_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) tmp1 \
+left join ( \
+        select id, \
+               blogId, \
+               postId, \
+               joinAction, \
+               needFollow, \
+               publishTime, \
+               publishType, \
+               status, \
+               count, \
+               isPublished, \
+               resetTimes, \
+               type \
+        from lofter_db_dump.ods_db_lucky_boy_config_nd \
+) tmp2 \
+on tmp1.luckyBoyId = tmp2.id and tmp1.postId = tmp2.postId

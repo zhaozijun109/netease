@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+driver-memory=8g
+class=com.netease.wm.group.platform.ContentGroupJob
+params=--dt ${azkaban.flow.1.days.ago}
+dependencies=

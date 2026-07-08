@@ -1,0 +1,32 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Clickhouse8NodeLoad
+conf.spark.default.parallelism=400
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.executor.cores=4
+conf.spark.source.query="\
+select day, \
+       itemId, \
+       userId, \
+       recId, \
+       itemType, \
+       nvl(articleType, 0) as articleType, \
+       scene, \
+       nvl(costTime, 0) as costTime, \
+       nvl(clickCount, 0) as clickCount, \
+       nvl(negActionCount, 0) as negActionCount, \
+       nvl(commentCount, 0) as commentCount, \
+       nvl(likeCount, 0) as likeCount, \
+       nvl(shareCount, 0) as shareCount, \
+       nvl(recommendCount, 0) as recommendCount, \
+       flowName, \
+       nvl(pos, 0) as pos, \
+       nvl(recStartTime, 0) as recStartTime, \
+       isPay, \
+       nvl(payCount, 0) as payCount, \
+       nvl(alg_weight, 0.0) as alg_weight \
+from lofter_dm.ads_alg_data_user_item_di \
+where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.ads_alg_data_user_item_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_alg_data_user_item_di

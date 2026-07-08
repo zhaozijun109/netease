@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01= \
+WITH base_data AS (  \
+    select   id, \
+        FROM_UNIXTIME(CAST(paytime / 1000 AS BIGINT), 'yyyy-MM-dd') AS order_date  \
+    FROM lofter_db_dump.ods_db_c2_c_trade_order_nd  \
+    WHERE FROM_UNIXTIME(CAST(paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+    and status not in ( '0','-1')  \
+    group by 1,2 \
+)  \
+,product_type as (  \
+    select tradeid ,id,sellerid,buyerid,price*count as gmv \
+        ,CASE  \
+            WHEN producttype = 0 THEN '约稿服务'  \
+            WHEN producttype = 1 THEN '虚拟商品'  \
+            WHEN producttype = 2 THEN '实体商品'  \
+        END AS product_type  \
+    from lofter_db_dump.ods_db_c2_c_trade_order_product_nd  \
+)  \
+insert overwrite table lofter_dm.ads_trade_producttype_gmv_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    a.order_date,  \
+    a.id, \
+    product_type,  \
+    SUM(gmv)/100 AS gmv,  \
+    COUNT(DISTINCT b.buyerid) AS cnt_buyer,  \
+    COUNT(DISTINCT b.id) AS cnt_order  \
+FROM base_data a  \
+join product_type b on a.id=b.tradeid  \
+group by 1,2,3

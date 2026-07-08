@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_channel_dau_stratify_di partition(dt='${azkaban.flow.1.days.ago}') \
+select device_type,origin_type,origin_channel,is_paid_subscribe,active_days_30d,count(distinct deviceudid) device_cnt \
+from lofter.dws_device_growth_dau_stratify_di \
+where dt='${azkaban.flow.1.days.ago}' \
+group by device_type,origin_type,origin_channel,is_paid_subscribe,active_days_30d \

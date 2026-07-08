@@ -1,0 +1,18 @@
+{
+  "id": "doc_id",
+  "fields": {
+    "doc_id": {
+      "type": "keyword"
+    },
+    "numeric": {
+      "type": "double",
+      "sort": true
+    },
+    "text": {
+      "type": "text"
+    },
+    "keyword": {
+      "type": "keyword"
+    }
+  }
+}

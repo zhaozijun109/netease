@@ -1,0 +1,197 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function html_paragraph as 'com.netease.wm.udf.HtmlParagraph';
+hive.query.02=drop table if exists lofter_tmp.tmp_highlight_posts;
+hive.query.03=create table lofter_tmp.tmp_highlight_posts stored as parquet as \
+select a.postId, a.blogId, a.pid, a.interaction_pv, b.tags, b.ips, b.recomStatus as is_rec, interaction_pv_7d, b.publishDate as post_publish_date, \
+       underscore_comment_pv, sweet_pv, bitter_pv, \
+       interaction_pv_1d, \
+       interaction_pv_15d, \
+       interaction_pv_30d, \
+       interaction_pv_90d, \
+       underscore_comment_pv_1d, \
+       underscore_comment_pv_7d, \
+       underscore_comment_pv_15d, \
+       underscore_comment_pv_30d, \
+       underscore_comment_pv_90d, \
+       sweet_pv_1d, \
+       sweet_pv_7d, \
+       sweet_pv_15d, \
+       sweet_pv_30d, \
+       sweet_pv_90d, \
+       bitter_pv_1d, \
+       bitter_pv_7d, \
+       bitter_pv_15d, \
+       bitter_pv_30d, \
+       bitter_pv_90d, \
+       haha_pv, \
+       haha_pv_1d, \
+       haha_pv_7d, \
+       haha_pv_15d, \
+       haha_pv_30d, \
+       haha_pv_90d \
+from ( \
+    select postId, blogId, pid, pv as interaction_pv, interaction_pv_7d, \
+           underscore_comment_pv, sweet_pv, bitter_pv, \
+           interaction_pv_1d, \
+           interaction_pv_15d, \
+           interaction_pv_30d, \
+           interaction_pv_90d, \
+           underscore_comment_pv_1d, \
+           underscore_comment_pv_7d, \
+           underscore_comment_pv_15d, \
+           underscore_comment_pv_30d, \
+           underscore_comment_pv_90d, \
+           sweet_pv_1d, \
+           sweet_pv_7d, \
+           sweet_pv_15d, \
+           sweet_pv_30d, \
+           sweet_pv_90d, \
+           bitter_pv_1d, \
+           bitter_pv_7d, \
+           bitter_pv_15d, \
+           bitter_pv_30d, \
+           bitter_pv_90d, \
+           haha_pv, \
+           haha_pv_1d, \
+           haha_pv_7d, \
+           haha_pv_15d, \
+           haha_pv_30d, \
+           haha_pv_90d \
+    from ( \
+        select postId, blogId, pid, sum(interaction_pv) as pv, sum(interaction_pv_7d) as interaction_pv_7d, \
+               sum(underscore_comment_pv) as underscore_comment_pv, sum(sweet_pv) as sweet_pv, sum(bitter_pv) as bitter_pv, \
+               sum(interaction_pv_1d) as interaction_pv_1d, \
+               sum(interaction_pv_15d) as interaction_pv_15d, \
+               sum(interaction_pv_30d) as interaction_pv_30d, \
+               sum(interaction_pv_90d) as interaction_pv_90d, \
+               sum(underscore_comment_pv_1d) as underscore_comment_pv_1d, \
+               sum(underscore_comment_pv_7d) as underscore_comment_pv_7d, \
+               sum(underscore_comment_pv_15d) as underscore_comment_pv_15d, \
+               sum(underscore_comment_pv_30d) as underscore_comment_pv_30d, \
+               sum(underscore_comment_pv_90d) as underscore_comment_pv_90d, \
+               sum(sweet_pv_1d) as sweet_pv_1d, \
+               sum(sweet_pv_7d) as sweet_pv_7d, \
+               sum(sweet_pv_15d) as sweet_pv_15d, \
+               sum(sweet_pv_30d) as sweet_pv_30d, \
+               sum(sweet_pv_90d) as sweet_pv_90d, \
+               sum(bitter_pv_1d) as bitter_pv_1d, \
+               sum(bitter_pv_7d) as bitter_pv_7d, \
+               sum(bitter_pv_15d) as bitter_pv_15d, \
+               sum(bitter_pv_30d) as bitter_pv_30d, \
+               sum(bitter_pv_90d) as bitter_pv_90d, \
+               sum(haha_pv) as haha_pv, \
+               sum(haha_pv_1d) as haha_pv_1d, \
+               sum(haha_pv_7d) as haha_pv_7d, \
+               sum(haha_pv_15d) as haha_pv_15d, \
+               sum(haha_pv_30d) as haha_pv_30d, \
+               sum(haha_pv_90d) as haha_pv_90d \
+        from ( \
+            select postId, blogId, pid, count(1) as interaction_pv, \
+                   sum(if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as interaction_pv_1d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as interaction_pv_7d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as interaction_pv_15d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as interaction_pv_30d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as interaction_pv_90d, \
+                   0 as underscore_comment_pv, sum(if(opType = 1, 1, 0)) as sweet_pv, sum(if(opType = 2, 1, 0)) as bitter_pv, \
+                   0 as underscore_comment_pv_1d, \
+                   0 as underscore_comment_pv_7d, \
+                   0 as underscore_comment_pv_15d, \
+                   0 as underscore_comment_pv_30d, \
+                   0 as underscore_comment_pv_90d, \
+                   sum(if(opType = 1 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as sweet_pv_1d, \
+                   sum(if(opType = 1 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as sweet_pv_7d, \
+                   sum(if(opType = 1 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as sweet_pv_15d, \
+                   sum(if(opType = 1 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as sweet_pv_30d, \
+                   sum(if(opType = 1 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as sweet_pv_90d, \
+                   sum(if(opType = 2 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as bitter_pv_1d, \
+                   sum(if(opType = 2 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as bitter_pv_7d, \
+                   sum(if(opType = 2 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as bitter_pv_15d, \
+                   sum(if(opType = 2 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as bitter_pv_30d, \
+                   sum(if(opType = 2 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as bitter_pv_90d, \
+                   sum(if(opType = 3, 1, 0)) as haha_pv, \
+                   sum(if(opType = 3 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as haha_pv_1d, \
+                   sum(if(opType = 3 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as haha_pv_7d, \
+                   sum(if(opType = 3 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as haha_pv_15d, \
+                   sum(if(opType = 3 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as haha_pv_30d, \
+                   sum(if(opType = 3 and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as haha_pv_90d \
+            from lofter_db_dump.ods_db_p_comment_user_mark_nd \
+            where opType in (1,2,3) and length(pid) > 0 \
+            group by postId, blogId, pid \
+          union all \
+            select postId, blogId, pid, count(1) as interaction_pv, \
+                   sum(if(from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as interaction_pv_1d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as interaction_pv_7d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as interaction_pv_15d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as interaction_pv_30d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as interaction_pv_90d, \
+                   count(1) as underscore_comment_pv, 0 as sweet_pv, 0 as bitter_pv, \
+                   sum(if(from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as underscore_comment_pv_1d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as underscore_comment_pv_7d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as underscore_comment_pv_15d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as underscore_comment_pv_30d, \
+                   sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as underscore_comment_pv_90d, \
+                   0 as sweet_pv_1d, \
+                   0 as sweet_pv_7d, \
+                   0 as sweet_pv_15d, \
+                   0 as sweet_pv_30d, \
+                   0 as sweet_pv_90d, \
+                   0 as bitter_pv_1d, \
+                   0 as bitter_pv_7d, \
+                   0 as bitter_pv_15d, \
+                   0 as bitter_pv_30d, \
+                   0 as bitter_pv_90d, \
+                   0 as haha_pv, \
+                   0 as haha_pv_1d, \
+                   0 as haha_pv_7d, \
+                   0 as haha_pv_15d, \
+                   0 as haha_pv_30d, \
+                   0 as haha_pv_90d \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where length(pid) > 0 \
+            group by postId, blogId, pid \
+        ) t1 \
+        group by postId, blogId, pid \
+        having pv > 0 \
+    ) t2 \
+) a \
+join lofter.dim_post b on a.postId = b.id
+hive.query.04=insert overwrite table lofter.dws_post_highlight_comment_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId,blogId,pid,interaction_pv,ips,is_rec,content, interaction_pv_7d, post_publish_date, \
+       underscore_comment_pv, sweet_pv, bitter_pv, tags, \
+       interaction_pv_1d, \
+       interaction_pv_15d, \
+       interaction_pv_30d, \
+       interaction_pv_90d, \
+       underscore_comment_pv_1d, \
+       underscore_comment_pv_7d, \
+       underscore_comment_pv_15d, \
+       underscore_comment_pv_30d, \
+       underscore_comment_pv_90d, \
+       sweet_pv_1d, \
+       sweet_pv_7d, \
+       sweet_pv_15d, \
+       sweet_pv_30d, \
+       sweet_pv_90d, \
+       bitter_pv_1d, \
+       bitter_pv_7d, \
+       bitter_pv_15d, \
+       bitter_pv_30d, \
+       bitter_pv_90d, \
+       haha_pv, \
+       haha_pv_1d, \
+       haha_pv_7d, \
+       haha_pv_15d, \
+       haha_pv_30d, \
+       haha_pv_90d \
+from ( \
+    select b.*, \
+           html_paragraph(a.content, b.pid) as content \
+    from ( \
+        select id as postId, content \
+        from lofter_db_dump.ods_db_text_post_nd \
+    ) a \
+    join lofter_tmp.tmp_highlight_posts b on a.postId = b.postId \
+) t \
+where length(content) > 0
+hive.query.05=drop table if exists lofter_tmp.tmp_highlight_posts;

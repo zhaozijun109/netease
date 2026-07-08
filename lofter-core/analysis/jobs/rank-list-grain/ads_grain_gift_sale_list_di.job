@@ -1,0 +1,85 @@
+type=sparksql
+hive.query.01=\
+with post_good_gifts as ( \
+    select c.ip, a.postId, a.userId, b.gift_good_id, c.blogId, c.publishDate, c.blogName, b.listType \
+    from ( \
+        select return_gift_id, sender as userId, postId, createTime \
+        from lofter.dwd_paid_post_detail_dd \
+        where dt='${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd')) < 30 and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select id as return_gift_id, nvl(nvl(emote_package_id, dress_id), postId) as gift_good_id, \
+               case when return_gift_plantype = '表情包' then 7 \
+                    when return_gift_plantype = '装扮' then 8 \
+                    when preview_image_count > 0 and image_count > 0 then 9 \
+                    end as listType \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 and \
+              ((return_gift_plantype in ('表情包', '装扮') and nvl(emote_package_id, dress_id) > 0) or \
+               (preview_image_count > 0 and image_count > 0)) \
+    ) b on a.return_gift_id = b.return_gift_id \
+    join ( \
+        select id as postId, ip, blogId, publishDate, blogName \
+        from lofter.dim_post \
+            lateral view explode(ips) as ip \
+        where !( \
+            array_contains(tags, '国拟') or \
+            array_contains(tags, '国家拟人') or \
+            array_contains(tags, 'CH') or \
+            array_contains(tags, '瓷') or \
+            array_contains(tags, '美瓷') or \
+            array_contains(tags, '苏瓷') or \
+            array_contains(tags, '双瓷') or \
+            array_contains(tags, '瓷左') or \
+            array_contains(tags, '瓷右') or \
+            array_contains(tags, '那兔') or \
+            array_contains(tags, '黑塔利亚') or \
+            array_contains(tags, 'aph') or \
+            array_contains(tags, '如果历史是一群喵') or \
+            array_contains(tags, '反转动物园') ) \
+      union all \
+        select id as postId, '全部' as ip, blogId, publishDate, blogName \
+        from lofter.dim_post \
+    ) c on a.postId = c.postId \
+    left join ( \
+        select userid \
+        from lofter_db_dump.ods_db_trade_gift_user_setting_nd \
+        where get_json_object(setting, '$.hideReturnGiftPreviewImg') =true \
+        group by userid \
+    ) d on c.blogid = d.userid \
+    where (b.listType <> 9 or d.userId is null) and \
+          c.blogId not in (2043632771,1966827648,2024575479,528094225,1966289115,523292157,1292535001,835448068,1978625903,1952442401,1292837349,1943438628,1978989393,492939668,1993817745,1985596604,1291451249,526091895,820583467,534846466) \
+) \
+insert overwrite table lofter_dm.ads_grain_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listSource = 5) \
+select listType, listName, \
+       postId, blogId, publishDate, blogName, gift_sale_uv as indexValue, ip_rnk as listRank, \
+       md5(concat(listType, listName)) as distinctId, \
+       md5(concat(listType, listName, listSource, '${azkaban.flow.1.days.ago}')) as uniqId \
+from ( \
+    select 5 as listSource, a.listType, \
+           a.ip as listName, \
+           a.ip_rnk, a.gift_good_id, b.postId, b.blogId, b.publishDate, b.blogName, a.gift_sale_uv, b.post_sale_uv, \
+           count(1) over (partition by a.listType, a.ip) post_count \
+    from ( \
+        select listType, ip, gift_good_id, gift_sale_uv, \
+               row_number() over (partition by listType, ip order by gift_sale_uv desc) as ip_rnk \
+        from ( \
+            select listType, ip, gift_good_id, count(distinct userId) as gift_sale_uv \
+            from post_good_gifts \
+            group by 1, 2, 3 \
+        ) t \
+        where gift_sale_uv >= 5 \
+    ) a \
+    join ( \
+        select listType, ip, gift_good_id, postId, blogId, publishDate, blogName, post_sale_uv, \
+               row_number() over (partition by listType, ip, gift_good_id order by post_sale_uv desc) as ip_gift_post_rnk \
+        from ( \
+            select listType, ip, gift_good_id, postId, blogId, publishDate, blogName, count(distinct userId) as post_sale_uv \
+            from post_good_gifts \
+            group by 1, 2, 3, 4, 5, 6, 7 \
+        ) t \
+    ) b on a.listType = b.listType and a.ip = b.ip and a.gift_good_id = b.gift_good_id \
+    where a.ip_rnk <= 30 and b.ip_gift_post_rnk = 1 \
+) tt \
+where post_count >= 8 \

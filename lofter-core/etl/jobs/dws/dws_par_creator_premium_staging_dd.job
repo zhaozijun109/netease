@@ -1,0 +1,40 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=insert overwrite table lofter.dws_par_creator_premium_staging_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.*, \
+       nvl(y.premium_date, if(x.is_premium > 0, '${azkaban.flow.1.days.ago}', null)) as premium_date, \
+       z.active_days_30d \
+from ( \
+    select a.userId, \
+           if(premium_posts > 0 and a.level in ('A','B','S'), 1, 0) as is_premium, \
+           if(nvl(premium_posts,0) == 0 and a.level in ('A','B','S'), 1, 0) as is_premium_high_potential, \
+           if(premium_posts > 0 and (a.level not in ('A','B','S') or a.level is null), 1, 0) as is_premium_middle_potential, \
+           nvl(premium_posts,0) as premium_posts_30d \
+    from ( \
+        select userId, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+       select userId, count(distinct postId) as premium_posts \
+       from lofter.dws_post_premium_di \
+       where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+             premium_date <= '${azkaban.flow.1.days.ago}' and premium_date >= '${azkaban.flow.30.days.ago}' \
+       group by userId \
+    ) b on a.userId = b.userId \
+) x \
+left join ( \
+   select userId, min(dt) as premium_date \
+   from lofter.dws_par_creator_premium_staging_dd \
+   where is_premium > 0 and dt >= '${azkaban.flow.30.days.ago}' and dt < '${azkaban.flow.1.days.ago}' \
+   group by userId \
+) y on x.userId = y.userId \
+left join ( \
+    select userId, count(distinct dt) as active_days_30d \
+    from lofter.dws_par_user_active_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) z on x.userId = z.userId \
+where is_premium > 0 or is_premium_high_potential > 0 or is_premium_middle_potential > 0 \
+distribute by 1
+dependencies=dws_par_user_active_di,dws_post_premium_di,dws_par_creator_level_scoring_dd

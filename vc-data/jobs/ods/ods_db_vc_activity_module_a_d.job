@@ -1,0 +1,3 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.ods_db_vc_activity_module_a_d partition(dt = '${azkaban.flow.1.days.ago}') \
+                select * from vc.ods_db_vc_activity_module_nd;

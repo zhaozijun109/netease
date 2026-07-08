@@ -1,0 +1,394 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=100
+hive.query.01=insert overwrite table lofter_dm.ads_post_tag_group_level1_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, tag, grp \
+from ( \
+    select id as postId, 'ALL' as tag, '1' as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+    select a.id as postId, 'ad_unlock_user_setting_post' as tag, \
+                               case b.settingValue when 'ON' then '开' \
+                                          else '关' end as grp \
+    from lofter.dim_post a \
+    left join lofter_db_dump.ods_db_trade_ad_unlock_user_setting_nd b on a.blogId = b.userId \
+    where a.isPublished=true and a.isCitedPost = false and b.settingType = 'AUTHOR_AD_UNLOCK_SWITCH' \
+  union all \
+    select a.id as postId, 'post_creator_gift_level' as tag, \
+                               case b.grade when 1 then '青铜' \
+                                          when 2 then '黄金' \
+                                          when 3 then '铂金' \
+                                          when 4 then '钻石' \
+                                          when 5 then '殿堂' \
+                                          else '未知' end as grp \
+    from lofter.dim_post a \
+    join lofter_db_dump.ods_db_trade_pay_grade_nd b on a.blogId = b.userId \
+    where a.isPublished=true and a.isCitedPost = false \
+  union all \
+    select id as postId, '用户id' as tag, blogId as grp \
+    from lofter.dim_post \
+    where isPublished = true and isCitedPost = false and isForbidden = false and \
+          valid = 0 and allowView = 0 and contentType in ("图片","文字","视频") \
+  union all \
+    select t2.id as postId, '是否广告授权作者' as tag, '1' as grp \
+    from ( \
+        select userId from lofter_db_dump.ods_db_rta_creator_ad_switch_nd where openAd = 1 \
+    ) t1 \
+    join lofter.dim_post_article t2 on t1.userId = t2.blogId \
+    where t2.valid = 0 and t2.allowView = 0 and t2.isPublished = true \
+  union all \
+    select b.id as postId, '活动报名用户' as tag, activity_name as grp \
+    from ( \
+        select * \
+        from lofter_dm.ads_act_signup_users_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a  \
+    join lofter.dim_post_article b on a.userId = b.blogId \
+    where b.valid = 0 and b.allowView = 0 and b.isPublished is true \
+  union all \
+    select id as postId, '是否达人博客' as tag, '1' as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false and isBlogAuthenticated = true \
+  union all \
+    select cast(conv(split(item_id,'_')[1], 16, 10) as bigint) as postId, \
+           'alg-内容特征' as tag, label as grp \
+    from rec.rec_data_content_learn_res_to_backend \
+    group by item_id, label \
+  union all \
+    select a.postId as postId, '是否小程序内容' as tag, if(b.postId is null, '0', '1') as grp \
+    from ( \
+        select id as postId \
+        from lofter.dim_post \
+        where isPublished=true and isCitedPost = false \
+    ) a \
+    left join ( \
+        select postId \
+        from lofter.dim_miniprogram_post \
+    ) b on a.postId = b.postId \
+  union all \
+    select a.postId as postId, '是否米良拉新内容' as tag, if(b.postId is null, '0', '1') as grp \
+    from ( \
+        select id as postId \
+        from lofter.dim_post \
+        where isPublished=true and isCitedPost = false \
+    ) a \
+    left join ( \
+        select itemId as postId \
+        from lofter.dim_actpwd_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and settlement_type = 'CPA' and content_type = '单日志' \
+        group by itemId \
+    ) b on a.postId = b.postId \
+  union all \
+    select postId, '特色品类' as tag, special_category as grp \
+    from lofter_dm.ads_creator_double_perspective_post_di \
+         lateral view explode(split(double_perspective_type, '\\\\|')) as special_category \
+    where dt = '${azkaban.flow.1.days.ago}' and length(special_category) > 0 \
+  union all \
+    select postId, '特色品类二级类目' as tag, b.level2 as grp \
+    from ( \
+        select postId, special_category \
+        from lofter_dm.ads_creator_double_perspective_post_di \
+             lateral view explode(split(double_perspective_type, '\\\\|')) as special_category \
+        where dt = '${azkaban.flow.1.days.ago}' and length(special_category) > 0 \
+    ) a join lofter_dm.ads_specialty_categories_level b on a.special_category = b.level3 \
+  union all \
+    select postId, '特色品类一级类目' as tag, b.level1 as grp \
+    from ( \
+        select postId, special_category \
+        from lofter_dm.ads_creator_double_perspective_post_di \
+             lateral view explode(split(double_perspective_type, '\\\\|')) as special_category \
+        where dt = '${azkaban.flow.1.days.ago}' and length(special_category) > 0 \
+    ) a join lofter_dm.ads_specialty_categories_level b on a.special_category = b.level3 \
+  union all \
+    select postId, '付费内容类型(UGC/PGC)' as tag, \
+           case when blog_channel = 0 then 'UGC' \
+                when blog_channel = 1 then 'PGC' \
+                end as grp \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and blog_channel in (0, 1) and status = 0 and auditStatus = 0 \
+  union all \
+    select postId, '文章字数' as tag, \
+           case when words_count < 50 then '1-50' \
+                when words_count < 100 then '50-100' \
+                when words_count < 200 then '100-200' \
+                when words_count < 500 then '200-500' \
+                when words_count < 1000 then '500-1k' \
+                when words_count < 2000 then '1k-2k' \
+                when words_count < 5000 then '2k-5k' \
+                when words_count < 10000 then '5k-1w' \
+                else '1w以上' end as grp \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and words_count > 0 \
+  union all \
+    select postId, '图片数量' as tag, \
+           case when words_count < 3 then '1-3' \
+                when words_count < 6 then '3-6' \
+                when words_count < 10 then '6-10' \
+                when words_count < 30 then '10-30' \
+                else '30以上' end as grp \
+    from lofter.dwd_post_length_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and photo_count > 0 \
+  union all \
+    select id as postId, '文章状态' as tag, \
+           case when allowView = 100 then '仅自己可见' \
+                when valid = 25 then '屏蔽' \
+                when allowView = 0 and valid = 0 then '公开' \
+                end as grp \
+    from lofter.dim_post \
+    where (allowView = 100 or valid = 25 or (allowView = 0 and valid = 0)) \
+  union all \
+    select b.postId, '是否签约内容' as tag, '1' as grp \
+    from lofter_db_dump.ods_db_pfb_content_nd a \
+    join lofter_db_dump.ods_db_pfb_content_related_post_nd b on a.id = b.contentId \
+    where a.status = 0 and b.status = 0 \
+    group by 1 \
+  union all \
+    select postId, '是否衍生' as tag, '1' as grp \
+    from ( \
+        select id as postId, tag from lofter.dim_post lateral view explode(tags) as tag \
+    ) a \
+    join ( \
+        select name as tag from lofter_db_dump.ods_db_cmb_tag_nd where derivedFlag = 1 and status = 0 \
+    ) b on a.tag = b.tag \
+    group by 1 \
+  union all \
+    select postId, '是否同人' as tag, '1' as grp \
+    from ( \
+        select id as postId, tag from lofter.dim_post lateral view explode(tags) as tag \
+    ) a \
+    join ( \
+        select name as tag from lofter_db_dump.ods_db_cmb_tag_nd where fanFlag = 1 and status = 0 \
+    ) b on a.tag = b.tag \
+    group by 1 \
+  union all \
+    select postId, '是否cp' as tag, '1' as grp \
+    from ( \
+        select id as postId, tag from lofter.dim_post lateral view explode(tags) as tag \
+    ) a \
+    join ( \
+        select name as tag from lofter_db_dump.ods_db_cmb_tag_nd where cpFlag = 1 and status = 0 \
+    ) b on a.tag = b.tag \
+    group by 1 \
+  union all \
+    select id as postId, '发文时间' as tag, publishDate as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_1' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            publishDate = '${azkaban.flow.1.days.ago}' \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_7' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            datediff('${azkaban.flow.1.days.ago}', publishDate) < 7 \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_15' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            datediff('${azkaban.flow.1.days.ago}', publishDate) < 15 \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_30' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            datediff('${azkaban.flow.1.days.ago}', publishDate) < 30 \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_90' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            datediff('${azkaban.flow.1.days.ago}', publishDate) < 90 \
+  union all \
+      select id as postId, '动态发文时间' as tag, 'DAY_180' as grp \
+      from lofter.dim_post \
+      where isPublished=true and isCitedPost = false and \
+            datediff('${azkaban.flow.1.days.ago}', publishDate) < 180 \
+  union all \
+    select id as postId, '内容类型' as tag, contentType as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+    select id as postId, '标签' as tag, tag as grp \
+    from lofter.dim_post \
+        lateral view explode(tags) as tag \
+    where length(tag) > 0 and \
+          isPublished=true and isCitedPost = false \
+  union all \
+      select id as postId, 'IP' as tag, ip as grp \
+      from lofter.dim_post \
+          lateral view explode(ips) as ip \
+      where length(ip) > 0 and \
+            isPublished=true and isCitedPost = false \
+  union all \
+    select id as postId, '是否书城内容' as tag, nvl(is_book_store, 0) as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+    select id as postId, '是否进推荐池' as tag, if(recomStatus == 1, 1, 0) as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+    select postId, '是否优质内容' as tag, '1' as grp \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select a.id as postId, '是否优质创作者' as tag, '1' as grp \
+    from lofter.dim_post a \
+    join ( \
+        select userId as blogId \
+        from lofter.dws_par_creator_premium_staging_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+    ) b on a.blogId = b.blogId \
+    where a.isPublished=true and a.isCitedPost = false \
+  union all \
+    select a.id as postId, '创作者等级' as tag, b.level as grp \
+    from lofter.dim_post a \
+    join ( \
+        select userId as blogId, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and length(level) > 0 \
+    ) b on a.blogId = b.blogId \
+    where a.isPublished=true and a.isCitedPost = false \
+  union all \
+    select postId, '是否合集' as tag, '1' as grp \
+    from lofter_db_dump.ods_db_post_collection_record_nd \
+    where status = 0 \
+    group by 1 \
+  union all \
+    select postId, '回礼类型' as tag, return_gift_planType as grp \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status > 0 \
+  union all \
+    select postId, '赠礼类型' as tag, gift_name as grp \
+    from lofter.dim_gift_post_return_dd \
+          lateral view explode(split(giftName, ',')) as gift_name \
+    where dt = '${azkaban.flow.1.days.ago}' and status > 0 \
+  union all \
+    select postId, '是否设置回礼' as tag, '1' as grp \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status > 0 \
+  union all \
+    select postId, '解锁方式' as tag, if(unlockType == 1, '高粉', '礼物') as grp \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status > 0 and unlockType > 0 \
+  union all \
+      select id as postId, '解锁方式' as tag, '书城会员' as grp \
+      from lofter.dim_post \
+      where is_book_store > 0 and \
+            isPublished=true and isCitedPost = false \
+  union all \
+    select postId, '付费礼物人数' as tag, \
+           case when gift_uv < 5 then '1-5' \
+                when gift_uv < 10 then '5-10' \
+                when gift_uv < 20 then '10-20' \
+                when gift_uv < 50 then '20-50' \
+                when gift_uv < 100 then '50-100' \
+                when gift_uv < 200 then '100-200' \
+                when gift_uv < 500 then '200-500' \
+                when gift_uv < 1000 then '500-1k' \
+                when gift_uv < 3000 then '1k-3k' \
+                when gift_uv < 5000 then '3k-5k' \
+                when gift_uv < 10000 then '5k-1w' \
+                when gift_uv < 30000 then '1w-3w' \
+                else '3w+' end as grp \
+    from ( \
+        select postId, count(distinct sender) as gift_uv \
+        from lofter.dwd_paid_post_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by postId \
+    ) t \
+  union all \
+    select postId, '付费礼物金额' as tag, \
+           case when gift_amount < 5 then '1-5' \
+                when gift_amount < 10 then '5-10' \
+                when gift_amount < 20 then '10-20' \
+                when gift_amount < 50 then '20-50' \
+                when gift_amount < 100 then '50-100' \
+                when gift_amount < 200 then '100-200' \
+                when gift_amount < 500 then '200-500' \
+                when gift_amount < 1000 then '500-1k' \
+                when gift_amount < 3000 then '1k-3k' \
+                when gift_amount < 5000 then '3k-5k' \
+                when gift_amount < 10000 then '5k-1w' \
+                when gift_amount < 30000 then '1w-3w' \
+                when gift_amount < 50000 then '3w-5w' \
+                else '5w+' end as grp \
+    from ( \
+        select postId, sum(coin) * 0.1 as gift_amount \
+        from lofter.dwd_paid_post_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by postId \
+    ) t \
+  union all \
+    select postId, '客单价' as tag, \
+           case when arpu < 1 then '0-1' \
+                when arpu < 2 then '1-2' \
+                when arpu < 3 then '2-3' \
+                when arpu < 5 then '3-5' \
+                when arpu < 10 then '5-10' \
+                when arpu < 15 then '10-15' \
+                when arpu < 20 then '15-20' \
+                else '20+' end as grp \
+    from ( \
+         select postId, sum(coin) * 0.1 / count(distinct sender) as arpu \
+         from lofter.dwd_paid_post_detail_dd \
+         where dt = '${azkaban.flow.1.days.ago}' and \
+               from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+         group by postId \
+     ) t \
+  union all \
+    select id as postId, '高粉人数' as tag, \
+           case when vip_fans < 5 then '1-5' \
+                when vip_fans < 10 then '5-10' \
+                when vip_fans < 20 then '10-20' \
+                when vip_fans < 50 then '20-50' \
+                when vip_fans < 100 then '50-100' \
+                when vip_fans < 200 then '100-200' \
+                when vip_fans < 500 then '200-500' \
+                when vip_fans < 1000 then '500-1k' \
+                when vip_fans < 3000 then '1k-3k' \
+                when vip_fans < 5000 then '3k-5k' \
+                when vip_fans < 10000 then '5k-1w' \
+                else '1w+' end as grp \
+    from lofter.dim_post a \
+    join ( \
+        select vipBlogId as blogId, count(distinct userId) as vip_fans \
+        from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+        where status = 1 and \
+              from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.blogId = b.blogId \
+    where a.isPublished=true and a.isCitedPost = false \
+  union all \
+    select postId, '类目' as tag, category as grp \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and length(category) > 0 \
+  union all \
+    select postId, '类目' as tag, category2 as grp \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and length(category2) > 0 \
+  union all \
+    select postId, '类目' as tag, category3 as grp \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and length(category3) > 0 \
+  union all \
+      select content_id as postId, '拉新等级' as tag, grade as grp \
+      from lofter_dm.ads_growth_content_di \
+      where dt = '${azkaban.flow.1.days.ago}' and new_devices > 0 and \
+            content_type in ('图片', '文字', '视频') \
+  union all \
+      select cast(conv(split(item_id,'_')[1], 16, 10) as bigint) as postId, \
+             '是否正向长评内容' as tag, '1' as grp \
+      from rec.rec_data_ecology_high_quality_item_by_comment \
+      where day <= '${azkaban.flow.1.days.ago}' and quality_comment_num > 0 \
+      group by 1 \
+  union all \
+      select talkId as postId, '是否短内容动态' as tag, '1' as grp \
+      from lofter.dim_post_talk \
+      where lower(talkType) like '%answer%' or talkType = 'QUESTION_POST' \
+) t \
+distribute by (postId / 1000000) % 100 \
+sort by tag, grp, postId

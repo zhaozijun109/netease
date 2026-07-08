@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.02=insert overwrite table lofter_dm.ads_rec_collection_rec_reason_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select collectionId, recReason, priority \
+from ( \
+    select collectionId, recReason, priority, \
+           row_number() over (partition by collectionId order by priority) as priority_rk \
+    from lofter_dm.ads_rec_collection_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is not null \
+) tt \
+where priority_rk = 1
+dependencies=ads_rec_collection_rec_reason_detail_di

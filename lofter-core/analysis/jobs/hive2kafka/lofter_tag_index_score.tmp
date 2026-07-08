@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select tag, postId, blogId, newPostHot, newUserScore as totalScore, 1 as type from lofter_dm.ads_ecology_tag_index_score_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic lofter.tag.index.score --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

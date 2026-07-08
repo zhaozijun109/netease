@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter_dm.ads_creator_user_relation_score_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, \
+       concat('https://',b.blogName,'.lofter.com') as blog_url, \
+       if(f.userId is not null, '是', '否') as fans_vip_status, \
+       if(d.userId is not null, '是', '否') as private_invite_status, \
+       case when d.status = 2 then '开通中' when d.status = 10 then '已关闭' else '未开通' end as private_status, \
+       e.recent30FansAttraction as private_condition_level, \
+       private_post_count, private_discuss_count, \
+       bitmap_count(to_bitmap(if(a.score >= e.recent30FansAttraction, a.userId, null)) over (partition by a.blogId)) as above_condition_level_users, \
+       bitmap_count(to_bitmap(c.userId) over (partition by a.blogId)) as private_fans_count, \
+       a.userId, \
+       concat('https://',a1.blogName,'.lofter.com') as user_url, \
+       if(a.score >= e.recent30FansAttraction, '是', '否') as is_above_condition_level, \
+       if(c.userId is not null, '是', '否') as is_private_fans, \
+       a.gift_score,a.share_score,a.comment_score,a.like_score, a.score \
+from ( \
+    select blogid,userid,score,gift_score,share_score,comment_score,like_score \
+    from lofter.dws_par_creator_user_support_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join lofter.dim_blog a1 on a.userId = a1.id \
+left join lofter.dim_blog b on a.blogId = b.id \
+left join lofter_db_dump.ods_db_blog_fans_private_nd c on a.blogId = c.fansPrivateBlogid and a.userId = c.userId \
+left join lofter_db_dump.ods_db_trade_fans_private_account_nd d on a.blogId = d.userId \
+left join lofter_db_dump.ods_db_trade_fans_private_condition_nd e on d.conditionLevel = e.id \
+left join (select userId from lofter_db_dump.ods_db_trade_fans_vip_account_nd where status = 2) f on a.blogId = f.userId \
+left join ( \
+   select blogId, count(distinct postId) as private_post_count \
+   from lofter_db_dump.ods_db_post_fans_post_nd \
+   where postStatus = 1 and fansPostType = 1 \
+   group by 1 \
+) g on a.blogId = g.blogId \
+left join ( \
+   select x.targetblogid, sum(y.discussCount) as private_discuss_count \
+   from lofter_db_dump.ods_db_ask_fans_question_nd x \
+   join lofter_db_dump.ods_db_ask_question_nd y on x.questionId = y.id \
+   group by 1 \
+) h on a.blogId = h.targetblogid \

@@ -1,0 +1,139 @@
+type=sparksql
+hive.query.01=\
+with users as ( \
+    select a.userid, \
+           case when e.userid is null then 0 else 1 end as is_uninterested, \
+           a.trade_money as history_trade_money, \
+           case when b.trade_money is null then 0 else b.trade_money end as 30trade_money, \
+           case when c.trade_money is null then 0 else c.trade_money end as 7trade_money, \
+           case when d.trade_money is null then 0 else d.trade_money end as 1trade_money \
+    from ( \
+        select userid,trade_money,trade_num \
+        from lofter_dm.ads_post_paid_user_consume_detail_di \
+        where period='history' \
+            and pay_type='all' \
+            and dt='${azkaban.flow.1.days.ago}' \
+        group by userid,trade_money,trade_num \
+    ) a \
+    left join ( \
+        select userid,trade_money,trade_num \
+        from lofter_dm.ads_post_paid_user_consume_detail_di \
+        where period='30' \
+            and pay_type='all' \
+            and dt='${azkaban.flow.1.days.ago}' \
+        group by userid,trade_money,trade_num \
+    ) b on a.userid=b.userid \
+    left join ( \
+        select userid,trade_money,trade_num \
+        from \
+        lofter_dm.ads_post_paid_user_consume_detail_di \
+        where period='7' \
+            and pay_type='all' \
+            and dt='${azkaban.flow.1.days.ago}' \
+        group by userid,trade_money,trade_num \
+    ) c on a.userid=c.userid \
+    left join ( \
+        select userid,trade_money,trade_num \
+        from lofter_dm.ads_post_paid_user_consume_detail_di \
+        where period='1' \
+            and pay_type='all' \
+            and dt='${azkaban.flow.1.days.ago}' \
+        group by userid,trade_money,trade_num \
+    ) d on a.userid=d.userid \
+    left join ( \
+        select user_id as userid \
+        from rec.rec_gift_low_acceptance_users_upload \
+        where refuse_gift_user='1' and day ='${azkaban.flow.1.days.ago}' \
+        group by user_id \
+    ) e on a.userid=e.userid \
+ \
+), \
+high_net_users as ( \
+    select userid, '历史200且30日大于0' as type \
+    from users \
+    where is_uninterested=0 \
+    and (history_trade_money>=200 and 30trade_money>0) \
+    group by userid \
+  union all \
+    select userid, '30日大于50且7日大于0' as type \
+    from users \
+    where is_uninterested=0 \
+         and (30trade_money>=50 and 7trade_money>0) \
+    group by userid \
+  union all \
+    select userid, '7日大于10' as type \
+    from users \
+    where is_uninterested=0 and ( 7trade_money>=10) \
+    group by userid \
+  union all \
+    select userid, '1日大于5' as type \
+    from users \
+    where is_uninterested=0 and ( 1trade_money>=5) \
+    group by userid \
+  union all \
+    select userid, '书城会员/UGC付费内容口令拉新促活用户' as type \
+    from ( \
+        select dt,actpwd,settlement_type,is_paid_subscribe \
+        from lofter.dim_actpwd_dd \
+        where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+              settlement_type in ('CPS','FANS','UGC') \
+        group by dt,actpwd,settlement_type,is_paid_subscribe \
+    ) a \
+    join ( \
+        select dt,device_type,deviceudid,origin_actpwd as actpwd \
+        from lofter.dwd_device_growth_attribution_di \
+        where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+              origin_type='口令' \
+        group by dt,device_type,deviceudid,origin_actpwd \
+    ) b on a.dt=b.dt and a.actpwd=b.actpwd \
+    join ( \
+        select dt,deviceudid,userid from lofter.device_active \
+                LATERAL VIEW explode(userIds) t2 AS userid \
+        where  dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by dt,deviceudid,userid \
+    ) c on b.dt=c.dt and b.deviceudid=c.deviceudid \
+    group by userid \
+  union all \
+    select userid, '通用糖果券余额>=1' as type \
+    from ( \
+        select userid,sum(balance) as balance \
+        from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+        where from_unixtime(cast(expireTime / 1000 AS BIGINT), 'yyyy-MM-dd') > '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) a \
+    where a.balance >= 1 \
+    group by userid \
+  union all \
+    select userid, '30日内付费金额>=25元' as type \
+    from ( \
+        select userid,sum(money) as money \
+        from lofter.dwd_user_order_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              pay_date between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and \
+              revenue_module in ('付费礼物','券包','粉丝会员','小程序会员','博客订阅','书城会员','官方账号','图片商城') and \
+              money > 0 \
+        group by userid \
+    ) a \
+    where a.money >= 25 \
+    group by userid \
+) \
+insert overwrite table lofter_dm.ads_rec_gift_user_stratify_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, type \
+from ( \
+    select userId, '高净值' as type from high_net_users \
+  union all \
+    select a.userid as userId, '中间态' as type \
+    from ( \
+        select userid \
+        from users \
+        where is_uninterested=0 and \
+              30trade_money>0 \
+        group by userid \
+    ) a \
+    left join high_net_users b on a.userid=b.userid \
+    where b.userid is null \
+    group by a.userid \
+) t \
+group by 1, 2 \
+
+dependencies=

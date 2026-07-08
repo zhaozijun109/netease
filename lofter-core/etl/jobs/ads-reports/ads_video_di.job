@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_di partition(dt='${azkaban.flow.1.days.ago}') \
+select m.videotype, m.postnum, m.pc_postnum, m.client_postnum,m.wap_postnum,m.viewpv,m.hotpv,m.praisepv,m.reproducepv, \
+       m.recommendpv,m.responsepv,m.subscribepv,m.playuv,m.availableplayuv,m.finishplayuv,m.finishPlayRatio,m.availablePlayRatio, \
+       realplaypv, realplayuv, realplayuv / dau as  realplayuv_ratio,realplay_videonum,per_realplaypv,per_realplay_videonum,realplaypv_distinct,dau, \
+       playpv_distinct,playpv,playuv2,finish_playpv_distinct,finish_playpv,finish_playuv,real_playtime,playtime, \
+       max_realplaypv,max_realplayuv,max_realplaytime,max_playtime \
+from ( \
+    select if(videotype=3, '本地视频', '外链视频') as videotype, \
+        '${azkaban.flow.1.days.ago}' as dt, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' then postId else null end) postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom ='web' then postId else null end) pc_postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom in('ios','android') then postId else null end) client_postnum, \
+        count(distinct case when publishdate='${azkaban.flow.1.days.ago}' and movefrom ='wap' then postId else null end) wap_postnum, \
+        sum(viewpv) viewpv, \
+        sum(hotpv) hotpv, \
+        sum(praisepv) praisepv, \
+        sum(reproducepv) reproducepv, \
+        sum(recommendpv) recommendpv, \
+        sum(responsepv) responsepv, \
+        sum(subscribepv) subscribepv, \
+        sum(playuv) as playuv, \
+        sum(availableplayuv) as availableplayuv, \
+        sum(finishplayuv) as finishplayuv, \
+        case when sum(finishplayuv) is null then 0 else sum(finishplayuv)/sum(playuv) end finishPlayRatio, \
+        case when sum(availableplayuv) is null then 0 else sum(availableplayuv)/sum(playuv) end availablePlayRatio \
+    from lofter.dws_video_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) m \
+left join ( \
+    select if(b.videotype = 3, '本地视频', '外链视频') as videotype, \
+          count(distinct if(is_real > 0, concat(deviceUdid, a.postId), null)) as realplaypv_distinct, \
+          sum(is_real) as realplaypv, \
+          count(distinct if(is_real > 0, deviceUdid, null)) as realplayuv, \
+          count(distinct if(is_real > 0, a.postId, null)) as realplay_videonum, \
+          sum(is_real) / count(distinct if(is_real > 0, deviceUdid, null)) as per_realplaypv, \
+          count(distinct if(is_real > 0, concat(deviceUdid, a.postId), null)) / count(distinct if(is_real > 0, deviceUdid, null)) as per_realplay_videonum, \
+          count(distinct if(duration > 0, concat(deviceudid, a.postId), null)) as playpv_distinct, \
+          count(if(duration > 0, concat(deviceudid, a.postId), null)) playpv, \
+          count(distinct if(duration > 0, deviceudid, null)) playuv2, \
+          count(distinct if(is_video_finish > 0, concat(deviceudid, a.postId), null)) finish_playpv_distinct, \
+          sum(is_video_finish) finish_playpv, \
+          count(distinct if(is_video_finish > 0, deviceudid, null)) finish_playuv, \
+          sum(duration * is_real) real_playtime, \
+          sum(duration) playtime \
+    from ( \
+        select postId, is_video_finish, is_real, duration, deviceUdid \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and post_content_type = '视频' \
+    ) a join ( \
+       select postId, videoType from lofter.dws_video_post_general_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) n on m.videotype = n.videotype \
+left join ( \
+    select if(b.videotype = 3, '本地视频', '外链视频') as videotype, \
+           sum(isRealPlay) as max_realplaypv, \
+           count(distinct if(isRealPlay > 0, deviceudid, null)) as max_realplayuv, \
+           sum(duration * isRealPlay) max_realplaytime, \
+           sum(duration) max_playtime \
+    from ( \
+        select deviceudid, postId, max(duration) as duration, max(is_real) as isRealPlay \
+        from lofter.dwd_post_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and post_content_type = '视频' and action_type = 'page_duration' \
+        group by deviceudid, postId \
+    ) a join ( \
+       select postId, videoType from lofter.dws_video_post_general_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) k on m.videotype = k.videotype \
+join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(distinct deviceudid) as dau from lofter.device_active where dt='${azkaban.flow.1.days.ago}' \
+) j on m.dt = j.dt
+

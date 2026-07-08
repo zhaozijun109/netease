@@ -1,0 +1,13 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag last_appversion --bitmap
+retries=0
+conf.spark.execute.sql="select userid                                as userId, \
+                               '当前应用版本号'                           as tag_name, \
+                               ''                                    as dim1, \
+                               ''                                    as dim2, \
+                               ''                                    as dim3, \
+                               ''                                    as dim4, \
+                               last_appversion                       as grp, \
+                               ''                                    as value \
+                        from lofter.dws_par_user_appversion_dd where dt = '${azkaban.flow.1.days.ago}';"

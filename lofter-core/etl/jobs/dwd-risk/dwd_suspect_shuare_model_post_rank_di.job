@@ -1,0 +1,132 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=INSERT OVERWRITE TABLE lofter.dwd_suspect_shuare_model_post_rank_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  * \
+              FROM \
+              ( \
+              	      SELECT  postId, \
+              	              blogId, \
+              	              publisherUserId, \
+              	              ip \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  postid, \
+              	      	              blogid, \
+              	      	              publisheruserid, \
+              	      	              ip, \
+              	      	              hisPraise, \
+              	      	              (profileipuvflg + devicenum_ipnumflg + loginip_userinum_loginip_devicenumflg + hotipuvflg + 1minipuvflg + 10minipuvflg + appdeviceudid_wabwapuseridflg + isBlackPhoneFlag + blockTagFlg + noValidBrowseFlg + deviceProvinceFlg) AS flg1, \
+                                      (fanflg + postnumflg + hotuseridhotflg) AS flg2 \
+              	      	      FROM \
+              	      	      ( \
+                                 select *, \
+                                  CASE \
+                                    WHEN ipUv >= 15 \
+                                    AND createIp IS NOT NULL AND createIp != '127.0.1' AND createIp != '127.0.0.1' THEN 1 \
+                                    ELSE 0 \
+                                  END AS profileipuvflg, \
+                                  CASE \
+                                    WHEN deviceNum >= 10 \
+                                    OR ipNum >= 10 \
+                                    AND ip NOT IN ('10.189.176.10', '10.189.176.11') THEN 1 \
+                                    ELSE 0 \
+                                  END AS devicenum_ipnumflg, \
+                                  CASE \
+                                    WHEN loginIpUv >= 15 \
+                                    OR loginIpDeviceUv >= 15 THEN 1 \
+                                    ELSE 0 \
+                                  END AS loginip_userinum_loginip_devicenumflg, \
+                                  CASE \
+                                    WHEN cityNum >= 2 THEN 1 \
+                                    ELSE 0 \
+                                  END AS citynumflg, \
+                                  CASE \
+                                    WHEN hotUv >= 10 \
+                                    AND ip NOT IN ('10.189.176.10', '10.189.176.11') THEN 1 \
+                                    ELSE 0 \
+                                  END AS hotipuvflg, \
+                                  CASE \
+                                    WHEN 1minIpUv >= 4 \
+                                    AND ip NOT IN ('10.189.176.10', '10.189.176.11') THEN 1 \
+                                    ELSE 0 \
+                                  END AS 1minipuvflg, \
+                                  CASE \
+                                    WHEN 10minIpUv >= 8 \
+                                    AND ip NOT IN ('10.189.176.10', '10.189.176.11') THEN 1 \
+                                    ELSE 0 \
+                                  END AS 10minipuvflg, \
+                                  CASE \
+                                    WHEN ( appUserId IS NOT NULL AND appDeviceUdid IS NULL) \
+                                    OR ( \
+                                      pcUserId IS NOT NULL \
+                                      AND pcDeviceId IS NULL \
+                                    ) THEN 2 \
+                                    ELSE 0 \
+                                  END AS appdeviceudid_wabwapuseridflg, \
+                                  CASE \
+                                    WHEN fans <= 15 \
+                                    OR fans IS NULL THEN 1 \
+                                    ELSE 0 \
+                                  END AS fanflg, \
+                                  CASE \
+                                    WHEN postNum < 3 \
+                                    OR postNum IS NULL THEN 1 \
+                                    ELSE 0 \
+                                  END AS postnumflg, \
+                                  CASE \
+                                    WHEN userHot <= 10 \
+                                    OR userHot IS NULL THEN 1 \
+                                    ELSE 0 \
+                                  END AS hotuseridhotflg, \
+                                  if(block_tag_count > 0, -2, 0) as blockTagFlg, \
+                                  if(nvl(real_browse_pv_30d,0) == 0, 1, 0) as noValidBrowseFlg, \
+                                  if(device_province_num_1d >= 5, 1, 0) deviceProvinceFlg \
+              	      	      	      FROM lofter.dwd_risk_shuare_model_di \
+              	      	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND userLevel = '普通用户' \
+              	      	      ) a1 \
+              	      ) a \
+              	      WHERE flg1 >= 3 AND flg2 >= 2   \
+              	      GROUP BY  postid, \
+              	                blogid, \
+              	                publisheruserid, \
+              	                ip \
+              ) t \
+              union all \
+              select postid, blogId, null as publisherUserId, null as ip \
+              from ( \
+                  SELECT postid, blogId, (tag1+tag2+tag3+tag4+tag5) as flag \
+                  FROM ( \
+                      SELECT * \
+                            ,case when web_praise_no_device_info_uv >= 10 then 1 ELSE 0 end as tag1 \
+                            ,case when max_city_ip_praise_ratio >= 0.15 then 1 ELSE 0 end as tag2 \
+                            ,case when praise2comment_ratio >= 0.7 then 1 ELSE 0 end as tag3 \
+                            ,case when praise_no_browse_uv >= 20 then 1 ELSE 0 end as tag4 \
+                            ,case when praise_quick_browse_ratio >= 0.7 then 1 ELSE 0 end as tag5 \
+                      FROM lofter.dwd_risk_shuare_post_model_di \
+                      WHERE dt = '${azkaban.flow.1.days.ago}' and post_content_type = '文字' \
+                   ) a1 \
+              ) a \
+              where flag >= 3 \
+              union all \
+              select postid, blogId, null as publisherUserId, null as ip \
+              from ( \
+                    SELECT postid, blogId, (tag1+tag2+tag3+tag4+tag5) as flag \
+                    FROM ( \
+                            SELECT * \
+                              ,case when web_praise_no_device_info_uv >= 20 then 1 ELSE 0 end as tag1 \
+                              ,case when max_city_ip_praise_ratio >= 0.15 then 1 ELSE 0 end as tag2 \
+                              ,case when praise2comment_ratio >= 0.7 then 1 ELSE 0 end as tag3 \
+                              ,case when praise_no_browse_uv >= 20 then 1 ELSE 0 end as tag4 \
+                              ,case when praise_quick_browse_ratio >= 0.7 then 1 ELSE 0 end as tag5 \
+                            FROM lofter.dwd_risk_shuare_post_model_di \
+                            WHERE dt = '${azkaban.flow.1.days.ago}' and post_content_type = '图片' \
+                   ) a1 \
+              ) a \
+              where flag >= 3 \
+              DISTRIBUTE BY 1 \
+
+dependencies=dwd_risk_shuare_model_di,dwd_risk_shuare_post_model_di

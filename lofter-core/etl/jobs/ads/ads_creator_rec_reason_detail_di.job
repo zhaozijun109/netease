@@ -1,0 +1,116 @@
+type=sparksql
+hive.query.01=\
+with user_tag as ( \
+    select userId, tag, postId \
+    from lofter.dwd_post_publish_di lateral view explode(post_tags) as tag \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter_dm.ads_creator_rec_reason_detail_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.userId as blogId, x.reason, x.priority, y.blogNickname as blog_nickname \
+from ( \
+    select userId, \
+           concat('#', tag, case when rank_type = 0 then '镇圈神太' when rank_type = 1 then '人气作者' when rank_type = 2 then '新锐作者' end) as reason, \
+           0 as priority \
+    from ( \
+        select tmp1.userId, \
+               tmp1.tag, \
+               tmp1.rank_type \
+        from ( \
+            select blogId as userId, \
+                   tag, \
+                   rank_type \
+            from lofter_dm.ads_tag_blog_rank_moderated_di where dt = '${azkaban.flow.1.days.ago}' and rank_type in (0,1,2) and rank <= 10 \
+        ) tmp1 \
+        join ( \
+            select userId, \
+                   tag \
+            from ( \
+                select userId, \
+                       tag, \
+                       row_number() over(partition by userId order by nvl(tag_post_cnt_30d/post_cnt_30d,0) desc) as rn \
+                from ( \
+                    select b.userId, \
+                           b.tag, \
+                           a.post_cnt_30d, \
+                           b.tag_post_cnt_30d \
+                    from ( \
+                        select userId, \
+                               count(distinct postId) as post_cnt_30d \
+                        from user_tag \
+                        group by userId \
+                    ) a \
+                    join ( \
+                        select userId, \
+                               tag, \
+                               count(distinct postId) as tag_post_cnt_30d \
+                        from user_tag \
+                        group by userId,tag \
+                    ) b \
+                    on a.userId = b.userId \
+                ) t1 \
+            ) t2 \
+            where rn = 1 \
+        ) tmp2 \
+        on tmp1.userId = tmp2.userId and tmp1.tag = tmp2.tag \
+    ) tmp3 \
+  union all \
+    select userId, concat(hot_1k_post_count, '篇千热作品') as reason, 6 as priority \
+    from ( \
+        select userId, count(distinct postId) as hot_1k_post_count \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and hot >= 1000 \
+        group by 1 \
+        having hot_1k_post_count >= 10 \
+    ) t \
+  union all \
+    select userId, '万粉太太' as reason, 4 as priority \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and fans_std > 10000 \
+  union all \
+    select userId, concat('7日涨粉', fans_7d) as reason, 5 as priority \
+    from lofter.dws_par_user_fans_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and fans_7d > 50 \
+  union all \
+    select userId, '7日内有更新' as reason, 7 as priority \
+    from lofter.dws_par_user_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and post_count_7d > 0 \
+  union all \
+    select blogId, \
+           case when updateDays >= 3 then concat('连续更新',updateDays,'天') \
+                when post_count_7d >= 2 then concat('7日内更新',post_count_7d,'篇') \
+                else null \
+           end as recReason, \
+           null as priority \
+    from ( \
+        select blogId, post_count_7d, max(updateDays) as updateDays \
+        from ( \
+            select blogId, post_count_7d, dts, count(1) as updateDays \
+            from ( \
+                select blogId, post_count_7d, date_sub(publishDate, rn) as dts \
+                from ( \
+                    select t1.blogId, \
+                        t1.post_count_7d, \
+                        t2.publishDate, \
+                        row_number() over(partition by t1.blogId order by t2.publishDate) as rn \
+                    from ( \
+                        select userId as blogId, post_count_7d from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' and fans_std >= 500 \
+                    ) t1 \
+                    join ( \
+                        select blogId, \
+                            publishDate \
+                        from lofter.dim_post_article \
+                        where publishDate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+                        group by blogId, publishDate \
+                    ) t2  \
+                    on t1.blogId = t2.blogId \
+                ) t3 \
+            ) t5 \
+            group by blogId, post_count_7d, dts \
+        ) t6 \
+        group by blogId, post_count_7d \
+    ) t7 \
+    where updateDays >= 3 or post_count_7d >= 3 \
+) x \
+join lofter.dim_blog y on x.userId = y.id
+dependencies=ads_tag_blog_rank_moderated_di
+

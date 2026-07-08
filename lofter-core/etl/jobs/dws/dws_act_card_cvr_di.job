@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_act_card_cvr_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select deviceUdid, userId, activityId, deviceOs, scene, \
+       sum(if(eventId = 'card-0', 1, 0)) as visit_pv, \
+       sum(if(eventId = 'card-1', 1, 0)) as click_navigate_pv, \
+       sum(if(eventId = 'card-2', 1, 0)) as click_lottery_pv, \
+       sum(if(eventId = 'card-5', 1, 0)) as click_share_pv, \
+       sum(if(eventId = 'card-11', 1, 0)) as click_shatter_pv, \
+       sum(if(eventId = 'card-7', 1, 0)) as order_pv, \
+       sum(if(eventId = 'card-13', 1, 0)) as confirm_deliver_pv, \
+       sum(amount) as amount \
+from ( \
+  select a.*, b.amount \
+  from ( \
+      select *, \
+             lag(occurTime) over (partition by deviceUdid, userId, activityId, deviceOs, scene order by occurTime desc) as nextEventTime \
+      from lofter.dwd_act_card_action_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+  ) a left join ( \
+      select buyerId as userId, cardActivityCode, createTime as orderTime, \
+             storePrice * productNum - newCouponPreferential as amount \
+      from lofter_db_dump.ods_db_benefit_order_product_nd \
+      where from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            and status in (1, 4) and type = 5 \
+  ) b on a.userId = b.userId and a.activityId = b.cardActivityCode and a.occurTime < b.orderTime and (a.nextEventTime is null or a.nextEventTime > b.orderTime) \
+) t \
+group by deviceUdid, userId, activityId, deviceOs, scene \
+distribute by 1

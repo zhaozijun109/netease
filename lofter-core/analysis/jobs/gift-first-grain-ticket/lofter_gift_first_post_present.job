@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select postId, blogId from lofter_dm.ads_gift_first_post_grain_ticket_hi where dt='${azkaban.flow.current.date}' and hour = ${azkaban.flow.start.hour} and is_test = 1 "
+params= --topic LOFTER.ReturnGift.Auto.Present --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=ads_gift_first_post_grain_ticket_hi

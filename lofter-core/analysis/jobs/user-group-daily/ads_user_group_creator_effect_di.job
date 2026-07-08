@@ -1,0 +1,57 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.02=insert overwrite table lofter_dm.ads_user_group_creator_effect_di \
+select count(distinct a.userId) as user_count, \
+       count(distinct if(b.level = 'S', b.userId, null)) level_s_creators, \
+       count(distinct if(b.level = 'A', b.userId, null)) level_a_creators, \
+       count(distinct if(b.level = 'B', b.userId, null)) level_b_creators, \
+       count(distinct if(b.level = 'C', b.userId, null)) level_c_creators, \
+       count(distinct if(b.level = 'D', b.userId, null)) level_d_creators, \
+       count(distinct if(b.level = 'D*', b.userId, null)) level_d_star_creators, \
+       count(distinct if(size(c.authdomainids) > 0, c.id, null)) daren_creators, \
+       count(distinct d.userId) as active_creators, \
+       count(distinct if( e.post_count_1d > 0, e.userId,null)) as post_creators, \
+       sum(e.post_count_1d) as post_count_1d, \
+       sum(e.post_count_7d) as post_count_7d, \
+       sum(e.post_count_30d) as post_count_30d, \
+       sum(f.revenue) as revenue, \
+       sum(g.fans) as new_fans, \
+       sum(h.receive_hot) as receive_hot, \
+       sum(j.clickPv) as click_pv, \
+       sum(j.browsePv) as browse_pv, \
+       sum(j.exposurePv) as exposure_pv, \
+       sum(j.playPv) as play_pv, \
+       count(distinct if(j.clickPv > 0, j.userId, null)) click_uv, \
+       count(distinct if(j.browsePv > 0, j.userId, null)) browse_uv, \
+       count(distinct if(j.exposurePv > 0, j.userId, null)) exposure_uv, \
+       count(distinct if(j.playPv > 0, j.userId, null)) play_uv, \
+       sum(h.exposurePv) as folder_exposure_pv, \
+       sum(h.clickPv) as folder_click_pv, \
+       sum(h.browsePv) as folder_browse_pv, \
+       sum(j.hdpv) as hd_pv, \
+       count(distinct if(j.hdPv > 0, j.userId, null)) hd_uv, \
+       sum(k.exposurePv) as collection_exposure_pv, \
+       sum(k.clickPv) as collection_click_pv, \
+       sum(k.browsePv) as collection_browse_pv, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       a.job_id \
+from ( \
+    select * \
+    from lofter.dwd_user_group_user_list_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a left join (select * from lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}') b on a.userId = b.userId \
+    left join lofter.dim_blog c on a.userId = c.id \
+    left join (select userId from lofter.dws_par_user_active_di where dt = '${azkaban.flow.1.days.ago}') d on a.userId = d.userId \
+    left join (select userId, post_count_1d, post_count_7d, post_count_30d from lofter.dws_par_user_post_dd where dt='${azkaban.flow.1.days.ago}') e on a.userId = e.userId \
+    left join (select userId, nvl(receive_gift_amount_1d,0) + nvl(receive_reward_amount_1d,0) as revenue from lofter.dws_par_user_revenue_dd where dt='${azkaban.flow.1.days.ago}' ) f on a.userId = f.userId \
+    left join (select blogId, count(distinct userId) fans from lofter_db_dump.ods_db_user_following_nd where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' group by blogId) g on a.userId = g.blogId \
+    left join (select userId, receive_hot from lofter.dws_par_creator_interaction_di where dt = '${azkaban.flow.1.days.ago}') h on a.userId = h.userId \
+    left join (select userId, sum(clickPv) clickPv, sum(browsePv) browsePv, sum(exposurePv) exposurePv, sum(playPv) playPv, sum(hdpv) hdPv from lofter.dws_post_base_stats_di where dt='${azkaban.flow.1.days.ago}' group by userId) j on a.userId = j.userId \
+    left join (select folderUserId , sum(isExposure) as exposurePv, sum(isClick) clickPv, sum(isBrowse) as browsePv from lofter.dwd_userfolder_action_di where dt='${azkaban.flow.1.days.ago}' group by folderUserId) h on a.userId = h.folderUserId \
+    left join (select post_userid , sum(if(action_type = 'expose', 1, 0)) as exposurePv, sum(if(action_type = 'click', 1, 0)) clickPv, sum(if(action_type = 'browse', 1, 0)) as browsePv from lofter.dwd_post_collection_di where dt='${azkaban.flow.1.days.ago}' group by post_userid) k on a.userId = k.post_userid \
+group by a.job_id

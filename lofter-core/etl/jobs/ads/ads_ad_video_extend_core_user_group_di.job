@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_video_extend_core_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, type \
+from ( \
+    select a.userid,'1日' as type \
+    from ( \
+        select userId, sum(count) as count \
+        from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') =  '${azkaban.flow.1.days.ago}' and \
+              type in (10,24,48,50,51) \
+        group by userId \
+    ) a \
+    where count>=1 \
+    group by a.userid \
+    union \
+    select a.userid,'7日' as type \
+    from ( \
+        select userId, sum(count) as count \
+        from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+        where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub( '${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' and \
+              type in  (10,24,48,50,51) \
+        group by userId \
+    ) a \
+    where count>=5 \
+    group by a.userid \
+    union \
+    select a.userid,'30日' as type \
+    from ( \
+        select userId, sum(count) as count \
+        from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+        where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub( '${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and \
+              type in (10,24,48,50,51) \
+        group by userid \
+    ) a \
+    where count>=10 \
+    group by  a.userid \
+    union \
+    select a.userid,'历史' as type \
+    from ( \
+        select userId, sum(count) as count \
+        from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+        where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              type in (10,24,48,50,51) \
+        group by userId \
+    ) a \
+    where count>=50 \
+    group by  a.userid \
+) t \

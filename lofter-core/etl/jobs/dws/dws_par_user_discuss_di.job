@@ -1,0 +1,84 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_discuss_di partition(dt = '${azkaban.flow.1.days.ago}') \
+     select userId, \
+         max(case when op_type='topic' then pv else 0 end) as topic_ask_pv, \
+         max(case when op_type='topic_answer' then pv else 0 end) as topic_answer_pv, \
+         max(case when op_type='no_topic_answer' then pv else 0 end) as notopic_answer_pv, \
+         max(case when op_type='topic_answer_comment' then pv else 0 end) as comment_pv, \
+         max(case when op_type='answer_like' then pv else 0 end) as topic_answer_like_pv, \
+         max(case when op_type='comment_like' then pv else 0 end) as topic_comment_like_pv \
+     from \
+     (select userId, 'topic' as op_type, count(id) as pv from lofter_db_dump.ods_db_ask_question_nd \
+     where  type = 3 and status in (0, 1) and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+     group by userId \
+      \
+     union all \
+     select a.userId, \
+        case when b.id is not null then 'topic_answer' when questionId=0 then 'no_topic_answer' end op_type, \
+        count(userId) as pv \
+     from \
+     (select id as postId, blogId as userId, questionId \
+     from lofter_db_dump.ods_db_ask_answer_post_nd \
+     where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') a \
+     left join \
+     (select id from lofter_db_dump.ods_db_ask_question_nd \
+     where  type = 3 and status in (0, 1)) b \
+     on a.questionId = b.id \
+     group by 1,2 \
+      \
+     union all \
+     select c.userId, 'topic_answer_comment' as op_type, count(c.id) as pv from \
+     (select a.id as postId \
+     from lofter_db_dump.ods_db_ask_answer_post_nd a \
+     left join \
+     (select id from lofter_db_dump.ods_db_ask_question_nd \
+     where  type = 3 and status in (0, 1)) b \
+     on a.questionId = b.id \
+     where a.questionId = 0 or b.id is not null) a \
+     join \
+     (select id, postId, publisheruserid as userId \
+     from lofter_db_dump.ods_db_post_response_nd \
+     where from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') c \
+     on a.postId = c.postId \
+     group by c.userId \
+      \
+     union all \
+     select c.userId, 'answer_like' as op_type, count(c.id) as pv from \
+     (select a.id as postId \
+     from lofter_db_dump.ods_db_ask_answer_post_nd a \
+     left join \
+     (select id from lofter_db_dump.ods_db_ask_question_nd \
+     where  type = 3 and status in (0, 1)) b \
+     on a.questionId = b.id \
+     where a.questionId = 0 or b.id is not null ) a \
+     join \
+     (select id, postId, publisheruserid as userId \
+     from lofter_db_dump.ods_db_post_hot_nd \
+     where from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') c \
+     on a.postId = c.postId \
+     group by c.userId \
+      \
+     union all \
+     select d.userId, 'comment_like' as op_type, count(c.id) as pv from \
+     (select a.id as postId \
+     from lofter_db_dump.ods_db_ask_answer_post_nd a \
+     left join \
+     (select id from lofter_db_dump.ods_db_ask_question_nd \
+     where  type = 3 and status in (0, 1)) b \
+     on a.questionId = b.id \
+     where  a.questionId = 0 or b.id is not null ) a \
+     join \
+     (select id, postId, publisheruserid as userId \
+     from lofter_db_dump.ods_db_post_response_nd) c \
+     on a.postId = c.postId \
+     join \
+     (select id,userId, commentId \
+     from lofter_db_dump.ods_db_comment_hot_nd \
+     where from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') d \
+     on c.id = d.commentId \
+     group by d.userId \
+     ) a \
+     group by userId \
+     distribute by 1
+
+dependencies=

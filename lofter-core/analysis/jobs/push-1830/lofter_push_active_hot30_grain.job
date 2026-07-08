@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'active_hot30_grain') \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'active_hot30_grain' as policy, \
+       3 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, 9 as messageType, grainId as itemId, prefer_ip as ip, 1 as messageSubType \
+    from lofter_dm.ads_push_active_hot30_grain_di \
+    where dt='${azkaban.flow.current.date}' \
+) t \
+union all \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'active_hot30_grain' as policy, \
+       2 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, 9 as messageType, postId as itemId, blogId, prefer_ip as ip, 3 as messageSubType \
+    from lofter_dm.ads_push_active_top1_photo_di \
+    where dt='${azkaban.flow.current.date}' \
+) t \
+union all \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'active_hot30_grain' as policy, \
+       1 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, 9 as messageType, postId as itemId, blogId, prefer_ip as ip, tag as postProtoType, 2 as messageSubType \
+    from lofter_dm.ads_push_active_top1_specialty_post_di \
+    where dt='${azkaban.flow.current.date}' \
+) t \
+
+dependencies=ads_push_active_hot30_grain_di,ads_push_active_top1_photo_di,ads_push_active_top1_specialty_post_di

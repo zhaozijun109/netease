@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=\
+with actTagSource as ( \
+    select tag from lofter.dim_act_accompany_tag \
+) \
+insert overwrite table lofter.dws_act_tag_honor_name_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag, type, honor_name \
+from( \
+    select tag, 1 as type, '评论友好' as honor_name \
+    from( \
+        select tag, (count(distinct commentId) / count(distinct postId)) as order_key \
+        from( \
+            select a.postId, b.commentId, a.tag \
+            from( \
+                select tag, id as postId \
+                from lofter.dim_post \
+                lateral view explode(tags) as tag \
+                where publishDate between date_sub('${azkaban.flow.1.days.ago}',39) and date_sub('${azkaban.flow.1.days.ago}',9) and contentType in ('文字','图片','视频') and tag in (select tag from actTagSource) \
+            )a \
+            left join( \
+                select postId, commentId, tag, userId, blogId \
+                from lofter.dwd_post_response_di \
+                lateral view explode(post_tags) as tag \
+                where dt between date_sub('${azkaban.flow.1.days.ago}',39) and '${azkaban.flow.1.days.ago}' and post_publish_date between date_sub('${azkaban.flow.1.days.ago}',39) and date_sub('${azkaban.flow.1.days.ago}',9) and post_content_type in('文字','图片','视频') and tag in (select tag from actTagSource) \
+            )b  on a.postId = b.postId and a.tag = b.tag \
+        ) \
+        group by tag \
+    ) \
+    where order_key >= 10.0 \
+union all \
+    select tag, 2 as type, '粮仓满满' as honor_name \
+    from( \
+        select id as postId, tag \
+        from lofter.dim_post \
+        lateral view explode(tags) as tag \
+        where publishDate >= '${azkaban.flow.30.days.ago}' and contentType in ('文字','图片','视频') and tag in (select tag from actTagSource) \
+    ) \
+    group by tag \
+    having  count(distinct postId) > 3000 \
+union all \
+    select tag, 3 as type, '神作聚集' as honor_name \
+    from( \
+        select postId, tag \
+        from( \
+            select postId, tag \
+            from lofter.dwd_post_hot_di \
+            lateral view explode(post_tags) as tag \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and post_publish_date between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and post_content_type in ('文字','图片','视频') and opType is not null and tag in (select tag from actTagSource) \
+        ) \
+        group by postId, tag \
+        having count(1) >= 1000 \
+    ) \
+    group by tag \
+    having count(distinct postId) > 100 \
+union all \
+    select tag, 4 as type, '抱团取暖' as honor_name \
+    from( \
+        select publishDate, tag, id as postId \
+        from lofter.dim_post \
+        lateral view explode(tags) as tag \
+        where publishDate between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' and contentType in ('文字','图片','视频') and tag in (select tag from actTagSource) \
+    ) \
+    group by tag \
+    having count(distinct publishDate) >= 7 and count(distinct postId) < 100 \
+)

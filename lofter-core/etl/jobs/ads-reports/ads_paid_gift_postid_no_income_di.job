@@ -1,0 +1,143 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_paid_gift_postid_no_income_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  period, \
+                      postId, \
+                      userid, \
+                      accept_gift_flag, \
+                      agree_day, \
+                      blogname, \
+                      blognickname, \
+                      platform_type, \
+                      url, \
+                      contenttype, \
+                      publishdate, \
+                      cp_type, \
+                      title, \
+                      CONCAT_WS(',',tags) AS tags, \
+                      return_gift_ids, \
+                      clickpv, \
+                      clickuv, \
+                      exposurepv, \
+                      exposureuv, \
+                      poshotpv, \
+                      poshotuv, \
+                      hdpv, \
+                      hduv, \
+                      coin_num, \
+                      gift_uv, \
+                      num, \
+                      new_sender_coin_num, \
+                      return_gift_coin_num, \
+                      new_sender_uv, \
+                      return_gift_uv, \
+                      rk \
+              FROM \
+              ( \
+              	      SELECT  a.period, \
+              	      		  a.postid, \
+              	      		  a.clickpv, \
+              	      		  a.clickuv, \
+              	      		  a.exposurepv, \
+              	      		  a.exposureuv, \
+              	      		  a.poshotpv, \
+              	      		  a.poshotuv, \
+              	      		  a.hdpv, \
+              	      		  a.hduv, \
+              	      		  a.coin_num, \
+              	      		  a.gift_uv, \
+              	      		  a.num, \
+              	      		  a.new_sender_coin_num, \
+              	      		  a.return_gift_coin_num, \
+              	      		  a.new_sender_uv, \
+              	      		  a.return_gift_uv, \
+              	              b.userid, \
+              	              b.accept_gift_flag, \
+              	              b.agree_day, \
+              	              b.blogname, \
+              	              b.blognickname, \
+              	              b.platform_type, \
+              	              b.url, \
+              	              b.contenttype, \
+              	              b.publishdate, \
+              	              b.cp_type, \
+              	              b.title, \
+              	              b.tags, \
+              	              b.return_gift_ids, \
+              	              ROW_NUMBER() OVER (PARTITION BY a.period,b.platform_type ORDER BY  a.exposureuv DESC) AS rk \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  'day'                     AS period, \
+              	      	              postid, \
+              	      	              SUM(clickpv)              AS clickpv, \
+              	      	              SUM(clickuv)              AS clickuv, \
+              	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	              SUM(hdpv)                 AS hdpv, \
+              	      	              SUM(hduv)                 AS hduv, \
+              	      	              SUM(coin_num)             AS coin_num, \
+              	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	              SUM(num)                  AS num, \
+              	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      FROM lofter.dws_gift_post_di \
+              	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND accept_gift_flag = 1 AND dt >= agree_day AND exposureuv > 10 AND is_pay_return_gift BETWEEN '2' AND '7' AND (coin_num IS NULL or coin_num = 0) \
+              	      	      GROUP BY  postid \
+              	      	      HAVING exposureuv > 500 \
+              	      	      UNION ALL \
+              	      	      SELECT  'week'                    AS period, \
+              	      	              postid, \
+              	      	              SUM(clickpv)              AS clickpv, \
+              	      	              SUM(clickuv)              AS clickuv, \
+              	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	              SUM(hdpv)                 AS hdpv, \
+              	      	              SUM(hduv)                 AS hduv, \
+              	      	              SUM(coin_num)             AS coin_num, \
+              	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	              SUM(num)                  AS num, \
+              	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      FROM lofter.dws_gift_post_di \
+              	      	      WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND accept_gift_flag = 1 AND dt >= agree_day AND exposureuv > 10 AND is_pay_return_gift BETWEEN '2' AND '7' AND (coin_num IS NULL or coin_num = 0) \
+              	      	      GROUP BY  postid \
+              	      	      HAVING exposureuv > 500 \
+              	      	      UNION ALL \
+              	      	      SELECT  'month'                   AS period, \
+              	      	              postid, \
+              	      	              SUM(clickpv)              AS clickpv, \
+              	      	              SUM(clickuv)              AS clickuv, \
+              	      	              SUM(exposurepv)           AS exposurepv, \
+              	      	              SUM(exposureuv)           AS exposureuv, \
+              	      	              SUM(poshotpv)             AS poshotpv, \
+              	      	              SUM(poshotuv)             AS poshotuv, \
+              	      	              SUM(hdpv)                 AS hdpv, \
+              	      	              SUM(hduv)                 AS hduv, \
+              	      	              SUM(coin_num)             AS coin_num, \
+              	      	              SUM(gift_uv)              AS gift_uv, \
+              	      	              SUM(num)                  AS num, \
+              	      	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	      	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	      	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	      	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      	      FROM lofter.dws_gift_post_di \
+              	      	      WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' AND accept_gift_flag = 1 AND dt >= agree_day AND exposureuv > 10 AND is_pay_return_gift BETWEEN '2' AND '7' AND (coin_num IS NULL or coin_num = 0) \
+              	      	      GROUP BY  postid \
+              	      	      HAVING exposureuv > 500 \
+              	      ) a \
+              	      JOIN lofter.dim_gift_post b \
+              	      ON a.postId = b.postId \
+              ) tmp1 \
+              WHERE rk <= 1000

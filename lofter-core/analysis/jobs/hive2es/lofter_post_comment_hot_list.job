@@ -1,0 +1,26 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query=" \
+    select commentId as id,0 as sourceType, commentId,commentTime,commentUserId,commentHot,content,postId,blogId,contentType,title,tags,dt  \
+    from lofter_dm.ads_post_comment_hot_list_di \
+    where dt='${azkaban.flow.1.days.ago}'  \
+union all \
+    select id, sourceType, commentId, commentTime, commentUserId,  \
+           commentHot,content,postId,blogId,contentType,title,tags,dt \
+    from ( \
+        select comment_id as id, \
+               case when type='common_bad' then 1 when type='outside' then 2 end as sourceType,  \
+               comment_id as commentId,comment_time as commentTime,comment_user_id as commentUserId,  \
+               commentHot,content,postId,blogId,content_type as contentType,title,tags,day as dt, \
+               row_number() over (partition by comment_id order by day) as rnk \
+        from rec.rec_data_ecology_neg_comment_minning \
+        where day <='${azkaban.flow.1.days.ago}' and type in ('common_bad', 'outside') \
+    ) t \
+    where dt = '${azkaban.flow.1.days.ago}' and rnk = 1 \
+union all \
+    select commentId as id, 3 as sourceType, commentId,commentTime,commentUserId,commentHot,content,postId,blogId,contentType,title,tags,dt  \
+    from lofter_dm.ads_post_comment_vip_copy_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_post_comment_hot_list --postfixsep --full --atom
+dependencies=

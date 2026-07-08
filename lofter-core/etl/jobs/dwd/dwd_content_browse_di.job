@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_content_browse_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select deviceUdid, userid, occurTime, source, scene, eventId, deviceOs, appVersion, \
+           case when eventId = 'h1-2' and params['collectionId'] is not null then cast(params['collectionId'] as bigint) \
+                when itemid is null and params['tid'] is not null then cast(params['tid'] as bigint) \
+                when itemid is null and params['itemid'] is null then cast(params['itemid'] as bigint) \
+                else cast(itemid as bigint) end as itemId, \
+           case when eventId in ('g1-8','l3-1') then '单日志' when eventId = 't2-1' then '粮单' when eventId = 'h1-2' then '合集' end as item_type, \
+           case when (scene = 'note' and params['module'] in ('feed_rec','feed_rec_domain','related_item','tag_rec','attention')) \
+                  or (params['module'] is null  and if(params['module'] is null ,get_json_object(source, '$[1].module'), null) in ('feed_rec','feed_rec_domain','related_item','tag_rec','attention')) \
+                  or params['module'] in ('videofeature','videodetail','videotag') \
+                  or (params['pos'] = 0 and if(params['pos']=0, get_json_object(source, '$[1].module'), null) in ('videofeature','videodetail','videotag')) \
+                  or get_json_object(source, '$[1].scene') in ('discovery','note','granary') then 1 \
+                else 0 end as isRec \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType in ('page_view', 'page_duration') and (eventId in ('h1-2','g1-8','l3-1') or (eventId = 't2-1' and scene = 'foodlist')) \
+) t \
+where itemId > 0 and length(item_type) > 0 \
+distribute by item_type, itemId
+

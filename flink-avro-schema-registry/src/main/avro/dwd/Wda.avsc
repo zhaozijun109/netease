@@ -1,0 +1,14 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "Wda",
+  "fields":[
+    {"name": "deviceUdid", "type": "string","default": ""},
+    {"name": "eventId","type": "string","default": ""},
+    {"name": "occurTime","type": "long","default": 0},
+    {"name": "appKey","type": "string","default": ""},
+    {"name": "userId","type": ["null", "long"]},
+    {"name": "attributes", "type": ["null", {"type": "map", "values": "string", "default": {}}]},
+    {"name": "currentUrl","type": ["null", "string"]}
+  ]
+}

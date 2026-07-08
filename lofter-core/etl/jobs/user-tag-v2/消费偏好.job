@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 消费偏好 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '消费偏好' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (     select userId, '消费偏好' as tag, post_content_type as grp \
+                                   from lofter.dwd_post_browse_di \
+                                   where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',180) and is_real > 0 and userId > 0 \
+                                   group by userId, post_content_type  ) "

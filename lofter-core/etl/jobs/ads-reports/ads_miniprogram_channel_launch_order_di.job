@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_miniprogram_channel_launch_order_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.* \
+	,blogname \
+	,blogid \
+	,blognickname \
+	,url \
+	,title \
+FROM ( \
+	SELECT miniid \
+		,postid \
+		,count(DISTINCT tradeid) AS num \
+		,count(DISTINCT userid) AS uv \
+		,sum(amount) AS amount \
+		,sum(channeldivision) AS channeldivision \
+	FROM lofter_db_dump.ods_db_trade_mini_program_order_nd \
+	WHERE ( \
+	      channelLaunchTrace is not null and channelLaunchTrace != '' and \
+	      (channelLaunchTrace like '%"clickid"%' or channelLaunchTrace like '%"callback"%' or channelLaunchTrace not like '%{%') \
+	    ) \
+		AND from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+		AND STATUS = 1 \
+	GROUP BY miniid \
+		,postid \
+	) a \
+LEFT JOIN ( \
+	SELECT id \
+		,blogname \
+		,blogid \
+		,blognickname \
+		,CONCAT ( \
+			'https://' \
+			,url \
+			) AS url \
+		,title \
+	FROM lofter.dim_post \
+	) b ON a.postid = b.id \

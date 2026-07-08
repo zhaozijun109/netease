@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_high_net_worth_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       substring('${azkaban.flow.current.date}', 0,7) as current_month, \
+       substring(add_months('${azkaban.flow.current.date}', -1), 0,7) as prev_month, \
+       sum(if(substring(dt, 0, 7) = substring('${azkaban.flow.current.date}', 0,7), amount, 0)) as current_month_support_value, \
+       sum(if(substring(dt, 0, 7) = substring(add_months('${azkaban.flow.current.date}', -1), 0,7), amount, 0)) as prev_month_support_value \
+from ( \
+    select sender as userId, coin / 10.0 as amount, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+    where status = 0 and coin > 0 and \
+          from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, amount, from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, amount, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_coupon_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, coin/10.0 as amount, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_coupon_coin_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, amount, from_unixtime(cast(finishTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_coupon_card_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) a \
+group by 1 \
+having current_month_support_value > 0 or prev_month_support_value > 0

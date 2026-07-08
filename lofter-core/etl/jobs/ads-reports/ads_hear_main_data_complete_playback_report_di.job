@@ -1,0 +1,101 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_hear_main_data_complete_playback_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  deviceos, \
+  count(1) as all_pv, \
+  count(distinct deviceudid) as all_uv, \
+  count( \
+    case \
+      when valid_flg = 1 then 1 \
+      else null \
+    end \
+  ) as valid_pv, \
+  count( \
+    distinct case \
+      when valid_flg = 1 then deviceudid \
+      else null \
+    end \
+  ) as valid_uv, \
+  count( \
+    case \
+      when finish_flg = 1 then 1 \
+      else null \
+    end \
+  ) as finish_pv, \
+  count( \
+    distinct case \
+      when finish_flg = 1 then deviceudid \
+      else null \
+    end \
+  ) as finish_uv, \
+  sum(playedtime) as all_playedtime, \
+  sum(maxprogress) as all_maxprogress, \
+  sum( \
+    case \
+      when valid_flg = 1 then playedtime \
+      else 0 \
+    end \
+  ) as valid_playedtime, \
+  sum( \
+    case \
+      when valid_flg = 1 then maxprogress \
+      else 0 \
+    end \
+  ) as valid_maxprogress \
+from \
+  ( \
+    select \
+      deviceos, \
+      deviceudid, \
+      userid, \
+      params ['collectionId'] as collection, \
+      params ['postId'] as postid, \
+      params ['duration'] as duration, \
+      case \
+        when params ['maxProgress'] > 1 then 1 \
+        else params ['maxProgress'] \
+      end as maxprogress, \
+      ( \
+        NVL(params ['playedTimeme'], 0) + NVL(params ['playedTime'], 0) \
+      ) as playedtime, \
+      occurtime, \
+      case \
+        when ( \
+          NVL(params ['playedTimeme'], 0) + NVL(params ['playedTime'], 0) \
+        ) > 5000 then 1 \
+        else 0 \
+      end as valid_flg, \
+      case \
+        when ( \
+          NVL(params ['playedTimeme'], 0) + NVL(params ['playedTime'], 0) \
+        ) > 5000 \
+        and ( \
+          ( \
+            NVL(params ['playedTimeme'], 0) + NVL(params ['playedTime'], 0) \
+          ) / params ['duration'] >= 0.3 \
+          and params ['maxProgress'] >= 0.9 \
+        ) then 1 \
+        else 0 \
+      end as finish_flg \
+    from \
+      ( \
+        SELECT \
+          deviceudid, \
+          userid, \
+          occurtime, \
+          deviceos, \
+          appversion, \
+          itemid, \
+          itemtype, \
+          params, \
+          scene \
+        from \
+          lofter.ods_mda_app_partition_di \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and eventid = 'm6-5' \
+      ) a \
+  ) a \
+group by \
+  deviceos \
+

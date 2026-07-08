@@ -1,0 +1,122 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_growth_arpu_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+SELECT \
+a.base_date, \
+a.device_type, \
+a.origin_type, \
+a.origin_channel, \
+a.proxy, \
+period, \
+device_count, \
+trade_device_count, \
+trade_money \
+from \
+( \
+SELECT \
+dt, \
+base_date, \
+device_type, \
+origin_type, \
+ifnull(origin_channel, 'null') origin_channel, \
+period, \
+nvl(proxy,0) proxy, \
+SUM( \
+case \
+when period = 1 then trade_device_count \
+when period = 7 then trade_device_count_7d \
+when period = 15 then trade_device_count_15d \
+when period = 30 then trade_device_count_30d \
+when period = 60 then trade_device_count_60d \
+when period = 90 then trade_device_count_90d \
+when period = 120 then trade_device_count_120d \
+when period = 180 then trade_device_count_180d \
+end \
+) AS trade_device_count, \
+SUM( \
+case \
+when period = 1 then trade_money \
+when period = 7 then trade_money_7d \
+when period = 15 then trade_money_15d \
+when period = 30 then trade_money_30d \
+when period = 60 then trade_money_60d \
+when period = 90 then trade_money_90d \
+when period = 120 then trade_money_120d \
+when period = 180 then trade_money_180d \
+end \
+) AS trade_money \
+FROM \
+vc_dm.ads_vc_growth_ltv_report_di \
+cross JOIN ( \
+SELECT \
+period \
+LATERAL VIEW explode(array(1, 7, 15, 30, 60, 90, 120, 180)) periods AS period \
+) \
+WHERE \
+dt >= '2024-03-01' and \
+( \
+( \
+period = 1 \
+AND base_date = dt \
+) \
+OR ( \
+period = 7 \
+AND datediff(dt, base_date) = 6 \
+) \
+OR ( \
+period = 15 \
+AND datediff(dt, base_date) = 14 \
+) \
+OR ( \
+period = 30 \
+AND datediff(dt, base_date) = 29 \
+) \
+OR ( \
+period = 60 \
+AND datediff(dt, base_date) = 59 \
+) \
+OR ( \
+period = 90 \
+AND datediff(dt, base_date) = 89 \
+) \
+OR ( \
+period = 120 \
+AND datediff(dt, base_date) = 119 \
+) \
+OR ( \
+period = 180 \
+AND datediff(dt, base_date) = 179 \
+) \
+) \
+GROUP BY \
+dt, \
+base_date, \
+period, \
+device_type, \
+origin_type, \
+origin_channel, \
+nvl(proxy,0) \
+) a \
+left join ( \
+select \
+base_date, \
+device_type, \
+origin_type, \
+ifnull(origin_channel, 'null') origin_channel, \
+nvl(proxy,0) proxy, \
+sum(device_count) device_count \
+from \
+vc_dm.ads_vc_growth_ltv_report_di \
+where  \
+group by \
+base_date, \
+device_type, \
+origin_type, \
+origin_channel, \
+nvl(proxy,0) \
+) b on a.base_date = b.base_date \
+and a.device_type = b.device_type \
+and a.origin_type = b.origin_type \
+and a.origin_channel = b.origin_channel \
+and a.proxy=b.proxy \
+
+dependencies=ads_vc_growth_ltv_report_di

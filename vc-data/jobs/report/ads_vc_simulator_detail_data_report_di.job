@@ -1,0 +1,27 @@
+type = sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_simulator_detail_data_report_di partition(dt ='${azkaban.flow.1.days.ago}' )  \
+with simulator_info as   \
+(  \
+select dt, source, user_id, name,  \
+count(message_id) as simulator_message_cnt,  \
+sum(total_consume) as simulator_total_consume,  \
+sum(case when source = 1 then buy_nums else 0 end) as simulator_buy_nums  \
+ \
+from vc.dwd_pv_simulator_talk_info_i_d  \
+where dt = '${azkaban.flow.1.days.ago}'   \
+ and scene='SIMULATOR_CHAT' \
+group by dt, source, user_id, name  \
+)  \
+ \
+select  COALESCE(source, 3) as source, name,  \
+simulator_chat_uv, simulator_message_cnt, \
+ simulator_total_consume, simulator_buy_nums  \
+ from   \
+ ( select dt, source, name,  \
+ count(distinct user_id) as simulator_chat_uv,  \
+ sum(simulator_message_cnt) as simulator_message_cnt,  \
+ sum(simulator_total_consume) as simulator_total_consume,  \
+ sum(simulator_buy_nums) as simulator_buy_nums  \
+ from simulator_info  \
+ group by 1,2,3  \
+ grouping sets( (dt,source,name), (dt,name) ) ) \

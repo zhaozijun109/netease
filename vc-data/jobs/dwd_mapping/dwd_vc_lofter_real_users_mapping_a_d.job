@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dwd_vc_lofter_real_users_mapping_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select y1.user_id, \
+                       y1.user_code                       as vc_user_code, \
+                       y2.user_code                       as lofter_user_id, \
+                       if(y2.user_code is null, 'N', 'Y') as is_lofter, \
+                       nvl(y2.is_pve, 'N'), \
+                       y2.phone \
+                from (select id as user_id, phone, user_code \
+                      from vc.ods_db_vc_user_account_nd \
+                      where phone is not null \
+                        and phone != '') y1 \
+                         left join \
+                     (select max(user_code) as user_code, if(ARRAY_CONTAINS(COLLECT_SET(is_pve), 'Y'), 'Y', 'N') as is_pve, phone \
+                      from (select x1.userid as user_code, if(x2.userid is null, 'N', 'Y') is_pve, x3.phone \
+                            from (select id as userid from lofter.dim_user where isrobot = 0 and istest = 0 and isanonymous = 0) x1 \
+                                     left join \
+                                 (select userid from lofter.dim_pve_user_dd where dt = '${azkaban.flow.2.days.ago}' and usertype = 0) x2 \
+                                 on x1.userid = x2.userid \
+                                     left join \
+                                 (select userid, last_phone as phone \
+                                  from lofter.dws_par_user_base_dd \
+                                  where dt = '${azkaban.flow.2.days.ago}' \
+                                    and last_phone is not null \
+                                  group by userid, last_phone) x3 on x1.userid = x3.userid \
+                            where x3.phone is not null) \
+                      group by phone) y2 on y1.phone = y2.phone;

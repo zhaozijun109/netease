@@ -1,0 +1,39 @@
+execution-jar=${classpath}
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="\
+select user_id as userId, \
+       collect_set(character_id) as characterIdSet, \
+       'NO_CARD_DATA_EXECUTER' as metricId \
+from ( \
+    select create_time, \
+           id, \
+           user_id, \
+           character_id, \
+           row_number() over (partition by id order by _bin_op_time desc) as rk \
+    from ( \
+        select from_unixtime(create_time) as create_time, \
+               id, \
+               user_id, \
+               character_id, \
+               _bin_op_time \
+        from vc.ods_binlog_vc_user_event_task_info_di \
+        where dt >= '${azkaban.flow.1.days.ago}' \
+              and `_bin_op` != 1 \
+              and init_source = 1 \
+              and status = 1 \
+              and from_unixtime(create_time) > concat('${azkaban.flow.1.days.ago}', ' 07:00:00') \
+              and from_unixtime(create_time) < concat('${azkaban.flow.current.date}', ' 07:00:00') \
+    ) t1 \
+    left join ( \
+        select event_id from vc.ods_binlog_vc_user_event_task_detail_di where type = 1 and `_bin_op` != 1 group by event_id \
+    ) t2 \
+    on t1.id = t2.event_id \
+    where t2.event_id is null \
+) t3 \
+where rk = 1 \
+group by user_id \
+"
+params= --topic vc_user_event_notice_topic --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092
+

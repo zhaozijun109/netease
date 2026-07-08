@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter_dm.ads_push_collection_rec_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.user_id as userId, a.collection_id, a.item_id, b.browse_uv as browse_uv \
+from ( \
+    select user_id, collection_id, item_id \
+    from rec.rec_push_collection \
+    where day = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+    select collectionId as collection_id, bitmap_count(bitmap_union(realbrowse_uv_bitmap)) as browse_uv \
+    from lofter.dws_collection_scene_bm_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+    having browse_uv > 0 \
+) b on a.collection_id = b.collection_id \

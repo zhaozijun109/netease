@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select postId as id, blogId, title, nvl(hot,0) as hot, publishTime, nvl(hot_1d,0) as recent1hot, \
+       hot_7d as recent7hot, \
+       tag, cast(current_timestamp() as bigint) * 1000 as updateTime, type, \
+       gift_type as giftType \
+from lofter_dm.ads_membership_rec_post_index_di \
+where dt ='${azkaban.flow.1.days.ago}' \
+"
+params= --id id --dest lofter_gift_post --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI

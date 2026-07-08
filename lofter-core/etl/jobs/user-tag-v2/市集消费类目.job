@@ -1,0 +1,30 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 市集消费类目 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '市集消费类目' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '市集消费类目' as tag, level as grp \
+                                  from lofter.dws_par_user_ec_dd \
+                                       lateral view explode(pay_product_category_level1) as level \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                               \
+                                  union all \
+                               \
+                                  select userId, '市集消费类目' as tag, level as grp \
+                                  from lofter.dws_par_user_ec_dd \
+                                       lateral view explode(pay_product_category_level2) as level \
+                                  where dt = '${azkaban.flow.1.days.ago}' \
+                               \
+                                  union all \
+                               \
+                                  select userId, '市集消费类目' as tag, level as grp \
+                                  from lofter.dws_par_user_ec_dd \
+                                       lateral view explode(pay_product_category_level3) as level \
+                                  where dt = '${azkaban.flow.1.days.ago}'   ) "

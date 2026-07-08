@@ -1,0 +1,25 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--cktable vc.user_portrait_datas --b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_user_character_fetter
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '角色羁绊值' as tag_name, \
+       character_name as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       '' as dim5, \
+       fetter_nums as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_user_character_fetter' as tag \
+from ( \
+    select user_id, character_name, fetter_nums \
+    from vc.dws_vc_uc_talk_summary_single_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and fetter_nums is not null \
+      and character_name is not null \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

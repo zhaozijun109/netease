@@ -1,0 +1,94 @@
+type=sparksql
+hive.query.01=\
+with postSource as ( \
+    select id as postId, contentType, title, tags, ips from lofter.dim_post_article \
+    where isPublished = true and isCitedPost = false and isForbidden = false and \
+          allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and \
+          isMoved = 0 and is_book_store = 0 \
+), \
+postHotSource as ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 10000 \
+), \
+partnerConfigSource as ( \
+    select name, taskType, dataType from lofter_db_dump.ods_db_partner_ip_tag_config_nd \
+) \
+insert overwrite table lofter_dm.ads_partner_special_commission_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select 4 as sourceType, \
+       t2.postId, \
+       t2.contentType, \
+       t2.title, \
+       t2.tags \
+from ( \
+    select name as ipName, \
+           dataType \
+    from partnerConfigSource \
+    where taskType = 1 and dataType = 1 \
+) t1 \
+join ( \
+    select postId, contentType, title, tags, ips, ip from postSource lateral view explode(ips) as ip \
+) t2 \
+on t1.ipName = t2.ip \
+join ( \
+    select cast(showId as bigint) as postId from lofter_db_dump.ods_db_recommend_user_mark_nd where showType = 1 and showId is not null group by showId \
+) t3 \
+on t2.postId = t3.postId \
+union all \
+select 5 as sourceType, \
+       t2.postId, \
+       t2.contentType, \
+       t2.title, \
+       t2.tags \
+from ( \
+    select name as ipName, \
+           dataType \
+    from partnerConfigSource \
+    where taskType = 1 and dataType = 2 \
+) t1 \
+join ( \
+    select postId, contentType, title, tags, ip from postSource lateral view explode(ips) as ip \
+) t2 \
+on t1.ipName = t2.ip \
+join ( \
+    select postId from postHotSource \
+) t3 \
+on t2.postId = t3.postId \
+union all \
+select 6 as sourceType, \
+       t2.postId, \
+       t2.contentType, \
+       t2.title, \
+       t2.tags \
+from ( \
+    select name as ipName, \
+           dataType \
+    from partnerConfigSource \
+    where taskType = 1 and dataType = 3 \
+) t1 \
+join ( \
+    select postId, contentType, title, tags, ip from postSource lateral view explode(ips) as ip where contentType = '文字' \
+) t2 \
+on t1.ipName = t2.ip \
+join ( \
+    select postId from postHotSource \
+) t3 \
+on t2.postId = t3.postId \
+union all \
+select 7 as sourceType, \
+       t2.postId, \
+       t2.contentType, \
+       t2.title, \
+       t2.tags \
+from ( \
+    select name as tagName, \
+           dataType \
+    from partnerConfigSource \
+    where taskType = 0 and dataType = 0 \
+) t1 \
+join ( \
+    select postId, contentType, title, tags, tag from postSource lateral view explode(tags) as tag \
+) t2 \
+on t1.tagName = t2.tag \
+join ( \
+    select postId from postHotSource \
+) t3 \
+on t2.postId = t3.postId

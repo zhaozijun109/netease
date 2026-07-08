@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dws_vc_daily_hot_words_dd partition(dt='${azkaban.flow.1.days.ago}') \
+                select word, nums, rk \
+                from (select word, nums, dense_rank() over (order by nums desc) as rk \
+                        from (select params['text'] as word, count(*) as nums \
+                            from vc.ods_mda_app_di \
+                            where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                                and eventid = 'b2-2' \
+                                and params['text'] is not null \
+                                and params['text'] != '' \
+                            group by params['text'] \
+                            having nums >= 10) x1 \
+                            left join  \
+                            (select code from vc.ods_db_vc_redeem_code_nd group by code) x2 on x1.word = x2.code \
+                            where x2.code is null \
+                            ) \
+                where rk <= 100
+

@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_hot_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select collectionId, recent7hot as hot_7d, recent7postHotAvg as hot_7d_avg, recent1hot as hot_1d, recent7hotChanged as hot_7d_diff, recent1hotChanged as hot_1d_diff \
+    from ( \
+    select a.id as collectionId, \
+           sum(c.recent7hot) as recent7hot, \
+           sum(c.recent7hot) / count(distinct b.postId) as recent7postHotAvg, \
+           sum(c.recent1hot) as recent1hot, \
+           sum(recent7hotChanged) as recent7hotChanged, \
+           sum(recent1hotChanged) as recent1hotChanged \
+    from lofter_db_dump.ods_db_post_collection_nd a \
+        join lofter_db_dump.ods_db_post_collection_record_nd b on a.id = b.collectionId \
+        join ( \
+          select postId, sum(if(dt >= '${azkaban.flow.7.days.ago}', 1, 0)) recent7hot, \
+                 sum(if(dt = date_sub('${azkaban.flow.7.days.ago}', 1), -1, if(dt = '${azkaban.flow.1.days.ago}', 1, 0))) recent7hotChanged, \
+                 sum(if(dt = '${azkaban.flow.1.days.ago}', 1, 0)) recent1hot, \
+                 sum(if(dt = '${azkaban.flow.2.days.ago}', -1, if(dt = '${azkaban.flow.1.days.ago}', 1, 0 ))) recent1hotChanged \
+          from lofter.dwd_post_hot_di \
+          where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.7.days.ago}', 1) \
+          group by postId \
+    ) c on b.postId = c.postId \
+    where a.status = 0 and b.status = 0 \
+    group by a.id \
+    ) t distribute by 1

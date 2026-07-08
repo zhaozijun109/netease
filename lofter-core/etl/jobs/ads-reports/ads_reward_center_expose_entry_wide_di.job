@@ -1,0 +1,106 @@
+type=sparksql
+hive.query.01=\
+WITH expose_agg AS ( \
+    SELECT userId, source_type, source, \
+           count(*) as expose_cnt, \
+           max_by(appchannel, occurtime) as app_channel \
+    FROM ( \
+        SELECT userId, appchannel, occurtime, \
+               CASE WHEN eventid = 'e1-73' THEN 'fixed' \
+                    WHEN eventid = 'e1-75' THEN 'attract' \
+                    WHEN eventid = 'g3-103' THEN 'fixed' \
+                    WHEN eventid = 'a1-37' THEN 'attract' \
+                    WHEN eventid = 'b1-45' THEN 'attract' \
+                    WHEN eventid = 'ad-65' THEN 'attract' \
+               END as source_type, \
+               CASE WHEN eventid = 'e1-73' THEN 'mine_account_loftgrain' \
+                    WHEN eventid = 'e1-75' THEN 'mine_account_banner' \
+                    WHEN eventid = 'g3-103' THEN 'giftbag_grain_ticket' \
+                    WHEN eventid = 'a1-37' THEN 'home_upperleft' \
+                    WHEN eventid = 'b1-45' THEN 'explorefeednative_11' \
+                    WHEN eventid = 'ad-65' THEN 'home_float' \
+               END as source \
+        FROM lofter.ods_mda_app_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND userId > 0 \
+          AND eventid in ('e1-73','e1-75','g3-103','a1-37','b1-45','ad-65') \
+    ) e \
+    GROUP BY userId, source_type, source \
+), \
+click_base AS ( \
+    SELECT userId, source_type, source \
+    FROM ( \
+        SELECT userId, \
+               CASE WHEN eventid = 'e1-74' THEN 'fixed' \
+                    WHEN eventid = 'e1-76' THEN 'attract' \
+                    WHEN eventid = 'g3-104' THEN 'fixed' \
+                    WHEN eventid = 'a1-36' THEN 'attract' \
+                    WHEN eventid = 'b1-46' THEN 'attract' \
+                    WHEN eventid = 'ad-37' THEN 'attract' \
+               END as source_type, \
+               CASE WHEN eventid = 'e1-74' THEN 'mine_account_loftgrain' \
+                    WHEN eventid = 'e1-76' THEN 'mine_account_banner' \
+                    WHEN eventid = 'g3-104' THEN 'giftbag_grain_ticket' \
+                    WHEN eventid = 'a1-36' THEN 'home_upperleft' \
+                    WHEN eventid = 'b1-46' THEN 'explorefeednative_11' \
+                    WHEN eventid = 'ad-37' THEN 'home_float' \
+               END as source \
+        FROM lofter.ods_mda_app_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND userId > 0 \
+          AND eventid in ('e1-74','e1-76','g3-104','a1-36','b1-46','ad-37') \
+    ) c \
+    GROUP BY userId, source_type, source \
+), \
+user_new AS ( \
+    SELECT userId FROM lofter.dwd_user_new_di WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY userId \
+), \
+user_return AS ( \
+    SELECT userId FROM lofter.dwd_user_return_di WHERE dt = '${azkaban.flow.1.days.ago}' GROUP BY userId \
+), \
+active AS ( \
+    SELECT userId, active_days_30d FROM lofter.dws_par_user_active_dd WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+user_base AS ( \
+    SELECT userId, country, province, city FROM lofter.dws_par_user_base_dd WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+first_entry AS ( \
+    SELECT userId, source_type, source FROM ( \
+        SELECT userId, \
+               nvl(nullif(trim(source_type), ''), 'unknown') as source_type, \
+               nvl(nullif(trim(source), ''), 'unknown') as source, \
+               row_number() over ( \
+                   partition by userId \
+                   order by CASE WHEN source IS NULL OR trim(source) = '' \
+                                   OR source_type IS NULL OR trim(source_type) = '' \
+                                 THEN 1 ELSE 0 END, \
+                            occurtime asc \
+               ) as rn \
+        FROM lofter.dwd_rewardcenter_visit_di \
+        WHERE dt <= '${azkaban.flow.1.days.ago}' \
+          AND userId > 0 \
+    ) t \
+    WHERE rn = 1 \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_reward_center_expose_entry_wide_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT e.userId, e.source_type, e.source, \
+       CASE WHEN un.userId IS NOT NULL THEN 'APP新用户' \
+            WHEN ur.userId IS NOT NULL THEN 'APP回流用户' \
+            ELSE 'APP老用户' END as user_type, \
+       nvl(ac.active_days_30d, 0) as active_days_30d, \
+       ub.country, ub.province, ub.city, \
+       e.app_channel, \
+       if(fe.userId IS NOT NULL AND fe.source_type = e.source_type AND fe.source = e.source, 1, 0) as is_first_entry, \
+       if(c.userId IS NOT NULL, 1, 0) as is_click, \
+       e.expose_cnt \
+FROM expose_agg e \
+LEFT JOIN user_new un ON e.userId = un.userId \
+LEFT JOIN user_return ur ON e.userId = ur.userId \
+LEFT JOIN active ac ON e.userId = ac.userId \
+LEFT JOIN user_base ub ON e.userId = ub.userId \
+LEFT JOIN first_entry fe ON e.userId = fe.userId \
+LEFT JOIN click_base c ON e.userId = c.userId AND e.source_type = c.source_type AND e.source = c.source \
+DISTRIBUTE BY 1
+
+dependencies=

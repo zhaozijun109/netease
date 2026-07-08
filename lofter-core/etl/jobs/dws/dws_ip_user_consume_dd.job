@@ -1,0 +1,14 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter.dws_ip_user_consume_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select ip, userId, \
+       bitmap_count(bitmap_union(post_bitmap)) as post_30d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, post_bitmap, null))) as post_15d, \
+       bitmap_count(bitmap_union(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, post_bitmap, null))) as post_7d \
+from lofter.dws_ip_user_consume_di \
+where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+      length(ip) > 0 and userId > 0 \
+group by ip, userId
+dependencies=dws_ip_user_consume_di

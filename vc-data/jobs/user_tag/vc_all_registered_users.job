@@ -1,0 +1,23 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_all_registered_users --bitmap
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '全量用户' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       'ALL' as grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_all_registered_users' as tag \
+from ( \
+    select user_id \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

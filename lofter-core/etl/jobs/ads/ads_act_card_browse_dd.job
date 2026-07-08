@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_browse_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select activityId as cardActivityCode, count(distinct deviceUdid) as browse_uv_30d \
+from lofter.dwd_act_card_action_di \
+where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.1.days.ago}' \
+group by activityId \
+distribute by 1

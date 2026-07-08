@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.02=insert overwrite table lofter.dws_ip_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.ip,categories, \
+ifnull(sum(realpv),0) sum_realpv, \
+ifnull(sum(case when device_type='近30日新增' then realpv end),0) newuser_realpv, \
+ifnull(sum(case when device_type='近30日回流' then realpv end),0) returnuser_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 1 and 7 then realpv end),0) 1to7_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 8 and 14 then realpv end),0) 8to14_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 15 and 28 then realpv end),0) 15to28_realpv, \
+ifnull(sum(case when device_type='持续活跃' and active_days_30d between 29 and 30 then realpv end),0) 29to30_realpv, \
+count(distinct a.deviceudid) sum_realuv, \
+count(distinct case when device_type='近30日新增' then a.deviceudid end) newuser_realuv, \
+count(distinct case when device_type='近30日回流' then a.deviceudid end) returnuser_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 1 and 7 then a.deviceudid end) 1to7_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 8 and 14 then a.deviceudid end) 8to14_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 15 and 28 then a.deviceudid end) 15to28_realuv, \
+count(distinct case when device_type='持续活跃' and active_days_30d between 29 and 30 then a.deviceudid end) 29to30_realuv, \
+sum(expose_pv) as expose_pv, \
+sum(pay_expose_pv) as pay_expose_pv \
+from \
+( \
+    select deviceudid,ip,count(postid) realpv \
+    from lofter.dwd_post_browse_di  \
+    lateral view explode(post_ips) t1 as ip  \
+    where dt ='${azkaban.flow.1.days.ago}' and is_real > 0  \
+    group by deviceudid,ip  \
+) a \
+join \
+( \
+    select deviceudid,device_type,active_days_30d \
+    from lofter.dws_device_growth_dau_stratify_di  \
+    where dt ='${azkaban.flow.1.days.ago}'  \
+) b \
+on a.deviceudid=b.deviceudid \
+left join \
+(  \
+    select ip,concat_ws(',',categories) categories  \
+    from lofter.dim_ip_dd \
+    where dt='${azkaban.flow.1.days.ago}'  \
+) c \
+on a.ip=c.ip \
+left join ( \
+    select a.deviceUdid, a.ip, sum(a.pv) as expose_pv, sum(if(b.postId is not null, a.pv, 0)) as pay_expose_pv \
+    from ( \
+        select deviceUdid, ip, postId, count(1) pv \
+        from lofter.dwd_post_expose_di \
+            lateral view explode(resolve_tag_ip(post_tags)) t1 as ip  \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2, 3 \
+    ) a \
+    left join ( \
+        select postId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 1) \
+        group by 1 \
+    ) b on a.postId = b.postId \
+    group by 1, 2 \
+) d on a.ip = d.ip and a.deviceUdid = d.deviceUdid \
+group by a.ip,categories
+dependencies=dws_device_growth_dau_stratify_di

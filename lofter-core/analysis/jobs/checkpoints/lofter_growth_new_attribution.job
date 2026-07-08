@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(itemId as string) as id,*, tags as tags_text from lofter_dm.ads_growth_new_attribution_content_di where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_growth_new_attribution --atom

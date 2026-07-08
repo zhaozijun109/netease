@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=create temporary function resolve_ip as 'com.netease.wm.udf.ResolveIp';
+hive.query.02=insert overwrite table lofter.dwd_risk_brush_hot_suspect_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.id as userId \
+from lofter.dim_user a \
+left join ( \
+    SELECT a.*, b.real_post_browse_count_30d \
+    from ( \
+        SELECT userId, send_like_cnt_30d, send_recommend_cnt_30d \
+        from lofter.dws_par_user_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        SELECT * \
+        from lofter.dws_par_user_traffic_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.userId = b.userId \
+) b on a.id = b.userid \
+left join ( \
+    SELECT userId, \
+        count(distinct login_province) as login_province_num_30d, \
+        count(distinct login_city) as login_city_num_30d \
+    from ( \
+        select cast(accountId as bigint) as userId, \
+                login_country,login_province,login_city \
+        FROM lofter.dwd_evt_user_login_di \
+        WHERE actiontype = 'login'  and \
+            dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    group by 1 \
+) c on a.id = c.userId \
+left join ( \
+    SELECT userId \
+    from ( \
+        select blogId as userId \
+        from ( \
+            select blogId, tags \
+            from lofter_db_dump.ods_db_blog_misc_setting_nd \
+                lateral view explode(split(multiFields, '\\\\|')) as tags \
+            where multiFields like '%56::%' \
+        ) t \
+        lateral view explode(split(substr(tags, 5), ',')) as tagName \
+        where tags like '%56::%' and length(tagName) > 0 \
+        group by 1 \
+      union all \
+        select userId from lofter.dws_par_user_fans_dd where dt = '${azkaban.flow.1.days.ago}' and fans_total >= 15 \
+      union all \
+        SELECT  userId FROM lofter.dws_par_creator_interaction_dd WHERE dt = '${azkaban.flow.1.days.ago}' and hd_uv_30d >= 10 \
+    ) t \
+    group by 1 \
+) c2 on a.id = c2.userId \
+left join (select blogId as userId from lofter_db_dump.ods_db_robot_blog_info_nd) c3 on a.id = c3.userId \
+where c2.userId is null and c3.userId is null and \
+     ( (b.send_like_cnt_30d > greatest(b.real_post_browse_count_30d,5) or b.send_recommend_cnt_30d > greatest(b.real_post_browse_count_30d, 5)) \
+       or c.login_province_num_30d > 3 or c.login_city_num_30d >= 5 ) \

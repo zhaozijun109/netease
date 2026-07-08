@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-ndarray</artifactId>
+
+    <properties>
+        <djl.version>0.6.0</djl.version>
+        <mxnet.version>1.7.0-b</mxnet.version>
+        <pytorch.version>1.5.0</pytorch.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.binary.version}</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>ai.djl</groupId>
+            <artifactId>api</artifactId>
+            <version>${djl.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ai.djl.mxnet</groupId>
+            <artifactId>mxnet-engine</artifactId>
+            <version>${djl.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ai.djl.pytorch</groupId>
+            <artifactId>pytorch-engine</artifactId>
+            <version>${djl.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>auto</id>
+            <dependencies>
+                <dependency>
+                    <groupId>ai.djl.mxnet</groupId>
+                    <artifactId>mxnet-native-auto</artifactId>
+                    <version>${mxnet.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>ai.djl.pytorch</groupId>
+                    <artifactId>pytorch-native-auto</artifactId>
+                    <version>${pytorch.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>osx</id>
+            <dependencies>
+                <dependency>
+                    <groupId>ai.djl.mxnet</groupId>
+                    <artifactId>mxnet-native-mkl</artifactId>
+                    <classifier>osx-x86_64</classifier>
+                    <version>${mxnet.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>ai.djl.pytorch</groupId>
+                    <artifactId>pytorch-native-cpu</artifactId>
+                    <classifier>osx-x86_64</classifier>
+                    <version>${pytorch.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>linux</id>
+            <dependencies>
+                <dependency>
+                    <groupId>ai.djl.mxnet</groupId>
+                    <artifactId>mxnet-native-mkl</artifactId>
+                    <classifier>linux-x86_64</classifier>
+                    <version>${mxnet.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>ai.djl.pytorch</groupId>
+                    <artifactId>pytorch-native-cpu</artifactId>
+                    <classifier>linux-x86_64</classifier>
+                    <version>${pytorch.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>win</id>
+            <dependencies>
+                <dependency>
+                    <groupId>ai.djl.mxnet</groupId>
+                    <artifactId>mxnet-native-mkl</artifactId>
+                    <classifier>win-x86_64</classifier>
+                    <version>${mxnet.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>ai.djl.pytorch</groupId>
+                    <artifactId>pytorch-native-cpu</artifactId>
+                    <classifier>win-x86_64</classifier>
+                    <version>${pytorch.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+
+</project>

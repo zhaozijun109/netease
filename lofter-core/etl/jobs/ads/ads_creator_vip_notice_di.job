@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_vip_notice_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.blogId, x.userId, x.is_above_condition, nvl(y.private_post_count,0), nvl(z.private_friends,0) \
+from ( \
+    select a.blogId, a.userId, if(a.score >= e.recent30FansAttraction, 1, 0) as is_above_condition \
+    from ( \
+        select blogid,userid,score \
+        from lofter.dws_par_creator_user_support_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join lofter_db_dump.ods_db_trade_fans_private_account_nd d on a.blogId = d.userId \
+    join lofter_db_dump.ods_db_trade_fans_private_condition_nd e on d.conditionLevel = e.id \
+    left join ( \
+       select * \
+       from lofter_db_dump.ods_db_blog_fans_private_nd \
+       where from_unixtime(cast(expireTime as bigint), 'yyyy-MM-dd') > '${azkaban.flow.1.days.ago}' \
+    ) f on a.blogId = f.fansPrivateBlogid and a.userId = f.userId \
+    where a.score >= e.recent30FansAttraction * 0.6 and d.status = 2 and f.userId is null \
+) x \
+left join ( \
+   select blogId, count(distinct postId) as private_post_count \
+   from lofter_db_dump.ods_db_post_fans_post_nd \
+   where postStatus = 1 and fansPostType = 1 \
+   group by 1 \
+) y on x.blogId = y.blogId \
+left join ( \
+     select fansPrivateBlogid as blogId, count(distinct userId) as private_friends \
+     from lofter_db_dump.ods_db_blog_fans_private_nd \
+     group by 1 \
+) z on x.blogId = z.blogId \
+left join ( \
+   select blogId, userId \
+   from lofter_dm.ads_creator_vip_notice_di \
+   where dt < '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+   group by 1, 2 \
+) z1 on x.blogId = z1.blogId and x.userId = z1.userId \
+left join ( \
+    select vipBlogId as blogId, userId \
+    from lofter_db_dump.ods_db_blog_fans_vip_nd \
+    where from_unixtime(cast(expireTime as bigint), 'yyyy-MM-dd') > '${azkaban.flow.1.days.ago}' \
+) z2 on x.blogId = z2.blogId and x.userId = z2.userId \
+where z1.userId is null and z2.userId is null and \
+      y.private_post_count > 0 \
+

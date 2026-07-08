@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_premium_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select all_premium_creators, all_creators, add_premium_creators, high_potential_creators, middle_potential_creators \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct if(is_premium > 0, userId,null)) as all_premium_creators, \
+           count(distinct if(premium_date = '${azkaban.flow.1.days.ago}', userId,null)) as add_premium_creators, \
+           count(distinct if(is_premium_high_potential > 0, userId, null)) as high_potential_creators, \
+           count(distinct if(is_premium_middle_potential > 0, userId, null)) as middle_potential_creators \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+  select '${azkaban.flow.1.days.ago}' as dt, count(distinct userId) all_creators \
+  from lofter.dws_par_creator_dd \
+  where dt = '${azkaban.flow.1.days.ago}' and level is not null and level != 'D*' \
+) b on a.dt = b.dt

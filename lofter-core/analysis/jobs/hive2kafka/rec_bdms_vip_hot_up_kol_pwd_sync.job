@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaRaw
+conf.spark.source.query="\
+select to_json(transform(sort_array(collect_list(struct(rk, actpwd as word, url)), true), x -> struct(x.word as word, x.url as url)) )as value \
+from lofter_dm.ads_membership_rec_actpwd_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic rec_bdms_vip_hot_up_kol_pwd_sync --key key --servers lofter-kafka-recommend1.gy.ntes:9092,lofter-kafka-recommend2.gy.ntes:9092,lofter-kafka-recommend3.gy.ntes:9092

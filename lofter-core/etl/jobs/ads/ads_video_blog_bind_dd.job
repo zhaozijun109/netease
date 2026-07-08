@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_blog_bind_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select orgId,blogId,m.postId,publishTime, \
+       nvl(playNum,0) as playNum,nvl(realPlayNum,0) as realPlayNum, nvl(likeNum,0) as likeNum, \
+       nvl(recommendNum,0) as recommendNum,nvl(commentNum,0) as commentNum,nvl(hotNum,0) as hotNum \
+from ( \
+    select orgId,a.blogId,postId,publishTime \
+    from ( \
+        select orgId,blogId,bindTime from lofter_db_dump.ods_db_media_org_bind_user_nd \
+        where status = 0 \
+    ) a join ( \
+        select id as postId,blogId, publishTime \
+        from lofter.dim_post \
+        where contentType = '视频' and  citedParentPostid = 0 and \
+              publishDate between '2021-04-14' and '${azkaban.flow.1.days.ago}' \
+    ) b on a.blogId = b.blogId and a.bindTime < b.publishTime \
+) m left join ( \
+        select postId, \
+               nvl(browseUv,0) + nvl(playUv,0) as playNum, \
+               nvl(realBrowseUv,0) + nvl(realPlayUv,0) as realPlayNum, \
+               if(posPraisePv - NegPraisePv <= 0, 0, posPraisePv - NegPraisePv) as likeNum, \
+               if(posRecPv - negRecPv <= 0, 0, posRecPv - negRecPv) as recommendNum, \
+               if(posHotPv - negHotPv <= 0, 0, posHotPv - negHotPv) as hotNum, \
+               if(posCommentPv - negCommentPv <= 0, 0, posCommentPv - negCommentPv) as commentNum \
+        from lofter.dws_post_base_stats_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+) n on m.postId = n.postId \
+distribute by 1

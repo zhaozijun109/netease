@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select category as id,dt,category,pvClickPercentile,uvClickPercentile,hdPercentile,qbHotPercentile from lofter_dm.ads_rec_dis_category_percentile_di where dt='${azkaban.flow.1.days.ago}'"
+params= --dest lofter_rec_dis_category_percentile --update
+dependencies=

@@ -1,0 +1,84 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_induction_warn_blogs_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.blogId, induction_type, nvl(user_type, 3) as user_type \
+from ( \
+    select a.blogId, 'post_induction' as induction_type \
+    from ( \
+        select blogId, count(distinct id) post_count_30d \
+        from lofter.dim_post \
+        where isPublished=true and isForbidden=false and isCitedPost=false \
+              and allowview=0 \
+              and ((movefrom not in("blog","lofternetease","blog163like","loftmove","BLOGPOST","bbs","photo-pp","163_news","instagram_mirror","weibo_sync","news","pp","netease_photo" ) \
+              and movefrom not like "%blog%" and  movefrom not like "%move%") or movefrom is null) \
+              and contentType in ('图片','文字','视频') \
+              and isActivityAutoPost = 0 \
+              and isImported = 0 \
+              and is_book_store = 0 \
+              and publishDate <= '${azkaban.flow.1.days.ago}' \
+              and publishDate >= '${azkaban.flow.30.days.ago}' \
+        group by 1 \
+    ) a \
+    left join ( \
+        select blogId, count(distinct postId) post_induction_count_30d \
+        from ( \
+            select blogId, postId, 'shortlink' as induction_type from lofter_dm.ads_risk_shortlink_induction_posts_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, 'actpwd_content' as induction_type from lofter_dm.ads_risk_actpwd_similar_posts_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, 'actpwd_comment' as induction_type from lofter_dm.ads_risk_actpwd_comment_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, 'actpwd_footer' as induction_type from lofter_dm.ads_risk_actpwd_post_footer_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+              select blogId, postId, 'actpwd_header' as induction_type from lofter_dm.ads_risk_actpwd_post_header_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        ) t \
+        group by 1 \
+    ) b on a.blogId = b.blogId \
+    where post_induction_count_30d / post_count_30d > 0.5 and post_count_30d >= 10 \
+  union all \
+    select blogId, 'comment_induction' as induction_type \
+    from ( \
+        select a.blogId, count(distinct a.commentId) as comment_count_30d, \
+               count(distinct b.commentId) / count(distinct a.commentId) as induction_comment_ratio \
+        from ( \
+            select blogId, id as commentId \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                  from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.30.days.ago}' \
+        ) a \
+        left join ( \
+            select blogId, commentId from lofter_dm.ads_risk_actpwd_comment_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        ) b on a.blogId = b.blogId and a.commentId = b.commentId \
+        group by 1 \
+        having induction_comment_ratio > 0.5 and comment_count_30d >= 10 \
+    ) t \
+) x \
+left join ( \
+    select x.blogId, \
+           case when x.level in ('S','A','B','C') and y.blogId is not null then 1 \
+                when x.level in ('S','A','B','C') and y.blogId is null then 2 \
+                else 3 end as user_type \
+    from ( \
+        select userId as blogid, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    left join ( \
+       select userId as blogId \
+       from lofter_db_dump.ods_db_trade_gift_account_nd \
+       where status = 2 \
+      union all \
+        select userId as blogId \
+        from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+        where status = 2 \
+      union all \
+        select userid as blogid from lofter_db_dump.ods_db_trade_fans_vip_account_nd where status = 2 \
+      union all \
+        select blogid from lofter_db_dump.ods_db_user_following_nd where userid=1943463653 group by blogid \
+      union all \
+        select blogid from lofter_db_dump.ods_db_pfb_content_related_post_nd group by blogid \
+    ) y on x.blogId = y.blogId \
+    group by 1, 2 \
+) y on x.blogId = y.blogId \
+left join lofter_db_dump.ods_db_forbid_nd z on x.blogId = z.blogId \
+where z.blogId is null
+dependencies=ads_risk_shortlink_induction_posts_di,ads_risk_actpwd_similar_posts_di,ads_risk_actpwd_comment_induction_di,ads_risk_actpwd_post_footer_induction_di,ads_risk_actpwd_post_header_induction_di

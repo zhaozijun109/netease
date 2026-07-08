@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ec_derivate_ipseries_category_confirm_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select channel, \
+       case \
+           when channel = '小程序' then 'ToC' \
+            when channel = 'LOFTER' then 'ToC' \
+            else 'ToB' \
+           end as channelType, \
+       supplierType, \
+       ipname, \
+       seriesname, \
+       categoryname, \
+       round(sum(revenue), 2) as revenue, \
+       round(sum(refund), 2) as refund \
+from ( \
+     select channel, \
+            suppliertype as supplierType, \
+            case when ipname is null or trim(ipname) = '' then '未分类' else trim(ipname) end as ipname, \
+            case when seriesname is null or trim(seriesname) = '' then '未分类' else trim(seriesname) end as seriesname, \
+            case when categoryname is null or trim(categoryname) = '' then '未分类' else trim(categoryname) end as categoryname, \
+            cast(amount as double) as revenue, \
+            cast(0 as double) as refund \
+     from lofter.dwd_ec_derivate_ipseries_category_revenue_di \
+     where dt = '${azkaban.flow.1.days.ago}' \
+     union all \
+    select channel, \
+     suppliertype as supplierType, \
+     case when ipname is null or trim(ipname) = '' then '未分类' else trim(ipname) end as ipname, \
+     case when seriesname is null or trim(seriesname) = '' then '未分类' else trim(seriesname) end as seriesname, \
+     case when categoryname is null or trim(categoryname) = '' then '未分类' else trim(categoryname) end as categoryname, \
+     cast(0 as double) as revenue, \
+     cast(amount as double) as refund \
+    from lofter.dwd_ec_derivate_ipseries_category_refund_di \
+     where dt = '${azkaban.flow.1.days.ago}' \
+     ) a \
+group by channel, \
+         case \
+             when channel = '小程序' then 'ToC' \
+              when channel = 'LOFTER' then 'ToC' \
+              else 'ToB' \
+             end, \
+         supplierType, \
+         ipname, \
+         seriesname, \
+         categoryname

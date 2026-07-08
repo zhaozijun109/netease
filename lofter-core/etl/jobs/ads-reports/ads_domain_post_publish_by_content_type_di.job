@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_domain_post_publish_by_content_type_di partition(dt='${azkaban.flow.1.days.ago}') \
+select  domainName, \
+        case \
+        when contentType = '文字' and contain_link = 1 and contain_image = 0 then '文字+链接' \
+        when contentType = '文字' and contain_link = 0 and contain_image = 1 then '文字+图片' \
+        when contentType = '文字' and contain_link = 0 and contain_image = 0 then '纯文字' \
+        when contentType = '图片' and contain_link = 0 and contain_image = 0 and contain_text = 1 then '文字+图片' \
+        when contentType = '图片' and contain_text = 0 then '纯图片' \
+        when contentType = '视频' and contain_link = 0 and contain_image = 0 and contain_text = 1 then '文字+视频' \
+        when contentType = '视频' and contain_text = 0 then '纯视频' \
+        when contentType = '音乐' and contain_link = 0 and contain_image = 0 and contain_text = 1 then '文字+音乐' \
+        when contentType = '音乐' and contain_text = 0 then '纯音乐' \
+        else '其他' end as contentType, \
+        count(distinct m.postId) as postNum \
+from ( \
+    select if(moveFrom like 'blogmove2018%', '博客搬家文章数', contentType) as contentType, nvl(b.domainName, 'else') as domainName, postId \
+    from ( \
+            select id as postId, blogId, domainId, contentType,movefrom \
+            from lofter.dim_post lateral view explode(domains) t as domainId \
+            where publishdate='${azkaban.flow.1.days.ago}' and ispublished=true and isforbidden=false \
+    ) a left join lofter.dim_domain b on a.domainId = b.id \
+) m left join ( \
+  select * \
+  from lofter.dwd_post_length_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) n on m.postId = n.postId \
+group by 1, 2 \
+distribute by 1
+

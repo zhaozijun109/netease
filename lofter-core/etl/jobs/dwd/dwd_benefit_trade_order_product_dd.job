@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_benefit_trade_order_product_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.*, 	 \
+    b.orderId,orderTime, order_money,deliveryPrice,deliveryTime,welfare,newcouponId,supplierId, 	 \
+    c.productId,productName,productTime,productGroupId,presaletype,productNum,storePrice,marketPrice,newCouponPreferential,bountyPreferential,product_money,slotNum 	 \
+from  	 \
+(select id as tradeId,thirdpartyNum, buyerId as userId, productType,status,orderFrom,payMethod,amount as trade_money,createTime as tradeTime,payTime 	 \
+from lofter_db_dump.ods_db_benefit_trade_nd) a 	 \
+left join  	 \
+(select id as orderId, tradeId,createTime as orderTime, amount as order_money,deliveryprice,deliverytime,welfare,newcouponid,supplierid 	 \
+from lofter_db_dump.ods_db_benefit_order_nd) b 	 \
+on a.tradeId=b.tradeId  	 \
+left join  	 \
+(select orderId,productId,productName,createtime as productTime,attrGroupId as productGroupId,presaletype,productNum,storePrice,marketPrice,newCouponPreferential,bountyPreferential, 	 \
+(storeprice  * productnum) - bountypreferential - newcouponpreferential as product_money,get_json_object(get_json_object(attrgroupext,"$.ext"),"$.slotNum") as slotNum 	 \
+from lofter_db_dump.ods_db_benefit_order_product_nd) c 	 \
+on b.orderId=c.orderId  \
+distribute by 1

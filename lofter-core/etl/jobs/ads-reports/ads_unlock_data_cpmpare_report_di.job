@@ -1,0 +1,106 @@
+type = sparksql
+hive.query.01= \
+with hudong as( \
+select  \
+     userid \
+    ,optype \
+    ,post_content_type \
+    ,FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+    from lofter.dwd_post_hot_di \
+    where FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'    \
+    union all  \
+    select \
+     userid \
+    ,'comment' as optype \
+    ,post_content_type \
+    ,FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+    from lofter.dwd_post_response_di \
+    where FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'    \
+)  \
+ \
+insert overwrite table lofter_dm.ads_unlock_data_cpmpare_report_di partition(dt ='${azkaban.flow.1.days.ago}')   \
+select  \
+case when b.userid is not null then '广告解锁' \
+     else '大盘' end flag, \
+case when h.userid is not null then '近30天新用户'  else '老用户' end flag2 , \
+count(distinct a.userid) active_user_cnt, \
+sum(coalesce(c.cnt_days,0)) ttl_cnt_days , \
+ \
+count(distinct d.userid)  cnt_user_read_pv, \
+sum(d.pv) read_pv, \
+ \
+count(distinct e.userid)  cnt_user_hudong, \
+sum(hudong) hudong, \
+ \
+sum(coalesce(f.trade_money_1day,0)) trade_money_1day, \
+count(distinct  f.userid ) cnt_user_trade_money_1day, \
+ \
+sum(coalesce(g.trade_money_30days,0)) trade_money_30days, \
+count(distinct g.userid) cnt_user_trade_money_30days \
+ \
+from( \
+select userid, dt \
+from lofter.dwd_user_active_di b  \
+where dt ='${azkaban.flow.1.days.ago}'    \
+group by 1,2 \
+) a  \
+left join  \
+( \
+select   \
+from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd')dt ,  \
+userid , \
+count(distinct postId, userId) as unlock_count  \
+from lofter_db_dump.ods_db_trade_ad_reward_complete_nd  \
+where (from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' )  \
+group by 1,2 \
+) b on a.dt=b.dt  and a.userid=b.userid \
+left join  \
+( \
+select userid, count(distinct dt) cnt_days \
+from lofter.dwd_user_active_di b  \
+where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+group by 1 \
+) c on a.userid=c.userid   \
+left join  \
+( \
+select  \
+userid,dt, \
+count(postid) pv \
+from lofter.dwd_post_browse_di  a  \
+where  dt ='${azkaban.flow.1.days.ago}'   \
+and a.action_type='page_duration'  \
+and  a.is_real=1  \
+group by 1 ,2 \
+) d on a.userid=d.userid and a.dt=d.dt  \
+left join  \
+( \
+select dt,userid,count(1)hudong \
+from  hudong \
+group by 1,2 \
+) e on a.userid=e.userid and a.dt=e.dt  \
+left join  \
+( \
+select userid, sum(trade_money) trade_money_1day \
+from lofter_dm.ads_post_paid_user_consume_detail_di  \
+where dt='${azkaban.flow.1.days.ago}'  \
+and period in ('1')   \
+and pay_type='礼物解锁' \
+ group by 1  \
+) f on a.userid=f.userid  \
+left join  \
+( \
+select userid,sum(trade_money) trade_money_30days \
+from lofter_dm.ads_post_paid_user_consume_detail_di  \
+where dt='${azkaban.flow.1.days.ago}'  \
+and period in ('30')   \
+and pay_type='礼物解锁' \
+group by 1  \
+) g on a.userid=g.userid  \
+left join  \
+( \
+select userid  \
+from lofter.dwd_user_new_di  \
+where dt between '${azkaban.flow.30.days.ago}'  and '${azkaban.flow.1.days.ago}'  \
+group by userid  \
+) h on a.userid=h.userid \
+group by 1,2

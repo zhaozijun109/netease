@@ -1,0 +1,51 @@
+syntax = "proto2";
+package com.netease.yuanqi.pojo.proto.ods;
+
+option java_package = "com.netease.yuanqi.common.pojo.proto.ods";
+option java_outer_classname = "WapMdaLogProtoBuilder";
+
+message WapMdaLogProto {
+  optional string eventId = 1;
+  optional string deviceUdid = 2;
+  optional string urlPath = 3;
+  optional int64 userId = 4;
+  optional string region = 5;
+  optional int32 screenHeight = 6;
+  optional string browserVersion = 7;
+  optional string referrerDomain = 8;
+  optional int64 kafkaTime = 9;
+  optional string secondLevelSource = 10;
+  optional string data = 11;
+  optional string deviceModel = 12;
+  optional string devicePlatform = 13;
+  optional string ipCity = 14;
+  optional string hubbleId = 15;
+  optional string city = 16;
+  optional string timestamp = 17;
+  optional int64 occurTime = 18;
+  optional string activationTime = 19;
+  optional string processTime = 20;
+  optional string serverTime = 21;
+  optional string browser = 22;
+  optional string deviceOs = 23;
+  optional string ipCountry = 24;
+  optional string currentUrl = 25;
+  optional string deviceOsVersion = 26;
+  optional string currentDomain = 27;
+  optional string country = 28;
+  optional string ip = 29;
+  optional string referrer = 30;
+  optional string datatype = 31;
+  optional string productKey = 32;
+  optional string sessionUuid = 33;
+  optional int32 screenWidth = 34;
+  optional string pageTitle = 35;
+  optional string appChannel = 36;
+  optional string pageOpenScene = 37;
+  optional string firstLevelSource = 38;
+  optional string ipProvince = 39;
+  optional string appKey = 40;
+  optional int64 costTime = 41;
+  map<string, string> attributes = 42;
+  optional string useragent = 43;
+}

@@ -1,0 +1,116 @@
+type=sparksql
+hive.query.01=\
+insert OVERWRITE TABLE lofter.dwd_issue_with_status_change_for_vc \
+select  \
+   t_data.id, \
+   t_data.created_at, \
+   t_data.updated_at, \
+   t_data.title, \
+   t_data.jira_id, \
+   t_data.jira_key, \
+   t_data.create_time, \
+   t_data.resolve_time, \
+   t_data.close_time, \
+   t_data.due_date,  \
+   t_data.plan_submit_test_time, \
+   t_data.plan_release_time, \
+   t_data.plan_start_time, \
+   t_data.creator, \
+   t_data.assignee, \
+   t_data.reporter, \
+   t_data.verifier, \
+   t_data.priority, \
+   t_data.severity, \
+   t_data.status, \
+   t_data.online_bug, \
+   t_data.original_estimate, \
+   t_data.remaining_estimate, \
+   t_data.time_spent, \
+   t_data.issue_type, \
+   t_data.parent, \
+   sprint.name as sprint, \
+   t_data.project_key, \
+   t_data.team, \
+   t_data.component, \
+   t_data.requirement_source, \
+   t_data.finished_estimate, \
+   t_data.finished_time_spent, \
+   t_data.man_month_estimate, \
+   t_data.labels, \
+   t_data.update_time, \
+   t_data.ticket_link, \
+   t_data.advise_link, \
+   t_data.incident_link, \
+   t_data.project_link, \
+   t_data.module_id, \
+   t_data.module_manual_updated, \
+   t_data.schedule_plan_time, \
+   t_data.project_category, \
+   t_data.watchers, \
+   t_data.source, \
+   t_data.bug_reason, \
+   t_data.bug_type, \
+   t_data.deleted, \
+   t_data.business_target, \
+   t_data.demand_target, \
+   t_data.review, \
+   t_data.check_evaluate, \
+   t_data.plan_check_time, \
+   t_data.updator, \
+   t_data.has_risk, \
+   t_data.feedback_source, \
+   t_data.actual_working_hours, \
+   t_data.actual_working_hours_sum, \
+   t_data.recheck_link, \
+   t_data.man_day_estimate, \
+   t_data.delay_rate, \
+   t_data.project_detail_link, \
+   t_data.label, \
+   t_data.value_close_loop, \
+   t_data.fix_result, \
+   t_data.estimate_cost, \
+   t_log_status.issue_key, \
+   t_log_status.story_req_time, \
+   t_log_status.story_vision_time, \
+   t_log_status.story_clarified_time, \
+   t_log_status.story_rd_time, \
+   t_log_status.story_ready_time, \
+   t_log_status.t_close, \
+   t_log_status.t_cancel, \
+   t_log_status.task_scheduled_time, \
+   t_log_status.t_resolve, \
+   t_log_status.bug_response_time, \
+   t_log_status.bug_close_time, \
+   t_log_status.bug_reopen_time, \
+   t_data.team_id, \
+   t_data.component_id, \
+   t_data.custom_ext \
+from lofter.dwd_issue_data t_data \
+left join ( \
+   select \
+       t_log.jira_key as issue_key, \
+       max(case t_log.after_value when '需求已评审' then t_log.create_at end)  as story_req_time, \
+       max(case t_log.after_value when '视觉已评审' then t_log.create_at end)  as story_vision_time, \
+       max(case t_log.after_value when '需求已明确' then t_log.create_at end) as story_clarified_time, \
+       min(case t_log.after_value when '进行中' then t_log.create_at end)  as story_rd_time, \
+       max(case t_log.after_value when '已上线确认' then t_log.create_at end)  as story_ready_time, \
+       max(case t_log.after_value when '关闭' then t_log.create_at end)  as t_close, \
+ \
+       max(case t_log.after_value when '已取消' then t_log.create_at end)  as t_cancel, \
+       max(case t_log.after_value when '已排期' then t_log.create_at end) as task_scheduled_time, \
+       max(case t_log.after_value when '已解决' then t_log.create_at end) as t_resolve, \
+ \
+       min(case t_log.after_value when '解决中' then t_log.create_at end) as bug_response_time, \
+       max(case t_log.after_value when '已关闭' then t_log.create_at end) as bug_close_time, \
+       min(case t_log.after_value when '重新打开' then t_log.create_at end) as bug_reopen_time \
+      from \
+         lofter.dwd_operate_log t_log \
+         where t_log.operation_field = 'status' \
+         and t_log.jira_key is not null \
+      group by t_log.jira_key \
+   )  \
+t_log_status \
+on t_data.jira_key = t_log_status.issue_key \
+left join lofter.ods_jira_sprint sprint \
+ on t_data.sprint = sprint.jira_id \
+where t_data.project_key = 'XNSJ'

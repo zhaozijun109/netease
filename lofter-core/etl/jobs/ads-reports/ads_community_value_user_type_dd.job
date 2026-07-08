@@ -1,0 +1,172 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_community_value_user_type_dd partition(dt ='${azkaban.flow.1.days.ago}') \
+select \
+    userid \
+    ,type_1 \
+    ,case when type_1='白板用户' then type_1 \
+          when type_1='仅浏览用户' and avg_14days_valid_pv>0  and  avg_14days_valid_pv<=1  then '0#(0,1]' \
+          when type_1='仅浏览用户' and avg_14days_valid_pv>1  and  avg_14days_valid_pv<=4  then '1#(1,4]' \
+          when type_1='仅浏览用户' and avg_14days_valid_pv>4  and  avg_14days_valid_pv<=10 then '2#(4,10]' \
+          when type_1='仅浏览用户' and avg_14days_valid_pv>10 and  avg_14days_valid_pv<=25 then '3#(10,25]' \
+          when type_1='仅浏览用户' and avg_14days_valid_pv>25                              then '4#25+' \
+          when type_1='社区一般价值用户' and high_community_pv=0 and low_community_pv<=7               then '1#低弱互动，无强互动' \
+          when type_1='社区一般价值用户' and high_community_pv=0 and low_community_pv>7                then '2#高弱互动，无强互动' \
+          when type_1='社区一般价值用户' and high_community_pv between 1 and 3 and low_community_pv<=7 then '3#低弱互动，偶尔强互动' \
+          when type_1='社区一般价值用户' and high_community_pv between 1 and 3 and low_community_pv>7  then '4#高弱互动，偶尔强互动' \
+          when type_1='社区核心价值用户' and publish_cnt>0                                             then '1#有过内容发布' \
+          when type_1='社区核心价值用户' and publish_cnt=0 and follow_pv+message_pv>0 and comment_pv=0 then '2#仅私信/关注' \
+          when type_1='社区核心价值用户' and publish_cnt=0 and follow_pv+message_pv=0 and comment_pv>0 then '3#仅评论' \
+          when type_1='社区核心价值用户' and publish_cnt=0 and follow_pv+message_pv>0 and comment_pv>0 then '4#私信/关注/评论' \
+    end type_2 \
+    ,avg_14days_valid_pv \
+    ,low_community_pv \
+    ,high_community_pv \
+    ,valid_pv \
+    ,praise_pv \
+    ,recommend_pv \
+    ,collect_pv \
+    ,reproduce_pv \
+    ,share_pv \
+    ,comment_pv \
+    ,subscribe_pv \
+    ,follow_pv \
+    ,message_pv \
+    ,publish_cnt \
+from \
+    (select \
+        userid \
+        ,case when low_community_pv+high_community_pv=0 and valid_pv=0 then '白板用户' \
+              when low_community_pv+high_community_pv=0 and valid_pv>0 then '仅浏览用户' \
+              when low_community_pv+high_community_pv>0 and high_community_pv<=3 and publish_cnt=0 then '社区一般价值用户' \
+              when low_community_pv+high_community_pv>0 and (high_community_pv>3 or publish_cnt>0) then '社区核心价值用户' \
+        end type_1 \
+        ,valid_pv/14 as avg_14days_valid_pv \
+        ,low_community_pv \
+        ,high_community_pv \
+        ,valid_pv \
+        ,praise_pv \
+        ,recommend_pv \
+        ,collect_pv \
+        ,reproduce_pv \
+        ,share_pv \
+        ,comment_pv \
+        ,subscribe_pv \
+        ,follow_pv \
+        ,message_pv \
+        ,publish_cnt \
+from \
+        (select \
+            a.userid \
+            ,nvl(valid_pv,0)     as valid_pv \
+            ,nvl(praise_pv,0)    as praise_pv \
+            ,nvl(recommend_pv,0) as recommend_pv \
+            ,nvl(collect_pv,0)   as collect_pv \
+            ,nvl(reproduce_pv,0) as reproduce_pv \
+            ,nvl(share_pv,0)     as share_pv \
+            ,nvl(comment_pv,0)   as comment_pv \
+            ,nvl(subscribe_pv,0) as subscribe_pv \
+            ,nvl(follow_pv ,0)   as follow_pv \
+            ,nvl(message_pv,0)   as message_pv \
+            ,nvl(publish_cnt ,0) as publish_cnt \
+            ,nvl(praise_pv,0)+nvl(recommend_pv,0)+nvl(collect_pv,0)+nvl(reproduce_pv,0)+nvl(share_pv,0)+nvl(subscribe_pv,0) as  low_community_pv \
+            ,nvl(follow_pv,0)+nvl(message_pv,0)+nvl(publish_cnt,0)+nvl(comment_pv,0)                                        as  high_community_pv \
+        from \
+            (select \
+                userid \
+            from lofter.dwd_user_active_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+            group by userid \
+            )a \
+        left join \
+            (select \
+                userid \
+                ,count(1) valid_pv \
+            from lofter.dwd_post_browse_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+            and is_real=1 \
+            group by \
+                userid \
+            )b \
+        on  a.userid=b.userid \
+        left join \
+            (select \
+                userid \
+                ,sum(praise_pv)    as praise_pv \
+                ,sum(recommend_pv) as recommend_pv \
+                ,sum(collect_pv)   as collect_pv \
+                ,sum(reproduce_pv) as reproduce_pv \
+                ,sum(share_pv)     as share_pv \
+                ,sum(comment_pv)   as comment_pv \
+                ,sum(subscribe_pv) as subscribe_pv \
+            from \
+                (select \
+                    dt \
+                    ,userid \
+                    ,sum(if(optype='praise', 1, 0))    as praise_pv \
+                    ,sum(if(optype='recommend', 1, 0)) as recommend_pv \
+                    ,sum(if(optype='subscribe', 1, 0)) as collect_pv \
+                    ,sum(if(optype='reproduce', 1, 0)) as reproduce_pv \
+                    ,sum(if(optype='share', 1, 0))     as share_pv \
+                    ,sum(if(optype='comment', 1, 0))   as comment_pv \
+                    ,sum(if(optype in ('subscribe_tag','subscribe_collection'),1,0)) as subscribe_pv \
+                from \
+                    ( \
+                    select dt ,userid, optype from lofter.dwd_post_hot_di where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    union all \
+                    select dt ,userid, 'share' as optype from lofter.dwd_post_share_di where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    union all \
+                    select dt ,userid, 'comment' as optype from lofter.dwd_post_response_di where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    union all \
+                    select dt ,userid, 'subscribe_tag' as optype from lofter.dwd_tag_subscribe_di where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    union all \
+                    select dt ,subscribe_userid as userid, 'subscribe_collection' as optype from lofter.dwd_collection_user_subscribe_dd where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' and from_unixtime(cast(subscribetime / 1000 as int), 'yyyy-MM-dd') = dt \
+                    )t \
+                group by \
+                    dt \
+                    ,userid \
+                )t \
+            group by userid \
+            )c \
+        on a.userid = c.userid \
+        left join \
+            (select \
+                userid \
+                ,sum(follow_pv)   follow_pv \
+                ,sum(message_pv)  message_pv \
+                ,sum(publish_cnt) publish_cnt \
+            from \
+                (select \
+                    dt \
+                    ,userid \
+                    ,sum(if(optype = 'follow',1,0))  as follow_pv \
+                    ,sum(if(optype = 'message',1,0)) as message_pv \
+                    ,sum(if(optype = 'publish',1,0)) as publish_cnt \
+                from \
+                    (select \
+                        dt ,userid,'follow' as optype from lofter.dwd_blog_follow_di  a \
+                    left join lofter_db_dump.ods_db_blog_official_blog_nd b \
+                    on a.blogid=b.blogid \
+                    where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    and b.blogid is null \
+                        union all \
+                    select \
+                        from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd') as dt \
+                        ,blogid as userid \
+                        ,'message' as optype \
+                    from lofter_db_dump.ods_db_message_nd \
+                    where  status = '2' \
+                    and from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    and issender=1 \
+                        union all \
+                    select  dt,userid ,'publish' as optype from lofter.dwd_post_publish_di where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                    )t \
+                group by \
+                    dt \
+                    ,userid \
+                )t \
+            group by userid \
+            )d \
+        on a.userid = d.userid \
+        )T \
+    )t

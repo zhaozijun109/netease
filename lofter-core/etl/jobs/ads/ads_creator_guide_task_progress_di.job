@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_guide_task_progress_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, b.warnType \
+from ( \
+    select userId, 1 as taskId, nvl(normal_return_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 2 as taskId, nvl(no_return_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 7 as taskId, nvl(normal2_return_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 8 as taskId, nvl(normal3_return_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 3 as taskId, creative_return_post_count as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 5 as taskId, hot_post_count as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 4 as taskId, new_unlock_uv as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 6 as taskId, nonhomo_return_post_count as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 9 as taskId, nvl(user_like_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select userId, 10 as taskId, nvl(high_unlock_post_count,0) as task_value \
+    from lofter_dm.ads_creator_guide_task_data_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+     select userId, max(warnType) as warnType \
+     from lofter_db_dump.ods_db_blog_pay_creator_warn_nd \
+     group by 1 \
+) b on a.userId = b.userId \
+
+dependencies=ads_creator_guide_task_data_dd

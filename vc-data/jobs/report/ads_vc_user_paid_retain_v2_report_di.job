@@ -1,0 +1,163 @@
+type=sparksql
+hive.query.01= \
+WITH \
+t1 AS ( \
+select dt, \
+detail_type,  \
+sub_type, \
+user_id, \
+money \
+from \
+(SELECT t1.dt, \
+concat_ws('-',t1.item_id,t1.product_name) as  detail_type, \
+t1.category_level1 AS sub_type, \
+t1.user_id, \
+sum(order_price) as money \
+FROM vc.dwd_vc_order_i_d t1 \
+WHERE t1.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}',90) AND '${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+concat_ws('-',t1.item_id,t1.product_name) , \
+t1.category_level1, \
+t1.user_id \
+)  \
+a) \
+ \
+ \
+insert overwrite table vc_dm.ads_vc_user_paid_retain_v2_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+b.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', b.dt) as period, \
+a.origin_type, \
+a.device_os, \
+case \
+when a.first_order_date = b.dt then 1 \
+else 0 \
+end as new_flg, \
+case \
+when a.register_date = b.dt then 1 \
+else 0 \
+end as new_register_flg, \
+CASE \
+WHEN datediff(b.dt,a.register_date) = 0 THEN 'd0' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 1 AND 7 THEN 'd1_d7' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 8 AND 15 THEN 'd8_d15' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 16 AND 31 THEN 'd16_d31' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 32 AND 60 THEN 'd32_d60' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 61 AND 90 THEN 'd61_d90' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 91 AND 180 THEN 'd91_d180' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 181 AND 360 THEN 'd181_d360' \
+ELSE 'd361_plus' \
+END as new_register_level, \
+b.detail_type, \
+b.sub_type, \
+count(DISTINCT b.user_id) AS uv, \
+sum(b.money) as money, \
+count( \
+DISTINCT CASE \
+WHEN c.dt = date_add(b.dt, 0) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_1d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt = date_add(b.dt, 1) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_2d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and  date_add(b.dt, 2) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (2) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_3d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and  date_add(b.dt, 4) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (4) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_5d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and  date_add(b.dt, 6) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_7d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 14) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_15d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 29) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_30d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 59) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (59) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_60d, \
+count( \
+DISTINCT CASE \
+WHEN c.dt between date_add(b.dt, 1) and date_add(b.dt, 89) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (89) THEN c.user_id \
+ELSE NULL \
+END \
+) AS uv_90d \
+from \
+( \
+select \
+user_id, \
+origin_type, \
+device_os, \
+first_order_date, \
+register_date \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+) a \
+join t1 b on a.user_id = b.user_id \
+left join t1 c on b.user_id = c.user_id \
+AND c.dt BETWEEN date_add(b.dt, 0) \
+AND date_add(b.dt, 89) \
+and b.detail_type = c.detail_type \
+and b.sub_type = c.sub_type \
+WHERE \
+datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 2, 4, 6, 14, 29, 59, 89) \
+group by \
+b.dt, \
+datediff('${azkaban.flow.1.days.ago}', b.dt), \
+a.origin_type, \
+a.device_os, \
+case \
+when a.first_order_date = b.dt then 1 \
+else 0 \
+end, \
+case \
+when a.register_date = b.dt then 1 \
+else 0 \
+end, \
+b.detail_type, \
+b.sub_type, \
+CASE \
+WHEN datediff(b.dt,a.register_date) = 0 THEN 'd0' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 1 AND 7 THEN 'd1_d7' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 8 AND 15 THEN 'd8_d15' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 16 AND 31 THEN 'd16_d31' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 32 AND 60 THEN 'd32_d60' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 61 AND 90 THEN 'd61_d90' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 91 AND 180 THEN 'd91_d180' \
+WHEN datediff(b.dt,a.register_date) BETWEEN 181 AND 360 THEN 'd181_d360' \
+ELSE 'd361_plus' \
+END  \

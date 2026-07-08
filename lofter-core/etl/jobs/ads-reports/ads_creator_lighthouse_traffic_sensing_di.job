@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_lighthouse_traffic_sensing_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.postId, a.blogId, least(b.pv, c.viewCount) as exposure, 80 as percentile, 1 as attributionType \
+from ( \
+  select id as postId, blogId, publishTime \
+  from lofter.dim_post \
+  where datediff('${azkaban.flow.1.days.ago}', publishDate) = 3 and isPublished = true and \
+        contentType in ('图片','文字','视频') \
+) a join ( \
+  select postId, sum(expose_pv) as pv \
+  from lofter.dws_post_traffic_di \
+  where dt <= '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', dt) <= 3 \
+  group by postId \
+) b on a.postId = b.postId \
+join ( \
+  select postId, viewCount \
+  from lofter_db_dump.ods_db_post_view_count_nd \
+) c on a.postId = c.postId \
+join ( \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_nd \
+    where status = 1 \
+  union \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_v2_nd \
+    where status = 1 \
+) d on a.blogId = d.userId \
+where a.publishTime > d.joinTime and least(b.pv, c.viewCount) > 0

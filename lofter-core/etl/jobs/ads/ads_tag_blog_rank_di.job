@@ -1,0 +1,78 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_blog_rank_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.*, \
+       row_number() over (partition by tag order by master_index desc) as master_rank, \
+       row_number() over (partition by tag order by newbie_index desc) as newbie_rank, \
+       row_number() over (partition by tag order by black_horse_index desc) as black_horse_rank \
+from ( \
+    select tag, blogId, \
+          if(post_count_std >= 10 and master_threshold = 1, 0.4 * greatest(hot_normal,0) + 0.3 * greatest(recurrent_rate_normal,0) + 0.3 * greatest(response_normal,0), 0) as master_index, \
+          if(first_publish_date >= '${azkaban.flow.30.days.ago}' and post_count_std <= 30 and hot >= 5 * post_count_std and post_count_std >= 2, browse2hd_rate, 0) as newbie_index, \
+          0.6 * greatest(hot_incr_normal,0) + 0.4 * greatest(recurrent_devices_incr_normal,0) as black_horse_index \
+    from ( \
+        select tag, blogId, \
+               log2(hot) / log2(max(hot) over (partition by tag)) as hot_normal, \
+               log2(response - min(response) over (partition by tag)) / log2(max(response) over (partition by tag) - min(response) over (partition by tag)) as response_normal, \
+               log2(recurrent_rate - min(recurrent_rate) over (partition by tag)) / log2(max(recurrent_rate) over (partition by tag) - min(recurrent_rate) over (partition by tag)) as recurrent_rate_normal, \
+               browse2hd_rate, \
+               log2(hot_incr - min(hot_incr) over (partition by tag)) / log2(max(hot_incr) over (partition by tag) - min(hot_incr) over (partition by tag)) as hot_incr_normal, \
+               log2(recurrent_devices_incr - min(recurrent_devices_incr) over (partition by tag)) / log2(max(recurrent_devices_incr) over (partition by tag) - min(recurrent_devices_incr) over (partition by tag)) as recurrent_devices_incr_normal, \
+               post_count_std, first_publish_date, hot, master_threshold \
+        from ( \
+            select a.*, \
+                   c.post_count_std, c.first_publish_date, \
+                   if(b.hot > 100, greatest(a.hot - b.hot, 0) / b.hot, 0) as hot_incr, \
+                   if(b.recurrent_devices > 20,  greatest(a.recurrent_devices - b.recurrent_devices, 0) / b.recurrent_devices, 0) as recurrent_devices_incr, \
+                   if(d.blogId is not null,1,0) as master_threshold \
+            from ( \
+                select *, \
+                       nvl(recurrent_devices / browse_devices, 0) as recurrent_rate, \
+                       if(browse_devices >= 200, hd_devices / browse_devices, 0) as browse2hd_rate \
+                from lofter_dm.ads_tag_blog_index_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) a \
+            left join ( \
+                select tag, blogId, hot, recurrent_devices \
+                from lofter_dm.ads_tag_blog_index_di \
+                where dt = date_sub('${azkaban.flow.1.days.ago}', 7) \
+            ) b on a.tag = b.tag and a.blogId = b.blogId \
+            left join ( \
+                select tag, blogId, count(1) as post_count_std, \
+                       min(publishDate) as first_publish_date \
+                from lofter.dim_post \
+                     lateral view explode(tags) as tag \
+                where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                      isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") and \
+                      publishDate <= '${azkaban.flow.1.days.ago}' \
+                group by tag, blogId \
+            ) c on a.tag = c.tag and a.blogId = c.blogId \
+            left join ( \
+                select userId as blogId \
+                from lofter.dws_post_interaction_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by userId \
+                having sum(case when hot >= 1000 then 1 else 0 end) >= 5 and sum(hot) >= 50000 \
+            ) d \
+            on a.blogId = d.blogId \
+        ) t \
+    ) tt \
+) x
+left join ( \
+    select blogId, count(distinct userId) uv, count(distinct postId) post_count \
+    from lofter_db_dump.ods_db_infringe_post_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+          status = 1 \
+    group by blogId \
+    having post_count >= 2 \
+) y on x.blogId = y.blogId \
+left join ( \
+    select blogId, count(1) as ai_post_count \
+    from lofter.dim_post \
+    where array_contains(tags, 'ai') or array_contains(tags, 'AI') or array_contains(tags, 'AL') or \
+          array_contains(tags, 'Al') or array_contains(tags, 'aI') or array_contains(tags, 'al') \
+    group by blogId \
+    having ai_post_count >= 5 \
+) z on x.blogId = z.blogId \
+where y.blogId is null and z.blogId is null
+dependencies=ads_tag_blog_index_di

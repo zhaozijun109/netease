@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_device_ecology_affinity_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select active_retain_ratio,new_retain_ratio,new_retain_7d_ratio,return_retain_ratio, \
+       return_retain_7d_ratio,pertime_min,avg_active_days_30d,middle_high_active_ratio,interactive_ratio \
+from ( \
+    select a.dt,sum(active_retain/dau) as active_retain_ratio, \
+        sum(new_retain/device_new_cnt) as new_retain_ratio, \
+        sum(new_retain_7d/device_new_cnt) as new_retain_7d_ratio, \
+        sum(return_retain/device_return_cnt) as return_retain_ratio, \
+        sum(return_retain_7d/device_return_cnt) as return_retain_7d_ratio \
+    from ( \
+        select base_date,dt, \
+            sum(active_retain) active_retain, \
+            sum(new_retain) new_retain, \
+            sum(new_retain_7d) new_retain_7d, \
+            sum(return_retain) return_retain, \
+            sum(return_retain_7d) return_retain_7d \
+        from lofter_dm.ads_device_platform_retain_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by base_date,dt \
+    ) a \
+    left join ( \
+        select dt,sum(dau) dau,sum(device_new_cnt) device_new_cnt,sum(device_return_cnt) device_return_cnt \
+        from lofter_dm.ads_device_platform_di \
+        where dt in ('${azkaban.flow.2.days.ago}' ,'${azkaban.flow.7.days.ago}') \
+        group by dt \
+    ) b on a.base_date = b.dt \
+    group by a.dt \
+) a \
+left join ( \
+    select dt, sum( (perTime*uv) / 60000 ) / sum(uv) pertime_min \
+    from lofter_dm.ads_device_platform_v2_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) b on a.dt=b.dt \
+left join ( \
+    select dt,avg(active_days_30d) avg_active_days_30d, \
+      count(distinct case when active_days_30d>10 then deviceUdid end)/count(distinct deviceUdid) middle_high_active_ratio \
+    from lofter.dws_par_device_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0 \
+    group by dt \
+) c on a.dt=c.dt \
+left join ( \
+    select dt,interactive_ratio \
+    from lofter_dm.ads_user_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.dt=d.dt
+dependencies=ads_user_interaction_di,ads_device_platform_v2_di,ads_device_platform_di,ads_device_platform_retain_di

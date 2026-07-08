@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag 同人创作者 --bitmap
+retries=0
+conf.spark.execute.sql="select userId                             as userId, \
+                               '同人创作者'                          as tag_name, \
+                               ''                                    as dim1, \
+                               ''                                    as dim2, \
+                               ''                                    as dim3, \
+                               ''                                    as dim4, \
+                               '1'                                   grp, \
+                               ''                                    as value \
+                        from lofter.dws_par_creator_dd \
+                        where is_cp > 0 and dt='${azkaban.flow.1.days.ago}'"

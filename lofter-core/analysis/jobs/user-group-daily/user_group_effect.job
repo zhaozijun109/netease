@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.usergroup.UserGroupEffectJob
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=ads_user_group_consumer_effect_di,ads_user_group_creator_effect_di,ads_user_group_retention_di

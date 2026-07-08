@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_bc_resource_position_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  deviceos, \
+  eventid, \
+  params ['actTitle'] as acttitle, \
+  count(1) as pv, \
+  count(distinct deviceudid) as uv \
+from \
+  lofter.ods_mda_app_partition_di \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and eventid in ('g1-167', 'g1-168') \
+  and actiontype = 'other' \
+group by \
+  deviceos, \
+  eventid, \
+  params ['actTitle'] \

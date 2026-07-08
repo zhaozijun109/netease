@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_pve_user_interview_di PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT t1.userId \
+FROM ( \
+    SELECT userId FROM lofter.dws_pve_user_action_di WHERE dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+LEFT JOIN ( \
+    SELECT userId FROM lofter.dim_pve_user_dd WHERE dt = '${azkaban.flow.1.days.ago}' and usertype = 0 \
+) t2 \
+ON t1.userId = t2.userId \
+WHERE t2.userId IS NULL

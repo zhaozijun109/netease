@@ -1,0 +1,20 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "MusicDspRequestEvent",
+  "fields": [
+    {"name": "action", "type": "string"},
+    {"name": "req_uid", "type": "string"},
+    {"name": "req_id", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "positionId", "type": "int"},
+    {"name": "positionName", "type": "string"},
+    {"name": "slotId", "type": "string"},
+    {"name": "slotType", "type": "string"},
+    {"name": "dspId", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "bidPrice", "type": "double"},
+    {"name": "bidFactor", "type": "double"},
+    {"name": "ecpm", "type": "double"}
+  ]
+}

@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_liaoliao_pvuv_based_on_source_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  eventId, \
+                      COUNT(deviceUdid)          AS pv, \
+                      COUNT(DISTINCT deviceUdid) AS uv \
+              FROM lofter.dwd_liaoliao_mda_base \
+              WHERE dt = '${azkaban.flow.1.days.ago}' \
+              GROUP BY  dt, \
+                        eventId \
+              GROUPING SETS((dt, eventId), (dt))

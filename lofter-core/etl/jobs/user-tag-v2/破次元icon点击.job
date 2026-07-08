@@ -1,0 +1,60 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 破次元icon点击 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '破次元icon点击'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from ( \
+                                 select userId, 'DAY_1' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_1d > 0 \
+                                 union all \
+                                 select userId, 'DAY_7' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_7d > 0 \
+                                 union all \
+                                 select userId, 'DAY_15' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_15d > 0 \
+                                 union all \
+                                 select userId, 'DAY_30' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_30d > 0 \
+                                 union all \
+                                 select userId, 'DAY_90' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_90d > 0 \
+                                 union all \
+                                 select userId, 'DAY_180' as cat, '有点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_click_count_180d > 0 \
+                                 union all \
+                                 select userId, 'DAY_1' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_1d > 0 and pve_click_count_1d = 0 \
+                                 union all \
+                                 select userId, 'DAY_7' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_7d > 0 and pve_click_count_7d = 0 \
+                                 union all \
+                                 select userId, 'DAY_15' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_15d > 0 and pve_click_count_15d = 0 \
+                                 union all \
+                                 select userId, 'DAY_30' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_30d > 0 and pve_click_count_30d = 0 \
+                                 union all \
+                                 select userId, 'DAY_90' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_90d > 0 and pve_click_count_90d = 0 \
+                                 union all \
+                                 select userId, 'DAY_180' as cat, '无点击' as grp \
+                                 from lofter.dws_par_user_home_top_resource_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' and pve_expose_days_180d > 0 and pve_click_count_180d = 0 )"

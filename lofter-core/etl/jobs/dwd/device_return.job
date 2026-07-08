@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dwd.DeviceReturnEtlJob
+params= --date ${azkaban.flow.1.days.ago}
+dependencies=device_new,device_active

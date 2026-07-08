@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ecology_ai_infringe_post_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       blogId, \
+       userId, \
+       source, \
+       createTime, \
+       from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as createDate \
+from ( \
+    select cast(showId as bigint) as postId, blogId, userId, 1 as source, createTime from lofter_db_dump.ods_db_recommend_user_mark_nd where markType = 'aiContent' and showType = 1 \
+    union all \
+    select postId, blogId, userId, 2 as source, createTime from lofter_db_dump.ods_db_infringe_post_nd where reportType in (2, 3) \
+    union all \
+    select t1.postId, blogId, null as userId, 3 as source, null as createTime \
+    from ( \
+        select itemId as postId \
+        from lofter.dwd_rec_content_understand_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and type = 'AI文识别V2' \
+    ) t1 \
+    left join ( \
+        select id as postId, \
+               blogId \
+        from lofter.dim_post_article \
+        where contentType = '文字' \
+    ) t2 \
+    on t1.postId = t2.postId \
+    left join ( \
+        select postId from rec.ai_gift_item_traffic_change where flow_change_strategy = 'hate' group by postId \
+    ) t3 \
+    on t1.postId = t3.postId \
+    where t3.postId is not null \
+    union all \
+    select postId, blogId, null as userId, 4 as source, null as createTime from lofter_db_dump.ods_db_partner_judge_task_nd where reportType = 9999 and result = 1 \
+) t \

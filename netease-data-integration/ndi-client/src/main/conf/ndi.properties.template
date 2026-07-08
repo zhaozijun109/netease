@@ -1,0 +1,27 @@
+# the address of http service of ndi
+# ndi.service=
+
+# the authentication information
+# ndi.app-id=
+# ndi.app-secret=
+
+# the home of spark client, if this property is empty, ndi will use SPARK_HOME in environment
+# ndi.spark.spark-home=
+# the conf dir of spark client, if this property is empty, ndi will use SPARK_CONF_DIR in environment or the
+# conf directory in ${SPARK_HOME}
+# ndi.spark.spark-conf-dir=
+
+# the home of worker
+# ndi.worker-home=
+
+# the argument of spark
+# ndi.spark.app-jar=${ndi.worker-home}/ndi-worker-music-transfer-common.jar
+# ndi.spark.spark-argument.class=com.netease.music.da.transfer.common.Worker
+# ndi.spark.spark-argument.driver-memory=2G
+# ndi.spark.spark-argument.executor-memory=2G
+
+# the conf dir of hadoop client
+# ndi.hadoop-conf-dir=
+
+# the size of com.netease.bdms.ndi.client.spark.CircularQueue
+# ndi.spark-log-size=200

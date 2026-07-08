@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.02=insert overwrite table lofter_dm.ads_grain_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listSource = 7) \
+select *, \
+       md5(concat(listType,listName)) as distinctId, \
+       md5(concat(listType,listName, if(listType = 15, 15, 30), '${azkaban.flow.1.days.ago}')) as uniqId \
+from ( \
+    select 15 as listType, a.ip as listName, \
+           a.postId as postId, b.blogId as blogId, b.publishDate as publishDate, b.blogName as blogName, \
+           a.hot as indexValue, a.rk as listRank \
+    from ( \
+        select *, \
+               max(hot) over (partition by ip) as rk1_hot, \
+               min(hot) over (partition by ip) as rk20_hot \
+        from ( \
+            select ip, postId, hot, row_number() over (partition by ip order by hot desc) as rk \
+            from ( \
+                select ip, postId, sum(hot_pv) as hot \
+                from lofter.dws_post_interaction_di \
+                     lateral view explode(resolve_tag_ip(post_tags)) as ip \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 14) and '${azkaban.flow.1.days.ago}' and \
+                      post_publish_date between date_sub('${azkaban.flow.1.days.ago}', 14) and '${azkaban.flow.1.days.ago}' \
+                group by 1, 2 \
+            ) t \
+        ) tt \
+        where rk <= 20 \
+    ) a \
+    join lofter.dim_post b on a.postId = b.id \
+    left join lofter.dim_gift_post c on a.postId = c.postId \
+    where a.rk1_hot >= 1000 and a.rk20_hot >= 50 and c.postId is null \
+  union all \
+    select 16 as listType, a.ip as listName, \
+           a.postId as postId, b.blogId as blogId, b.publishDate as publishDate, b.blogName as blogName, \
+           a.hot as indexValue, a.rk as listRank \
+    from ( \
+        select *, \
+               max(hot) over (partition by ip) as rk1_hot, \
+               min(hot) over (partition by ip) as rk20_hot \
+        from ( \
+            select ip, postId, hot, row_number() over (partition by ip order by hot desc) as rk \
+            from ( \
+                select ip, postId, sum(hot_pv) as hot \
+                from lofter.dws_post_interaction_di \
+                     lateral view explode(resolve_tag_ip(post_tags)) as ip \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' and \
+                      post_publish_date between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+                group by 1, 2 \
+            ) t \
+        ) tt \
+        where rk <= 20 \
+    ) a \
+    join lofter.dim_post b on a.postId = b.id \
+    left join lofter.dim_gift_post c on a.postId = c.postId \
+    where a.rk1_hot >= 1000 and a.rk20_hot >= 50 and c.postId is null \
+) t \

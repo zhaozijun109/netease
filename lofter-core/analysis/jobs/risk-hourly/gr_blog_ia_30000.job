@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="select userid as blogId, subscribes as followCount, fans as followerCount, cast(current_timestamp() as bigint) * 1000 as snapShootTime from lofter_dm.ads_risk_account_social_hi where dt='${azkaban.flow.current.date}' and hour = ${azkaban.flow.start.hour} "
+params= --messageType 30000 --topic GR_BLOG_IA --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092,lofter-kafka-bi-risk4.gy.ntes:9092,lofter-kafka-bi-risk5.gy.ntes:9092,lofter-kafka-bi-risk6.gy.ntes:9092,lofter-kafka-bi-risk7.gy.ntes:9092,lofter-kafka-bi-risk8.gy.ntes:9092
+dependencies=ads_risk_account_social_hi

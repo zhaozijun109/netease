@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_evt_avatar_box_access_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select cast(userId as bigint) as userId, occurTime \
+from lofter.ods_mda_wap_di \
+where dt = '${azkaban.flow.1.days.ago}' and \
+      currentUrl like 'https://www.lofter.com/front/account/avatar-box-center%' and \
+      cast(userId as bigint) > 0 \
+distribute by 1

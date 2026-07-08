@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.ClickhouseLoad
+conf.spark.source.query="select dt,post_content_type,creator_level,creator_creative_life_cycle,post_cnt,creator_userid_bitmap,is_pay_gift from lofter_dm.ads_post_publish_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_post_publish_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_post_publish_di

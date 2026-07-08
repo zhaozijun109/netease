@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_kol_actpwd_cvr_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select m.actpwd, m.actpwd_channel, m.search_devices, n.order_cnt, n.order_devices, n.order_amount, \
+       greatest(x.new_devices - nvl(z.cpa_deduplicate_new_user_count,0), 0) as new_devices, \
+       x.return_devices, \
+       least(x.new_whiteboard_user_count, greatest(x.new_devices - nvl(z.cpa_deduplicate_new_user_count,0), 0)) as new_whiteboard_user_count, \
+       y.activate_silent_user_count \
+from ( \
+    select actpwd, channel as actpwd_channel, count(distinct deviceUdid) as search_devices \
+    from lofter.dwd_growth_actpwd_access_di \
+    where dt = '${azkaban.flow.1.days.ago}' and (channel like '%订阅' or channel like '%会员]' or channel like '米良%') \
+    group by 1, 2 \
+) m \
+left join ( \
+    select actpwd,count(order_id) as order_cnt,count(distinct deviceUdid) as order_devices,sum(amount) order_amount \
+    from ( \
+        select actpwd, order_id, deviceUdid, amount \
+        from lofter.dwd_paid_subscribe_order_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and (is_official > 0 or is_vip_fans > 0) and \
+              from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select actpwd, orderId as order_id, deviceUdid, amount \
+        from lofter.dwd_coupon_order_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+              actpwd_channel like '米良[%' and \
+              from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select actpwd, order_id, deviceUdid, amount \
+        from lofter.dwd_membership_order_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+              from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select actpwd, order_id, deviceUdid, amount \
+        from lofter.dwd_pve_ml_order_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+              from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by actpwd \
+) n on m.actpwd = n.actpwd \
+left join ( \
+    select origin_actpwd, \
+           count(distinct if(device_type = 'new', deviceUdid, null)) as new_devices, \
+           count(distinct if(device_type = 'return_30', deviceUdid, null)) as return_devices, \
+           count(distinct if(device_type = 'new' and is_whiteboard > 0, deviceUdid, null)) as new_whiteboard_user_count \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by origin_actpwd \
+) x on m.actpwd = x.origin_actpwd \
+left join ( \
+    select actpwd, count(distinct userId) as activate_silent_user_count \
+    from lofter.dwd_paid_subscribe_silent_user_activate_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by actpwd \
+) y on m.actpwd = y.actpwd \
+left join ( \
+    select actpwd, count(distinct deviceUdid) as cpa_deduplicate_new_user_count \
+    from lofter.dwd_paid_subscribe_device_cpa_deduplicate_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) z on m.actpwd = z.actpwd \

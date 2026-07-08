@@ -1,0 +1,69 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_paid_gift_postid_money_from_blog_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  tmp1.postid, \
+                      tmp3.userid, \
+                      tmp3.accept_gift_flag, \
+                      tmp3.agree_day, \
+                      tmp3.blogname, \
+                      tmp3.blognickname, \
+                      CAST(tmp2.blog_channel AS STRING) AS platform_type, \
+                      tmp3.url, \
+                      tmp3.contenttype, \
+                      tmp3.publishdate, \
+                      tmp3.cp_type, \
+                      tmp3. title, \
+                      CONCAT_WS(',',tmp3.tags) AS tags, \
+                      tmp3.return_gift_ids, \
+                      tmp1.clickpv, \
+                      tmp1.clickuv, \
+                      tmp1.exposurepv, \
+                      tmp1.exposureuv, \
+                      tmp1.poshotpv, \
+                      tmp1.poshotuv, \
+                      tmp1.hdpv, \
+                      tmp1.hduv, \
+                      tmp1.coin_num, \
+                      tmp1.gift_uv, \
+                      tmp1.num, \
+                      tmp1.new_sender_coin_num, \
+                      tmp1.return_gift_coin_num, \
+                      tmp1.new_sender_uv, \
+                      tmp1.return_gift_uv \
+              FROM \
+              ( \
+              	      SELECT  postId, \
+              	              SUM(clickpv)              AS clickpv, \
+              	              SUM(clickuv)              AS clickuv, \
+              	              SUM(exposurepv)           AS exposurepv, \
+              	              SUM(exposureuv)           AS exposureuv, \
+              	              SUM(poshotpv)             AS poshotpv, \
+              	              SUM(poshotuv)             AS poshotuv, \
+              	              SUM(hdpv)                 AS hdpv, \
+              	              SUM(hduv)                 AS hduv, \
+              	              SUM(coin_num)             AS coin_num, \
+              	              SUM(gift_uv)              AS gift_uv, \
+              	              SUM(num)                  AS num, \
+              	              SUM(new_sender_coin_num)  AS new_sender_coin_num, \
+              	              SUM(return_gift_coin_num) AS return_gift_coin_num, \
+              	              SUM(new_sender_uv)        AS new_sender_uv, \
+              	              SUM(return_gift_uv)       AS return_gift_uv \
+              	      FROM lofter.dws_gift_post_di \
+              	      WHERE platform_type = '博客引入' AND dt <= '${azkaban.flow.1.days.ago}' \
+              	      GROUP BY postId \
+              ) tmp1 \
+              JOIN \
+              ( \
+              	      SELECT  postId, \
+              	              blog_channel \
+              	      FROM lofter.dim_gift_post_return_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              	      GROUP BY  postId,blog_channel \
+              ) tmp2 \
+              ON tmp1.postId = tmp2.postId \
+              JOIN lofter.dim_gift_post tmp3 \
+              ON tmp1.postId = tmp3.postId

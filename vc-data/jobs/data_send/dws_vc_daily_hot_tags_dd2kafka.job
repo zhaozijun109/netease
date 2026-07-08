@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select replace(dt,'-','') as version, msgType, COLLECT_SET(data) as data \
+                         from (select named_struct('word', tag, 'nums', nums, 'rk', rk) as data, dt, 70 as msgType \
+                               from vc.dws_vc_daily_hot_tags_dd \
+                               where dt = '${azkaban.flow.1.days.ago}' and rk <= 20) \
+                         group by dt, msgType"
+params= --topic vc_data_push_msg --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092 --withCount
+

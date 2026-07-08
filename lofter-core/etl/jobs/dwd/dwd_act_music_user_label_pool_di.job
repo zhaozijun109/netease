@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_act_music_user_label_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+  select a.userId, b.phone, c.email, e.verify_phone \
+  from ( \
+      select userId \
+      from lofter.dwd_user_active_di \
+      where dt <= '${azkaban.flow.1.days.ago}' and \
+            dt >= '${azkaban.flow.30.days.ago}' and \
+            is_anonymous = 0 \
+      group by 1 \
+  ) a \
+  left join ( \
+      select userId, phone \
+      from lofter_db_dump.ods_db_connect_phone_account_nd \
+  ) b on a.userId = b.userId \
+  left join ( \
+      select userId, email \
+      from lofter_db_dump.ods_db_account_nd \
+      where email not like '%#%' and length(email) > 0 \
+  ) c on a.userId = c.userId \
+  left join ( \
+      select userId, verifyphone as verify_phone \
+      from lofter_db_dump.ods_db_verify_phone_account_nd \
+  ) e on a.userId = e.userId \
+  where (b.phone is not null or c.email is not null or e.verify_phone is not null) \
+
+dependencies=dwd_user_active_di

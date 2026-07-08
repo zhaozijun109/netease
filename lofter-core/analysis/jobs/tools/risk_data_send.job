@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.backend.RiskDataSend
+params= --table lofter_tmp.zq_lofter_fanlaji_yixing_erchuang_aoteman_tag_post --taskId 275801

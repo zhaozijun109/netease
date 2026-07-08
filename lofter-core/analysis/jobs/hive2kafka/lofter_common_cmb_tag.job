@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select a.tag as tag, b.ip as ip, b.category as category \
+from ( \
+    select tag from rec.rec_data_content_tag_candidate_challenge_tag \
+    union \
+    select tag from rec.rec_data_content_tag_candidate_label \
+) a \
+left join ( \
+    select tag, related_set as ip, cat_label as category from rec.rec_data_content_tag_candidate_label \
+) b on a.tag = b.tag \
+where length(a.tag) > 0 \
+"
+params= --topic LOFTER.COMMON.CMB.TAG  --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

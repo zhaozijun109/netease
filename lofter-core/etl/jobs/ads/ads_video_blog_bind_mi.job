@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_blog_bind_mi partition(dt = '${azkaban.flow.1.days.ago}') \
+select orgId,blogId,a.postId,publishTime, \
+      nvl(realPlayNum,0) as realPlayNum \
+from ( \
+    select orgId,a.blogId,postId,publishTime \
+    from ( \
+        select orgId,blogId,bindTime \
+        from lofter_db_dump.ods_db_media_org_bind_user_nd \
+        where status = 0 \
+    ) a join ( \
+        select id as postId,blogId, publishTime \
+        from lofter_db_dump.ods_db_post_nd \
+        where type = 4 and  citerootpostid = 0 and \
+              from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd') between '2021-04-14' and '${azkaban.flow.1.days.ago}' and \
+              dayofmonth('${azkaban.flow.current.date}') = 1 \
+    ) b on a.blogId = b.blogId and a.bindTime < b.publishTime \
+) a left join ( \
+        select postId, sum(playuv) as playNum, sum(realplayuv) as realPlayNum \
+        from lofter.dws_video_post_general_di \
+        where dt between concat(substring('${azkaban.flow.1.days.ago}', 0, 7), '-01') and '${azkaban.flow.1.days.ago}' \
+        group by postId \
+) b on a.postId=b.postId \
+distribute by 1

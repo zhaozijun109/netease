@@ -1,0 +1,212 @@
+type=sparksql
+hive.query.01=\
+with base_1d as ( \
+    select \
+        '1日' as window_type, \
+        id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus, \
+        sum(exposureuv)   as exposureuv, \
+        sum(money)        as gift_money, \
+        sum(poshotpv)        as poshotpv, \
+        sum(poscommentpv)    as poscommentpv, \
+        sum(ad_money)     as ad_money, \
+        sum(unlock_pv)    as ad_unlock_pv, \
+        sum(ad_pge_money) as ad_pge_money \
+    from \
+    (select id, ips, blogid, contenttype, publishdate, title, blognickname, recomstatus \
+        from lofter.dim_post) a \
+    join ( \
+        select a.postid, max(ad_flg) as ad_flg from ( \
+            select postid, \
+                case when giftname like '%广告%' then 2 \
+                     when ispay_returngift in (0,1) then 1 \
+                     else 0 end as ad_flg \
+            from lofter.dim_gift_post_return_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+              and status = 1 \
+              and auditstatus = 1 \
+              and contenttype in ('文字','图片') \
+            group by postid, case when giftname like '%广告%' then 2 \
+                                  when ispay_returngift in (0,1) then 1 \
+                                  else 0 end \
+        ) a \
+        group by a.postid \
+    ) b on a.id = b.postid \
+    join ( \
+        select sum(bid_amount) as ad_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '广告文' \
+        group by postid \
+    ) d on a.id = d.postid \
+    left join ( \
+        select postid, sum(exposureuv) as exposureuv, sum(chargegiftamount*0.1) as money,sum(poshotpv) as poshotpv,sum(poscommentpv) as poscommentpv \
+        from lofter.dws_post_base_stats_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) c on a.id = c.postid \
+    left join ( \
+        select sum(bid_amount) as ad_pge_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '激励广告' \
+        group by postid \
+    ) f on a.id = f.postid \
+    left join ( \
+        select postid, count(1) as unlock_pv \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+          and unlock_method = '广告' \
+        group by postid \
+    ) e on a.id = e.postid \
+    group by id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus \
+), \
+base_7d as ( \
+    select \
+        '7日' as window_type, \
+        id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus, \
+        sum(exposureuv)   as exposureuv, \
+        sum(money)        as gift_money, \
+        sum(poshotpv)        as poshotpv, \
+        sum(poscommentpv)    as poscommentpv, \
+        sum(ad_money)     as ad_money, \
+        sum(unlock_pv)    as ad_unlock_pv, \
+        sum(ad_pge_money) as ad_pge_money \
+    from \
+    (select id, ips, blogid, contenttype, publishdate, title, blognickname, recomstatus \
+        from lofter.dim_post) a \
+    join ( \
+        select a.postid, max(ad_flg) as ad_flg from ( \
+            select postid, \
+                case when giftname like '%广告%' then 2 \
+                     when ispay_returngift in (0,1) then 1 \
+                     else 0 end as ad_flg \
+            from lofter.dim_gift_post_return_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+              and status = 1 \
+              and auditstatus = 1 \
+              and contenttype in ('文字','图片') \
+            group by postid, case when giftname like '%广告%' then 2 \
+                                  when ispay_returngift in (0,1) then 1 \
+                                  else 0 end \
+        ) a \
+        group by a.postid \
+    ) b on a.id = b.postid \
+    join ( \
+        select sum(bid_amount) as ad_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '广告文' \
+        group by postid \
+    ) d on a.id = d.postid \
+    left join ( \
+        select postid, sum(exposureuv) as exposureuv, sum(chargegiftamount*0.1) as money,sum(poshotpv) as poshotpv,sum(poscommentpv) as poscommentpv \
+        from lofter.dws_post_base_stats_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) c on a.id = c.postid \
+    left join ( \
+        select sum(bid_amount) as ad_pge_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '激励广告' \
+        group by postid \
+    ) f on a.id = f.postid \
+    left join ( \
+        select postid, count(1) as unlock_pv \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+          and unlock_method = '广告' \
+        group by postid \
+    ) e on a.id = e.postid \
+    group by id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus \
+), \
+base_30d as ( \
+    select \
+        '30日' as window_type, \
+        id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus, \
+        sum(exposureuv)   as exposureuv, \
+        sum(money)        as gift_money, \
+        sum(poshotpv)        as poshotpv, \
+        sum(poscommentpv)    as poscommentpv, \
+        sum(ad_money)     as ad_money, \
+        sum(unlock_pv)    as ad_unlock_pv, \
+        sum(ad_pge_money) as ad_pge_money \
+    from \
+    (select id, ips, blogid, contenttype, publishdate, title, blognickname, recomstatus \
+        from lofter.dim_post) a \
+    join ( \
+        select a.postid, max(ad_flg) as ad_flg from ( \
+            select postid, \
+                case when giftname like '%广告%' then 2 \
+                     when ispay_returngift in (0,1) then 1 \
+                     else 0 end as ad_flg \
+            from lofter.dim_gift_post_return_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+              and status = 1 \
+              and auditstatus = 1 \
+              and contenttype in ('文字','图片') \
+            group by postid, case when giftname like '%广告%' then 2 \
+                                  when ispay_returngift in (0,1) then 1 \
+                                  else 0 end \
+        ) a \
+        group by a.postid \
+    ) b on a.id = b.postid \
+    join ( \
+        select sum(bid_amount) as ad_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '广告文' \
+        group by postid \
+    ) d on a.id = d.postid \
+    left join ( \
+        select postid, sum(exposureuv) as exposureuv, sum(chargegiftamount*0.1) as money,sum(poshotpv) as poshotpv,sum(poscommentpv) as poscommentpv \
+        from lofter.dws_post_base_stats_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) c on a.id = c.postid \
+    left join ( \
+        select sum(bid_amount) as ad_pge_money, postid \
+        from lofter.dwd_ad_content_unlock_sdk_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+          and bid_amount > 0 and module = '激励广告' \
+        group by postid \
+    ) f on a.id = f.postid \
+    left join ( \
+        select postid, count(1) as unlock_pv \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+          and unlock_method = '广告' \
+        group by postid \
+    ) e on a.id = e.postid \
+    group by id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus \
+), \
+base as ( \
+    select * from base_1d \
+    union all \
+    select * from base_7d \
+    union all \
+    select * from base_30d \
+), \
+ranked as ( \
+    select \
+        window_type, id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus, \
+        exposureuv, gift_money,poshotpv,poscommentpv, ad_money, ad_unlock_pv, ad_pge_money, \
+        row_number() over (partition by window_type, contenttype order by ad_money desc) as rn \
+    from base \
+) \
+insert overwrite table lofter_dm.ads_ad_content_post_revenue_top_report_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    window_type, \
+    id, ips, blogid, contenttype, publishdate, title, blognickname, ad_flg, recomstatus, \
+    NVL(exposureuv,0)   as exposureuv, \
+    NVL(gift_money,0)   as gift_money, \
+    NVL(poshotpv,0)   as poshotpv, \
+    NVL(poscommentpv,0)   as poscommentpv, \
+    NVL(ad_money,0)     as ad_money, \
+    NVL(ad_unlock_pv,0) as ad_unlock_pv, \
+    NVL(ad_pge_money,0) as ad_pge_money \
+from ranked \
+where rn <= 1000 \

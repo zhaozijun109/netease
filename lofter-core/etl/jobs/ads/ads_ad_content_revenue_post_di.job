@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_revenue_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select module, \
+    postId, blogId, unlock_count, post_ad_revenue, \
+    sum(unlock_count) over () as total_unlock_count, \
+    sum(post_ad_revenue) over () as total_revenue, \
+    raw_ad_revenue \
+from ( \
+    select module, postId, blogId, \
+           count(distinct userId) as unlock_count, \
+           sum(post_ad_revenue) * 0.5 as post_ad_revenue, \
+           sum(ad_revenue) as raw_ad_revenue \
+    from ( \
+        select a.module as module, \
+               a.postId, c.blogId, a.userId, \
+               b.bid_amount as ad_revenue, \
+               case when b.bid_amount <= 0.01 then null \
+                    when b.bid_amount < 0.08 then 0.08 \
+                    when b.bid_amount < 0.5 then b.bid_amount \
+                    when b.bid_amount >= 0.5 then 0.5 \
+                    else null end as post_ad_revenue \
+        from ( \
+            select module, postId, userId \
+            from lofter.dwd_ad_content_unlock_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            group by 1, 2, 3 \
+        ) a \
+        join ( \
+            select case positionId when 279600 then '激励广告' \
+                                           when 278625 then '广告文' \
+                                           when 278626 then '广告文' \
+                                           when 277629 then '视频合集' \
+                                           end as module, \
+                   postId, userId, max(bid_amount/1000) as bid_amount \
+            from lofter.dwd_ad_actions_v2_di \
+            where dt = '${azkaban.flow.1.days.ago}' and positionId in (279600, 278625, 278626, 277629) and is_bg > 0 \
+            group by 1, 2, 3 \
+        ) b on a.userId = b.userId and a.postId = b.postId and a.module = b.module \
+        join lofter.dim_post c on a.postId = c.id \
+    ) t \
+    where post_ad_revenue is not null \
+    group by 1, 2, 3 \
+) tt \

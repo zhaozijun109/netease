@@ -1,0 +1,62 @@
+type=sparksql
+executor-memory=12g
+conf.spark.executor.memoryOverhead=6g
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=200
+conf.spark.executor.cores=4
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+hive.query.01=insert overwrite table lofter_dm.ads_creator_level_transition_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.prev_level, x.current_level, nvl(y.prev_level_creators,0) as prev_level_creators, x.transition_creators, \
+       score_before,score_now,post_score_before,post_score_now,fans_score_before,fans_score_now,hot_score_before,hot_score_now, \
+       post_count_recommend_pool_review_180d_before,post_count_recommend_pool_review_180d_now, \
+       post_count_recommend_pool_180d_before,post_count_recommend_pool_180d_now,hd_fans_1y_before, \
+       hd_fans_1y_now,hot_avg_rec_pool_recent_posts_1y_before,hot_avg_rec_pool_recent_posts_1y_now \
+from ( \
+    select nvl(a.level, if(a.is_new > 0, 'new_no', 'old_no')) as prev_level, \
+          nvl(b.level, 'no') as current_level, \
+          count(distinct b.userId) as transition_creators, \
+          avg(a.score) score_before, \
+          avg(a.post_count_recommend_pool_review_180d) post_count_recommend_pool_review_180d_before, \
+          avg(a.post_count_recommend_pool_180d) post_count_recommend_pool_180d_before, \
+          avg(a.hd_fans_1y) hd_fans_1y_before, \
+          avg(a.hot_avg_rec_pool_recent_posts_1y) hot_avg_rec_pool_recent_posts_1y_before, \
+          avg(a.post_score) post_score_before, \
+          avg(a.fans_score) fans_score_before, \
+          avg(a.hot_score) hot_score_before, \
+          avg(b.score) score_now, \
+          avg(b.post_count_recommend_pool_review_180d) post_count_recommend_pool_review_180d_now, \
+          avg(b.post_count_recommend_pool_180d) post_count_recommend_pool_180d_now, \
+          avg(b.hd_fans_1y) hd_fans_1y_now, \
+          avg(b.hot_avg_rec_pool_recent_posts_1y) hot_avg_rec_pool_recent_posts_1y_now, \
+          avg(b.post_score) post_score_now, \
+          avg(b.fans_score) fans_score_now, \
+          avg(b.hot_score) hot_score_now \
+    from lofter.dim_user u \
+    left join ( \
+      select userId, level, score, if(datediff(dt, post_first_date) <= 30, 1, 0) as is_new, \
+            post_count_recommend_pool_review_180d,post_count_recommend_pool_180d,hd_fans_1y,hot_avg_rec_pool_recent_posts_1y, \
+            log(least(greatest(post_count_recommend_pool_180d,1), 180))/log(180)*22.76 post_score, \
+            log(least(greatest(hd_fans_1y,1),250000))/log(250000)*34.20 fans_score, \
+            log(least(greatest(hot_avg_rec_pool_recent_posts_1y,1),75000))/log(75000)*43.04 hot_score \
+      from lofter.dws_par_creator_level_scoring_dd \
+      where dt = date_sub('${azkaban.flow.1.days.ago}',30) \
+    ) a on u.id = a.userId \
+    left join ( \
+        select userId, level,score, \
+               post_count_recommend_pool_review_180d,post_count_recommend_pool_180d,hd_fans_1y,hot_avg_rec_pool_recent_posts_1y, \
+               log(least(greatest(post_count_recommend_pool_180d,1), 180))/log(180)*22.76 post_score, \
+               log(least(greatest(hd_fans_1y,1),250000))/log(250000)*34.20 fans_score, \
+               log(least(greatest(hot_avg_rec_pool_recent_posts_1y,1),75000))/log(75000)*43.04 hot_score \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt='${azkaban.flow.1.days.ago}' \
+    ) b on u.id = b.userId \
+    group by 1, 2 \
+) x \
+left join ( \
+  select level, count(distinct userId) as prev_level_creators \
+  from lofter.dws_par_creator_dd \
+  where dt = date_sub('${azkaban.flow.1.days.ago}', 30) \
+  group by level \
+) y on x.prev_level = y.level \
+where (prev_level not in ('new_no', 'old_no') or current_level != 'no')

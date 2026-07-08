@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.bridge_exp_metric_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select 1 as appId, a.expId as exp_id, b.metricCode as metric, nvl(c.dimName, '全部') as dimension, nvl(c.dimCode, 'ALL') as dimension_value \
+from lofter_db_dump.ods_db_ab_exp_metric_nd a \
+join lofter_db_dump.ods_db_ab_metric_detail_nd b on a.metricId = b.id \
+left join lofter_db_dump.ods_db_ab_metric_dim_nd c on a.dimId = c.id \
+
+hive.query.02=create or replace view lofter.bridge_exp_metric as select * from lofter.bridge_exp_metric_dd where dt = '${azkaban.flow.1.days.ago}'

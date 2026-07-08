@@ -1,0 +1,238 @@
+host: 10.200.212.34
+port: 31614
+modelName: fr-v015-p2
+timeOutMills: 12000
+batchSize: 50
+signatureName: serving_default
+tfInputLayer: examples
+tfOutputLayer: ctr_probabilities
+exampleType: user_once_example
+stringFeatures:
+  - name: user_id
+    isShared: true
+    dim: 48
+  - name: item_id
+    dim: 48
+  - name: o_alg
+    dim: 8
+  - name: o_os
+    isShared: true
+    dim: 2
+  - name: i_blog_id
+    dim: 24
+  - name: i_first_tag
+    dim: 24
+  - name: i_article_type
+    dim: 4
+  - name: u_gender
+    isShared: true
+    dim: 2
+floatFeatures:
+  - name: o_hour
+    isShared: true
+    dim: 4
+  - name: i_pic_num
+    dim: 8
+  - name: i_mul_pic
+  - name: i_like_num
+    dim: 8
+  - name: i_comment_num
+    dim: 8
+  - name: i_up_num
+    dim: 8
+  - name: i_reblog_num
+    dim: 8
+  - name: i_create_time_days
+    dim: 8
+  - name: i_hot
+    dim: 8
+  - name: i_lf_exposed_count_7d
+    dim: 8
+  - name: i_lf_click_count_7d
+    dim: 8
+  - name: i_lf_inter_count_7d
+    dim: 8
+  - name: i_lf_neg_count_7d
+    dim: 8
+  - name: i_lf_cost_time_7d
+    dim: 8
+  - name: i_lf_exposed_count_3d
+    dim: 8
+  - name: i_lf_click_count_3d
+    dim: 8
+  - name: i_lf_inter_count_3d
+    dim: 8
+  - name: i_lf_neg_count_3d
+    dim: 8
+  - name: i_lf_cost_time_3d
+    dim: 8
+  - name: i_lf_exposed_count_1d
+    dim: 8
+  - name: i_lf_click_count_1d
+    dim: 8
+  - name: i_lf_inter_count_1d
+    dim: 8
+  - name: i_lf_neg_count_1d
+    dim: 8
+  - name: i_lf_cost_time_1d
+    dim: 8
+  - name: i_fr_exposed_count_7d
+    dim: 8
+  - name: i_fr_click_count_7d
+    dim: 8
+  - name: i_fr_inter_count_7d
+    dim: 8
+  - name: i_fr_neg_count_7d
+    dim: 8
+  - name: i_fr_cost_time_7d
+    dim: 8
+  - name: i_fr_ctr_7d
+    dim: 8
+  - name: i_fr_cvr_7d
+    dim: 8
+  - name: i_fr_negr_7d
+    dim: 8
+  - name: i_fr_exposed_count_3d
+    dim: 8
+  - name: i_fr_click_count_3d
+    dim: 8
+  - name: i_fr_inter_count_3d
+    dim: 8
+  - name: i_fr_neg_count_3d
+    dim: 8
+  - name: i_fr_cost_time_3d
+    dim: 8
+  - name: i_fr_ctr_3d
+    dim: 8
+  - name: i_fr_cvr_3d
+    dim: 8
+  - name: i_fr_negr_3d
+    dim: 8
+  - name: i_fr_exposed_count_1d
+    dim: 8
+  - name: i_fr_click_count_1d
+    dim: 8
+  - name: i_fr_inter_count_1d
+    dim: 8
+  - name: i_fr_neg_count_1d
+    dim: 8
+  - name: i_fr_cost_time_1d
+    dim: 8
+  - name: i_fr_ctr_1d
+    dim: 8
+  - name: i_fr_cvr_1d
+    dim: 8
+  - name: i_fr_negr_1d
+    dim: 8
+  - name: i_rt_exposed_count
+    dim: 8
+  - name: i_rt_click_count
+    dim: 8
+  - name: i_rt_ctr
+    dim: 8
+  - name: u_lofter_age
+    isShared: true
+    dim: 8
+  - name: u_fr_rec_num_1d
+    isShared: true
+    dim: 8
+  - name: u_fr_clk_num_1d
+    isShared: true
+    dim: 8
+  - name: u_fr_rec_num_7d
+    isShared: true
+    dim: 8
+  - name: u_fr_clk_num_7d
+    isShared: true
+    dim: 8
+  - name: c_firsttag_in_utags
+  - name: c_firsttag_in_u_rt_itags
+  - name: c_firsttag_in_u_rt_tags
+  - name: c_itags_utags
+  - name: c_itags_u_rt_itags
+  - name: c_itags_u_rt_tags
+  - name: c_blog_in_u_fblogs
+  - name: c_u_prefer_tags_short_i_tags
+  - name: c_u_prefer_tags_short_i_first_tag
+  - name: c_u_prefer_tags_long_i_tags
+  - name: c_u_prefer_tags_long_i_first_tag
+  - name: c_u_prefer_tags_wake_i_tags
+  - name: c_u_prefer_tags_wake_i_first_tag
+  - name: artice_type_in_user_action_types
+  - name: c_u_prefer_tags_180d_i_tags
+  - name: c_u_prefer_tags_180d_i_first_tag
+  - name: c_u_prefer_tags_60d_i_tags
+  - name: c_u_prefer_tags_60d_i_first_tag
+  - name: c_u_prefer_tags_30d_i_tags
+  - name: c_u_prefer_tags_30d_i_first_tag
+  - name: c_u_prefer_tags_10d_i_tags
+  - name: c_u_prefer_tags_10d_i_first_tag
+  - name: c_u_prefer_tags_3d_i_tags
+  - name: c_u_prefer_tags_3d_i_first_tag
+kvFeatures:
+  - name: u_p_tags_short
+    isShared: true
+    dim: 24
+  - name: u_p_tags_long
+    isShared: true
+    dim: 24
+  - name: u_p_tags_wake
+    isShared: true
+    dim: 24
+  - name: u_prefer_tags_180d
+    isShared: true
+    dim: 24
+  - name: u_prefer_tags_60d
+    isShared: true
+    dim: 24
+  - name: u_prefer_tags_30d
+    isShared: true
+    dim: 24
+  - name: u_prefer_tags_10d
+    isShared: true
+    dim: 24
+  - name: u_prefer_tags_3d
+    isShared: true
+    dim: 24
+  - name: u_rt_itags_kv
+    isShared: true
+    dim: 24
+listStringFeatures:
+  - name: i_tags
+    dim: 24
+  - name: i_title
+    dim: 8
+  - name: u_tags
+    isShared: true
+    dim: 24
+  - name: u_follow_blogs
+    isShared: true
+    dim: 24
+  - name: u_rt_blogs
+    isShared: true
+    dim: 24
+  - name: u_rt_firsttags
+    isShared: true
+    dim: 24
+  - name: u_rt_itags_set
+    isShared: true
+    dim: 24
+  - name: u_rt_tags
+    isShared: true
+    dim: 24
+  - name: u_light_items
+    isShared: true
+    dim: 48
+  - name: u_high_items
+    isShared: true
+    dim: 48
+  - name: u_rt_types
+    isShared: true
+    dim: 4
+nestedListStringFeatures:
+  - name: u_light_items_tags
+    isShared: true
+    dim: 24
+  - name: u_high_items_tags
+    isShared: true
+    dim: 24

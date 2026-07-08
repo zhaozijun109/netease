@@ -1,0 +1,100 @@
+type=sparksql
+hive.query.01= \
+with ip_mapping AS (  \
+    SELECT ip, category_res \
+    FROM lofter.dim_seven_group_ip_category_res_dd  \
+    WHERE dt = (SELECT max(dt) FROM lofter.dim_seven_group_ip_category_res_dd)  \
+    GROUP BY ip, category_res  \
+) \
+,base_data as ( \
+    SELECT a.postid, publishdate, a.userid, poshotpv, hdpv, browseuv, browsepv, ips, url, title, sharepv \
+    FROM  \
+    ( \
+        SELECT postid, userid, poshotpv, hdpv, browseuv, browsepv,sharepv \
+        FROM lofter.dws_post_base_stats_di  \
+        WHERE dt='${azkaban.flow.1.days.ago}' \
+        and contenttype in ('文字','图片') \
+    ) a  \
+    JOIN lofter.dim_post_article b ON a.postid=b.id \
+    left anti join ( \
+        select  \
+            postid \
+       from lofter.dwd_gift_return_post_dd \
+       where dt='${azkaban.flow.1.days.ago}' \
+       group by postid  \
+        )c on a.postid=c.postid \
+) \
+,post_std as ( \
+    select  a.postid, a.userid, a.like_cnt, a.hot, a.comment_cnt,b.hot_yd \
+    from  \
+    (SELECT postid, userid, like_cnt, hot, comment_cnt \
+    FROM lofter.dws_post_interaction_dd \
+    WHERE dt ='${azkaban.flow.1.days.ago}' \
+    )a  \
+    left join ( \
+    SELECT postid, userid, like_cnt, hot as hot_yd, comment_cnt \
+    FROM lofter.dws_post_interaction_dd \
+    WHERE dt =date_sub('${azkaban.flow.1.days.ago}',1) \
+    )b on a.postid=b.postid and a.userid=b.userid \
+) \
+,post_ip_data as ( \
+    SELECT postid, publishdate, userid, poshotpv, hdpv, browseuv, browsepv, a.ip \
+        ,case when category_res is null then '泛用户'   \
+            when category_res in ('影视','娱乐','综艺') then 'RPS' else category_res end as category_res \
+        ,url \
+        ,title \
+        ,sharepv \
+    FROM  \
+    ( \
+        SELECT postid, publishdate, userid, poshotpv, hdpv, browseuv, browsepv, ip, url, title, sharepv \
+        FROM base_data  \
+        LATERAL VIEW explode(ips) h AS ip \
+    ) a  \
+    JOIN ip_mapping b ON a.ip = b.ip  \
+) \
+,crt_data as ( \
+    SELECT userid, level, blog_url, blog_nickname, fans_std, post_count_30d, post_hot_30d, hd_uv_30d, fans_cnt_30d \
+    FROM lofter.dws_par_creator_dd \
+    WHERE dt ='${azkaban.flow.1.days.ago}' \
+) \
+,rn_data as ( \
+    SELECT  \
+        a.postid, publishdate, a.userid, poshotpv, hdpv, browseuv, browsepv,url, title, sharepv,hot_yd,hot \
+        ,COALESCE(hot, 0) - COALESCE(hot_yd, 0) as hotpv_diff \
+        ,a.category_res \
+        ,row_number() OVER (PARTITION by a.category_res ORDER BY COALESCE(hot, 0) - COALESCE(hot_yd, 0) DESC) as rn \
+        ,collect_set(a.ip) as top_100_ips \
+    FROM post_ip_data a  \
+    LEFT JOIN post_std b ON a.postid = b.postid \
+    group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14 \
+) \
+insert overwrite table lofter_dm.ads_crt_post_top100_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    a.postid \
+    ,a.userid \
+    ,b.level \
+    ,b.blog_url \
+    ,b.blog_nickname \
+    ,a.url \
+    ,a.title \
+    ,publishdate \
+    ,a.rn \
+    ,case when category_res is null then '泛用户'   \
+        when category_res in ('影视','娱乐','综艺') then 'RPS' else category_res end as category_res \
+    ,top_100_ips \
+    ,sum(a.hotpv_diff) as hotpv_diff \
+    ,sum(COALESCE(a.poshotpv, 0)) as poshotpv_1d \
+    ,sum(COALESCE(a.hdpv, 0)) as hdpv_1d \
+    ,sum(COALESCE(a.browsepv, 0)) as browsepv_1d \
+    ,sum(COALESCE(a.sharepv, 0))  as sharepv_1d \
+    ,sum(COALESCE(c.hot, 0)) as hot_std \
+    ,sum(COALESCE(c.comment_cnt, 0)) as comment_cnt_std \
+FROM  \
+( \
+    SELECT * \
+    FROM rn_data \
+    WHERE rn <= 100 \
+) a \
+LEFT JOIN crt_data b ON a.userid=b.userid  \
+LEFT JOIN post_std c ON a.postid =c.postid AND a.userid=c.userid \
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11

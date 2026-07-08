@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter_dm.ads_push_collection_update_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, concat_ws(',', transform(sort_array(collect_set(struct(-browse_uv_3d, collectionId)), true), x -> x.collectionId)) as collections, \
+       nvl(max(browse_uv_3d), 0) as browseUv \
+from ( \
+    select b.userId, a.collectionId, if(c.userId is not null, 1, 0) as is_subscribed, \
+           bitmap_count(to_bitmap(if(b.browse_pv_3d > 0, b.userId, null)) over (partition by a.collectionId)) as browse_uv_3d \
+    from ( \
+        select blogId, collectionId, postId, status, row_number() over (partition by blogId, collectionId, postId order by _bin_op_time desc, _bin_op_seqno desc) rnk \
+        from lofter.ods_binlog_post_collection_record_di \
+        where dt between '${azkaban.flow.1.days.ago}' and '${azkaban.flow.current.date}' and _bin_op in (0, 2) and \
+              from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH:mm:SS') between \
+              '${azkaban.flow.1.days.ago} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+              and '${azkaban.flow.current.date} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+    ) a \
+    join ( \
+        select collectionId, userId, \
+               sum(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) between 0 and 2, 1, 0)) as browse_pv_3d \
+        from lofter.dwd_post_collection_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) and action_type = 'browse' and is_real > 0 \
+        group by 1, 2 \
+    ) b on a.collectionId = b.collectionId \
+    left join ( \
+      select subscribe_userId as userId, collectionId \
+      from lofter.dwd_collection_user_subscribe_dd \
+      where dt='${azkaban.flow.1.days.ago}' \
+      group by 1, 2 \
+    ) c on b.collectionId = c.collectionId and b.userId = c.userId \
+    where a.rnk = 1 and a.status = 0 \
+) t \
+where is_subscribed > 0 \
+group by userId \
+distribute by 1

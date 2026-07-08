@@ -1,0 +1,251 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01= \
+with exp_users_month as ( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id, pv \
+    from lofter.dws_ab_platform_exp_user_agg_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+      and exp_state = 1 \
+      and is_return_user = 0 \
+      and (register_date is null or register_date <> dt) \
+), \
+dimension_source as( \
+  SELECT '全部' AS dimension, 'ALL' AS dimension_value \
+) \
+insert overwrite table lofter.dws_ab_platform_active_user_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId,a.exp_date,a.appId,a.sceneId,a.exp_id,a.bucket_id,a.metric,a.dimension,a.dimension_value,a.metric_value \
+from (  \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'active_user_exp_uv' as metric, \
+      '全部' as dimension, 'ALL' as dimension_value, \
+      1.0 as metric_value \
+    from exp_users_month a \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'active_user_exp_pv' as metric, \
+      '全部' as dimension, 'ALL' as dimension_value, \
+      cast(pv as double) as metric_value \
+   from exp_users_month a \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      concat('active_user_retain_', period) as metric, \
+      '全部' as dimension, 'ALL' as dimension_value, \
+      if(b.userId is not null, 1.0, 0.0) as metric_value \
+    from (select * from exp_users_month where exp_date between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+      select userId, period, baseDate as base_date \
+      from lofter.dwd_user_retention_di \
+      where dt='${azkaban.flow.1.days.ago}' \
+    ) b on a.userId = b.userId and a.exp_date = b.base_date \
+    where b.period in (1, 2, 6) and datediff('${azkaban.flow.1.days.ago}', a.exp_date) in (1,2,6) \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+      'active_user_full_retain_1d' as metric,  \
+      '全部' as dimension, 'ALL' as dimension_value,  \
+      if(b.userid is not null,1.0,0.0) as metric_value  \
+   from (select * from exp_users_month where exp_date between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}') a  \
+   left join (  \
+      select userid, count(distinct (from_unixtime(cast(firstactivetime / 1000 AS BIGINT), 'yyyy-MM-dd') )) days  \
+      from lofter.dws_par_user_active_di \
+      where dt >='${azkaban.flow.2.days.ago}' and dt <= '${azkaban.flow.1.days.ago}'  \
+      group by 1  \
+      having days = 2  \
+   ) b on a.userId = b.userid  \
+   where a.exp_date = '${azkaban.flow.2.days.ago}'  \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+      'active_user_full_active_days_7d_backward' as metric,  \
+      '全部' as dimension, 'ALL' as dimension_value,  \
+      cast(nvl(active_days_7d,0) as double)  as metric_value  \
+   from (select * from exp_users_month where exp_date between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select userid,active_days_7d \
+      from lofter.dws_par_user_active_dd \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userid \
+   where datediff('${azkaban.flow.1.days.ago}', a.exp_date)  = 6  \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+        concat('active_user_',b.metric),  \
+        b.dimension, \
+        b.dimension_value, \
+        cast(nvl(b.metric_value,0) as double) as metric_value  \
+   from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select * \
+      from lofter.dws_ab_platform_ecology_collection_metric_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userid  and a.bucket_id = b.bucket_id and a.exp_date = b.basedate \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+        concat('active_user_',b.metric),  \
+        b.dimension, \
+        b.dimension_value, \
+        cast(nvl(b.metric_value,0) as double) as metric_value  \
+   from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select * \
+      from lofter.dws_ab_platform_ecology_creator_metric_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userid and a.bucket_id = b.bucket_id and a.exp_date = b.basedate \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+        concat('active_user_',b.metric),  \
+        b.dimension, \
+        b.dimension_value, \
+        cast(nvl(b.metric_value,0) as double) as metric_value  \
+   from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select * \
+      from lofter.dws_ab_platform_ecology_fullSite_metric_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userid and a.bucket_id = b.bucket_id and a.exp_date = b.basedate  \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+        concat_ws('_','active_user',b.scene,b.metric) as metric,  \
+        b.dimension, \
+        b.dimension_value, \
+        cast(nvl(b.metric_value,0) as double) as metric_value  \
+   from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select * \
+      from lofter.dws_ab_platform_ecology_scene_metric_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userid and a.bucket_id = b.bucket_id and a.exp_date = b.basedate \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        'new_usre_pve_visit_retain_1' as metric, \
+        '全部' as dimension, 'ALL' as dimension_value, \
+        cast(1 as double) as metric_value \
+    from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+        select userId, count(distinct dt) days \
+        from lofter.dws_pve_user_action_di \
+        where dt >='${azkaban.flow.2.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+        having days = 2 \
+    ) b on a.userId = b.userId \
+    where a.exp_date = '${azkaban.flow.2.days.ago}' \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+        concat_ws('_','active_user',b.type,b.metric) as metric, \
+        '全部' as dimension, \
+        'ALL' as dimension_value, \
+        cast(nvl(b.metric_value,0) as double) as metric_value  \
+   from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+   left join( \
+      select userId,type,metric,metric_value \
+      from lofter.dws_ab_platform_pve_metric_expand_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) b on a.userId = b.userId \
+union all \
+  select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+	 'active_user_pay_again_rate' as metric,  \
+	 '全部' as dimension, 'ALL' as dimension_value,  \
+	 if(b.userid is null,0.0,1.0)  as metric_value  \
+  from (select * from exp_users_month where exp_date between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}') a  \
+  left join( \
+	 select t1.userid \
+	 from \
+	 ( \
+		select userid \
+		from lofter.dwd_gift_post_unlock_dd \
+		where dt = date_sub('${azkaban.flow.1.days.ago}', 6)  and is_settle = 1 and userid is not null \
+		group by userid \
+	 )t1 join( \
+		select userid \
+		from lofter.dwd_gift_post_unlock_dd \
+		where dt = '${azkaban.flow.1.days.ago}' and is_settle = 1 and userid is not null \
+		group by userid \
+	 )t2 on t1.userid = t2.userid \
+	 \
+  ) b on a.userId = b.userid \
+  where datediff('${azkaban.flow.1.days.ago}', a.exp_date)  = 6 \
+union all \
+  select * from( \
+	 select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id,  \
+		(case b.groupsetid \
+		    when 7 then concat('active_user_full_',b.metric) \
+            when 6 then concat('active_user_full_',b.metric) \
+            when 5 then concat('active_user_full_',b.metric) \
+		    else concat_ws('_','active_user',b.type,b.metric) \
+		    end \
+		) as metric, \
+		(case \
+		   when b.groupsetid = 7 or b.groupsetid = 3 then '全部' \
+		   when b.groupsetid = 6 or b.groupsetid = 2 then b.unlock_method \
+		   when b.groupsetid = 5 or b.groupsetid = 1 then b.is_fans_vip \
+		   else '全部' \
+		   end  \
+		)as dimension, \
+		(case \
+		   when b.groupsetid = 7 or b.groupsetid = 3 then 'ALL' \
+		   when b.groupsetid = 6 or b.groupsetid = 2 then if(b.unlock_method = '券包', 'COUPON','GIFT') \
+		   when b.groupsetid = 5 or b.groupsetid = 1 then if(b.is_fans_vip = '高粉','VIP_FANS','NO_VIP_FANS') \
+		   else 'ALL' \
+		   end  \
+		)as dimension_value,  \
+		cast(nvl(b.metric_value,0) as double)  as metric_value  \
+	 from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a  \
+	 left join( \
+		select userid,type,is_fans_vip,unlock_method,groupsetid,metric,metric_value \
+		from lofter.dws_ab_platform_paycontent_metric_di \
+		where dt = '${azkaban.flow.1.days.ago}' \
+	 )b on a.userId = b.userid \
+  ) \
+  where dimension_value is not null \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      concat('active_user_',b.metric) as metric, \
+      b.dimension, b.dimension_value, \
+      nvl(b.metric_value,0.0) as metric_value \
+    from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+        select * from lofter.dws_ab_platform_exp8_metric_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) b \
+    on a.userId = b.userid and a.exp_date = b.base_date and a.bucket_id = b.bucket_id \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      concat('active_user_',b.metric) as metric, \
+      b.dimension as dimension, b.dimension_value as dimension_value, \
+      nvl(b.metric_value,0.0) as metric_value \
+    from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+      select * from lofter.dws_ab_platform_exp10_metric_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) b \
+    on a.userid = b.userid and a.exp_id = b.exp_id and a.exp_date = b.basedate and a.bucket_id = b.bucket_id \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      concat('active_user_',b.metric) as metric, \
+      if(b.dim_flag = 0,'全部',null) as dimension, \
+      if(b.dim_flag = 0,'ALL',null) as dimension_value, \
+      nvl(b.metric_value,0.0) as metric_value \
+    from exp_users_month a \
+    left join ( \
+      select * from lofter.dws_ab_platform_paycontent_metric_v2_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) b \
+    on a.userId = b.userid and a.exp_date = b.base_date and a.bucket_id = b.bucket_id \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        concat('active_user_',b.metric) as metric, \
+        b.dimension as dimension, b.dimension_value as dimension_value, \
+        nvl(b.metric_value,0.0) as metric_value \
+    from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+        select * from lofter.dws_ab_platform_push_user_device_metric_di where dt = '${azkaban.flow.1.days.ago}' and userId is not null \
+    ) b \
+    on a.userid = b.userid and a.exp_id = b.exp_id and a.exp_date = b.basedate and a.bucket_id = b.bucket_id \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        concat('active_user_',b.metric) as metric, \
+        b.dimension as dimension, b.dimension_value as dimension_value, \
+        nvl(b.metric_value,0.0) as metric_value \
+    from (select * from exp_users_month where exp_date = '${azkaban.flow.1.days.ago}') a \
+    left join ( \
+        select * from lofter.dws_ab_platform_client_metric_di where dt = '${azkaban.flow.1.days.ago}' and userId is not null \
+    ) b \
+    on a.userid = b.userid and a.exp_id = b.exp_id and a.exp_date = b.basedate and a.bucket_id = b.bucket_id \
+) a
+dependencies=dws_ab_platform_exp_user_agg_di,dws_ab_platform_pve_metric_expand_di,dws_ab_platform_paycontent_metric_di,dws_ab_platform_exp8_metric_di,dws_ab_platform_exp10_metric_di,dws_ab_platform_paycontent_metric_v2_di,dws_ab_platform_ecology_collection_metric_di,dws_ab_platform_ecology_creator_metric_di,dws_ab_platform_ecology_fullSite_metric_di,dws_ab_platform_ecology_scene_metric_di,dws_ab_platform_push_user_device_metric_di,dws_ab_platform_client_metric_di

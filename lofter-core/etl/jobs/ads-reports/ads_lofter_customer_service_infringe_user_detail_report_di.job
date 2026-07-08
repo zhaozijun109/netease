@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_lofter_customer_service_infringe_user_detail_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+  min( \
+    from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+  ) as complaint_first_day, \
+  max( \
+    from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+  ) as complaint_last_day, \
+  count(distinct blogid) as blognum, \
+  count( \
+    distinct case \
+      when status in (1, 2) then blogid \
+      else null \
+    end \
+  ) as handle_blognum, \
+  userid \
+from \
+  lofter_db_dump.ods_db_infringe_post_nd \
+where \
+  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) \
+  and '${azkaban.flow.1.days.ago}' \
+  and reporttype in (2, 3) \
+group by \
+  userid \

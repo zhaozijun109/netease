@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('-',tag,question_id) as id, tag,question_id as questionId, dt, if(hot_rank = 1, 'hot', 'new') as rankType from lofter_dm.ads_tag_discuss_hot_list_di where (hot_rank = 1 or new_rank = 1) and dt = '${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --parallel 5 --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --dest lofter_tag_hot_chat_dd --postfixsep --full --atom

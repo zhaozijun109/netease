@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_card_aggregation_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a1.base_date, max(visit_pv) visit_pv, sum(visti_uv) visti_uv, \
+    max(signin_pv) signin_pv, sum(signin_uv) signin_uv, \
+    sum(visit_1d_visit_uv) visit_1d_visit_uv, sum(signin_1d_visit_uv) signin_1d_visit_uv, \
+    sum(signin_1d_signin_uv) signin_1d_signin_uv, \
+    count(distinct a2.userid) signin_consume_uv, sum(money) signin_consume_money \
+from ( \
+    select t1.dt base_date, t1.userid, t1.eventid, \
+        max(visit_pv) visit_pv, \
+        count(distinct if(t1.eventid = 'w1-50', t1.userid, null)) visti_uv, \
+        max(signin_pv) signin_pv, \
+        count(distinct if(t1.eventid = 'w1-52', t1.userid, null)) signin_uv, \
+        count(distinct if(t1.eventid = 'w1-50' and t2.eventid = 'w1-50', t2.userid, null)) visit_1d_visit_uv, \
+        count(distinct if(t1.eventid = 'w1-52' and t2.eventid = 'w1-50', t2.userid, null)) signin_1d_visit_uv, \
+        count(distinct if(t1.eventid = 'w1-52' and t2.eventid = 'w1-52', t2.userid, null)) signin_1d_signin_uv \
+    from ( \
+        select dt, userid, eventid, \
+            count(if(eventid = 'w1-50', userid, null)) over(partition by dt) visit_pv, \
+            count(if(eventid = 'w1-52', userid, null)) over(partition by dt) signin_pv \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.2.days.ago}' and \
+              actionType in ('other', 'benefit_market') and \
+              eventid in ('w1-50', 'w1-52') \
+    ) t1 left join ( \
+        select dt, userid, eventid \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              actionType in ('other', 'benefit_market') and \
+              eventid in ('w1-50', 'w1-52') \
+    ) t2 \
+    on t1.userid = t2.userid \
+    group by t1.dt, t1.userid, t1.eventid \
+) a1 left join ( \
+    select userid, sum(money) money \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and pay_date = '${azkaban.flow.1.days.ago}' and order_type = 'benefit' \
+    group by userid \
+) a2 \
+on a1.eventid = 'w1-52' and a1.userid = a2.userid \
+group by a1.base_date
+

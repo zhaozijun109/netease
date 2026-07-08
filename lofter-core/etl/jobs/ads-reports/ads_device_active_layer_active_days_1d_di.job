@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_device_active_layer_active_days_1d_di partition(dt='${azkaban.flow.1.days.ago}') \
+select active_type1, \
+       active_type2, \
+       cnt, \
+       type1_cnt, \
+       type1_type2_cnt, \
+       round(type1_cnt/cnt,4) as rate1, \
+       round(type1_type2_cnt/cnt,4) as rate2, \
+       round(type1_type2_cnt/type1_cnt,4) as rate3 \
+from ( \
+    select active_type1, \
+        active_type2, \
+        count(deviceudid) over(partition by dt) as cnt, \
+        count(deviceudid) over(partition by active_type1) as type1_cnt, \
+        count(deviceudid) over(partition by active_type1,active_type2) as type1_type2_cnt \
+    from lofter_dm.ads_device_active_layer_di \
+    where dt = '${azkaban.flow.1.days.ago}' and active_days_1d = 1 \
+) \
+group by active_type1, \
+         active_type2, \
+         cnt, \
+         type1_cnt, \
+         type1_type2_cnt, \
+         round(type1_cnt/cnt,4), \
+         round(type1_type2_cnt/cnt,4), \
+         round(type1_type2_cnt/type1_cnt,4)
+dependencies=ads_device_active_layer_di

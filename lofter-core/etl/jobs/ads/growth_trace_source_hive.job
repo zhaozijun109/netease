@@ -1,0 +1,6 @@
+type=hivejdbc
+azk.hive.action=execute.query
+hive.query.01=use lofter_dm;
+hive.query.02=msck repair table lofter_dm.dwb_device_new_trace_source;
+hive.query.03=msck repair table lofter_dm.dwb_device_callback_trace_source;
+dependencies=growth_trace_source

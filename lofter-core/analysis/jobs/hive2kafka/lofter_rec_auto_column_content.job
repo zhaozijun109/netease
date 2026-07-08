@@ -1,0 +1,7 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select tag, rankType, rankName, tagContentReasons \
+    from lofter_dm.ads_rec_auto_column_content_di where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic rec_bdms_auto_column_article --servers lofter-kafka-recommend1.gy.ntes:9092,lofter-kafka-recommend2.gy.ntes:9092,lofter-kafka-recommend3.gy.ntes:9092

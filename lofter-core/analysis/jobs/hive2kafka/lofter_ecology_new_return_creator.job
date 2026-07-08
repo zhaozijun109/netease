@@ -1,0 +1,29 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="\
+select t1.type, \
+       t1.blogId \
+from ( \
+    select type, blogId \
+    from lofter_dm.ads_ecology_new_return_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+    select type, blogId \
+    from lofter_dm.ads_ecology_new_return_creator_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+      and type = 1 \
+    group by type, blogId \
+) t2 \
+on t1.type = t2.type and t1.blogId = t2.blogId \
+left join ( \
+    select type, blogId \
+    from lofter_dm.ads_ecology_new_return_creator_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 179) and dt < '${azkaban.flow.1.days.ago}' \
+      and type = 2 \
+    group by type, blogId \
+) t3 \
+on t1.type = t3.type and t1.blogId = t3.blogId \
+where t2.blogId is null and t3.blogId is null \
+"
+params=  --messageType 19 --topic lofter.common.businessData --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092 --parallel 1

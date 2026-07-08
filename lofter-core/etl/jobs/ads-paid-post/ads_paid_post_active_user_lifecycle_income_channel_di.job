@@ -1,0 +1,242 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_active_user_lifecycle_income_channel_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  a.userid, \
+  g.createday, \
+  case \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) = 0 then '0' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) > 0 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 7 then '1~6' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 7 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 30 then '7~29' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 30 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 180 then '30~179' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 180 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 365 then '180~364' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 365 then '365~' \
+    else 'other' \
+  end as life_flg, \
+  case \
+    when b.userid is not null then 'new' \
+    when c.userid is not null then 'return' \
+    else 'active' \
+  end as active_flg, \
+  case \
+    when settlement_type is null then '非内容付费口令词' \
+    else settlement_type \
+  end as koulin_flg, \
+  case \
+    when e.trade_money is null then 0 \
+    else 1 \
+  end as history_paid_flg, \
+  case \
+    when f.trade_money is null then 0 \
+    else 1 \
+  end as 30daypaid_flg, \
+  case \
+    when f.trade_money is null then 0 \
+    when f.trade_money > 0 \
+    and f.trade_money <= 2 then '0~2' \
+    when f.trade_money > 2 \
+    and f.trade_money <= 5 then '2~5' \
+    when f.trade_money > 5 \
+    and f.trade_money <= 15 then '5~15' \
+    when f.trade_money > 15 \
+    and f.trade_money <= 25 then '15~25' \
+    when f.trade_money > 25 \
+    and f.trade_money <= 50 then '25~50' \
+    when f.trade_money > 50 \
+    and f.trade_money <= 100 then '50~100' \
+    else '100~' \
+  end as  30daypaid_level \
+from \
+  ( \
+    Select \
+      userid \
+    from \
+      lofter.dwd_user_active_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and is_anonymous = 0 \
+    group by \
+      userid \
+  ) a \
+  join ( \
+    select \
+      id, \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as createday \
+    from \
+      lofter.dim_user \
+    where \
+      isanonymous = 0 \
+    group by \
+      id, \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+  ) g on a.userid = g.id \
+  left join ( \
+    select \
+      userid \
+    from \
+      lofter.dwd_user_new_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and is_anonymous = 0 \
+    group by \
+      userid \
+  ) b on a.userid = b.userid \
+ \
+  left join ( \
+    select \
+      userid \
+    from \
+      lofter.dwd_user_return_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+ \
+      userid \
+  ) c on a.userid = c.userid \
+  left join ( \
+    select \
+      settlement_type, \
+      userid \
+    from \
+      ( \
+        select \
+          settlement_type, \
+          userid, \
+          createday, \
+          a.itemid, \
+          a.actpwd \
+        from \
+          ( \
+            select \
+              actpwd, \
+              userid, \
+              itemid, \
+              settlement_type \
+            from \
+              lofter.dwd_growth_actpwd_access_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and content_type = '单日志' \
+              and settlement_type in ('CPS', 'UGC') \
+              and actpwd is not null \
+              and itemid is not null \
+            group by \
+              actpwd, \
+              userid, \
+              itemid, \
+              settlement_type \
+            UNION \
+            select \
+              null actpwd, \
+              userid, \
+              null as itemid, \
+              '内容付费口令词汇总' settlement_type \
+            from \
+              lofter.dwd_growth_actpwd_access_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and content_type = '单日志' \
+              and settlement_type in ('CPS', 'UGC') \
+              and actpwd is not null \
+              and itemid is not null \
+            group by \
+              userid \
+          ) a \
+          join ( \
+            select \
+              id, \
+              from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as createday \
+            from \
+              lofter.dim_user \
+            where \
+              isanonymous = 0 \
+            group by \
+              id, \
+              from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+          ) b on a.userid = b.id \
+      ) a \
+    group by \
+      settlement_type, \
+      userid \
+  ) d on a.userid = d.userid \
+  left join ( \
+    select \
+      userid, \
+      trade_money \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+      and period = 'history' \
+      and pay_type = 'all' \
+    group by \
+      userid, \
+      trade_money \
+  ) e on a.userid = e.userid \
+  left join ( \
+    select \
+      userid, \
+      trade_money \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+      and period = '30' \
+      and pay_type = 'all' \
+    group by \
+      userid, \
+      trade_money \
+  ) f on a.userid = f.userid \
+group by \
+  a.userid, \
+  g.createday, \
+  case \
+   when datediff('${azkaban.flow.1.days.ago}', g.createday) = 0 then '0' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) > 0 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 7 then '0~7' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 7 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 30 then '7~30' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 30 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 180 then '30~180' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 180 \
+    and datediff('${azkaban.flow.1.days.ago}', g.createday) < 365 then '180~365' \
+    when datediff('${azkaban.flow.1.days.ago}', g.createday) >= 365 then '365~' \
+    else 'other' \
+  end, \
+  case \
+    when b.userid is not null then 'new' \
+    when c.userid is not null then 'return' \
+    else 'active' \
+  end, \
+  case \
+   when settlement_type is null then '非内容付费口令词' \
+    else settlement_type \
+  end, \
+  case \
+    when e.trade_money is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when f.trade_money is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when f.trade_money is null then 0 \
+    when f.trade_money > 0 \
+    and f.trade_money <= 2 then '0~2' \
+    when f.trade_money > 2 \
+    and f.trade_money <= 5 then '2~5' \
+    when f.trade_money > 5 \
+    and f.trade_money <= 15 then '5~15' \
+    when f.trade_money > 15 \
+    and f.trade_money <= 25 then '15~25' \
+    when f.trade_money > 25 \
+    and f.trade_money <= 50 then '25~50' \
+    when f.trade_money > 50 \
+    and f.trade_money <= 100 then '50~100' \
+    else '100~' \
+  end
+dependencies=ads_post_paid_user_consume_detail_di

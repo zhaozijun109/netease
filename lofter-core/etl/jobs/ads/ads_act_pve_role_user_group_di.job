@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01= \
+with user_role_chat as ( \
+    select a.userId, a.roleId, a.total_chats, a.prev_chats, \
+        case when a.total_chats >= 30 and a.prev_chats >= 1  then 'A' \
+             when a.prev_chats >= 6 then 'B' \
+             when a.prev_chats >= 1 and a.prev_chats < 6 then 'C' \
+             end as chat_type \
+    from ( \
+        select userId, roleId, \
+            count(1) as total_chats, \
+            sum(if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1,0)) as prev_chats \
+        from lofter_db_dump.ods_db_pve_user_dialogue_nd \
+        where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              sender = 1 \
+        group by 1, 2 \
+    ) a \
+    left join ( \
+        select  id, \
+                rolename \
+        from `lofter_db_dump`.`ods_db_pve_role_info_nd` \
+        where status = 1 AND publicview = 1 AND (type = 0 or type = 4) \
+    ) b \
+    on a.roleId = b.id \
+    where a.prev_chats > 0 and b.id is not null \
+) \
+insert overwrite table lofter_dm.ads_act_pve_role_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, roleId, 0 as `type` \
+from ( \
+    select userId, roleId \
+    from user_role_chat \
+    where chat_type in ('A', 'B') \
+  union all \
+    select userId, roleId \
+    from ( \
+        select a.userId, a.roleId, b.ab_roles, \
+            row_number() over (partition by a.userId order by total_chats desc) as c_rk \
+        from user_role_chat a \
+        join ( \
+            select userId, sum(if(chat_type in ('A', 'B'), 1, 0)) as ab_roles \
+            from user_role_chat \
+            group by userId \
+        ) b on a.userId = b.userId \
+        where a.chat_type = 'C' \
+    ) t \
+    where c_rk < 3 - ab_roles \
+) tt

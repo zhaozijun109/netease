@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_miniprogram_post_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.*, b.blogName as blog_name, b.blogNickName as blog_nickname, b.title, b.url \
+from ( \
+    select poolId as miniId, postId, blogId, createTime as list_time \
+    from lofter_db_dump.ods_db_post_pool_nd \
+    where status = 1 \
+) a \
+join lofter.dim_post b on a.postId = b.id; \
+
+hive.query.02=create or replace view lofter.dim_miniprogram_post as select * from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}';
+
+dependencies=dim_post

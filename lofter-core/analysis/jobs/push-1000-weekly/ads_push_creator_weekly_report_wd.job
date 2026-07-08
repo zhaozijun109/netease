@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_creator_weekly_report_wd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, \
+    case when a.responsenum >= 50 then 1 \
+        when b.level in ('S', 'A', 'B') and a.hotnum >= 1000 then 2 \
+         when b.level = 'C' and a.hotnum >= 300 then 2 \
+         when b.level = 'D' and a.hotnum >= 100 then 2 \
+         when a.sharenum >= 10000 then 3 \
+         end as accomplishment_type, \
+    case when a.responsenum >= 50 then a.responsenum \
+         when b.level in ('S', 'A', 'B') and a.hotnum >= 1000 then a.hotnum \
+         when b.level = 'C' and a.hotnum >= 300 then a.hotnum \
+         when b.level = 'D' and a.hotnum >= 100 then a.hotnum \
+         when a.sharenum >= 10000 then a.sharenum \
+         end as accomplishment_num, \
+    a.postnum, \
+    if(c.post_main_content_type = '文字', a.wordnum,0), \
+    if(c.post_main_content_type = '图片', a.photonum,0), \
+    if(c.post_main_content_type = '视频', a.videonum,0) \
+from ( \
+    select * \
+    from lofter_dm.ads_user_data_center_wd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join (select userId, level from lofter.dws_par_creator_level_scoring_dd where dt = '${azkaban.flow.1.days.ago}') b on a.blogId = b.userId \
+left join (select userId, post_main_content_type from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}') c on a.blogId = c.userId \

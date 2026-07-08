@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_creator_valid_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+select t1.userid, \
+case when sum_realpv_365d>=10000 and post_count_365d>=10 and sum_realpv_365d/post_count_365d>=200 then 1 else 0 end is_valid_creator_365d, \
+case when sum_realpv_30d>=1000 and post_count_30d>=2 and sum_realpv_30d/post_count_30d>=200 then 1 else 0 end is_valid_creator_30d, \
+post_count_365d,sum_realpv_365d,sum_realpv_365d/post_count_365d avg_post_realpv_365d,hotpv_365d,commentpv_365d, \
+post_count_30d,sum_realpv_30d,sum_realpv_30d/post_count_30d avg_post_realpv_30d,hotpv_30d,commentpv_30d, \
+premium_posts \
+from \
+( \
+    select userid, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', dt)<365 then realplaypv+realbrowsepv end) sum_realpv_365d, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', dt)<365 then poshotpv-neghotpv end) hotpv_365d, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', dt)<365 then poscommentpv-negcommentpv end) commentpv_365d, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and datediff('${azkaban.flow.1.days.ago}', dt)<30 then realplaypv+realbrowsepv end) sum_realpv_30d, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and datediff('${azkaban.flow.1.days.ago}', dt)<30 then poshotpv-neghotpv end) hotpv_30d, \
+    sum(case when datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and datediff('${azkaban.flow.1.days.ago}', dt)<30 then poscommentpv-negcommentpv end) commentpv_30d \
+    from lofter.dws_post_base_stats_di \
+    where datediff('${azkaban.flow.1.days.ago}', dt)<365 and dt<='${azkaban.flow.1.days.ago}' \
+    and datediff('${azkaban.flow.1.days.ago}', publishdate)<365 and publishdate<='${azkaban.flow.1.days.ago}' \
+    group by userid \
+    having sum(case when datediff('${azkaban.flow.1.days.ago}', dt)<365 then realplaypv+realbrowsepv end)>=10000 or sum(case when datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and datediff('${azkaban.flow.1.days.ago}', dt)<30 then realplaypv+realbrowsepv end)>=1000 \
+) t1 \
+join \
+( \
+    select x.blogId, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 365, x.id, null)) as post_count_365d,\
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}', x.publishDate) < 30, x.id, null)) as post_count_30d \
+    from ( \
+         select id, blogId, publishDate, recomStatus as is_rec, tags, ips \
+         from lofter.dim_post \
+         where publishDate <= '${azkaban.flow.1.days.ago}' and is_book_store = 0 and \
+             isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+             isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") \
+    ) x \
+    left join ( \
+        select postId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) y on x.id = y.postId \
+    left join (select postId from lofter.ods_risk_limit where type = 0 and status = 0) z on x.id = z.postId \
+    where y.postId is null and z.postId is null \
+    group by x.blogId \
+    having (post_count_30d>=2 or post_count_365d>=10) \
+) t2 \
+on t1.userid=t2.blogId \
+left join \
+( \
+    select userid,count(postid) premium_posts \
+    from lofter.dws_post_premium_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by userid \
+) t3 \
+on t1.userid=t3.userid  \
+where ((sum_realpv_365d>=10000 and post_count_365d>=10 and sum_realpv_365d/post_count_365d>=200) or (sum_realpv_30d>=1000 and post_count_30d>=2 and sum_realpv_30d/post_count_30d>=200))  \
+
+dependencies=dws_post_base_stats_di,dws_post_premium_di

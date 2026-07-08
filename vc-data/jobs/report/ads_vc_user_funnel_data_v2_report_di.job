@@ -1,0 +1,66 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_user_funnel_data_v2_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select base_date, \
+period, \
+origin_type, \
+COALESCE(new_register_flag,2) as new_register_flag, \
+active_uv, \
+chat_uv, \
+total_chats, \
+consum_uv, \
+total_amount, \
+chat_uv_10up, \
+chat_uv_30up, \
+chat_uv_100up \
+from  \
+( \
+select a.dt as base_date, \
+'0' as period, \
+b.origin_type, \
+case when a.dt=b.register_date then 1 else 0 end as new_register_flag, \
+count(distinct a.user_id) as active_uv, \
+count(distinct c.user_id) as chat_uv, \
+sum(c.total_chats) as total_chats, \
+count(distinct d.user_id) as consum_uv, \
+sum(d.total_amount) as total_amount, \
+count(distinct case when c.total_chats>9 then c.user_id end) as  chat_uv_10up, \
+count(distinct case when c.total_chats>29 then c.user_id end) as chat_uv_30up, \
+count(distinct case when c.total_chats>99 then c.user_id end) as chat_uv_100up \
+from \
+( \
+select dt,user_id \
+from vc.dwd_vc_user_active_i_d  \
+where dt = '${azkaban.flow.1.days.ago}' \
+and nvl(is_anonymity,'N') != 'Y'  \
+group by 1,2 \
+) a  \
+left join \
+( \
+select dt,user_id,register_date,origin_type \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity = 'N' \
+group by 1,2,3,4 \
+) b on a.user_id=b.user_id \
+left join \
+( \
+select dt,user_id,sum(message_cnt) as total_chats \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+and is_anonymity = 'N' \
+group by dt,user_id \
+) c on a.dt=c.dt and a.user_id=c.user_id \
+left join \
+( \
+select dt,user_id,sum(order_price) as total_amount \
+from vc.dwd_vc_order_i_d \
+where is_test_user='N' \
+and dt = '${azkaban.flow.1.days.ago}' \
+and order_status = 2 \
+group by dt,user_id \
+) d on a.dt=d.dt and a.user_id=d.user_id \
+group by a.dt, \
+b.origin_type, \
+case when a.dt=b.register_date then 1 else 0 end \
+grouping sets((a.dt,b.origin_type),(a.dt,case when a.dt=b.register_date then 1 else 0 end,b.origin_type)) \
+) \

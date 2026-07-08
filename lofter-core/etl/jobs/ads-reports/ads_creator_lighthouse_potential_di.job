@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_lighthouse_potential_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.level, a.potential_type \
+from ( \
+    select blogid, level, '等级高潜' as potential_type \
+    from ( \
+        select userId as blogId, level, score, \
+            case when level='D*' then 30 \
+                when level='D' and  post_main_content_type in ('视频','图片')  then 60 \
+                when level='D' and  post_main_content_type in ('文字') then 50 \
+                when level='C' and  post_main_content_type in ('视频','图片') and  score >= 30 and score < 60 then 60 \
+                when level='C' and  post_main_content_type in ('视频','图片') and score >= 60 and score < 70 then 70 \
+                when level='C' and  post_main_content_type in ('文字') and score >= 30 and score < 50 then 50 \
+                when level='C' and  post_main_content_type in ('文字') and score >= 50 and score < 60 then 60 \
+                end as level_max_score \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and level in ('D*','D','C') \
+    ) t \
+    where ((level_max_score - score between 0 and 4 and level in ('D')) or \
+           (level_max_score - score between 0 and 3 and level in ('C')) or \
+           (level_max_score - score between 0 and 2 and level in ('D*'))) \
+  union all \
+    select a.blogid, a.level, '评分快速上涨' as potential_type \
+    from ( \
+        select userId as blogId, level, score, \
+        case when level='D*' then 30 \
+            when level='D' and  post_main_content_type in ('视频','图片')  then 60 \
+            when level='D' and  post_main_content_type in ('文字') then 50 \
+            when level='C' and  post_main_content_type in ('视频','图片') and  score >= 30 and score < 60 then 60 \
+            when level='C' and  post_main_content_type in ('视频','图片') and score >= 60 and score < 70 then 70 \
+            when level='C' and  post_main_content_type in ('文字') and score >= 30 and score < 50 then 50 \
+            when level='C' and  post_main_content_type in ('文字') and score >= 50 and score < 60 then 60 \
+            end as level_max_score \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and level in ('D*','D','C') \
+    ) a \
+    join ( \
+        select userId as blogId, score score_before \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = date_sub('${azkaban.flow.30.days.ago}', 1) \
+    ) b on a.blogid=b.blogid and score / score_before >= 1.1 \
+    where ((level_max_score - score > 3 and level_max_score - score < 7 and a.level in ('C')) or \
+           (level_max_score - score > 4 and level_max_score - score < 7 and a.level in ('D')) or \
+           (level_max_score - score > 2 and level_max_score - score < 7 and a.level in ('D*'))) \
+) a \
+left join ( \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_nd \
+    where status = 1 \
+  union all \
+    select userId, joinTime \
+    from lofter_db_dump.ods_db_act_lighthouse_user_v2_nd \
+    where status = 1 \
+) b on a.blogId = b.userId \
+left join ( \
+    select blogId \
+    from lofter_dm.ads_creator_lighthouse_potential_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt < '${azkaban.flow.1.days.ago}' \
+) c on a.blogId = c.blogId \
+where b.userid is null and c.blogId is null \
+group by a.blogId, a.level, a.potential_type
+dependencies=

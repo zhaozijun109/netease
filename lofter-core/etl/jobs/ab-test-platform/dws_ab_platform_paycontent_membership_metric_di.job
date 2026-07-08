@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01= \
+WITH exp_users_month AS (  \
+    SELECT  \
+        user_id AS userId,  \
+        dt AS exp_date,  \
+        appId,  \
+        sceneId,  \
+        exp_id,  \
+        bucket_id  \
+    FROM lofter.dwd_ab_platform_exp_user_di  \
+    WHERE dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 29) AND '${azkaban.flow.1.days.ago}'  \
+    GROUP BY user_id, dt, appId, sceneId, exp_id, bucket_id  \
+),  \
+membership_order_source AS (  \
+    SELECT  \
+        userid,  \
+        dt AS order_date,  \
+        SUM(amount) AS pay_amount,  \
+        1 AS pay_uv  \
+    FROM lofter.dwd_membership_order_di  \
+    WHERE dt = '${azkaban.flow.1.days.ago}'  \
+        AND is_internal_attribute_order = 0  \
+    GROUP BY userid, dt  \
+),  \
+membership_browse_source AS (  \
+    SELECT  \
+        userid,  \
+        browse_date,  \
+        COUNT(1) AS browse_pv, \
+        1 AS browse_uv  \
+    FROM ( \
+        SELECT userid, dt AS browse_date, postid \
+        FROM lofter.dwd_membership_vip_post_browse_di  \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY userid, dt, postid \
+    ) tmp \
+    GROUP BY userid, browse_date \
+),  \
+atomic_metric AS (  \
+    SELECT  \
+        a.userId,  \
+        a.exp_date AS base_date,  \
+        a.bucket_id,  \
+		a.exp_id,  \
+        NVL(b.pay_uv, 0) AS membership_pay_uv,  \
+        NVL(b.pay_amount, 0) AS membership_pay_amount,  \
+        NVL(c.browse_uv, 0) AS membership_vip_browse_uv,  \
+        NVL(c.browse_pv, 0) AS membership_vip_browse_pv  \
+    FROM (SELECT userId, exp_date, bucket_id,exp_id FROM exp_users_month WHERE exp_date = '${azkaban.flow.1.days.ago}') a  \
+    LEFT JOIN membership_order_source b  \
+        ON a.userId = b.userid AND a.exp_date = b.order_date  \
+    LEFT JOIN membership_browse_source c  \
+        ON a.userId = c.userid AND a.exp_date = c.browse_date  \
+)  \
+INSERT OVERWRITE TABLE lofter.dws_ab_platform_paycontent_membership_metric_di  \
+PARTITION (dt = '${azkaban.flow.1.days.ago}')  \
+SELECT  \
+    userId AS userid,  \
+    base_date,  \
+    bucket_id,  \
+    metric,  \
+    dimension,  \
+    dimension_value,  \
+    metric_value,  \
+	exp_id  \
+FROM atomic_metric  \
+LATERAL VIEW INLINE(  \
+    ARRAY(  \
+        STRUCT('membership_pay_uv', '全部', 'ALL', CAST(membership_pay_uv AS DOUBLE)),  \
+        STRUCT('membership_pay_amount', '全部', 'ALL', CAST(membership_pay_amount AS DOUBLE)),  \
+        STRUCT('membership_vip_browse_uv', '全部', 'ALL', CAST(membership_vip_browse_uv AS DOUBLE)),  \
+        STRUCT('membership_vip_browse_pv', '全部', 'ALL', CAST(membership_vip_browse_pv AS DOUBLE))  \
+    )  \
+) t AS metric, dimension, dimension_value, metric_value
+dependencies=dwd_ab_platform_exp_user_di

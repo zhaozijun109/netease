@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+conf.spark.sql.caseSensitive=true
+class=com.netease.lofter.etl.ods.AntiRiskRadarLogEtlJob
+params=--date ${azkaban.flow.1.days.ago}

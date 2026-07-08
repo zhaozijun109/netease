@@ -1,0 +1,26 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag Tag下30日自分享次数 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               'Tag下30日自分享次数'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, 'Tag下30日自分享次数' as tag, tag as cat, \
+                                    case when pv < 3 then '1-3' \
+                                         when pv < 5 then '3-5' \
+                                         when pv < 8 then '5-8' \
+                                         when pv < 10 then '8-10' \
+                                         when pv < 15 then '10-15' \
+                                         else '15及以上' end as grp \
+                                  from ( \
+                                      select tag, userId, count(1) as pv \
+                                      from lofter.dwd_post_share_di \
+                                          lateral view explode(post_tags) as tag \
+                                      where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}',30) \
+                                      group by 1, 2 \
+                                  ) t ) "

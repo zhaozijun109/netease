@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_benefit_product_category \
+select categoryId, name, level, parentId, categoryType, category1, category1_name, category2, category2_name, category3, category3_name \
+from ( \
+    select id as categoryId, name as name, level as level, parentId, `type` as categoryType, \
+           id as category1, name as category1_name, \
+           null as category2, null as category2_name, \
+           null as category3, null as category3_name \
+    from lofter_db_dump.ods_db_benefit_category_nd \
+    where level = 1 \
+  union all \
+    select a.id as categoryId, a.name as name, a.level as level,a.parentId, a.`type` as categoryType, \
+           b.id as category1, b.name as category1_name, \
+           a.id as category2, a.name as category2_name, \
+           null as category3, null as category3_name \
+    from ( \
+        select id, name, parentId, level, `type` \
+        from lofter_db_dump.ods_db_benefit_category_nd \
+        where level = 2 \
+    ) a join ( \
+        select id, name, parentId, level \
+        from lofter_db_dump.ods_db_benefit_category_nd \
+        where level = 1 \
+    ) b on a.parentId = b.id \
+    union all \
+    select a.id as categoryId, a.name as name, a.level as level,a.parentId, a.`type` as categoryType, \
+           c.id as category1, c.name as category1_name, \
+           b.id as category2, b.name as category2_name, \
+           a.id as category3, a.name as category3_name \
+    from ( \
+        select id, name, parentId, level, `type` \
+        from lofter_db_dump.ods_db_benefit_category_nd \
+        where level = 3 \
+    ) a \
+    join ( \
+        select id, name, parentId, level \
+        from lofter_db_dump.ods_db_benefit_category_nd \
+        where level = 2 \
+    ) b on a.parentId = b.id \
+    join ( \
+        select id, name, parentId, level \
+        from lofter_db_dump.ods_db_benefit_category_nd \
+        where level = 1 \
+    ) c on b.parentId = c.id \
+) t

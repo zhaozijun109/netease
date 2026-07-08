@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_reward_exchange_inventory_consumption_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.productid \
+	,a.skuid \
+	,name \
+	,salecount \
+	,swapPrice \
+	,costPrice \
+FROM ( \
+	SELECT productid \
+		,skuid \
+		,name \
+		,get_json_object(extInfoJson, '$.swapPrice') AS swapPrice \
+		,salecount \
+	FROM lofter_db_dump.ods_db_benefit_card_nd \
+	WHERE activityCode = 'SWAP_ACTIVITY' \
+		AND salecount > 0 \
+	) a \
+JOIN ( \
+	SELECT id \
+		,productid \
+		,storeprice \
+		,costprice \
+	FROM lofter_db_dump.ods_db_benefit_product_attribute_nd \
+	) b ON a.skuId = b.id \

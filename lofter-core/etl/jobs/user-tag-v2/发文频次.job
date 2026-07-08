@@ -1,0 +1,59 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 发文频次 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '发文频次'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '发文频次' as tag, 'DAY_7' as cat, \
+                                         case when post_count_7d < 3 then 'COUNT_1_3' \
+                                              when post_count_7d < 6 then 'COUNT_3_6' \
+                                              when post_count_7d < 30 then 'COUNT_6_30' \
+                                              else 'COUNT_30' end as grp \
+                                  from lofter.dws_par_user_post_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and post_count_7d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '发文频次' as tag, 'DAY_15' as cat, \
+                                         case when post_count_15d < 3 then 'COUNT_1_3' \
+                                              when post_count_15d < 6 then 'COUNT_3_6' \
+                                              when post_count_15d < 30 then 'COUNT_6_30' \
+                                              else 'COUNT_30' end as grp \
+                                  from lofter.dws_par_user_post_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and post_count_15d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '发文频次' as tag, 'DAY_30' as cat, \
+                                         case when post_count_30d < 3 then 'COUNT_1_3' \
+                                              when post_count_30d < 6 then 'COUNT_3_6' \
+                                              when post_count_30d < 30 then 'COUNT_6_30' \
+                                              else 'COUNT_30' end as grp \
+                                  from lofter.dws_par_user_post_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and post_count_30d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '发文频次' as tag, 'DAY_90' as cat, \
+                                         case when post_count_90d < 3 then 'COUNT_1_3' \
+                                              when post_count_90d < 6 then 'COUNT_3_6' \
+                                              when post_count_90d < 30 then 'COUNT_6_30' \
+                                              else 'COUNT_30' end as grp \
+                                  from lofter.dws_par_user_post_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and post_count_90d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '发文频次' as tag, 'DAY_180' as cat, \
+                                         case when post_count_180d < 3 then 'COUNT_1_3' \
+                                              when post_count_180d < 6 then 'COUNT_3_6' \
+                                              when post_count_180d < 30 then 'COUNT_6_30' \
+                                              else 'COUNT_30' end as grp \
+                                  from lofter.dws_par_user_post_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and post_count_180d > 0 ) "

@@ -1,0 +1,73 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_tag_unpass_rate_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag,all_num,unpass_num,unpass_num/all_num as unpass_rate,row_number()over(order by unpass_num/all_num desc ) as rk,'日' as period \
+from  \
+(select a.tag, \
+count(distinct c.postid,c.version) as all_num, \
+count(distinct case when status=2 then concat(c.postid,c.version) else null end ) as unpass_num \
+from  \
+(select tag \
+from  \
+lofter.dws_tag_dd \
+where dt='${azkaban.flow.1.days.ago}'  \
+and post_count_std>=200 \
+group by  tag) a \
+ \
+join \
+ \
+(select id as postid,tag \
+from lofter.dim_post  \
+lateral view explode(tags) myTable as tag   \
+where  publishdate='${azkaban.flow.1.days.ago}'  \
+group by id,tag) b \
+ \
+on a.tag=b.tag \
+ \
+join \
+ \
+(select postid,blogid,version,status \
+from lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+where type=0 and   version>0 and status in (0,2,3)  and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  \
+group by  postid,blogid,version,status) c \
+ \
+on b.postid=c.postid \
+group by  a.tag) a \
+ \
+where all_num>=10 \
+ \
+union \
+ \
+select tag,all_num,unpass_num,unpass_num/all_num as unpass_rate,row_number()over(order by unpass_num/all_num desc ) as rk,'7日' as period \
+from \
+(select a.tag, \
+count(distinct c.postid,c.version) as all_num, \
+count(distinct case when status=2 then concat(c.postid,c.version) else null end ) as unpass_num \
+from  \
+(select tag \
+from  \
+lofter.dws_tag_dd \
+where dt='${azkaban.flow.1.days.ago}'  \
+and post_count_std>=200 \
+group by  tag) a \
+ \
+join \
+ \
+(select id as postid ,tag \
+from lofter.dim_post  \
+lateral view explode(tags) myTable as tag   \
+where  publishdate between '${azkaban.flow.7.days.ago}' and  '${azkaban.flow.1.days.ago}' \
+group by id,tag) b \
+ \
+on a.tag=b.tag \
+ \
+join \
+ \
+(select postid,blogid,version,status \
+from lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+where type=0 and   version>0 and status in (0,2,3)  and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and  '${azkaban.flow.1.days.ago}' \
+group by  postid,blogid,version,status) c \
+ \
+on b.postid=c.postid \
+group by  a.tag) a \
+ \
+where all_num>=100 \

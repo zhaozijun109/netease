@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select productId, ratio, orderProductNum, row_number() over (order by ratio desc,orderUserCount desc,viewUserCount desc, orderProductNum desc) as id from (select *, orderUserCount/viewUserCount as ratio from lofter_dm.ads_ec_market_product_di where dt='${azkaban.flow.1.days.ago}' and period='14Days' and (orderUserCount/viewUserCount) > 0) a "
+params= --dest lofter_top_ratio_product

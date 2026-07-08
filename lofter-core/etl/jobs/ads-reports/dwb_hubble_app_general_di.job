@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.dwb_hubble_app_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select cast(regexp_replace(nvl(a.appKey, b.appKey), '[a-zA-Z\-]','') as bigint) as appKey, a.device_uv, a.user_uv, \
+       a.pv, a.visit_session, b.avg_session_duration as per_duration \
+from ( \
+    select appKey, \
+           count(distinct if(eventId = 'da_screen' or eventId = 'da_session_start' or eventId = 'da_session_close' or (eventId not like 'da_%' and length(eventId) > 0), deviceUdid, null)) device_uv, \
+           count(distinct if(eventId = 'da_screen' or (eventId not like 'da_%' and length(eventId) > 0), userId, null)) user_uv, \
+           count(if(eventId = 'da_screen', 1, null)) pv, count(distinct sessionUuid) visit_session \
+    from ( \
+        select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+        from lofter.ods_mda_app_partition_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+      union all \
+        select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+        from lofter.ods_mda_web_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+      union all \
+        select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+        from lofter.ods_mda_wap_di where dt='${azkaban.flow.1.days.ago}' \
+      union all \
+        select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+        from lofter.ods_mda_miniprogram_di where dt='${azkaban.flow.1.days.ago}' \
+    ) t where length(appKey) > 0 and from_unixtime(cast(occurTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by appKey \
+) a \
+full outer join ( \
+   select appKey, \
+          count(distinct sessionUuid) session_count, \
+          sum(occurtime2 - occurtime) / count(distinct sessionUuid) / 1000 as avg_session_duration \
+   from ( \
+      select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid, \
+             lead(eventid, 1) over (partition by appkey, durationId order by occurtime) event2, \
+             lead(occurtime, 1) over (partition by appkey, durationId order by occurtime) occurtime2 \
+      from ( \
+          select *, nvl(sessionUuid, deviceUdid) as durationId \
+          from ( \
+              select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+              from lofter.ods_mda_app_partition_di \
+              where dt='${azkaban.flow.1.days.ago}' \
+           union all \
+              select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+              from lofter.ods_mda_web_di where dt='${azkaban.flow.1.days.ago}' \
+           union all \
+               select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+               from lofter.ods_mda_wap_di where dt='${azkaban.flow.1.days.ago}' \
+           union all \
+               select appKey, eventId, deviceUdid, userId, occurTime, sessionuuid \
+               from lofter.ods_mda_miniprogram_di where dt='${azkaban.flow.1.days.ago}' \
+          ) mda \
+          where eventid in ('da_session_start', 'da_session_close') and \
+                from_unixtime(cast(occurTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      ) t1 where length(appKey) > 0 and from_unixtime(cast(occurTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+   ) t2 \
+   where eventid='da_session_start' and event2 = 'da_session_close' and (occurtime2 - occurtime) < 24 * 3600 * 1000 and (occurtime2 - occurtime) > 0 \
+   group by appKey \
+) b on a.appKey = b.appKey

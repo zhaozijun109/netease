@@ -1,0 +1,155 @@
+type=sparksql
+hive.query.01=\
+with tagSource as ( \
+    select name as tag, 0 as tagType from lofter_db_dump.ods_db_cmb_tag_nd where status = 0 and cpFlag = 1 \
+    union \
+    select name as tag, 1 as tagType from lofter_db_dump.ods_db_cmb_tag_nd where status = 0 and ipFlag = 1 \
+    union \
+    select tag, 2 as tagType from lofter_db_dump.ods_db_challenge_tag_nd where type = 1 and status = 1 \
+), \
+postHotSource as ( \
+    select postId, hot, hot_15d from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 1000 \
+), \
+gradePostSource as ( \
+    select t2.tag, \
+           t2.tagType, \
+           t1.postId, \
+           t1.blogId, \
+           t1.contentType, \
+           t3.hot, \
+           t3.hot_15d \
+    from ( \
+        select tag, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from lofter_dm.ads_post_trend_grade_di lateral view explode(split(',', tags)) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and grade in ('S', 'A') and contentType in ('图片', '文字') \
+    ) t1 \
+    join tagSource t2 \
+    on t1.tag = t2.tag \
+    join postHotSource t3 \
+    on t1.postId = t3.postId \
+    left join ( \
+        select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) t4 \
+    on t1.postId = t4.postId \
+    where t4.postId is null \
+), \
+tagPostSource as ( \
+    select t1.tag, \
+           t1.tagType, \
+           t2.postId, \
+           t2.blogId, \
+           t2.contentType, \
+           t3.hot, \
+           t3.hot_15d \
+    from tagSource t1 \
+    join ( \
+        select id as postId, blogId, contentType, tag \
+        from lofter.dim_post_article lateral view explode(tags) as tag \
+        where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and \
+        allowView = 0 and contentType in ('图片', '文字') and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+    ) t2 \
+    on t1.tag = t2.tag \
+    join postHotSource t3 \
+    on t2.postId = t3.postId \
+    left join ( \
+        select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) t4 \
+    on t2.postId = t4.postId \
+    left join ( \
+        select postId from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count >= 3000 \
+    ) t5 \
+    on t2.postId = t5.postId \
+    where t4.postId is null and case when t2.contentType = '文字' then if(t5.postId is not null, true, false) else true end \
+) \
+insert overwrite table lofter_dm.ads_search_premium_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postType, \
+       canRec, \
+       tag, \
+       tagType, \
+       postId, \
+       blogId, \
+       contentType, \
+       postHot \
+from ( \
+    select postType, \
+           canRec, \
+           tag, \
+           tagType, \
+           postId, \
+           blogId, \
+           contentType, \
+           hot as postHot, \
+           row_number() over(partition by postType, tag, postId order by tagType asc, canRec desc) as rn \
+    from ( \
+        select 0 as postType, \
+               0 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from tagPostSource \
+        union all \
+        select 0 as postType, \
+               1 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from gradePostSource \
+        union all \
+        select 0 as postType, \
+               1 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from tagPostSource \
+        where (contentType = '图片' and (hot >= 10000 or hot_15d >= 2000)) or (contentType = '文字' and (hot >= 5000 or hot_15d >= 1000)) \
+        union all \
+        select 1 as postType, \
+               0 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from tagPostSource \
+        where tagType = 0 and contentType = '文字' \
+        union all \
+        select 1 as postType, \
+               1 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from gradePostSource \
+        where contentType = '文字' \
+        union all \
+        select 1 as postType, \
+               1 as canRec, \
+               tag, \
+               tagType, \
+               postId, \
+               blogId, \
+               contentType, \
+               hot \
+        from tagPostSource \
+        where tagType = 0 and contentType = '文字' and (hot >= 5000 or hot_15d >= 1000) \
+    ) t1 \
+) t2 \
+where rn = 1
+dependencies=ads_post_trend_grade_di
+

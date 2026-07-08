@@ -1,0 +1,560 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_title_classify_1_modle_blog_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select *,'60日' as period \
+from  \
+(select \
+  blogid, \
+  '同质化套路' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '同质化套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      tongzhitaoluchangjing_postnum >= 3 \
+      and tongzhitaoluchangjing_postnum / postnum >= 0.35 \
+      and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.65 \
+    ) \
+    or (tongzhitaoluchangjing_postnum >= 15) \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '同质化套路风险' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '同质化套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      tongzhitaoluchangjing_postnum >= 3 \
+      and tongzhitaoluchangjing_postnum / postnum >= 0.2 \
+    ) \
+    or ( \
+      tongzhitaoluchangjing_postnum >= 2 \
+      and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.65 \
+    ) \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '套路' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      ( \
+        tongzhi_taoluchangjing_postnum >= 3 \
+        and tongzhi_taoluchangjing_postnum / postnum >= 0.5 \
+      ) \
+      or ( \
+        tongzhi_taoluchangjing_postnum >= 3 \
+        and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.8 \
+      ) \
+    ) \
+    or (taoluchangjing_postnum >= 20) \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '套路风险' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    taoluchangjing_postnum >= 3 \
+    and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.5 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '普通场景' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '普通场景' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      ( \
+        putongchangjing_postnum >= 2 \
+        and putongchangjing_postnum / postnum >= 0.35 \
+      ) \
+      and tongzhi_taoluchangjing_postnum / postnum <= 0.3 \
+    ) \
+    or putongchangjing_postnum >= 10 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '场景' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '场景' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    allchangjing_postnum >= 5 \
+    and allchangjing_postnum / postnum >= 0.6 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '普通' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '普通' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      putong_postnum >= 3 \
+      and putong_postnum / postnum >= 0.5 \
+    ) \
+    or putong_postnum >= 15 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '观影' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '观影' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      guanying_postnum >= 5 \
+      and guanying_postnum / postnum >= 0.35 \
+    ) \
+    or guanying_postnum >= 25 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '观影意愿' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '观影' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  (guanying_postnum >= 3) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '擦边' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '擦边' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      cabian_postnum >= 5 \
+      and cabian_postnum / postnum >= 0.35 \
+    ) \
+    or cabian_postnum >= 10 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '擦边意愿' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '擦边' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  (cabian_postnum >= 2) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '长连载' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '长连载' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      changlianzai_postnum >= 5 \
+      and changlianzai_postnum / postnum >= 0.5 \
+    ) \
+    or changlianzai_postnum >= 20 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '文学' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '文学' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      wenxue_postnum >= 2 \
+      and wenxue_postnum / postnum >= 0.5 \
+    ) \
+    or wenxue_postnum >= 10 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '文学普通' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '文学普通' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      wenxue_putong_postnum >= 5 \
+      and wenxue_putong_postnum / postnum >= 0.5 \
+    ) \
+    or wenxue_postnum >= 15 \
+  ) \
+  and period = '60日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid) a \
+   \
+union \
+ \
+ \
+select *,'120日' as period \
+from  \
+(select \
+  blogid, \
+  '同质化套路' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '同质化套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      tongzhitaoluchangjing_postnum >= 3 \
+      and tongzhitaoluchangjing_postnum / postnum >= 0.35 \
+      and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.65 \
+    ) \
+    or (tongzhitaoluchangjing_postnum >= 15) \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '同质化套路风险' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '同质化套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      tongzhitaoluchangjing_postnum >= 3 \
+      and tongzhitaoluchangjing_postnum / postnum >= 0.2 \
+    ) \
+    or ( \
+      tongzhitaoluchangjing_postnum >= 2 \
+      and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.65 \
+    ) \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '套路' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      ( \
+        tongzhi_taoluchangjing_postnum >= 3 \
+        and tongzhi_taoluchangjing_postnum / postnum >= 0.5 \
+      ) \
+      or ( \
+        tongzhi_taoluchangjing_postnum >= 3 \
+        and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.8 \
+      ) \
+    ) \
+    or (taoluchangjing_postnum >= 20) \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '套路风险' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '套路' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    taoluchangjing_postnum >= 3 \
+    and tongzhi_taoluchangjing_cabian_postnum / postnum >= 0.5 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '普通场景' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '普通场景' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      ( \
+        putongchangjing_postnum >= 2 \
+        and putongchangjing_postnum / postnum >= 0.35 \
+      ) \
+      and tongzhi_taoluchangjing_postnum / postnum <= 0.3 \
+    ) \
+    or putongchangjing_postnum >= 10 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '场景' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '场景' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    allchangjing_postnum >= 5 \
+    and allchangjing_postnum / postnum >= 0.6 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '普通' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '普通' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      putong_postnum >= 3 \
+      and putong_postnum / postnum >= 0.5 \
+    ) \
+    or putong_postnum >= 15 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '观影' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '观影' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      guanying_postnum >= 5 \
+      and guanying_postnum / postnum >= 0.35 \
+    ) \
+    or guanying_postnum >= 25 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '观影意愿' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '观影' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  (guanying_postnum >= 3) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '擦边' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '擦边' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      cabian_postnum >= 5 \
+      and cabian_postnum / postnum >= 0.35 \
+    ) \
+    or cabian_postnum >= 10 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '擦边意愿' as flg, \
+  '类型标' as type, \
+  0 as mark, \
+  '擦边' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  (cabian_postnum >= 2) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '长连载' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '长连载' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      changlianzai_postnum >= 5 \
+      and changlianzai_postnum / postnum >= 0.5 \
+    ) \
+    or changlianzai_postnum >= 20 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '文学' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '文学' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      wenxue_postnum >= 2 \
+      and wenxue_postnum / postnum >= 0.5 \
+    ) \
+    or wenxue_postnum >= 10 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid \
+union \
+select \
+  blogid, \
+  '文学普通' as flg, \
+  '类型标' as type, \
+  1 as mark, \
+  '文学普通' as flg1 \
+from \
+  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where \
+  ( \
+    ( \
+      wenxue_putong_postnum >= 5 \
+      and wenxue_putong_postnum / postnum >= 0.5 \
+    ) \
+    or wenxue_postnum >= 15 \
+  ) \
+  and period = '120日'  and dt='${azkaban.flow.1.days.ago}' \
+group by \
+  blogid) a \
+
+dependencies=ads_gift_post_title_classify_blog_dd

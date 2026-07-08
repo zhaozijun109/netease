@@ -1,0 +1,455 @@
+type = sparksql
+hive.query.01 = \
+with consum_base_data as ( \
+select \
+base_date, \
+period, \
+COALESCE(new_register_flag, 2) AS new_register_flag, \
+origin_type, \
+consum_uv, \
+consum_uv_1d, \
+consum_uv_2d, \
+consum_uv_3d, \
+consum_uv_7d, \
+consum_uv_15d, \
+consum_uv_30d, \
+consum_chat_uv_1d, \
+consum_chat_uv_2d, \
+consum_chat_uv_3d, \
+consum_chat_uv_7d, \
+consum_chat_uv_15d, \
+consum_chat_uv_30d, \
+consum_active_uv_1d, \
+consum_active_uv_2d, \
+consum_active_uv_3d, \
+consum_active_uv_7d, \
+consum_active_uv_15d, \
+consum_active_uv_30d \
+from \
+( \
+select \
+a.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END AS new_register_flag, \
+b.origin_type, \
+count(distinct a.user_id) as consum_uv, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt = date_add(a.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_1d, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt = date_add(a.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_2d, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 2) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_3d, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_7d, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_15d, \
+COALESCE( \
+count( \
+distinct case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then c.user_id \
+end \
+), \
+0 \
+) as consum_uv_30d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt = date_add(a.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_1d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt = date_add(a.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_2d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 2) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_3d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_7d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_15d, \
+COALESCE( \
+count( \
+distinct case \
+when d.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then d.user_id \
+end \
+), \
+0 \
+) as consum_chat_uv_30d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt = date_add(a.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_1d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt = date_add(a.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_2d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 2) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_3d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_7d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_15d, \
+COALESCE( \
+count( \
+distinct case \
+when e.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then e.user_id \
+end \
+), \
+0 \
+) as consum_active_uv_30d \
+from \
+( \
+select \
+dt, \
+user_id, \
+sum(order_price) as total_amount \
+from \
+vc.dwd_vc_order_i_d \
+where \
+order_status = 2 \
+and is_test_user = 'N' \
+AND dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+group by \
+dt, \
+user_id \
+) a \
+left join ( \
+select  \
+user_id, \
+first_talk_date, \
+first_order_date, \
+register_date, \
+origin_type \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+) b on a.user_id = b.user_id \
+left join ( \
+select \
+dt, \
+user_id, \
+sum(order_price) as total_amount \
+from \
+vc.dwd_vc_order_i_d \
+where \
+order_status = 2 \
+and is_test_user = 'N' \
+AND dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+group by \
+dt, \
+user_id \
+) c on a.user_id = c.user_id \
+AND c.dt BETWEEN date_add(a.dt, 0) \
+AND date_add(a.dt, 30) \
+left join ( \
+select \
+distinct dt, \
+user_id \
+from \
+vc.dwd_vc_uc_talk_info_i_d \
+where \
+sender = 2 \
+and dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+) d on a.user_id = d.user_id \
+AND d.dt BETWEEN date_add(a.dt, 0) \
+AND date_add(a.dt, 30) \
+left join ( \
+select \
+dt, \
+user_id \
+from vc.dwd_vc_user_active_i_d  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+) e on a.user_id = e.user_id \
+AND e.dt BETWEEN date_add(a.dt, 0) AND date_add(a.dt, 30) \
+WHERE datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 2, 6, 14, 29) \
+group by \
+a.dt, \
+CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END, \
+datediff('${azkaban.flow.1.days.ago}', a.dt), \
+b.origin_type \
+grouping sets( \
+(a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt),b.origin_type), \
+(a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt),b.origin_type,CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END) \
+) \
+) t \
+), \
+consum_retain_data as ( \
+select \
+base_date, \
+period, \
+COALESCE(new_register_flag, 2) as new_register_flag, \
+origin_type, \
+total_amount_1d, \
+total_amount_2d, \
+total_amount_3d, \
+total_amount_7d, \
+total_amount_15d, \
+total_amount_30d \
+from \
+( \
+select \
+a.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END AS new_register_flag, \
+b.origin_type, \
+sum(a.total_amount) as total_amount, \
+COALESCE( \
+sum( \
+case \
+when c.dt = date_add(a.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (0) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_1d, \
+COALESCE( \
+sum( \
+case \
+when c.dt = date_add(a.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (1) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_2d, \
+COALESCE( \
+sum( \
+case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 2) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (2) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_3d, \
+COALESCE( \
+sum( \
+case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (6) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_7d, \
+COALESCE( \
+sum( \
+case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (14) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_15d, \
+COALESCE( \
+sum( \
+case \
+when c.dt between date_add(a.dt, 1) \
+and date_add(a.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', a.dt) in (29) then c.total_amount \
+end \
+), \
+0 \
+) as total_amount_30d \
+from \
+( \
+select \
+dt, \
+user_id, \
+sum(order_price) as total_amount \
+from \
+vc.dwd_vc_order_i_d \
+where \
+order_status = 2 \
+and is_test_user = 'N' \
+group by \
+dt, \
+user_id \
+) a \
+left join ( \
+select  \
+user_id, \
+first_talk_date, \
+first_order_date, \
+register_date, \
+origin_type \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+) b on a.user_id = b.user_id \
+left join ( \
+select \
+dt, \
+user_id, \
+sum(order_price) as total_amount \
+from \
+vc.dwd_vc_order_i_d \
+where \
+order_status = 2 \
+and is_test_user = 'N' \
+group by \
+dt, \
+user_id \
+) c on a.user_id = c.user_id \
+AND c.dt BETWEEN date_add(a.dt, 0) \
+AND date_add(a.dt, 30)  \
+WHERE datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 2, 6, 14, 29) \
+group by \
+a.dt, \
+CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END, \
+datediff('${azkaban.flow.1.days.ago}', a.dt), \
+b.origin_type \
+grouping sets( \
+(a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt),b.origin_type), \
+(a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt),b.origin_type,CASE WHEN a.dt = b.register_date THEN 1 ELSE 0 END) \
+) \
+) t \
+) \
+ \
+ \
+insert overwrite table vc_dm.ads_vc_user_consum_data_v2_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  a.base_date, \
+a.new_register_flag, \
+a.origin_type, \
+a.period, \
+a.consum_uv, \
+a.consum_uv_1d, \
+a.consum_uv_2d, \
+a.consum_uv_3d, \
+a.consum_uv_7d, \
+a.consum_uv_15d, \
+a.consum_uv_30d, \
+a.consum_chat_uv_1d, \
+a.consum_chat_uv_2d, \
+a.consum_chat_uv_3d, \
+a.consum_chat_uv_7d, \
+a.consum_chat_uv_15d, \
+a.consum_chat_uv_30d, \
+a.consum_active_uv_1d, \
+a.consum_active_uv_2d, \
+a.consum_active_uv_3d, \
+a.consum_active_uv_7d, \
+a.consum_active_uv_15d, \
+a.consum_active_uv_30d, \
+b.total_amount_1d, \
+b.total_amount_2d, \
+b.total_amount_3d, \
+b.total_amount_7d, \
+b.total_amount_15d, \
+b.total_amount_30d \
+from consum_base_data a \
+left join consum_retain_data b on a.base_date=b.base_date and a.new_register_flag=b.new_register_flag and a.origin_type=b.origin_type and a.period=b.period \
+ \

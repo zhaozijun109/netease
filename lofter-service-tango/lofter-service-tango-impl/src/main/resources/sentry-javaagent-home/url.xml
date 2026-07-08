@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<url>
+    <defaultHttpSuccessCode successCode="200-399,401,403,404"/>
+
+    <exclude method="endwith" pattern=".png"/>
+    <exclude method="endwith" pattern=".PNG"/>
+    <exclude method="endwith" pattern=".jpg"/>
+    <exclude method="endwith" pattern=".JPG"/>
+    <exclude method="endwith" pattern=".gif"/>
+    <exclude method="endwith" pattern=".ico"/>
+    <exclude method="endwith" pattern=".js"/>
+    <exclude method="endwith" pattern=".css"/>
+    <exclude method="endwith" pattern=".html"/>
+
+    <include>
+        <pattern method="all" source="" target="" action=""/>
+    </include>
+</url>

@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('-',translate(dt, '-',''), creator,level,nvl(contentType, 'all')) as id, creator, level, contentType, postNum, exposurePv, hotPv from lofter_dm.ads_rec_dis_aid_stage_creator_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --dest lofter_rec_dis_post_stage_daily_of_creator_v2 --update
+dependencies=flow_control_effect_by_post_aid_stage_creator

@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_highlight_comment_top_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.postId, x.blogId, x.top_pids \
+from ( \
+    select postId, blogid, \
+           concat_ws(',', transform(sort_array(collect_set(struct(pid_rank, pid)), true), x -> x.pid)) as top_pids \
+    from ( \
+        select *, \
+              row_number() over (partition by postId order by interaction_pv desc) as pid_rank \
+        from lofter.dws_post_highlight_comment_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and interaction_pv >= 10 \
+    ) t \
+    where pid_rank <= 3 \
+    group by 1, 2 \
+) x \
+left join ( \
+    select postId, top_pids \
+    from ( \
+        select postId, top_pids, row_number() over (partition by postId order by dt desc) as rk \
+        from lofter_dm.ads_post_highlight_comment_top_di \
+        where dt < '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rk = 1 \
+) y on x.postId = y.postId \
+where y.postId is null or x.top_pids != y.top_pids

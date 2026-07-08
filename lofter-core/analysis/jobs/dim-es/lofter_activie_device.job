@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select customudid as deviceId, greatest(max(occurTime), unix_timestamp('${azkaban.flow.1.days.ago}', 'yyyy-MM-dd') * 1000) as lastActiveTime \
+from lofter.ods_mda_app_raw_di \
+where dt = '${azkaban.flow.1.days.ago}' and length(customudid) > 0 \
+group by 1 \
+"
+params= --id deviceId --dest lofter_activie_device --update --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI

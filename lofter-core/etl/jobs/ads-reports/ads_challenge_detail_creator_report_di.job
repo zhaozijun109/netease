@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_challenge_detail_creator_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userid,blog_url,post_top_ips,fans_std \
+,count(distinct x.postid) as post_cnt \
+,count(distinct a.postid) as post_today \
+,sum(cc.browse_cnt) as browse_cnt \
+,sum(hot) as hot \
+,sum(comments) as comments \
+,sum(share) as share \
+from(select id as postid,userid,title,publishdate,tag,recomstatus,blogid,url \
+from lofter.dim_post_article \
+lateral view explode(tags) t as tag \
+where publishdate = '${azkaban.flow.1.days.ago}' \
+) a  \
+join  \
+(select tag \
+from lofter_db_dump.ods_db_challenge_tag_nd \
+where type = 2 and status = 1 \
+group by tag \
+) b  \
+on a.tag = b.tag \
+left join  \
+(select id as postid \
+from lofter.dim_post_article \
+lateral view explode(tags) t as tag \
+where publishdate >= '2025-07-25' \
+) x  \
+on a.postid = x.postid \
+join  \
+(select userid,blog_url,post_top_ips,fans_std \
+from lofter.dws_par_creator_dd  \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by userid,blog_url,post_top_ips,fans_std \
+) y \
+on a.userid = y.userid \
+left join  \
+(select postid,realbrowsepv as browse_cnt \
+from lofter.dws_post_base_stats_dd  \
+where dt = '${azkaban.flow.1.days.ago}'  \
+) cc \
+on a.postid = cc.postid \
+left join  \
+(select postid,poshotpv-neghotpv as hot,poscommentpv+negcommentpv as comments,sharepv as share \
+from lofter.dws_post_base_stats_dd  \
+where dt = '${azkaban.flow.1.days.ago}' \
+) e \
+On a.postid = e.postid \
+group by a.userid,blog_url,post_top_ips,fans_std \

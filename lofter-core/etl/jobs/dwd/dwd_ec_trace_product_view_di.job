@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ec_trace_product_view_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, deviceUdid, url, adTrace, \
+       parse_url(url, "QUERY", "activityCode") as activityCode, \
+       nvl(parse_url(url, "QUERY", "productId"), productId) as productId, \
+       occurTime \
+from ( \
+    select deviceUdid, userId, productId, occurTime, \
+           nvl(nvl(params['URL'],params['url']), params['currentUrl']) as url, \
+           nvl(parse_url(nvl(params['URL'], params['url']), "QUERY", "adTrace"), params['adTrace']) as adTrace \
+    from lofter.ods_mda_app_partition_di \
+        lateral view explode(split(nvl(nvl(params['goodId'], itemId), '0'), ',')) ps as productId \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType = 'benefit_market' and eventId = 'w3-2' \
+  union all \
+    select deviceUdid, userId, null as productId, occurTime, \
+           nvl(nvl(params['URL'],params['url']), params['currentUrl']) as url, \
+           nvl(parse_url(nvl(params['URL'], params['url']), "QUERY", "adTrace"), params['adTrace']) as adTrace \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId = 'card-0' \
+  union all \
+    select nvl(attributes['clienthubbledeviceid'], deviceUdid) as deviceUdid, userId, null as productId, occurTime, \
+           currentUrl as url, \
+           nvl(parse_url(currentUrl, "QUERY", "adTrace"), attributes['adtrace']) as adTrace \
+    from lofter.ods_mda_wap_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          (eventId in ('card-0','w3-2') or (eventId = 'da_screen' and currentUrl like '%lofter.com/cms%')) \
+) t \
+where length(adTrace) > 0 \
+distribute by 1

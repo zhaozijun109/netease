@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_user_interview_import_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  import_flg, \
+  userid \
+from \
+  ( \
+    select \
+      userid, \
+      occurtime, \
+      import_flg, \
+      row_number() over( \
+        partition by userid \
+        order by \
+          occurtime asc \
+      ) as rk \
+    from \
+      ( \
+        select \
+          userid, \
+          occurtime, \
+          case \
+            when eventid = 'a1-36' then '首页左上入口' \
+            when eventid = 'e1-54' then '账号页banner入口' \
+            when eventid = 'z1-8' then '底部虚拟人入口按钮点击' \
+            when eventid = 'e1-45' then '账号页我的应用资源位' \
+            when eventid = 'e2-17' \
+            and itemid like '%roleId%' then '私信聊天角色点击' \
+            when eventid = 'e2-17' \
+            and itemid not like '%roleId%' then '私信聊天邀约点击' \
+          end as import_flg \
+        from \
+          ( \
+            select \
+              userid, \
+              eventid, \
+              occurtime, \
+              itemid, \
+              itemtype, \
+              params, \
+              deviceos \
+            from \
+              lofter.ods_mda_app_partition_di \
+where \
+              dt ='${azkaban.flow.1.days.ago}' \
+              and ( \
+                eventid in ( 'e1-54', 'z1-8') \
+                or ( \
+                  eventid = 'e1-45' \
+                  and params ['URL'] like '%pve%' \
+                ) \
+                or ( \
+                  eventid = 'e2-17' \
+                  and itemid like '%pve%' \
+                ) \
+				or (eventid='a1-36' and   \
+				(lower(nvl(params['URL'], params['url'])) is null or lower(nvl(params['URL'], params['url'])) like '%pve%')  \
+				)) \
+          ) a \
+      ) a \
+  ) a \
+where rk = 1

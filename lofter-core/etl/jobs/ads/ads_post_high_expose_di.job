@@ -1,0 +1,102 @@
+type=sparksql
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_post_high_expose_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT r1.postId, \
+       r1.blogId \
+FROM ( \
+    SELECT postId, \
+           blogId \
+    FROM ( \
+          SELECT tmp1.postId, \
+                 tmp2.blogId \
+          FROM ( \
+                SELECT postId \
+                FROM \
+                ( \
+                    SELECT postId \
+                    FROM \
+                    ( \
+                        SELECT postId, \
+                               SUM(if(reaction is null,1,0)) AS expose_pv \
+                        FROM lofter.dwd_post_expose_di \
+                        WHERE dt >= '${azkaban.flow.7.days.ago}' AND dt <= '${azkaban.flow.1.days.ago}' AND detail_scene_level_1 IN ('discovery', 'search', 'tag', 'attention', 'related_article') \
+                        GROUP BY postId \
+                    ) a1 \
+                    WHERE a1.expose_pv > 80000 \
+                ) a \
+                LEFT JOIN \
+                ( \
+                    SELECT id \
+                    FROM lofter.dim_post \
+                    WHERE isPublished = true AND isCitedPost = false AND recomStatus = 1 \
+                ) b \
+                ON a.postId = b.id \
+                WHERE b.id IS NULL \
+                UNION \
+                SELECT postId \
+                FROM \
+                ( \
+                    SELECT postId \
+                    FROM \
+                    ( \
+                        SELECT postId, \
+                               SUM(if(reaction is null,1,0)) AS search_expose_pv \
+                        FROM lofter.dwd_post_expose_di \
+                        WHERE dt = '${azkaban.flow.1.days.ago}' AND detail_scene_level_1 = 'search' \
+                        GROUP BY postId \
+                    ) c \
+                    ORDER BY search_expose_pv DESC \
+                    LIMIT 100 \
+                ) \
+                UNION \
+                SELECT postId \
+                FROM \
+                ( \
+                    SELECT postId \
+                    FROM \
+                    ( \
+                        SELECT postId, \
+                               SUM(if(reaction is null,1,0)) AS tag_discovery_expose_pv \
+                        FROM lofter.dwd_post_expose_di \
+                        WHERE dt = '${azkaban.flow.1.days.ago}' AND detail_scene_level_2 = 'tag_discovery' \
+                        GROUP BY postId \
+                    ) d \
+                    ORDER BY tag_discovery_expose_pv DESC \
+                    LIMIT 100 \
+                ) \
+          ) tmp1 \
+          LEFT JOIN ( \
+              SELECT id, blogId FROM lofter.dim_post \
+          ) tmp2 \
+          ON tmp1.postId = tmp2.id \
+    ) GROUP BY postId, blogId \
+) r1 \
+LEFT JOIN ( \
+    SELECT postId, blogId FROM lofter_dm.ads_post_high_expose_di WHERE dt < '${azkaban.flow.1.days.ago}' \
+) r2 \
+ON r1.postId = r2.postId \
+WHERE r2.postId IS NULL \
+UNION ALL \
+SELECT postId, \
+       blogId \
+FROM ( \
+    SELECT t1.postId, \
+           t1.blogId \
+    FROM ( \
+        SELECT postId, \
+               blogId \
+        FROM lofter_dm.ads_post_high_expose_di \
+        WHERE dt >= '${azkaban.flow.30.days.ago}' AND dt < '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    JOIN ( \
+        SELECT postId, \
+               blogId \
+        FROM lofter.ods_binlog_recommend_review_post_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND _bin_old['version'] IS NOT NULL \
+    ) t2 \
+    ON t1.postId = t2.postId \
+) t \
+GROUP BY postId,blogId
+dependencies=

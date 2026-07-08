@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_trade_user_free_gift_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.userid \
+	,a.count AS free_gift_count \
+	,CASE  \
+		WHEN b.pv IS NULL \
+			THEN 0 \
+		ELSE pv \
+		END AS ad_bppv \
+	,createtime \
+	,register_ip \
+	,from_platform \
+	,accounttype \
+	,last_phone \
+	,last_login_time \
+	,last_login_deviceid \
+	,last_login_ip \
+FROM ( \
+	SELECT sum(count) AS count \
+		,userid \
+	FROM lofter_db_dump.ods_db_trade_user_free_gift_nd \
+	WHERE from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+		AND type = 48 \
+	GROUP BY userid \
+	) a \
+LEFT JOIN ( \
+	SELECT userid \
+		,count(1) AS pv \
+	FROM lofter.ods_mda_app_partition_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	    AND actionType = 'advertisement' \
+		AND eventid = 'ad-82' \
+	GROUP BY userid \
+	) b ON a.userid = b.userid \
+LEFT JOIN ( \
+	SELECT userid \
+		,createtime \
+		,register_ip \
+		,from_platform \
+		,accounttype \
+		,last_phone \
+		,last_login_time \
+		,last_login_deviceid \
+		,last_login_ip \
+	FROM lofter.dws_par_user_base_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	) c ON a.userid = c.userid \

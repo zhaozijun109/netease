@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select phone as id, phone, count(distinct userId) as uv from lofter.dws_par_user_base_dd lateral view explode(phones) t as phone where dt = '${azkaban.flow.1.days.ago}' group by phone "
+params= --dest lofter_phone_stat --update --url lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F

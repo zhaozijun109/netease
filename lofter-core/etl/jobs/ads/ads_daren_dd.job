@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_daren_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select a.id as blog_id, b.fans_7d, c.avg_hot_of_recent10_post, \
+                     d.post_count_std, d.post_count_1y, d.post_count_180d, e.tag_r1, e.tag_r2, e.tag_r3, \
+                     e.tag_r1_post_count, e.tag_r2_post_count, e.tag_r3_post_count \
+              from lofter.dim_blog a \
+                 left join ( \
+                    select blogId, count(distinct userId) as fans_7d \
+                     from lofter.dwd_blog_follow_di \
+                     where dt >= '${azkaban.flow.7.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+                     group by blogId \
+                 ) b on a.id = b.blogId \
+                 left join ( \
+                      select a.userId, avg(b.hot) as avg_hot_of_recent10_post \
+                      from ( \
+                          select postId, blogId as userId, row_number() over (partition by blogId order by publishTime desc) as rnk \
+                          from ( \
+                            select id as postId, blogId, publishTime \
+                            from lofter.dim_post \
+                            where isPublished = true and isForbidden = false \
+                          ) t \
+                      ) a join (select postId, count(1) as hot from lofter_db_dump.ods_db_post_hot_nd group by postId) b on a.postId = b.postId \
+                      where a.rnk <= 10 \
+                      group by a.userId \
+                 ) c on a.id = c.userId \
+                 left join ( \
+                      select blogId as userId, \
+                             count(1) as post_count_std, \
+                             count(if(publishDate >= date_sub('${azkaban.flow.1.days.ago}', 365) and publishDate <= '${azkaban.flow.1.days.ago}', 1, null)) as post_count_1y, \
+                             count(if(publishDate >= date_sub('${azkaban.flow.1.days.ago}', 180) and publishDate <= '${azkaban.flow.1.days.ago}', 1, null)) as post_count_180d \
+                      from lofter.dim_post \
+                      where isPublished = true \
+                      group by blogId \
+                 ) d on a.id = d.userId \
+                 left join ( \
+                      select userId, \
+                            first_value(if(rnk=1, tag, null), true) as tag_r1, \
+                            first_value(if(rnk=2, tag, null), true) as tag_r2, \
+                            first_value(if(rnk=3, tag, null), true) as tag_r3, \
+                            first_value(if(rnk=1, postCount, null), true) as tag_r1_post_count, \
+                            first_value(if(rnk=2, postCount, null), true) as tag_r2_post_count, \
+                            first_value(if(rnk=3, postCount, null), true) as tag_r3_post_count \
+                      from ( \
+                            select userId, tag, postCount, row_number() over (partition by userId order by postCount desc) as rnk \
+                            from ( \
+                                   select userId, tag, count(distinct postId) as postCount \
+                                   from lofter.dwd_post_publish_di lateral view explode(post_tags) t as tag \
+                                   where dt > date_sub('${azkaban.flow.1.days.ago}', 365) and \
+                                         dt <= '${azkaban.flow.1.days.ago}' \
+                                   group by userId, tag \
+                            ) t \
+                      ) tt where rnk <= 3 \
+                      group by userId \
+                 ) e on a.id = e.userId \
+               where d.post_count_180d > 0
+               distribute by 1
+dependencies=

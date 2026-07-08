@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_offsite_induction_return_gift_di partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, blogId, content \
+from lofter.dwd_risk_offsite_induction_return_gift_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+distribute by 1

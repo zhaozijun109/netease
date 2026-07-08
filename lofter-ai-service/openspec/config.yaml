@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  ## AI Foundation Service (AI 基础服务)
+  
+  为部门内部用户提供统一的 AI 接入能力，作为公司 AIGW（AI Gateway）的透明代理层。
+  
+  ### 核心目标
+  - 隐藏 AIGW 的 appcode/key 鉴权复杂度，对用户暴露 OpenAI 兼容的 API
+  - 用户只需 BaseURL + API Key 即可接入，兼容 Cursor、ChatBox 等任意 OpenAI 客户端
+  - 通过 X-Aigw-Meta: user_code 注入实现 AIGW 的用户级使用统计和报表
+  
+  ### 技术栈
+  - Framework: Next.js 14+ (App Router)
+  - UI: shadcn/ui + Tailwind CSS v4
+  - Database: MySQL + Prisma ORM
+  - Logging: pino
+  - Cache: lru-cache (in-memory API Key 验证缓存)
+  - Auth: next-auth (管理后台登录)
+  - Package Manager: pnpm
+  
+  ### 关键设计决策
+  - 双 Key 体系: sk-{appCode}-{hex} (个人) / svc-{appCode}-{hex} (服务)
+  - 多 app_code 支持，每个 app_code 对应一组 AIGW 凭证
+  - 服务 Key 默认要求 X-User-Code header（可按 app 配置关闭）
+  - 三环境: test / pre / prod，通过 APP_ENV 切换
+  - SSE 流式代理，需 tee stream 解析最终 usage chunk 用于日志
+  
+  ### 目录结构
+  - /app - Next.js 应用根目录（已初始化，含 shadcn/ui）
+  - /openspec - OpenSpec 变更管理
+
+rules:
+  proposal:
+    - 保持简洁，聚焦于变更的目标和范围
+    - 标注对现有系统的影响（如果有的话）
+  tasks:
+    - 每个 task 应该是可独立验证的小单元
+    - 优先级：核心功能 > 配置 > UI > 优化

@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_membership_actpwd_hot_search_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select actpwd, search_count, rk \
+from ( \
+    select a.actpwd, b.search_count, row_number() over (order by b.search_count desc) rk \
+    from ( \
+        select actpwd \
+        from lofter.dim_actpwd_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and settlement_type in ('UGC', 'CPS') \
+    ) a \
+    join ( \
+        select search_query, count(distinct deviceudid) search_count \
+        from lofter.dwd_search_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.actpwd = b.search_query \
+) t \
+where rk <= 100 \

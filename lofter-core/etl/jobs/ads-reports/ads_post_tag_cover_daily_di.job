@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_tag_cover_daily_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.contenttype as content_type,   \
+    	count(distinct id) publish_post,    \
+    	count(distinct postid) category_post,   \
+    	count(distinct postid) /count(distinct id) cover_rate   \
+    from    \
+    (select id,contenttype from lofter.dim_post     \
+    where publishdate='${azkaban.flow.1.days.ago}' and  valid in (0,12,15,16) and ispublished=true \
+          and isforbidden=false and tags is not null    \
+    group by id,contenttype     \
+    ) a     \
+    left join   \
+    (select  * from  lofter.dim_post_category_dd where dt='${azkaban.flow.1.days.ago}') b   \
+    on a.id=b.postid    \
+    group by a.contenttype  \
+    distribute by 1

@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_video_creator_dd partition(dt='${azkaban.flow.1.days.ago}') \
+with creator_post as ( \
+    select \
+        v.blogId, \
+        v.userId, \
+        count(distinct v.postId)                                    as total_video_count, \
+        sum(case when v.publish_date = '${azkaban.flow.1.days.ago}' then 1 else 0 end) as publish_count_1d \
+    from lofter.dim_video_dd v \
+    where v.dt = '${azkaban.flow.1.days.ago}' \
+      and v.is_published = true \
+      and v.is_forbidden = false \
+      and v.allow_view = 0 \
+    group by v.blogId, v.userId \
+), \
+creator_metrics as ( \
+    select \
+        s.blogId, \
+        sum(s.expose_pv)                                            as expose_pv_1d, \
+        sum(s.play_pv)                                              as play_pv_1d, \
+        sum(s.real_play_pv)                                         as real_play_pv_1d, \
+        sum(s.finish_play_pv)                                       as finish_play_pv_1d, \
+        sum(s.hot_pv)                                               as hot_pv_1d, \
+        sum(s.share_pv)                                             as share_pv_1d, \
+        sum(s.response_pv)                                          as response_pv_1d, \
+        sum(s.play_session_count)                                   as play_session_count_1d, \
+        sum(s.buffer_session_count)                                 as buffer_session_count_1d \
+    from lofter.dws_video_post_dd s \
+    where s.dt = '${azkaban.flow.1.days.ago}' \
+    group by s.blogId \
+) \
+select \
+    cp.blogId, \
+    cp.userId, \
+    cp.total_video_count, \
+    cp.publish_count_1d, \
+    nvl(m.expose_pv_1d, 0)                                          as expose_pv_1d, \
+    nvl(m.play_pv_1d, 0)                                            as play_pv_1d, \
+    nvl(m.real_play_pv_1d, 0)                                       as real_play_pv_1d, \
+    nvl(m.finish_play_pv_1d, 0)                                     as finish_play_pv_1d, \
+    nvl(m.hot_pv_1d, 0)                                             as hot_pv_1d, \
+    nvl(m.share_pv_1d, 0)                                           as share_pv_1d, \
+    nvl(m.response_pv_1d, 0)                                        as response_pv_1d, \
+    nvl(m.play_session_count_1d, 0)                                 as play_session_count_1d, \
+    nvl(m.buffer_session_count_1d, 0)                               as buffer_session_count_1d \
+from creator_post cp \
+left join creator_metrics m on cp.blogId = m.blogId \
+distribute by cp.blogId % 10
+dependencies=dws_video_post_dd

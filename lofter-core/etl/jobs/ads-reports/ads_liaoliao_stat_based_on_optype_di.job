@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_liaoliao_stat_based_on_optype_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select nvl(a.opType,'汇总') as opType,nvl(a.flag,'汇总') as flag, a.publishDate,count(distinct a.id) as num,count(distinct a.userid) as uv \
+              from \
+              (select distinct id,userid,from_unixtime(cast(submittime / 1000 AS BIGINT), 'yyyy-MM-dd') as publishDate,'发布' as opType, '有话题' as flag \
+              from lofter_db_dump.ods_db_ask_question_nd \
+              where from_unixtime(cast(submittime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+              union all \
+              select distinct b.id,b.blogid as userid,from_unixtime(cast(b.createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as publishDate,'回答' as opType, b.flag \
+              from \
+              (select id,blogid,createtime,case when questionid=0 then '无话题' else '有话题' end as flag \
+              from lofter_db_dump.ods_db_ask_answer_post_nd \
+              where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}') b \
+              union all \
+              select distinct c.id,c.publisheruserid as userid,from_unixtime(cast(c.publishtime / 1000 AS BIGINT), 'yyyy-MM-dd') as publishDate,'评论' as opType, b.flag \
+              from \
+              (select id,blogid,createtime,case when questionid=0 then '无话题' else '有话题' end as flag \
+              from lofter_db_dump.ods_db_ask_answer_post_nd) b \
+              join \
+              (select id,postid,publisheruserid,publishtime \
+              from lofter_db_dump.ods_db_post_response_nd \
+              where from_unixtime(cast(publishtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}') c \
+              on c.postid=b.id) a \
+              group by a.opType,a.publishDate,a.flag \
+              grouping sets((a.opType,a.publishDate,a.flag),(a.opType,a.publishDate),(a.publishDate,a.flag),(a.publishDate)) \
+              distribute by 1

@@ -1,0 +1,87 @@
+type = sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_hear_main_data_report_di  partition(dt ='${azkaban.flow.1.days.ago}')     \
+select     \
+a.hear_uv,    \
+a.hear_pv,    \
+a.avg_per_hear_pv,    \
+a.hear_uv/b.dau rate_uv,    \
+c.avg_per_playedtime,    \
+c.avg_post_playedtime,    \
+c.avg_playedtime,    \
+c.rate_hear,    \
+e.avg_per_session_app ,    \
+playedtime,    \
+play_user_cnt,    \
+play_post_cnt,    \
+session_app,    \
+user_cnt_app    \
+from(    \
+select dt,    \
+count(distinct userid) hear_uv ,    \
+count(userid)hear_pv,    \
+count(userid)/count(distinct userid) avg_per_hear_pv    \
+from  lofter.ods_mda_app_partition_di    \
+where dt='${azkaban.flow.1.days.ago}'    \
+and eventid='m6-5'    \
+group by  dt    \
+) a     \
+left join     \
+(    \
+select dt,count(distinct userid) dau    \
+from lofter.dwd_user_active_di a     \
+where dt='${azkaban.flow.1.days.ago}'    \
+group by 1    \
+) b on a.dt=b.dt     \
+left join     \
+(    \
+select dt,sum(playedtime)playedtime,count(distinct userid)play_user_cnt,count(distinct postid) play_post_cnt,    \
+sum(playedtime)/count(distinct userid) avg_per_playedtime,    \
+sum(playedtime)/count(distinct postid) avg_post_playedtime,    \
+sum(playedtime)/count( postid) avg_playedtime,    \
+avg(play_progress) rate_hear    \
+from(    \
+select dt,userid,duration,playedtime,postid,collectionid ,playedtime/duration play_progress  \
+from(      \
+select dt,userid,params['duration']/1000 duration,  \
+case when params['playedTime']/1000>0 then params['playedTime']/1000  \
+     when params['playedTimeme']/1000>0 then params['playedTimeme']/1000  end playedtime,    \
+params['postId'] postid,params['collectionId'] collectionid    \
+from lofter.ods_mda_app_partition_di a     \
+where dt='${azkaban.flow.1.days.ago}'    \
+and eventid='m6-5'    \
+) a   \
+where playedtime>5   \
+  \
+) a     \
+group by  dt    \
+) c on a.dt=c.dt     \
+    \
+left join     \
+(    \
+select a.dt,sum(b.seconds)/count(distinct b.userid ) avg_per_session_app,sum(b.seconds) session_app,count(distinct b.userid ) user_cnt_app    \
+from(    \
+select dt,userid  \
+from(      \
+select dt,userid,params['duration']/1000 duration,  \
+case when params['playedTime']/1000>0 then params['playedTime']/1000  \
+     when params['playedTimeme']/1000>0 then params['playedTimeme']/1000  end playedtime,    \
+params['postId'] postid,params['collectionId'] collectionid    \
+from lofter.ods_mda_app_partition_di a     \
+where dt='${azkaban.flow.1.days.ago}'    \
+and eventid='m6-5'    \
+) a   \
+where playedtime>5   \
+group by 1,2    \
+) a     \
+join     \
+(    \
+select dt     \
+,userId userid    \
+,sum(session_total_time / (1000 )) AS seconds    \
+from lofter.dws_par_user_session_di    \
+where dt='${azkaban.flow.1.days.ago}'    \
+group by 1,2     \
+) b on a.dt=b.dt and a.userid=b.userid     \
+group by 1     \
+    \
+) e on a.dt=e.dt      \

@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'search_tag_update') \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'search_tag_update' as policy, \
+       4 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select 13 as messageType, userId, tag, postId as itemId, blogId \
+    from lofter_dm.ads_push_search_tag_update_di \
+    where dt = '${azkaban.flow.current.date}' \
+) t \
+
+dependencies=ads_push_search_tag_update_di

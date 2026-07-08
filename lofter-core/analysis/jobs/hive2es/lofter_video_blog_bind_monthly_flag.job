@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(replace(substring(date_sub('${azkaban.flow.current.date}', dayofmonth('${azkaban.flow.current.date}')), 0, 7), '-') as int) as id"
+params= --dest lofter_video_blog_bind_monthly_flag
+dependencies=lofter_video_blog_bind_monthly

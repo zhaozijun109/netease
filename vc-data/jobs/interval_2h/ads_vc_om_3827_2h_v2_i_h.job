@@ -1,0 +1,28 @@
+type=sparksql
+conf.spark.hadoop.hive.exec.dynamic.partition=true
+conf.spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict
+hive.query.01 = insert overwrite table vc.ads_vc_om_3827_2h_v2_i_h PARTITION (dt, hour) \
+                select user_id, COLLECT_SET(jsonob) as datas, '${azkaban.flow.current.date}' as dt, '${azkaban.flow.start.hour}' as hour \
+                from (select user_id, \
+                             named_struct('character_id', character_id, 'talk_interval', talk_interval1) as jsonob \
+                      from (select user_id, \
+                                   character_id, \
+                                   FROM_UNIXTIME(max(create_time) / 1000, 'yyyy-MM-dd HH:mm:ss') last_talk_time, \
+                                   round((UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) - (max(create_time) / 1000)) / 3600, \
+                                         2) as                                                   talk_interval1 \
+                            from ( \
+                                     select user_id, \
+                                            character_id, \
+                                            create_time, \
+                                            row_number() over (PARTITION by id order by _bin_op_time desc) as rk \
+                                     from vc.ods_binlog_vc_user_message_record_partition_di \
+                                     where dt >= '${azkaban.flow.3.days.ago}' \
+                                       and sender in (2, 4) \
+                                       and status in (2, 6) \
+                                       and lower(nvl(from_json(ext,'STRUCT<source: STRING>').source, 'vc')) != 'lofter') \
+                            where rk = 1 \
+                            group by user_id, character_id) \
+                      where talk_interval1 <= 72 \
+                        and talk_interval1 > 2) \
+                where ${azkaban.flow.start.hour} not in (2,4,6) and mod(${azkaban.flow.start.hour}, 2) = 0 \
+                group by user_id ;

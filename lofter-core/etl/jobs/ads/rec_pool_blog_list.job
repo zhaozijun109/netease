@@ -1,0 +1,234 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.dwb_rec_pool_blog_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select \
+                'tag榜单' as module, \
+                blogId \
+              from ( \
+                select blogId \
+                from lofter_dm.ads_tag_blog_rank_moderated_di \
+                where dt = '${azkaban.flow.1.days.ago}' and rank_type in (0,1,2) and rank <= 12 \
+                group by blogId \
+              ) t1 \
+              union all \
+              select \
+                '小编推荐' as module, \
+                a.blogid \
+              from \
+                ( \
+                  select \
+                    distinct blogid \
+                  from \
+                    lofter_db_dump.ods_db_authenticate_blog_nd \
+                    /**绿V达人**/ \
+                ) a \
+                join ( \
+                  select \
+                    distinct a.blogid \
+                  from \
+                    ( \
+                      select \
+                        distinct blogid, \
+                        id \
+                      from \
+                        lofter.dim_post \
+                      where \
+                        datediff( \
+                          current_date(), \
+                          from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                        ) <=14 \
+                        and datediff( \
+                          current_date(), \
+                          from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                        ) >0 \
+                        and ispublished=true \
+                        and isforbidden=false \
+                        and allowview=0 \
+                        and contenttype<>'问答' \
+                    ) a \
+                    join ( \
+                      select \
+                        conv(substring(item_id, instr(item_id, "_") +1), 16, 10) postid \
+                      from \
+                        rec.rec_ra_item_pool_v1 \
+                      where \
+                        day = '${azkaban.flow.1.days.ago}' and item_type='ARTICLE' \
+                    ) b on a.id=b.postid \
+                    /**近14天发过文，且有文章进入过推荐池**/ \
+                ) b on a.blogid=b.blogid \
+                join ( \
+                  select \
+                    blogid \
+                  from \
+                    ( \
+                      select \
+                        blogid, \
+                        count(distinct id) posts \
+                      from \
+                        lofter.dim_post \
+                      where \
+                        ispublished=true \
+                        and isforbidden=false \
+                        and allowview=0 \
+                        and contenttype<>'问答' \
+                      group by \
+                        blogid \
+                    ) t1 \
+                  where \
+                    posts>=30 \
+                    /**累计发文总量>=30**/ \
+                ) c on a.blogid=c.blogid \
+              group by \
+                a.blogid \
+               \
+              union all \
+               \
+              select \
+                '猜你喜欢' as module, \
+                blogid \
+              from \
+                ( \
+                  select \
+                    distinct a.blogid \
+                  from \
+                    ( \
+                      select \
+                        distinct blogid \
+                      from \
+                        lofter_db_dump.ods_db_authenticate_blog_nd \
+                        /**绿V达人**/ \
+                    ) a \
+                    join ( \
+                      select \
+                        distinct a.blogid \
+                      from \
+                        ( \
+                          select \
+                            distinct blogid, \
+                            id \
+                          from \
+                            lofter.dim_post \
+                          where \
+                            datediff( \
+                              current_date(), \
+                              from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                            ) <=14 \
+                            and datediff( \
+                              current_date(), \
+                              from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                            ) >0 \
+                            and ispublished=true \
+                            and isforbidden=false \
+                            and allowview=0 \
+                            and contenttype<>'问答' \
+                        ) a \
+                        join ( \
+                          select \
+                            conv(substring(item_id, instr(item_id, "_") +1), 16, 10) postid \
+                          from \
+                            rec.rec_ra_item_pool_v1 \
+                          where \
+                            day = '${azkaban.flow.1.days.ago}' and item_type='ARTICLE' \
+                        ) b on a.id=b.postid \
+                        /**近14天发过文，且有文章进入过推荐池**/ \
+                    ) b on a.blogid=b.blogid \
+                    join ( \
+                      select \
+                        blogid \
+                      from \
+                        ( \
+                          select \
+                            blogid, \
+                            count(distinct id) posts \
+                          from \
+                            lofter.dim_post \
+                          where \
+                            ispublished=true \
+                            and isforbidden=false \
+                            and allowview=0 \
+                            and contenttype<>'问答' \
+                          group by \
+                            blogid \
+                        ) t1 \
+                      where \
+                        posts>=30 \
+                        /**累计发文总量>=30**/ \
+                    ) c on a.blogid=c.blogid \
+                  union all \
+                  select \
+                    distinct a.blogid \
+                  from \
+                    ( \
+                      select \
+                        distinct a.blogid \
+                      from \
+                        ( \
+                          select \
+                            distinct blogid, \
+                            id \
+                          from \
+                            lofter.dim_post \
+                          where \
+                            datediff( \
+                              current_date(), \
+                              from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                            ) <=14 \
+                            and datediff( \
+                              current_date(), \
+                              from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') \
+                            ) >0 \
+                            and ispublished=true \
+                            and isforbidden=false \
+                            and allowview=0 \
+                            and contenttype<>'问答' \
+                        ) a \
+                        join ( \
+                          select \
+                            conv(substring(item_id, instr(item_id, "_") +1), 16, 10) postid \
+                          from \
+                            rec.rec_ra_item_pool_v1 \
+                          where \
+                            day = '${azkaban.flow.1.days.ago}' and item_type='ARTICLE' \
+                        ) b on a.id=b.postid \
+                        /**近14天发过文，且有文章进入过推荐池**/ \
+                    ) a \
+                    join ( \
+                      select \
+                        blogid \
+                      from \
+                        ( \
+                          select \
+                            blogid, \
+                            count(distinct id) posts \
+                          from \
+                            lofter.dim_post \
+                          where \
+                            ispublished=true \
+                            and isforbidden=false \
+                            and allowview=0 \
+                            and contenttype<>'问答' \
+                          group by \
+                            blogid \
+                        ) t1 \
+                      where \
+                        posts>=30 \
+                        /**累计发文总量>=30**/ \
+                    ) b on a.blogid=b.blogid \
+                    join ( \
+                      select \
+                        blogid \
+                      from \
+                        ( \
+                          select \
+                            blogid, \
+                            count(1) hot \
+                          from \
+                            lofter_db_dump.ods_db_post_hot_nd \
+                          group by \
+                            blogid \
+                        ) t1 \
+                      where \
+                        hot>=3000 \
+                        /**总热度大于3000**/ \
+                    ) c on a.blogid=c.blogid \
+                ) aa distribute by 1;
+dependencies=ads_tag_blog_rank_moderated_di

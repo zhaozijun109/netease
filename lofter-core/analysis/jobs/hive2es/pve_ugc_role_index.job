@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="SELECT roleId, roleName, tags, rank FROM lofter_dm.ads_pve_user_ugc_role_sort_list_dd WHERE dt = '${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --id roleId --dest pve_ugc_role_index --postfixsep --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 1

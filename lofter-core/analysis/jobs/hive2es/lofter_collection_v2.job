@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select collectionId, hot_7d as recent7hot, hot_7d_avg as recent7postHotAvg, hot_1d as recent1hot from lofter_dm.ads_collection_hot_dd where dt='${azkaban.flow.1.days.ago}' and (hot_7d_diff != 0 or hot_1d_diff != 0) "
+params= --dest lofter_collection_v2 --update --id collectionId --url lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F

@@ -1,0 +1,31 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="\
+select t1.simulator_id, \
+       t1.simulator_category, \
+       t1.simulator_type, \
+       t1.people_nums, \
+       t1.talk_cnt, \
+       t2.front_tags, \
+       t2.backend_tags \
+from ( \
+    select simulator_id, \
+           simulator_category, \
+           simulator_type, \
+           sum(people_nums) as people_nums, \
+           sum(talk_cnt) as talk_cnt \
+    from vc.dwd_pv_simulator_summary_i_d \
+    group by simulator_id, \
+             simulator_category, \
+             simulator_type \
+) t1 \
+join ( \
+   select simulator_id, \
+          split(front_tags, ',') as front_tags, \
+          split(backend_tags, ',') as backend_tags \
+   from vc.ods_db_vc_simulator_info_nd \
+   where is_trial = 0 and status = 3 \
+) t2 \
+on t1.simulator_id = t2.simulator_id \
+"
+params= --index pv_data_simulator_summary_v2 --id simulator_id --savemode overwrite --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG

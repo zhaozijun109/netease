@@ -1,0 +1,10 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "NewPostFansPush",
+  "fields": [
+    {"name": "postId", "type": "long"},
+    {"name": "blogId", "type": "long"},
+    {"name": "userId", "type": "long"}
+  ]
+}

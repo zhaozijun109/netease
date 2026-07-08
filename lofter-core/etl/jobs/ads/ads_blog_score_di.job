@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_blog_score_di partition(dt='${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select a.userId as blogid, \
+           level, blog_url, blog_nickname, is_cp, \
+           b.grade as security_grade, score, \
+           post_count_recommend_pool_180d, \
+           post_first_date, post_last_date, \
+           post_count_std, post_count_180d, post_count_30d, nvl(d.post_count_1d,0) as post_count_1d, \
+           active_days_30d, active_last_date, \
+           fans_std, hd_fans_1y, hot_avg_rec_pool_recent_posts_1y, \
+           element_at(post_top_categories,1) as category_r1, \
+           element_at(post_top_categories,2) as category_r2, \
+           element_at(post_top_categories,3) as category_r3, \
+           element_at(post_top_domains,1) as domain_r1, \
+           element_at(post_top_domains,2) as domain_r2, \
+           element_at(post_top_domains,3) as domain_r3, \
+           element_at(post_top_ips,1) as ip_r1, \
+           element_at(post_top_ips,2) as ip_r2, \
+           element_at(post_top_ips,3) as ip_r3, \
+           post_main_content_type, post_count_video_1y, post_count_text_1y, post_count_photo_1y \
+    from ( \
+      select * from lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+       select distinct a.blogId,case when b.blogId is not null then 3 else a.grade end as grade \
+       from ( \
+         select blogId, grade from lofter.dws_user_security_level_di where dt='${azkaban.flow.1.days.ago}' \
+       ) a left join ( \
+         select blogId from lofter_dm.ads_high_security_user_di where dt='${azkaban.flow.1.days.ago}' \
+       ) b on a.blogId = b.blogId \
+    ) b on a.userId = b.blogId \
+    left join ( \
+      select userId, score, post_count_recommend_pool_180d, hd_fans_1y, hot_avg_rec_pool_recent_posts_1y, \
+             post_count_video_1y, post_count_text_1y, post_count_photo_1y \
+      from lofter.dws_par_creator_level_scoring_dd \
+      where dt='${azkaban.flow.1.days.ago}' \
+    ) c on a.userId = c.userId \
+    left join ( \
+      select userId, post_count as post_count_1d from lofter.dws_par_creator_di where dt='${azkaban.flow.1.days.ago}' \
+    ) d on a.userId = d.userId \
+) t \
+where level is not null
+dependencies=ads_high_security_user_di

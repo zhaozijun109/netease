@@ -1,0 +1,19 @@
+spring:
+  redis:
+    cluster:
+      nodes: ${redis.cluster.nodes}
+    password: ${redis.cluster.password}
+    timeout: 3s
+
+dubbo:
+  registry:
+    register: false
+
+clickhouse:
+  enable: true
+
+apollo:
+  meta: http://10.194.74.138
+  cluster: dev
+  accesskey:
+    secret: db5b272340a04e3fb2d14b0cc216c137

@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_collection_detail_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select itemId as collectionId, deviceUdid, userId, occurTime, deviceOs, appVersion \
+from lofter.dwd_content_browse_di \
+where dt='${azkaban.flow.1.days.ago}' and \
+      itemId > 0 and item_type = '合集' \
+distribute by 1
+dependencies=dwd_content_browse_di

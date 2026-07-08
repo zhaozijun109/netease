@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_report_forbid_post_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.* \
+	,blogid \
+	,url \
+	,publishdate \
+	,valid \
+	,allowview \
+	,CASE  \
+		WHEN c.responsecount IS NULL \
+			THEN 0 \
+		ELSE responsecount \
+		END AS responsecount \
+	,CASE  \
+		WHEN c.hot IS NULL \
+			THEN 0 \
+		ELSE hot \
+		END AS hot \
+FROM ( \
+	SELECT postid \
+		,operator \
+		,get_json_object(get_json_object(content, "$.callback"), "$.reportType") AS reporttype \
+	FROM lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+	WHERE from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+		AND get_json_object(get_json_object(content, "$.callback"), "$.reportType") IS NOT NULL \
+		AND STATUS = 2 \
+		AND type = 0 \
+		AND get_json_object(content, "$.method") = 'newPostAuditResults' \
+		AND get_json_object(get_json_object(content, "$.callback"), "$.dataType") = 2 \
+		AND machine = 0 \
+	GROUP BY postid \
+		,operator \
+		,get_json_object(get_json_object(content, "$.callback"), "$.reportType") \
+	) a \
+JOIN ( \
+	SELECT id \
+		,blogid \
+		,url \
+		,publishdate \
+		,valid \
+		,allowview \
+	FROM lofter.dim_post \
+	) b ON a.postid = b.id \
+LEFT JOIN ( \
+	SELECT postid \
+		,responsecount \
+		,(favoritecount + reblogcount + sharecount + subscribecount) AS hot \
+	FROM lofter_db_dump.ods_db_post_count_nd \
+	) c ON a.postid = c.postid \

@@ -1,0 +1,103 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_query_tag_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.tag, \
+  a.uv, \
+  a.pv, \
+  case \
+    when NVL(joinednum, 0) <= 0 then 0 \
+    else NVL(joinednum, 0) \
+  end as joinednum \
+from \
+  ( \
+    select \
+      case \
+        when c.tag is null then a.query \
+        else c.tag \
+      end as tag, \
+      count(distinct a.userid) as uv, \
+      count(a.userid) as pv \
+    from \
+      ( \
+        Select \
+          query, \
+          user_id as userid \
+        from \
+          rec.rec_alg_search_noblog_action_di_user_item \
+        where \
+          day = '${azkaban.flow.1.days.ago}' \
+          and scene in ('search') \
+          and tab in ('all') \
+          and query is not null \
+          and query != '' \
+          and query != 'NULL' \
+        group by \
+          query, \
+          user_id \
+      ) a \
+      left join ( \
+        select \
+          actpwd \
+        from \
+          lofter.dim_actpwd_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          actpwd \
+      ) b on a.query = b.actpwd \
+      left join ( \
+        SELECT \
+          query, \
+          tag \
+        from \
+          ( \
+            select \
+              item_id as query, \
+              tag \
+            from \
+              rec.rec_fea_word_upload_hbase_v2 lateral view explode(split(q_contains_tags, ',')) tmp as tag \
+            where \
+              day = '${azkaban.flow.1.days.ago}' \
+          ) a \
+          join ( \
+            select \
+              name \
+            from \
+              lofter_db_dump.ods_db_cmb_tag_nd \
+            where \
+              cpflag + ipflag > 0 \
+            group by \
+              name \
+          ) b on a.tag = b.name \
+        group by \
+          query, \
+          tag \
+      ) c on a.query = c.query \
+    where \
+      actpwd is null \
+    group by \
+      case \
+        when c.tag is null then a.query \
+        else c.tag \
+      end \
+  ) a \
+  left join ( \
+    Select \
+      tagname, \
+      joinednum \
+    from \
+      lofter_db_dump.ods_db_tag_joined_nd \
+  ) b on a.tag = b.tagname \
+where \
+  tag is not null \
+  and tag != '' \
+  and tag != 'NULL' \
+  and pv >= 5 \
+group by \
+  a.tag, \
+  a.uv, \
+  a.pv, \
+  case \
+    when NVL(joinednum, 0) <= 0 then 0 \
+    else NVL(joinednum, 0) \
+  end \

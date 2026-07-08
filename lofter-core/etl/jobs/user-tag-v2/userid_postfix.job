@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag userid_postfix --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               tag as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (     select id as userId, 'userid_postfix' as tag, \
+                                          cast((id % 10) as string) as grp \
+                                   from lofter.dim_user \
+                        ) t "

@@ -1,0 +1,14 @@
+# IDE
+/.idea/*
+
+# Spark/Hive 本地测试产物
+**/metastore_db/
+**/derby.log
+
+# 数据文件
+**/contribution_export/
+**/*.parquet
+**/*.pkl
+
+# macOS
+.DS_Store

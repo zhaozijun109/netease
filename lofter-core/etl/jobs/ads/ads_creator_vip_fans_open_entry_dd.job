@@ -1,0 +1,92 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter_dm.ads_creator_vip_fans_open_entry_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.blogId as userId, x.is_public \
+from ( \
+    select blogId, max(is_public) as is_public \
+    from ( \
+        select blogId, 1 as is_public \
+        from ( \
+            select a.blogId, \
+                sum(score) as support_count, \
+                sum(if(from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}', score,0)) as support_count_30d, \
+                count(distinct b.userId) as fans_support_uv, \
+                sum(if(from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and b.userId is not null, score, 0)) fans_support_count_30d \
+            from lofter_db_dump.ods_db_trade_support_record_nd a \
+                left join (select userId, blogId from lofter_db_dump.ods_db_user_following_nd) b on a.supporterBlogid = b.userId and a.blogId = b.blogId \
+            where from_unixtime(cast(a.time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            group by 1 \
+        ) a \
+        where support_count >= 50000 or support_count_30d >= 3000 or fans_support_uv >= 3000 or fans_support_count_30d >= 1000 \
+      union \
+        select blogId, 1 as is_public \
+        from ( \
+            select blogId, count(distinct userId) fans_std \
+            from lofter_db_dump.ods_db_user_following_nd \
+            where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            group by 1 \
+            having fans_std >= 10000 \
+        ) tt \
+      union \
+        select blogId, 0 as is_public \
+        from ( \
+            select a.blogId, count(distinct a.userId) pay_uv, \
+                count(distinct if(a.pay_count >= 3, a.userId, null)) pay_uv_3 \
+            from ( \
+                select blogId, userId, count(1) pay_count \
+                from lofter.dwd_user_order_dd \
+                where dt='${azkaban.flow.1.days.ago}' and order_type = 'gift_present' and \
+                    pay_date <= '${azkaban.flow.1.days.ago}' and \
+                    blogId > 0 \
+                group by 1, 2 \
+            ) a \
+            join lofter_db_dump.ods_db_user_following_nd b on a.userId = b.userId and a.blogId = b.blogId \
+            group by 1 \
+            having pay_uv >= 100 and pay_uv_3 / pay_uv > 0.2 \
+        ) tt \
+      union \
+        select blogId, 0 as is_public \
+        from ( \
+            select  blogId, \
+                count(distinct userid) as uv, \
+                percentile_approx(num, array(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9),9999) as  percentiles \
+            from ( \
+                select a.blogId, a.userId, nvl(b.blog_channel,0) as blog_channel, count(distinct a.postId) as num \
+                from ( \
+                    select userId, postId, post_userid as blogId \
+                    from lofter.dwd_post_browse_di \
+                    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                        and post_content_type in ('文字','图片') \
+                        and action_type='page_duration' \
+                        and is_real=1 \
+                ) a \
+                left join ( \
+                    select postId, blog_channel \
+                    from lofter.dim_gift_post_return \
+                    where dt='${azkaban.flow.1.days.ago}' and \
+                        status=1 and \
+                        ispay_returngift in (0,1) and contenttype in ('文字','图片') \
+                ) b on a.postId = b.postid \
+                group by 1,2,3 \
+            ) t \
+            where blog_channel = 0 \
+            group by 1 \
+            having uv >= 5000 and percentiles[7] >= 6 \
+        ) t \
+    ) tt \
+    group by 1 \
+) x \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+) y on x.blogId = y.userId \
+left join ( \
+    select userId, max(is_public) as is_public \
+    from lofter_dm.ads_creator_vip_fans_open_entry_dd \
+    where dt < '${azkaban.flow.1.days.ago}' and \
+          dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) z on x.blogId = z.userId \
+where y.userId is null and \
+      (z.userId is null or \
+       (z.is_public = 0 and x.is_public = 1)) \

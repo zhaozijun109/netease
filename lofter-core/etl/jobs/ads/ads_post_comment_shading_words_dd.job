@@ -1,0 +1,78 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01=\
+with userBrowsePostSource as ( \
+    select userId, postId, post_userId as blogId, count(distinct dt) as cnt \
+    from lofter.dwd_post_browse_di where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' and is_real = 1 and userId <> post_userId \
+    group by userId, postId, post_userId \
+) \
+insert overwrite table lofter_dm.ads_post_comment_shading_words_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       itemId, \
+       type \
+from ( \
+    select userId, \
+           itemId, \
+           type, \
+           row_number() over(partition by userId, itemId order by type) as rn \
+    from ( \
+        select t1.userId, \
+               t1.collectionId as itemId, \
+               0 as type \
+        from ( \
+            select userId, collectionId \
+            from lofter_db_dump.ods_db_subscribe_collection_nd \
+            where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        ) t1 \
+        join ( \
+            select collectionId, postId from lofter.bridge_collection_post \
+        ) t2 \
+        on t1.collectionId = t2.collectionId \
+        join ( \
+            select userId, postId, blogId from userBrowsePostSource \
+        ) t3 \
+        on t1.userId = t3.userId and t2.postId = t3.postId \
+        union all \
+        select userId, \
+               blogId as itemId, \
+               1 as type \
+        from userBrowsePostSource \
+        where cnt >= 3 \
+        union all \
+        select t1.userId, \
+               t1.blogId as itemId, \
+               if(t3.blogId is not null, 2, 3) as type \
+        from userBrowsePostSource t1 \
+        join ( \
+            select userId, blogId \
+            from lofter_db_dump.ods_db_user_following_nd \
+            where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            group by userId, blogId \
+        ) t2 \
+        on t1.userId = t2.userId and t1.blogId = t2.blogId \
+        left join ( \
+            select userId as blogId \
+            from lofter.dws_par_creator_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', post_last_date) < 30 \
+        ) t3 \
+        on t1.blogId = t3.blogId \
+        union all \
+        select t1.userId, \
+               t1.blogId as itemId, \
+               4 as type \
+        from userBrowsePostSource t1 \
+        join ( \
+            select userId, postId, blogId \
+            from ( \
+                select userId, postId, blogId from lofter.dwd_post_hot_di where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' and userId <> blogId \
+                union all \
+                select userId, postId, blogId from lofter.dwd_post_share_di where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' and userId <> blogId \
+            ) t \
+            group by userId, postId, blogId \
+        ) t2 \
+        on t1.userId = t2.userId and t1.postId = t2.postId and t1.blogId = t2.blogId \
+    ) tmp1 \
+) tmp2 \
+where rn = 1

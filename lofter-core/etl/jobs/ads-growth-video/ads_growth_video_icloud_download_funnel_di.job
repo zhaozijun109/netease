@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_video_icloud_download_funnel_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    appVersion, \
+    count(1)                                                        as total_event_count, \
+    count(distinct deviceUdid)                                      as user_uv, \
+    sum(case when result_status = 'cancel' then 1 else 0 end)       as cancel_count, \
+    sum(case when result_status = 'fail'   then 1 else 0 end)       as fail_count, \
+    sum(case when result_status is null    then 1 else 0 end)       as success_or_other_count \
+from lofter.dwd_video_icloud_download_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by appVersion
+dependencies=

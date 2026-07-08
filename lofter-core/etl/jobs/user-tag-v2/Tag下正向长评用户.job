@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag Tag下正向长评用户 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               'Tag下正向长评用户' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select cast(comment_user_id as bigint) as userId, 'Tag下正向长评用户' as tag, tag as grp \
+                                  from rec.rec_data_ecology_comment_detail \
+                                       lateral view explode(tags) as tag \
+                                  where day <= '${azkaban.flow.1.days.ago}' and day > '$monthAgo' and concat_ws(',', tags) not rlike '反|怼'  and is_quality_comment > 0 \
+                                  group by cast(comment_user_id as bigint), tag  ) "

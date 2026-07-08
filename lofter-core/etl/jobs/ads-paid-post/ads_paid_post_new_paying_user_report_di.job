@@ -1,0 +1,269 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_new_paying_user_report_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  a.dt  as base_dt, \
+  a.interview_flg, \
+  a.createday, \
+  a.life_flg, \
+  a.active_flg, \
+  a.koulin_flg, \
+  a.history_paid_flg, \
+  a.30daypaid_flg, \
+  a.30daypaid_level, \
+  datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+  count(DISTINCT a.userid) AS uv0, \
+  count( DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29)  and 30trade_money >5 and  30trade_money <=15  THEN a.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30zhong1_uv, \
+  count( DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29)  and 30trade_money >15 and  30trade_money <=25  THEN a.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30zhong2_uv, \
+   count( DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29)  and 30trade_money >25   and  30trade_money <=50 THEN a.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30gao1_uv, \
+     count( DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29)  and 30trade_money >50   and  30trade_money <=100 THEN a.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30gao2_uv, \
+  count( DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29)  and 30trade_money >100   THEN a.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30gao3_uv, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN b.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_1_uv, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 1) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) THEN b.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_2_uv, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 1) \
+      and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_7_uv, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 1) \
+      and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.userid \
+      ELSE NULL \
+    END \
+  ) AS trade_30_uv, \
+  sum( \
+    CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN b.trade_money \
+      ELSE 0 \
+    END \
+  ) AS trade_1_money, \
+  sum( \
+     CASE \
+      WHEN b.dt between date_add(a.dt, 0) \
+      and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.trade_money \
+      ELSE NULL \
+    END \
+  ) AS trade_7_money, \
+  sum( \
+     CASE \
+      WHEN b.dt between date_add(a.dt, 0) \
+      and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.trade_money \
+      ELSE NULL \
+    END \
+  ) AS trade_30_money, \
+  sum( \
+    CASE \
+      WHEN b.dt = date_add(a.dt, 1) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) THEN b.trade_money \
+      ELSE 0 \
+    END \
+  ) AS retain_trade_2_money, \
+  sum( \
+     CASE \
+      WHEN b.dt between date_add(a.dt, 1) \
+      and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.trade_money \
+      ELSE NULL \
+    END \
+  ) AS retain_trade_6_money, \
+  sum( \
+     CASE \
+      WHEN b.dt between date_add(a.dt, 1) \
+      and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.trade_money \
+      ELSE NULL \
+    END \
+  ) AS retain_trade_29_money \
+from \
+  ( \
+    select \
+      b.dt, \
+      b.userid, \
+      b.trade_money, \
+      case \
+        when c.userid is null then 0 \
+        else 1 \
+      end as interview_flg, \
+      createday, \
+      life_flg, \
+      active_flg, \
+      koulin_flg, \
+      history_paid_flg, \
+      30daypaid_flg, \
+      30daypaid_level, \
+      d.trade_money as 30trade_money  \
+    from \
+      ( \
+        select \
+          userid, \
+          first_pay_date \
+        from \
+          lofter_dm.ads_paid_post_revenue_module_user_first_last_date_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and revenue_module = '礼物解锁' \
+        group by \
+          userid, \
+          first_pay_date \
+      ) a \
+      join ( \
+        select \
+          dt, \
+          userid, \
+          trade_money \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+          and '${azkaban.flow.1.days.ago}' \
+          and pay_type = '礼物解锁' \
+          and period = '1' \
+        group by \
+          dt, \
+          userid, \
+          trade_money \
+      ) b on a.userid = b.userid \
+      and a.first_pay_date = b.dt \
+      left join ( \
+        select \
+          userid, \
+          dt, \
+          createday, \
+          life_flg, \
+          active_flg, \
+          koulin_flg, \
+          history_paid_flg, \
+          30daypaid_flg, \
+          30daypaid_level \
+        from \
+          lofter_dm.ads_paid_post_active_user_lifecycle_income_channel_di \
+        where \
+          dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+          and '${azkaban.flow.1.days.ago}' \
+        group by \
+          userid, \
+          dt, \
+          createday, \
+          life_flg, \
+          active_flg, \
+          koulin_flg, \
+          history_paid_flg, \
+          30daypaid_flg, \
+          30daypaid_level \
+      ) c on c.userid = b.userid \
+      and c.dt = b.dt \
+      left join \
+      ( \
+        select \
+          dt, \
+          userid, \
+          trade_money \
+        from \
+          lofter_dm.ads_post_paid_user_consume_detail_di \
+        where \
+          dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+          and '${azkaban.flow.1.days.ago}' \
+          and pay_type = '礼物解锁' \
+          and period = '30' \
+        group by \
+          dt, \
+          userid, \
+          trade_money \
+      ) d on a.userid = d.userid \
+      and d.dt = date_add(b.dt,29) \
+       \
+    group by \
+      b.dt, \
+      b.userid, \
+      b.trade_money, \
+      case \
+        when c.userid is null then 0 \
+        else 1 \
+      end, \
+      createday, \
+      life_flg, \
+      active_flg, \
+      koulin_flg, \
+      history_paid_flg, \
+      30daypaid_flg, \
+      30daypaid_level, \
+      d.trade_money \
+  ) a \
+  left join ( \
+    select \
+      dt, \
+      userid, \
+      trade_money \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+      and '${azkaban.flow.1.days.ago}' \
+      and pay_type = '礼物解锁' \
+      and period = '1' \
+    group by \
+      dt, \
+      userid, \
+      trade_money \
+  ) b on a.userId = b.userid \
+  and b.dt BETWEEN date_add(a.dt, 0) \
+  AND date_add(a.dt, 29) \
+WHERE \
+  datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 6, 29) \
+group by \
+  a.dt, \
+  a.interview_flg, \
+  a.createday, \
+  a.life_flg, \
+  a.active_flg, \
+  a.koulin_flg, \
+  a.history_paid_flg, \
+  a.30daypaid_flg, \
+  a.30daypaid_level, \
+  datediff('${azkaban.flow.1.days.ago}', a.dt) \
+
+dependencies=ads_paid_post_revenue_module_user_first_last_date_dd,ads_post_paid_user_consume_detail_di,ads_paid_post_active_user_lifecycle_income_channel_di

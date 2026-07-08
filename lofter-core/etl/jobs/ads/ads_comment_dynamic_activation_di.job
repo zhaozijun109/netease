@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_comment_dynamic_activation_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select commentId, \
+       postId, \
+       blogId, \
+       commentInteractionCount \
+from ( \
+    select tmp1.commentId, \
+           tmp1.postId, \
+           tmp1.blogId, \
+           tmp1.commentInteractionCount, \
+           row_number() over(partition by tmp1.commentUserId order by tmp1.commentInteractionCount desc) as rn \
+    from ( \
+        select t1.commentId, \
+               t1.postId, \
+               t1.commentUserId, \
+               t2.blogId, \
+               (t2.commentHot + t2.replyL2Count) as commentInteractionCount \
+        from ( \
+            select commentId, \
+                   postId, \
+                   commentUserId, \
+                   case when is_circle_comment=1                     then '一级圈评' \
+                        when is_underscore=1                         then '一级划线评' \
+                        when is_underscore=0 and is_circle_comment=0 then '一级普通评论' \
+                   end as comment_type \
+            from ( \
+                select commentId, \
+                       postId, \
+                       userId as commentUserId, \
+                       is_circle_comment, \
+                       is_underscore, \
+                       length(regexp_replace(content,'(?U)(\\\\[.*?\\\\]|[\\\\p{Punct}\\\\s])','')) as word_num \
+                from lofter.dwd_post_response_di \
+                where dt = '${azkaban.flow.7.days.ago}' \
+                and replyL1_commentId=0 \
+                and replyL2_commentId=0 \
+                and is_valid=1 \
+                and userId <> blogId \
+            ) a \
+            where word_num > 5 \
+        ) t1 \
+        join ( \
+            select id, \
+                   postId, \
+                   blogId, \
+                   commentHot, \
+                   replyL2Count \
+            from lofter_db_dump.ods_db_post_response_nd \
+        ) t2 \
+        on t1.commentId = t2.id and t1.postId = t2.postId \
+        left join ( \
+            select comment_id \
+            from rec.rec_data_ecology_neg_comment_minning \
+            where day <= '${azkaban.flow.1.days.ago}' and is_neg_comment = 1 \
+            group by comment_id \
+        ) t3 \
+        on t1.commentId = t3.comment_id \
+        left join ( \
+            select id from lofter.dim_post_article where contentType not in ('图片','文字') \
+        ) t4 \
+        on t1.postId = t4.id \
+        where ((t1.comment_type in ('一级普通评论') and t2.commentHot > 2) or \
+              (t1.comment_type in ('一级圈评') and t2.commentHot > 2) or \
+              (t1.comment_type in ('一级划线评') and t2.commentHot > 2)) \
+              and t3.comment_id is null and t4.id is null \
+    ) tmp1 \
+    left join ( \
+        select get_json_object(ext,'$.commentId') as commentId,get_json_object(ext,'$.postId') as postId,get_json_object(ext,'$.blogId') as blogId \
+        from lofter_db_dump.ods_db_ask_answer_post_nd \
+    ) tmp2 \
+    on tmp1.commentId = tmp2.commentId and tmp1.postId = tmp2.postId and tmp1.blogId = tmp2.blogId \
+    where tmp2.commentId is null and tmp2.postId is null and tmp2.blogId is null \
+) tmp3 \
+where rn = 1

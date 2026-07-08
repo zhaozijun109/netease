@@ -1,0 +1,13 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "MusicAdActionEvent",
+  "fields": [
+    {"name": "action", "type": "string"},
+    {"name": "req_uid", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "bidPrice", "type": ["null", "double"], "default": null},
+    {"name": "bidFactor", "type": ["null", "double"], "default": null},
+    {"name": "ecpm", "type": ["null", "double"], "default": null}
+  ]
+}

@@ -1,0 +1,161 @@
+type = sparksql
+hive.query.01 = WITH vc_user_label AS (select bb.user_id, \
+                                              coalesce(t2.active_days_7d, 0)     active_days_7d, \
+                                              coalesce(t1.active_days_30d, 0)    active_days_30d, \
+                                              case \
+                                                  when t1.active_days_30d > 0 and t1.active_days_30d < 6 then '1-5' \
+                                                  when t1.active_days_30d > 5 and t1.active_days_30d < 11 then '6-10' \
+                                                  when t1.active_days_30d > 10 and t1.active_days_30d < 16 then '11-15' \
+                                                  when t1.active_days_30d > 15 and t1.active_days_30d < 21 then '16-20' \
+                                                  when t1.active_days_30d > 20 and t1.active_days_30d < 26 then '21-25' \
+                                                  when t1.active_days_30d > 25 and t1.active_days_30d < 31 then '26-30' \
+                                                  end                            tag_active_days_30d, \
+                                              case \
+                                                  when t2.active_days_7d = 1 then '1' \
+                                                  when t2.active_days_7d > 1 and t2.active_days_7d < 4 then '2-3' \
+                                                  when t2.active_days_7d > 3 and t2.active_days_7d < 7 then '4-6' \
+                                                  when t2.active_days_7d = 7 then '7' \
+                                                  end                            tag_active_days_7d, \
+                                              coalesce(rest_energy, 0)           rest_energy, \
+                                              coalesce(get_total_energy, 0)      get_total_energy, \
+                                              coalesce(get_reward_energy, 0)     get_reward_energy, \
+                                              coalesce(get_buy_energy, 0)        get_buy_energy, \
+                                              coalesce(get_free_energy, 0)       get_free_energy, \
+                                              coalesce(free_energy_consume, 0)   free_energy_consume, \
+                                              coalesce(reward_energy_consume, 0) reward_energy_consume, \
+                                              coalesce(buy_energy_consume, 0)    buy_energy_consume, \
+                                              coalesce(ttl_energy_consume, 0)    ttl_energy_consume, \
+                                              register_date, \
+                                              coalesce(origin_type, 0)           origin_type, \
+                                              coalesce(device_os, 0)             device_os, \
+                                              coalesce(appversion, 0)            appversion, \
+                                              coalesce(free_rest_energy, 0)      free_rest_energy, \
+                                              coalesce(buy_rest_energy, 0)       buy_rest_energy, \
+                                              coalesce(reward_rest_energy, 0)    reward_rest_energy \
+                                       from ( \
+                                                select user_id, \
+                                                       register_date, \
+                                                       origin_type, \
+                                                       device_os, \
+                                                       appversion, \
+                                                       free_rest_energy, \
+                                                       buy_rest_energy, \
+                                                       reward_rest_energy, \
+                                                       rest_energy \
+                 \
+                                                from vc.dws_vc_user_behavior_info_a_d a \
+                                                where a.dt = '${azkaban.flow.1.days.ago}' \
+                                                  and a.is_anonymity = 'N' \
+                                                  AND is_test_user = 'N' \
+                                                group by user_id, register_date, origin_type, device_os, appversion, free_rest_energy, \
+                                                         buy_rest_energy, reward_rest_energy, \
+                                                         rest_energy \
+                                                ) bb \
+                 \
+                 \
+                                                left join \
+                                            ( \
+                                                SELECT user_id, count(distinct dt) active_days_30d \
+                                                FROM vc.dwd_vc_user_active_i_d \
+                                                WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+                                                GROUP BY user_id \
+                                                ) t1 on bb.user_id = t1.user_id \
+                                                left join \
+                                            ( \
+                                                SELECT user_id, count(distinct dt) active_days_7d \
+                                                FROM vc.dwd_vc_user_active_i_d \
+                                                WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+                                                GROUP BY user_id \
+                                                ) t2 on bb.user_id = t2.user_id \
+                                                left join \
+                                            ( \
+                                                select user_id, \
+                                                       sum(free_energy)    free_energy_consume, \
+                                                       sum(reward_energy)  reward_energy_consume, \
+                                                       sum(buy_energy)     buy_energy_consume, \
+                                                       sum(energy_consume) ttl_energy_consume \
+                                                from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                                WHERE dt = '${azkaban.flow.1.days.ago}' \
+                                                group by 1 \
+                                                ) cc on bb.user_id = cc.user_id \
+                                                left join ( \
+                                           SELECT t1.user_id, \
+                                                  sum(CASE \
+                                                          WHEN t1.scene IN (1, 5) \
+                                                              AND reward_id = 1 THEN t1.amount END) AS get_free_energy, \
+                                                  sum(CASE \
+                                                          WHEN t1.scene = 2 \
+                                                              AND reward_id = 1 THEN t1.amount END) AS get_buy_energy, \
+                                                  sum(CASE \
+                                                          WHEN t1.scene = 3 \
+                                                              AND reward_id = 1 THEN t1.amount END) AS get_reward_energy, \
+                                                  sum(CASE \
+                                                          WHEN t1.scene in (1, 5, 2, 3) \
+                                                              AND reward_id = 1 THEN t1.amount END) AS get_total_energy \
+                 \
+                                           FROM vc.dwd_vc_user_income_record_i_d t1 \
+                                           WHERE t1.reward_type = 1 \
+                                             AND t1.dt = '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY 1 \
+                                           ) dd on bb.user_id = dd.user_id) \
+                insert overwrite table vc_dm.ads_vc_core_table_active_energy_report_di partition (dt = '${azkaban.flow.1.days.ago}') \
+                select '30天活跃天数'          tag, \
+                       tag_active_days_30d, \
+                       count(distinct user_id) cnt_user_active_days_30d, \
+                       ''                      tag_cnt_days_last7days, \
+                       ''                      cnt_user_active_days_30d, \
+                       ''                      ttl_energy_consume, \
+                       ''                      ttl_energy_get \
+                        , \
+                       ''                      ttl_energy_rest \
+                from vc_user_label \
+                where tag_active_days_30d is not null \
+                group by '30天活跃天数', tag_active_days_30d \
+                union all \
+                select '7天活跃天数'           tag, \
+                       '', \
+                       '', \
+                       tag_active_days_7d, \
+                       count(distinct user_id) cnt_user_active_days_d7, \
+                       '', \
+                       '', \
+                       '' \
+                from vc_user_label \
+                where tag_active_days_7d is not null \
+                group by '7天活跃天数', '', '', tag_active_days_7d \
+                 \
+                union all \
+                select '能量消耗'              tag, \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       sum(ttl_energy_consume) ttl_energy_consume, \
+                       '', \
+                       '' \
+                from vc_user_label \
+                group by '能量消耗', '', '', '', '' \
+                 \
+                union all \
+                select '能量获取'            tag, \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       sum(get_total_energy) ttl_energy_get, \
+                       '' \
+                from vc_user_label \
+                group by '能量获取', '', '', '', '', '' \
+                 \
+                union all \
+                select '能量获取'       tag, \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       '', \
+                       sum(rest_energy) ttl_energy_rest \
+                from vc_user_label \
+                group by '能量获取' \

@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_stratify_mi partition(dt='${azkaban.flow.1.days.ago}') \
+select count(case when type='无效' then userid end) as not_valid_uv, \
+       count(case when type='消费' then userid end) as browse_uv, \
+       count(case when type='互动' then userid end) as interact_uv, \
+       count(case when type='讨论' then userid end) as discuss_uv, \
+       count(case when type='发文' then userid end) as post_uv, \
+       count(case when type='付费' then userid end) as trade_uv, \
+       count(userid) as all, \
+       count(case when send_hot>0 then userid end) as send_hot_uv, \
+       count(case when follow>0 then userid end) as follow_uv, \
+       count(case when send_comment_cnt>0 then userid end) as send_comment_uv, \
+       count(case when share_cnt>0 then userid end) as share_uv \
+from ( \
+  select userid, \
+         send_hot,follow,share_cnt,send_comment_cnt,discuss, \
+         case when trade_money>0 then '付费' \
+              when trade_money<=0 and post_cnt>0 then '发文' \
+              when trade_money<=0 and post_cnt<=0 and discuss>0 then '讨论' \
+              when trade_money<=0 and post_cnt<=0 and discuss<=0 and interact>0 then '互动' \
+              when trade_money<=0 and post_cnt<=0 and discuss<=0 and interact<=0 and valid_pv>2 then '消费' \
+              else '无效' end as type \
+  from ( \
+    select userid, \
+           max(valid_pv) as valid_pv, sum(send_hot) as send_hot, sum(follow) as follow, \
+           sum(share_cnt) as share_cnt, sum(send_comment_cnt) as send_comment_cnt, \
+           sum(send_hot+send_comment_cnt+follow+share_cnt) as interact, \
+           sum(discuss) as discuss, sum(post_cnt) as post_cnt, sum(trade_money) as trade_money \
+    from lofter.dws_par_user_stratify_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by userId \
+  ) tt \
+) t

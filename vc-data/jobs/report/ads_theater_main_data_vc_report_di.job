@@ -1,0 +1,373 @@
+type = sparksql
+hive.query.01=insert overwrite table vc_dm.ads_theater_main_data_vc_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select   \
+'1' period,  \
+a.dau,  \
+a.new_user_cnt,  \
+chat_user ,  \
+cnt_user_10,  \
+cnt_user_30,  \
+cnt_user_100,  \
+avg_cnt_huihe ,  \
+cnt_user_order ,  \
+amount,  \
+avg_cnt_juchang   \
+  \
+from(  \
+select a.dt,count(distinct a.userid) dau ,  \
+count(distinct case when  b.userid is not null then b.userid end ) new_user_cnt  \
+from  vc_dm.ads_theater_active_user_vc_report_di a   \
+left join   \
+(  \
+select userid,min(dt) first_active_date  \
+from vc_dm.ads_theater_active_user_vc_report_di  \
+group by 1  \
+)b on a.userid=b.userid and a.dt=b.first_active_date   \
+where a.dt='${azkaban.flow.1.days.ago}'  \
+group by  a.dt  \
+) a   \
+left join   \
+(  \
+select dt,  \
+count(user_id)chat_user,  \
+avg(cnt_juchang) avg_cnt_juchang,  \
+avg(cnt_huihe) avg_cnt_huihe,  \
+count(distinct case when cnt_huihe>=10 then user_id end) cnt_user_10,  \
+count(distinct case when cnt_huihe>=30 then user_id end) cnt_user_30,  \
+count(distinct case when cnt_huihe>=100 then user_id end) cnt_user_100  \
+from(  \
+select  a.dt,a.user_id,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe  \
+from   \
+(  \
+select dt,user_id,req_id,biz_id  \
+from(      \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk        \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a   \
+where a.dt='${azkaban.flow.1.days.ago}'  \
+and a.scene ='PLOT_SIMULATOR_CHAT'  \
+and a.sender = 2    \
+) aa  \
+where rk=1  \
+group by 1,2,3,4  \
+) a   \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd where status=2 group by 1,2    )b on a.biz_id=b.id  \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c  \
+on b.simulator_id=c.simulator_id  \
+group by 1,2   \
+) a   \
+group by 1   \
+) b on a.dt=b.dt   \
+left join   \
+(  \
+select   \
+from_unixtime(createtime/1000, 'yyyy-MM-dd') dt,  \
+count(distinct userid)cnt_user_order,  \
+sum(amount)	amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd  \
+where from_unixtime(createtime/1000, 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'  \
+and producttype in (12,13)  \
+and status in (1)  \
+group by 1  \
+) c on a.dt=c.dt   \
+  \
+union ALL   \
+  \
+select   \
+'history' period,  \
+a.dau,  \
+a.new_user_cnt,  \
+chat_user ,  \
+cnt_user_10,  \
+cnt_user_30,  \
+cnt_user_100,  \
+avg_cnt_huihe ,  \
+cnt_user_order ,  \
+amount,  \
+avg_cnt_juchang   \
+  \
+from(  \
+select '1'flag,count(distinct a.userid) dau ,  \
+count(distinct case when  b.userid is not null then b.userid end ) new_user_cnt  \
+from  vc_dm.ads_theater_active_user_vc_report_di a   \
+left join   \
+(  \
+select userid,min(dt) first_active_date  \
+from vc_dm.ads_theater_active_user_vc_report_di  \
+group by 1  \
+)b on a.userid=b.userid and a.dt=b.first_active_date   \
+where a.dt between  '2025-12-26' and   '${azkaban.flow.1.days.ago}'  \
+group by '1'  \
+) a   \
+left join   \
+(  \
+select flag,  \
+count(user_id)chat_user,  \
+avg(cnt_juchang) avg_cnt_juchang,  \
+avg(cnt_huihe) avg_cnt_huihe,  \
+count(distinct case when cnt_huihe>=10 then user_id end) cnt_user_10,  \
+count(distinct case when cnt_huihe>=30 then user_id end) cnt_user_30,  \
+count(distinct case when cnt_huihe>=100 then user_id end) cnt_user_100  \
+from(  \
+select  '1'flag ,a.user_id,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe  \
+from   \
+(  \
+select dt,user_id,req_id,biz_id  \
+from(      \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk        \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a   \
+where a.dt between  '2025-12-26' and   '${azkaban.flow.1.days.ago}'  \
+and a.scene ='PLOT_SIMULATOR_CHAT'  \
+and a.sender = 2    \
+) aa  \
+where rk=1  \
+group by 1,2,3,4  \
+) a   \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd  where status=2 group by 1,2    )b on a.biz_id=b.id  \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c  \
+on b.simulator_id=c.simulator_id  \
+group by 1,2   \
+) a   \
+group by 1   \
+) b on a.flag=b.flag  \
+left join   \
+(  \
+select   \
+ '1'flag,  \
+count(distinct userid)cnt_user_order,  \
+sum(amount)	amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd  \
+where from_unixtime(createtime/1000, 'yyyy-MM-dd') between  '2025-12-26' and   '${azkaban.flow.1.days.ago}'  \
+and producttype in (12,13)  \
+and status in (1)  \
+group by 1  \
+) c on a.flag=c.flag   \
+  \
+  \
+union ALL   \
+  \
+select   \
+'7' period,  \
+a.dau,  \
+a.new_user_cnt,  \
+chat_user ,  \
+cnt_user_10,  \
+cnt_user_30,  \
+cnt_user_100,  \
+avg_cnt_huihe ,  \
+cnt_user_order ,  \
+amount,  \
+avg_cnt_juchang   \
+  \
+from(  \
+select '1'flag,count(distinct a.userid) dau ,  \
+count(distinct case when  b.userid is not null then b.userid end ) new_user_cnt  \
+from  vc_dm.ads_theater_active_user_vc_report_di a   \
+left join   \
+(  \
+select userid,min(dt) first_active_date  \
+from vc_dm.ads_theater_active_user_vc_report_di  \
+group by 1  \
+)b on a.userid=b.userid and a.dt=b.first_active_date   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',6)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+group by '1'  \
+) a   \
+left join   \
+(  \
+select flag,  \
+count(user_id)chat_user,  \
+avg(cnt_juchang) avg_cnt_juchang,  \
+avg(cnt_huihe) avg_cnt_huihe,  \
+count(distinct case when cnt_huihe>=10 then user_id end) cnt_user_10,  \
+count(distinct case when cnt_huihe>=30 then user_id end) cnt_user_30,  \
+count(distinct case when cnt_huihe>=100 then user_id end) cnt_user_100  \
+from(  \
+select  '1'flag ,a.user_id,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe  \
+from   \
+(  \
+select dt,user_id,req_id,biz_id  \
+from(      \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk        \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',6)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+and a.scene ='PLOT_SIMULATOR_CHAT'  \
+and a.sender = 2    \
+) aa  \
+where rk=1  \
+group by 1,2,3,4  \
+) a   \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd where status=2 group by 1,2    )b on a.biz_id=b.id  \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c  \
+on b.simulator_id=c.simulator_id  \
+group by 1,2   \
+) a   \
+group by 1   \
+) b on a.flag=b.flag  \
+left join   \
+(  \
+select   \
+ '1'flag,  \
+count(distinct userid)cnt_user_order,  \
+sum(amount)	amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd  \
+where from_unixtime(createtime/1000, 'yyyy-MM-dd') between  date_sub('${azkaban.flow.1.days.ago}',6)  and   '${azkaban.flow.1.days.ago}'  \
+and from_unixtime(createtime/1000, 'yyyy-MM-dd')>='2025-12-26'  \
+and producttype in (12,13)  \
+and status in (1)  \
+group by 1  \
+) c on a.flag=c.flag   \
+  \
+  \
+union ALL   \
+  \
+select   \
+'15' period,  \
+a.dau,  \
+a.new_user_cnt,  \
+chat_user ,  \
+cnt_user_10,  \
+cnt_user_30,  \
+cnt_user_100,  \
+avg_cnt_huihe ,  \
+cnt_user_order ,  \
+amount,  \
+avg_cnt_juchang   \
+  \
+from(  \
+select '1'flag,count(distinct a.userid) dau ,  \
+count(distinct case when  b.userid is not null then b.userid end ) new_user_cnt  \
+from  vc_dm.ads_theater_active_user_vc_report_di a   \
+left join   \
+(  \
+select userid,min(dt) first_active_date  \
+from vc_dm.ads_theater_active_user_vc_report_di  \
+group by 1  \
+)b on a.userid=b.userid and a.dt=b.first_active_date   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',14)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+group by '1'  \
+) a   \
+left join   \
+(  \
+select flag,  \
+count(user_id)chat_user,  \
+avg(cnt_juchang) avg_cnt_juchang,  \
+avg(cnt_huihe) avg_cnt_huihe,  \
+count(distinct case when cnt_huihe>=10 then user_id end) cnt_user_10,  \
+count(distinct case when cnt_huihe>=30 then user_id end) cnt_user_30,  \
+count(distinct case when cnt_huihe>=100 then user_id end) cnt_user_100  \
+from(  \
+select  '1'flag ,a.user_id,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe  \
+from   \
+(  \
+select dt,user_id,req_id,biz_id  \
+from(      \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk        \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',14)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+and a.scene ='PLOT_SIMULATOR_CHAT'  \
+and a.sender = 2    \
+) aa  \
+where rk=1  \
+group by 1,2,3,4  \
+) a   \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd where status=2 group by 1,2    )b on a.biz_id=b.id  \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c  \
+on b.simulator_id=c.simulator_id  \
+group by 1,2   \
+) a   \
+group by 1   \
+) b on a.flag=b.flag  \
+left join   \
+(  \
+select   \
+ '1'flag,  \
+count(distinct userid)cnt_user_order,  \
+sum(amount)	amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd  \
+where from_unixtime(createtime/1000, 'yyyy-MM-dd') between  date_sub('${azkaban.flow.1.days.ago}',14)  and   '${azkaban.flow.1.days.ago}'  \
+and from_unixtime(createtime/1000, 'yyyy-MM-dd')>='2025-12-26'  \
+and producttype in (12,13)  \
+and status in (1)  \
+group by 1  \
+) c on a.flag=c.flag   \
+  \
+  \
+  \
+union ALL   \
+  \
+select   \
+'30' period,  \
+a.dau,  \
+a.new_user_cnt,  \
+chat_user ,  \
+cnt_user_10,  \
+cnt_user_30,  \
+cnt_user_100,  \
+avg_cnt_huihe ,  \
+cnt_user_order ,  \
+amount,  \
+avg_cnt_juchang   \
+  \
+from(  \
+select '1'flag,count(distinct a.userid) dau ,  \
+count(distinct case when  b.userid is not null then b.userid end ) new_user_cnt  \
+from  vc_dm.ads_theater_active_user_vc_report_di a   \
+left join   \
+(  \
+select userid,min(dt) first_active_date  \
+from vc_dm.ads_theater_active_user_vc_report_di  \
+group by 1  \
+)b on a.userid=b.userid and a.dt=b.first_active_date   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',29)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+group by '1'  \
+) a   \
+left join   \
+(  \
+select flag,  \
+count(user_id)chat_user,  \
+avg(cnt_juchang) avg_cnt_juchang,  \
+avg(cnt_huihe) avg_cnt_huihe,  \
+count(distinct case when cnt_huihe>=10 then user_id end) cnt_user_10,  \
+count(distinct case when cnt_huihe>=30 then user_id end) cnt_user_30,  \
+count(distinct case when cnt_huihe>=100 then user_id end) cnt_user_100  \
+from(  \
+select  '1'flag ,a.user_id,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe  \
+from   \
+(  \
+select dt,user_id,req_id,biz_id  \
+from(      \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk        \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a   \
+where a.dt between  date_sub('${azkaban.flow.1.days.ago}',29)  and   '${azkaban.flow.1.days.ago}'  \
+and a.dt>='2025-12-26'  \
+and a.scene ='PLOT_SIMULATOR_CHAT'  \
+and a.sender = 2    \
+) aa  \
+where rk=1  \
+group by 1,2,3,4  \
+) a   \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd where status=2 group by 1,2    )b on a.biz_id=b.id  \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c  \
+on b.simulator_id=c.simulator_id  \
+group by 1,2   \
+) a   \
+group by 1   \
+) b on a.flag=b.flag  \
+left join   \
+(  \
+select   \
+ '1'flag,  \
+count(distinct userid)cnt_user_order,  \
+sum(amount)	amount  \
+from lofter_db_dump.ods_db_trade_pve_stamina_order_nd  \
+where from_unixtime(createtime/1000, 'yyyy-MM-dd') between  date_sub('${azkaban.flow.1.days.ago}',29)  and   '${azkaban.flow.1.days.ago}'  \
+and from_unixtime(createtime/1000, 'yyyy-MM-dd')>='2025-12-26'  \
+and producttype in (12,13)  \
+and status in (1)  \
+group by 1  \
+) c on a.flag=c.flag
+dependencies=ads_theater_active_user_vc_report_di

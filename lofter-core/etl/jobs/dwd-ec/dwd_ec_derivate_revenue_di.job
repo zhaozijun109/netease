@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=\
+with product_revenue as ( \
+select a.id as orderid, \
+       IF(c.orderfrom = 'legu_mini','小程序','LOFTER') as channel, \
+       a.deliverymode, \
+       if(a.deliverymode=2,b.productnum,e.num) as deliverynum, \
+       if(d.purchasesupplierid=7639000,'legu','nolegu') as suppliertype, \
+       CASE \
+          WHEN a.deliverymode = 2 THEN a.amount \
+          WHEN a.deliverymode = 1 THEN \
+              (e.num * b.storePrice) - \
+              (e.num * COALESCE(b.newCouponPreferential, 0) / GREATEST(b.productNum, 1)) - \
+              (e.num * COALESCE(b.bountyPreferential, 0) / GREATEST(b.productNum, 1)) - \
+              (e.num * COALESCE(b.hongbaopreferential,0) / GREATEST(b.productnum,1)) \
+       END as delivered_amount \
+from lofter_db_dump.ods_db_benefit_order_nd a \
+join lofter_db_dump.ods_db_benefit_order_product_nd b on a.id = b.orderId \
+join lofter_db_dump.ods_db_benefit_trade_nd c on a.tradeId = c.id \
+join lofter_db_dump.ods_db_benefit_product_info_nd d on b.productid = d.id \
+left join (select orderid,productid,num from lofter_db_dump.ods_db_benefit_order_product_delivery_nd where status = 0 and from_unixtime(cast(deliveryTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') e on a.id = e.orderid and b.productid = e.productid \
+WHERE a.deliverymode in (1,2) and a.status = 4 and a.deliveryTime > 0 and c.deletestatus = 0 and c.amount > 0 and a.producttype in (3,6,9) and from_unixtime(cast(a.deliveryTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') \
+insert overwrite table lofter.dwd_ec_derivate_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.orderid, \
+       a.ship_qty, \
+       a.deliverymode, \
+       a.channel, \
+       a.suppliertype, \
+       ROUND(a.revenue-b.deliveryprice+b.deliverpreferential,2) as revenue, \
+       b.deliveryprice-b.deliverpreferential as freight_revenue \
+from ( \
+      select orderid, \
+             channel, \
+             deliverymode, \
+             SUM(deliverynum) as ship_qty, \
+             suppliertype, \
+             case \
+                  when deliverymode = 1 then sum(delivered_amount) \
+                  when deliverymode = 2 then max(delivered_amount) \
+             end as revenue \
+      FROM product_revenue \
+      group by orderid,channel,deliverymode,suppliertype) a \
+join lofter_db_dump.ods_db_benefit_order_nd b on a.orderid = b.id \
+union all \
+SELECT do.id, \
+       SUM(dod.deliveredCount) AS ship_qty, \
+       CASE WHEN do.status = 4 THEN 1 ELSE 2 END AS deliverymode, \
+       pd.typename AS channel, \
+       'legu' AS supplierType, \
+       ROUND(SUM(dod.deliveredCount * poi.purchaseprice), 2) AS revenue, \
+       0 AS freight_revenue \
+FROM lofter_db_dump.ods_db_derive_deliver_order_nd do \
+JOIN lofter_db_dump.ods_db_derive_deliver_order_detail_nd dod ON do.id = dod.deliverorderid AND dod.purchaseOrderItemId > 0 \
+JOIN lofter_db_dump.ods_db_derive_purchase_order_item_nd poi ON poi.id = dod.purchaseOrderItemId \
+JOIN lofter_db_dump.ods_db_derive_partner_nd p ON poi.partnerId = p.id AND p.id <> 5007 AND p.status = 0 \
+JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd ON p.partnerDiscountId = pd.id AND pd.status = 0 \
+WHERE do.parentDeliverOrderId > 0 AND do.deliverytype = 2 AND do.status IN (2, 3, 4, 5, 6) AND do.deliverytime > 0 AND FROM_UNIXTIME(do.deliveryTime / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY do.id,CASE \
+                    WHEN do.status = 4 THEN 1 \
+                    ELSE 2 \
+               END,pd.typename

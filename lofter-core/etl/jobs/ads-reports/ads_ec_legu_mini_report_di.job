@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=\
+with legu_mini_benefit_trade as \
+    (select id as orderId, buyerId as userId,  \
+            c.productId as productId, c.productNum as product_num,  \
+            createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date,  \
+            payTime as pay_time, from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') pay_date,  \
+            amount as money \
+        from (select * from lofter_db_dump.ods_db_benefit_trade_nd where orderfrom='legu_mini')a  \
+        join (select tradeId from lofter_db_dump.ods_db_benefit_order_nd where originType in (0, 4)) a1 on a.id = a1.tradeId  \
+        left join (  \
+            select code, slotType, startTime, endTime  \
+            from lofter_db_dump.ods_db_benefit_card_activity_nd  \
+        ) b on a.thirdPartyNum = b.code and a.createTime between b.startTime and b.endTime  \
+        left join (  \
+            select a.id as tradeId,  \
+            max(c.productId) as productId,  \
+            sum(if(productType = 5, c.slotNum, c.productNum)) as productNum  \
+            from lofter_db_dump.ods_db_benefit_trade_nd a  \
+            left join (  \
+                select id as orderId, tradeId  \
+                from lofter_db_dump.ods_db_benefit_order_nd  \
+            ) b on a.id = b.tradeId  \
+            left join (  \
+                select orderId,productId,productName,  \
+                    productNum,  \
+                    cast(get_json_object(get_json_object(attrgroupext,"$.ext"),"$.slotNum") as bigint) as slotNum  \
+                from lofter_db_dump.ods_db_benefit_order_product_nd  \
+            ) c on b.orderId = c.orderId  \
+            group by 1  \
+        ) c on a.id = c.tradeId  \
+        where productType in (3,5) and orderfrom='legu_mini' and  status in (1,3,4) and payTime > 0  \
+        and from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) \
+insert overwrite table lofter_dm.ads_ec_legu_mini_report_di partition (dt='${azkaban.flow.1.days.ago}') \
+SELECT b.period as stat_period  \
+	,sum(money) AS MONEY  \
+	,count(1) AS trade_num  \
+	,sum(product_num) AS product_num  \
+	,count(distinct userid) AS uv  \
+FROM (  \
+      select userId , orderId, money, product_num, pay_date  \
+      from legu_mini_benefit_trade  \
+      where  pay_date <= '${azkaban.flow.1.days.ago}'   \
+ ) a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date  \
+WHERE b.calendar_date = '${azkaban.flow.1.days.ago}'  \
+GROUP BY 1

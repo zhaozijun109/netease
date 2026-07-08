@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=\
+with orders as ( \
+    select userid,postid,giftid,return_gift_id, blogId, money, unlock_time, unlock_method, \
+           return_gift_plantype, coin, \
+           row_number() over (order by unlock_time, userId) as id \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter_dm.ads_gift_easy_fetch_order_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userid, a.postid, a.giftid, a.return_gift_id, a.blogId, a.money, a.unlock_time, a.unlock_method, \
+       a.return_gift_plantype, a.coin, \
+       concat_ws(',', b.ips) as ips, b.title, b.contentType as content_type, \
+       c.collectionId, c.collection_name, \
+       if(d.userId is not null, 1, 0) as is_fans, \
+       if(e.userId is not null, 1, 0) as is_collection_subscribed, \
+       f.name as gift_name, \
+       g.source_scene, \
+       if(h.postId is not null, 1, 0) as is_post_premium, \
+       if(j.postId is not null, 1, 0) as is_post_gift_premium, \
+       k.review_status as return_gift_review_status, \
+       l.ai_contenttype, \
+       l.element_tag, \
+       case when m.user_id is not null then '高付费意愿' else '其他' end is_high_willing_pay_user, \
+       n.is_rec_paid_traffic_support \
+from orders a \
+left join lofter.dim_post b on a.postId = b.id \
+left join lofter.bridge_collection_post c on a.postId = c.postId \
+left join lofter_db_dump.ods_db_user_following_nd d on a.userId = d.userId and a.blogId = d.blogId \
+left join (select userId, collectionId from lofter_db_dump.ods_db_subscribe_collection_nd group by 1,2) e on a.userId = e.userId and c.collectionId = e.collectionId \
+left join lofter.dim_gift f on a.giftId = f.id \
+left join ( \
+    select id, source_scene \
+    from ( \
+        select a.id, b.source1_scene as source_scene, \
+               row_number() over (partition by a.id order by b.occurTime desc) as rk \
+        from orders a \
+        join ( \
+            select userId, postId, occurTime, source1_scene \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.userId = b.userId and a.postId = b.postId and b.occurTime < a.unlock_time \
+    ) t \
+    where rk = 1 \
+) g on a.id = g.id \
+left join (select postId from lofter.dws_post_premium_di where dt = '${azkaban.flow.1.days.ago}' group by 1) h on a.id = h.postId \
+left join (select postId from lofter.dws_gift_post_premium_scoring_dd where dt = '${azkaban.flow.1.days.ago}' group by 1) j on a.id = j.postId \
+left join ( \
+    select id, review_status \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) k on a.return_gift_id = k.id \
+left join( \
+    select \
+        post_id, \
+        concat_ws(',', COLLECT_LIST(if(classify = 1,result,null))) as ai_contenttype, \
+        concat_ws(',', COLLECT_LIST(if(classify = 2,result,null))) as element_tag \
+    from rec.content_reg_payed_title_classify_output2 \
+    where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' and probability >= cast(0.7 as float) and result is not null and classify in (1,2) \
+    group by post_id \
+)l on a.postid = l.post_id \
+left join( \
+    select user_id \
+        from rec.rec_fea_gift_item_boost_user_v3 \
+        where day= '${azkaban.flow.1.days.ago}' \
+    and boost_gift_user_v3="1" \
+)m on a.userid = m.user_id \
+left join( \
+    select userid,postid,unlock_time,money,is_rec_paid_traffic_support \
+    from( \
+        select a.userid,a.postid,unlock_time,money,is_rec_paid_traffic_support, \
+            row_number() over(partition by a.userid,a.postid,money,a.unlock_time order by abs(createtime - unlock_time) asc) as rNo \
+        from( \
+            select userid,postid,money,cast(unlock_time as bigint) unlock_time \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+                from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and money > 0 \
+        )a \
+        left join( \
+            select a.*,if(b.rec_id is null,0,1) as is_rec_paid_traffic_support \
+            from( \
+                select item_id,rec_id,cast(conv(split(item_id,'_')[1],16,10) as bigint) as postid,user_id,createtime \
+                from rec.rec_data_noblog_action_di_user_item_business \
+                where day = '${azkaban.flow.1.days.ago}' \
+            )a \
+            left join( \
+                select item_id,rec_id \
+                from rec.alg_data_noblog_action_di_user_item  \
+                where day="${azkaban.flow.1.days.ago}" and  \
+                flow_name in ("FeedRecBoostGift","FeedRecPGCBoostGift","RelatedBoostGift","TagRecBoostGift","TagRecPGC") \
+            )b on a.item_id = b.item_id and a.rec_id = b.rec_id \
+        )b on a.userid = b.user_id and a.postid = b.postid \
+    ) \
+    where rNo = 1 \
+)n on a.postid = n.postid and a.userid = n.postid and a.unlock_time = n.unlock_time and a.money = n.money \

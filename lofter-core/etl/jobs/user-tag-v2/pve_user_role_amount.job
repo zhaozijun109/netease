@@ -1,0 +1,163 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag pve_user_role_amount
+retries=0
+conf.spark.execute.sql="select userid, \
+                               'pve_user_role_amount'             as tag_name, \
+                               cat                                  as dim1, \
+                               subcat                               as dim2, \
+                               ''                                   as dim3, \
+                               ''                                   as dim4, \
+                               ''                                   as dim5, \
+                               value \
+                        from (         SELECT  `userId`, \
+                                               `count_period`    AS `cat`, \
+                                               `roleName`        AS `subCat`, \
+                                               `total_amount`    AS `value` \
+                                       FROM ( \
+                                           SELECT userId, \
+                                                  'DAY_7' AS count_period, \
+                                                  roleId, \
+                                                  roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',7) and dt <= '${azkaban.flow.1.days.ago}' and roleDef = 'ogc' \
+                                           GROUP BY userId, roleId, roleName \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_15' AS count_period, \
+                                                  roleId, \
+                                                  roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',15) and dt <= '${azkaban.flow.1.days.ago}' and roleDef = 'ogc' \
+                                           GROUP BY userId, roleId, roleName \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_30' AS count_period, \
+                                                  roleId, \
+                                                  roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',30) and dt <= '${azkaban.flow.1.days.ago}' and roleDef = 'ogc' \
+                                           GROUP BY userId, roleId, roleName \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_90' AS count_period, \
+                                                  roleId, \
+                                                  roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',90) and dt <= '${azkaban.flow.1.days.ago}' and roleDef = 'ogc' \
+                                           GROUP BY userId, roleId, roleName \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_7' AS count_period, \
+                                                  CASE WHEN roleDef = 'ogc' THEN 0 \
+                                                       WHEN roleDef = 'hc' THEN 1 \
+                                                       WHEN roleDef = 'pc' THEN 2 \
+                                                       ELSE 3 \
+                                                  END AS roleId, \
+                                                  roleDef AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',7) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId, roleDef \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_15' AS count_period, \
+                                                  CASE WHEN roleDef = 'ogc' THEN 0 \
+                                                       WHEN roleDef = 'hc' THEN 1 \
+                                                       WHEN roleDef = 'pc' THEN 2 \
+                                                       ELSE 3 \
+                                                  END AS roleId, \
+                                                  roleDef AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',15) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId, roleDef \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_30' AS count_period, \
+                                                  CASE WHEN roleDef = 'ogc' THEN 0 \
+                                                       WHEN roleDef = 'hc' THEN 1 \
+                                                       WHEN roleDef = 'pc' THEN 2 \
+                                                       ELSE 3 \
+                                                  END AS roleId, \
+                                                  roleDef AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',30) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId, roleDef \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_90' AS count_period, \
+                                                  CASE WHEN roleDef = 'ogc' THEN 0 \
+                                                       WHEN roleDef = 'hc' THEN 1 \
+                                                       WHEN roleDef = 'pc' THEN 2 \
+                                                       ELSE 3 \
+                                                  END AS roleId, \
+                                                  roleDef AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',90) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId, roleDef \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_7' AS count_period, \
+                                                  3 AS roleId, \
+                                                  'all' AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',7) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_15' AS count_period, \
+                                                  3 AS roleId, \
+                                                  'all' AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',15) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_30' AS count_period, \
+                                                  3 AS roleId, \
+                                                  'all' AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',30) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId \
+                                        \
+                                           UNION ALL \
+                                        \
+                                           SELECT userId, \
+                                                  'DAY_90' AS count_period, \
+                                                  3 AS roleId, \
+                                                  'all' AS roleName, \
+                                                  SUM(total_amount)  AS total_amount \
+                                           FROM lofter.dws_pve_user_role_amount_di \
+                                           WHERE dt >= date_sub('${azkaban.flow.1.days.ago}',90) and dt <= '${azkaban.flow.1.days.ago}' \
+                                           GROUP BY userId \
+                                       ) tmp1 )  "

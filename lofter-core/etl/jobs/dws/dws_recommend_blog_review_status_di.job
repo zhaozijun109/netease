@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_recommend_blog_review_status_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select cast(resource as bigint) as blogid, \
+    nvl(count(distinct postid),0) as published_post_cnt, \
+    nvl(concat(cast(round((count(distinct if(recomstatus = 1,postid,null))/count(distinct postid))*100,2) AS DECIMAL(10,2)),'%'),'0.00%') as review_success_rate \
+from( \
+    select resource \
+    from lofter_db_dump.ods_db_recommend_review_config_nd \
+    where deleted = 0 and type = 'superUser' \
+    group by resource \
+)a \
+left join( \
+    select blogid,postid,recomstatus \
+    from lofter_db_dump.ods_db_recommend_review_post_nd \
+    where type <> 5 and from_unixtime(cast( createtime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    group by blogid,postid,recomstatus \
+)b on b.blogid = cast(a.resource as bigint) \
+group by resource

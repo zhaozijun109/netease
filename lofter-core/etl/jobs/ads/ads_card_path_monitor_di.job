@@ -1,0 +1,56 @@
+type=sparksql
+hive.query.01= \
+with t1 as ( \
+    select a.*,eventId,userid,occurtime \
+    from ( \
+        select a1.projectcode,a1.id projectid,a1.name projectname,a2.activityid \
+        from lofter_db_dump.ods_db_act_project_nd a1 \
+        join lofter_db_dump.ods_db_act_project_activity_record_nd a2 \
+        on a1.id=a2.projectid \
+    ) a \
+    join ( \
+        select userid,occurtime,eventId, activityId \
+        from lofter.dwd_act_card_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' and userid not in(1286320356) \
+    ) b on a.activityid=b.activityid \
+), \
+path2Info as ( \
+    select a.*,c.userId as uv2,d.userId as uv3,e.userId as uv4,e.tradeId,e.amount \
+    from ( \
+        select distinct * from t1 where eventId='card-0' \
+    ) a \
+    left join ( \
+        select distinct * from t1 where eventId='card-2' \
+    ) c on a.userid=c.userid and a.occurtime <= c.occurtime and  a.projectCode=c.projectCode \
+    left join ( \
+        select buyerid userid,createtime occurtime,thirdpartynum \
+        from lofter_db_dump.ods_db_benefit_trade_nd \
+        where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' and producttype=5 \
+        group by buyerid,createtime,thirdpartynum \
+    ) d on c.userid=d.userid and c.occurtime<=d.occurtime and c.projectCode=d.thirdpartynum \
+    left join ( \
+        select id as tradeId,buyerid userid,createtime occurtime,thirdpartynum,amount \
+        from lofter_db_dump.ods_db_benefit_trade_nd \
+        where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' and producttype=5  and status=1 \
+        group by buyerid,createtime,thirdpartynum,amount,id \
+    ) e on d.userid=e.userid and d.occurtime<=e.occurtime and d.thirdpartynum=e.thirdpartynum \
+) \
+insert overwrite table lofter_dm.ads_card_path_monitor_di partition (dt ='${azkaban.flow.1.days.ago}') \
+select a.*,b.money \
+from ( \
+    select a.projectCode as project_code,a.projectName as project_name,'path2' as path, \
+        count(distinct a.userId) as uv1, \
+        count(distinct uv2) as uv2, \
+        count(distinct uv3) as uv3, \
+        count(distinct uv4) as uv4, \
+        0 as uv5 \
+    from path2Info a \
+    group by 1,2 \
+) a \
+left join ( \
+    select a.projectCode as project_code,a.projectName as project_name,'path2' as path,sum(a.amount) as money \
+    from ( \
+        select distinct projectCode,projectName,uv4,tradeId,amount from path2Info \
+    ) a \
+    group by 1,2 \
+) b on a.project_code=b.project_code and a.project_name=b.project_name and a.path=b.path \

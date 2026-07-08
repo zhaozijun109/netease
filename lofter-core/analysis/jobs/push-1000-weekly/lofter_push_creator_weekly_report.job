@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'creator_weekly_report') \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'creator_weekly_report' as policy, \
+       1 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select blogId as userId, 4 as messageType, \
+         accomplishment_type as accomplishmentType, accomplishment_num as accomplishmentNum, \
+         postNum,wordNum,photoNum,videoNum \
+    from lofter_dm.ads_push_creator_weekly_report_wd \
+    where dt = '${azkaban.flow.1.days.ago}' and postNum > 0 and accomplishment_type > 0 \
+) t \
+
+dependencies=ads_push_creator_weekly_report_wd

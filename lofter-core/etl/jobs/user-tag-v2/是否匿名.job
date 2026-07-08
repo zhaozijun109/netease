@@ -1,0 +1,13 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag 是否匿名 --bitmap
+retries=0
+conf.spark.execute.sql="select id                                   as userId, \
+                               '是否匿名'                             as tag_name, \
+                               ''                                    as dim1, \
+                               ''                                    as dim2, \
+                               ''                                    as dim3, \
+                               ''                                    as dim4, \
+                               cast(isAnonymous as string)           as grp, \
+                               ''                                    as value \
+                        from lofter.dim_user "

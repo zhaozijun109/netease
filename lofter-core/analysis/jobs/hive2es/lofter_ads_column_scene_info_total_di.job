@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select columnId as id, `columnId`,`scenes`,`exposureCount`,`clickCount`,`clickRateCount`,`dt` from `lofter_dm`.`ads_column_scene_info_total_di` where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id id --dest lofter_ads_column_scene_info_total_di --postfixsep --atom

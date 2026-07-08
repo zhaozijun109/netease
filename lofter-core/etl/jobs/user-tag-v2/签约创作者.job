@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 签约创作者 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '签约创作者' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select blogId as userId, '签约创作者' as tag, '1' as grp \
+                                  from lofter_db_dump.ods_db_sign_authenticate_nd \
+                                  where status = 3 \
+                                  group by blogId   ) "

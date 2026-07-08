@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query=" \
+select * \
+from ( \
+    select postId, blogId, pid, content, interaction_pv_7d as interactionCount, concat_ws(',', ips) as ip, \
+           row_number() over (order by interaction_pv_7d desc) as rk \
+    from lofter_dm.ads_post_highlight_comment_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_rec > 0 and size(ips) > 0 and interaction_pv_7d > 0 and \
+          datediff('${azkaban.flow.1.days.ago}', post_publish_date) < 14 and octet_length(content) < 32766 \
+) t \
+where rk <= 100 \
+"
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_highlight_comment_paragraph --atom --full

@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01= \
+with ip_mapping AS (  \
+    SELECT ip, category_res \
+    FROM lofter.dim_seven_group_ip_category_res_dd  \
+    where dt = (SELECT max(dt) FROM lofter.dim_seven_group_ip_category_res_dd)  \
+    GROUP BY ip, category_res  \
+) \
+,post_data as ( \
+    select userid,postid,post_content_type,a.ip,category_res \
+    from  \
+    (select userid,postid,post_content_type,ip \
+    from lofter.dwd_post_publish_di \
+    LATERAL VIEW explode(post_ips) ip_exploded AS ip \
+    where dt ='${azkaban.flow.1.days.ago}' \
+    ) a  \
+    join ip_mapping b on a.ip=b.ip  \
+) \
+,post_hot_data as ( \
+    select postid,userid,poshotpv,hdpv,browseuv,browsepv \
+    from lofter.dws_post_base_stats_di \
+    where dt ='${azkaban.flow.1.days.ago}' \
+) \
+,crt_data as ( \
+    select userid,level,blog_url,blog_nickname,fans_std,post_count_30d,post_hot_30d,hd_uv_30d,fans_cnt_30d,post_top_ips,post_top_tags \
+    from lofter.dws_par_creator_dd \
+    where dt ='${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter_dm.ads_crt_create_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+    category_res \
+    ,case when category_res in ('影视','综艺','娱乐') then 'RPS' else category_res end as vertical_category_res \
+    ,level \
+    ,count(distinct a.userid) as cnt_creator \
+    ,count(distinct a.postid) as cnt_postid \
+    ,count(distinct case when post_content_type='图片' then a.postid else null end) as cnt_photo \
+    ,count(distinct case when post_content_type='文字' then a.postid else null end) as cnt_text \
+    ,count(distinct case when post_content_type='视频' then a.postid else null end) as cnt_video \
+    ,sum(COALESCE(poshotpv,0)) as poshotpv \
+    ,sum(COALESCE(hdpv,0)) as hdpv \
+    ,sum(COALESCE(browseuv,0)) as browseuv \
+    ,sum(COALESCE(browsepv,0)) as browsepv \
+    ,sum(COALESCE(fans_std,0)) as fans_std \
+    ,sum(COALESCE(post_count_30d,0)) as post_count_30d \
+    ,sum(COALESCE(post_hot_30d,0)) as post_hot_30d \
+    ,sum(COALESCE(hd_uv_30d,0)) as hd_uv_30d \
+from post_data a  \
+left join post_hot_data b on a.postid = b.postid and a.userid=b.userid \
+left join crt_data c on a.userid=c.userid \
+group by 1,2,3

@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_specialty_user_consume_di partition (dt='${azkaban.flow.1.days.ago}') \
+select b.userId, a.label, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.dt) < 7, a.postId, null)) as post_count_7d, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.dt) < 15, a.postId, null)) as post_count_15d, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.dt) < 30, a.postId, null)) as post_count_30d \
+from ( \
+    select cast(conv(split(item_id,'_')[1], 16, 10) as bigint) as postId, label \
+    from rec.rec_data_content_learn_res_to_backend \
+    group by 1, 2 \
+) a \
+join ( \
+    select userId, postId, dt \
+    from lofter.dwd_post_browse_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_real > 0 \
+) b on a.postId = b.postId \
+group by 1, 2 \

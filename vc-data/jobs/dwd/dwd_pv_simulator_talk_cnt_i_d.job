@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dwd_pv_simulator_talk_cnt_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select simulator_id, \
+                       name, \
+                       nvl(init_user_identity, '') as init_user_identity, \
+                       user_id, \
+                       character_id, \
+                       source, \
+                       count(message_id)           as talk_cnt \
+                from vc.dwd_pv_simulator_talk_info_i_d \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by simulator_id, name, nvl(init_user_identity, ''), user_id, character_id, source
+
+dependencies=dwd_pv_simulator_talk_info_i_d

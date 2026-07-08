@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select a.*,nvl(b.histCount,0) as hist_count   \
+                         from   \
+                         (select topicId as id,topicId,topicName,userId,topicType,tags,images,discuss_count,nvl(score*(101-rank), 0) as score,rank,dt  \
+                         from lofter_dm.ads_question_square_host_list_di   \
+                         where dt='${azkaban.flow.1.days.ago}' and rank<=200 ) a  \
+                         left join  \
+                         (select topicId,count(1) as histCount  \
+                         from lofter_dm.ads_question_square_host_list_di   \
+                         where dt between '2022-10-23' and '${azkaban.flow.1.days.ago}' and rank<=200  \
+                         group by topicId) b  \
+                         on a.topicId=b.topicId  "
+params= --partition ${azkaban.flow.1.days.ago}  --dest lofter_question_square_host_list --postfixsep --full --atom

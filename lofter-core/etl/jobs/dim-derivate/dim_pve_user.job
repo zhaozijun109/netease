@@ -1,0 +1,216 @@
+type=sparksql
+hive.query.01= \
+with user_origin_channel as ( \
+    select userId, \
+           min(type) as userChannel \
+    from ( \
+        select userId, \
+               10 as type \
+        from lofter_db_dump.ods_db_corp_out_user_nd \
+        where appKey = 'musicpve' and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') <= '2024-09-03' \
+        union all \
+        select tmp1.userId, \
+               20 as type \
+        from ( \
+            select deviceUdid, \
+                   userId, \
+                   dt \
+            from lofter.dwd_act_pve_action_di \
+            where dt <= '2024-09-03' \
+        ) tmp1 \
+        join ( \
+            select dt, \
+                   deviceUdid \
+            from lofter.dwd_ad_growth_new_di \
+            where dt <= '2024-09-03' \
+            group by dt, deviceUdid \
+            union all \
+            select dt, \
+                   deviceUdid \
+            from lofter.dwd_ad_growth_return_di \
+            where dt <= '2024-09-03' \
+            group by dt, deviceUdid \
+            union all \
+            select t1.dt as dt, \
+                   t1.deviceudid as deviceudid \
+            from ( \
+                select dt, \
+                       daDeviceId as deviceUdid, \
+                       row_number() over (partition by daDeviceId order by time) as rnk \
+                from lofter.ods_log_ad_new_linkup_di \
+                where dt <= '2024-09-03' \
+            ) t1 \
+            left join ( \
+                select deviceUdid \
+                from lofter.dwd_ad_growth_new_di \
+                where dt <= '2024-09-03' \
+                union all \
+                select deviceUdid \
+                from lofter.dwd_ad_growth_return_di \
+                where dt <= '2024-09-03' \
+            ) t2 \
+            on t1.deviceUdid = t2.deviceUdid \
+            where t1.rnk = 1 and t2.deviceUdid is null \
+            group by t1.dt,t1.deviceudid \
+        ) tmp2 \
+        on tmp1.dt=tmp2.dt and tmp1.deviceUdid=tmp2.deviceUdid \
+        group by tmp1.userId \
+    ) tmp3 \
+    where '${azkaban.flow.1.days.ago}' <= '2024-09-03' \
+    group by userId \
+    union all \
+    select userId, \
+           min(type) as userChannel \
+    from ( \
+        select userId, \
+               10 as type \
+        from lofter_db_dump.ods_db_corp_out_user_nd \
+        where appKey = 'musicpve' and from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select tmp1.userId, \
+               20 as type \
+        from ( \
+            select deviceUdid, \
+                   userId, \
+                   dt \
+            from lofter.dwd_act_pve_action_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) tmp1 \
+        join ( \
+            select dt, \
+                   deviceUdid \
+            from lofter.dwd_ad_growth_device_di \
+            where appid = 'lofter' and dt = '${azkaban.flow.1.days.ago}' \
+            group by dt,deviceUdid \
+            union all \
+            select t1.dt as dt, \
+                   t1.deviceudid as deviceudid \
+            from ( \
+                select dt, \
+                       daDeviceId as deviceUdid, \
+                       row_number() over (partition by daDeviceId order by time) as rnk \
+                from lofter.ods_log_ad_new_linkup_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            left join ( \
+                select deviceUdid \
+                from lofter.dwd_ad_growth_device_di \
+                where appid = 'lofter' and dt = '${azkaban.flow.1.days.ago}' \
+            ) t2 \
+            on t1.deviceUdid = t2.deviceUdid \
+            where t1.rnk = 1 and t2.deviceUdid is null \
+            group by t1.dt,t1.deviceudid \
+        ) tmp2 \
+        on tmp1.dt=tmp2.dt and tmp1.deviceUdid=tmp2.deviceUdid \
+        group by tmp1.userId \
+    ) tmp3 \
+    where '${azkaban.flow.1.days.ago}' > '2024-09-03' \
+    group by userId \
+), \
+previous_pve as ( \
+    select userId, \
+           first_interview_date, \
+           last_interview_date, \
+           first_chats_date, \
+           last_chats_date, \
+           first_trade_date, \
+           last_trade_date, \
+           userType, \
+           userChannel \
+    from lofter.dim_pve_user_dd \
+    where dt = '${azkaban.flow.2.days.ago}' \
+) \
+insert overwrite table lofter.dim_pve_user_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select tmp1.userId, \
+       tmp1.first_interview_date, \
+       tmp1.last_interview_date, \
+       tmp1.first_chats_date, \
+       tmp1.last_chats_date, \
+       tmp1.first_trade_date, \
+       tmp1.last_trade_date, \
+       tmp1.userType, \
+       nvl(tmp2.userChannel,tmp1.userChannel) as userChannel \
+from ( \
+    select userId, \
+           min(first_interview_date) as first_interview_date, \
+           max(last_interview_date) as last_interview_date, \
+           min(first_chats_date) as first_chats_date, \
+           max(last_chats_date) as last_chats_date, \
+           min(first_trade_date) as first_trade_date, \
+           max(last_trade_date) as last_trade_date, \
+           min(userType) as userType, \
+           min(userChannel) as userChannel \
+    from ( \
+        select t1.userId, \
+               t2.first_interview_dt as first_interview_date, \
+               t2.last_interview_dt as last_interview_date, \
+               t3.first_chats_dt as first_chats_date, \
+               t3.last_chats_dt as last_chats_date, \
+               t4.first_trade_dt as first_trade_date, \
+               t4.last_trade_dt as last_trade_date, \
+               case when t1.sendMsgCount > 0 then 0 \
+                    when t1.sendMsgCount = 0 and t2.userId is not null then 1 \
+                    else 2 \
+               end as userType, \
+               nvl(t5.userChannel,30) as userChannel \
+        from ( \
+            select userid, \
+                   sendMsgCount \
+            from lofter_db_dump.ods_db_pve_user_info_nd \
+        ) t1 \
+        left join ( \
+            select userId, min(dt) as first_interview_dt, max(dt) as last_interview_dt \
+            from lofter.dws_pve_user_action_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt < '2024-07-30' \
+            group by userId \
+            union all \
+            select userId, dt as first_interview_dt, dt as last_interview_dt \
+            from lofter.dws_pve_user_action_di \
+            where dt = '${azkaban.flow.1.days.ago}' and dt >= '2024-07-30' \
+        ) t2 \
+        on t1.userId = t2.userId \
+        left join ( \
+            select userId, min(dt) as first_chats_dt, max(dt) as last_chats_dt \
+            from lofter.dws_pve_user_role_chats_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt < '2024-07-30' \
+            group by userId \
+            union all \
+            select userId, dt as first_chats_dt, dt as last_chats_dt \
+            from lofter.dws_pve_user_role_chats_di \
+            where dt = '${azkaban.flow.1.days.ago}' and dt >= '2024-07-30' \
+        ) t3 \
+        on t1.userId = t3.userId \
+        left join ( \
+            select userId, min(dt) as first_trade_dt, max(dt) as last_trade_dt \
+            from lofter.dws_pve_user_role_amount_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt < '2024-07-30' \
+            group by userId \
+            union all \
+            select userId, dt as first_trade_dt, dt as last_trade_dt \
+            from lofter.dws_pve_user_role_amount_di \
+            where dt = '${azkaban.flow.1.days.ago}' and dt >= '2024-07-30' \
+        ) t4 \
+        on t1.userId = t4.userId \
+        left join ( \
+            select userId,userChannel from user_origin_channel \
+        ) t5 \
+        on t1.userId = t5.userId \
+        union all \
+        select userId, \
+               first_interview_date, \
+               last_interview_date, \
+               first_chats_date, \
+               last_chats_date, \
+               first_trade_date, \
+               last_trade_date, \
+               userType, \
+               nvl(userChannel,30) as userChannel \
+        from previous_pve \
+    ) r1 \
+    group by userId \
+) tmp1 \
+left join ( \
+    select userId,userChannel from previous_pve \
+) tmp2 \
+on tmp1.userId = tmp2.userId
+hive.query.02=create or replace view lofter.dim_pve_user as select * from lofter.dim_pve_user_dd where dt = '${azkaban.flow.1.days.ago}';

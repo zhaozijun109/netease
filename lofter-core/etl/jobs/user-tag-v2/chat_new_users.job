@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag chat_new_users
+retries=0
+conf.spark.execute.sql="select userId, \
+                               'chat_new_users'                as tag_name, \
+                               cat                                  as dim1, \
+                               ''                                   as dim2, \
+                               ''                                   as dim3, \
+                               ''                                   as dim4, \
+                               ''                                   as dim5, \
+                               value \
+                        from lofter_dm.ads_pve_chat_new_users_metric_dd where dt = '${azkaban.flow.1.days.ago}' \
+                         and tag = 'chat_new_users' "

@@ -1,0 +1,73 @@
+type=sparksql
+hive.query.01=\
+with blogStatusSource as ( \
+    select id as blogId from lofter.dim_blog where isValid = true \
+) \
+insert overwrite table lofter_dm.ads_rec_auto_column_blog_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select tag, \
+       rank_type as rankType, \
+       case when rank_type = 0 then '镇圈神太榜' when rank_type = 1 then '人气飙升榜' when rank_type = 2 then '潜力新人榜' end as rankName, \
+       cast(to_json(transform(sort_array(collect_list(struct(rank, blogId, reasons)), true), x -> struct(x.blogId, x.reasons))) as string) as tagBlogReasons \
+from ( \
+    select t3.tag, \
+           t3.blogId, \
+           t3.rank_type, \
+           t3.rank, \
+           transform(sort_array(collect_set(struct(t3.priority, t3.reason)), true), x -> x.reason) as reasons \
+    from ( \
+        select t1.tag, \
+               t1.blogId, \
+               t1.rank_type, \
+               t1.rank, \
+               t2.priority, \
+               t2.reason \
+        from ( \
+            select tag, \
+                   blogId, \
+                   rank_type, \
+                   rank \
+            from lofter_dm.ads_tag_blog_rank_moderated_di where dt = '${azkaban.flow.1.days.ago}' and rank_type in (0,1,2) and rank <= 20 \
+        ) t1 \
+        left join ( \
+            select blogId, \
+                   split(regexp_replace(reason, '镇圈神太|人气作者|新锐作者', ''), '#')[1] as tag, \
+                   priority, \
+                   reason \
+            from lofter_dm.ads_creator_rec_reason_detail_di \
+            where dt = '${azkaban.flow.1.days.ago}' and priority = 0 \
+        ) t2 \
+        on t1.tag = t2.tag and t1.blogId = t2.blogId \
+        union all \
+        select t1.tag, \
+               t1.blogId, \
+               t1.rank_type, \
+               t1.rank, \
+               t2.priority, \
+               t2.reason \
+        from ( \
+            select tag, \
+                   blogId, \
+                   rank_type, \
+                   rank \
+            from lofter_dm.ads_tag_blog_rank_moderated_di where dt = '${azkaban.flow.1.days.ago}' and rank_type in (0,1,2) and rank <= 20 \
+        ) t1 \
+        left join ( \
+            select blogId, \
+                   priority, \
+                   reason \
+            from lofter_dm.ads_creator_rec_reason_detail_di \
+            where dt = '${azkaban.flow.1.days.ago}' and priority is not null and priority <> 0 \
+        ) t2 \
+        on t1.blogId = t2.blogId \
+    ) t3 \
+    left join blogStatusSource t4 \
+    on t3.blogId = t4.blogId \
+    where t3.reason is not null and t4.blogId is not null \
+    group by t3.tag, \
+             t3.blogId, \
+             t3.rank_type, \
+             t3.rank \
+) t \
+group by tag, \
+         rank_type
+dependencies=ads_creator_rec_reason_detail_di

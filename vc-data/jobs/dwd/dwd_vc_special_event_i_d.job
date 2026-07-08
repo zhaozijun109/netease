@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01 = with message as (select max(title) as title, task_info_id, collect_set(sub_type) as sub_type_set \
+                                 from (select user_id, \
+                                              character_id, \
+                                              message_id, \
+                                              nvl(GET_JSON_OBJECT(ext, '$.title'), content) as title, \
+                                              GET_JSON_OBJECT(ext, '$.eventId')             as task_info_id, \
+                                              GET_JSON_OBJECT(ext, '$.subType')             as sub_type, \
+                                              GET_JSON_OBJECT(ext, '$.showLoading'), \
+                                              GET_JSON_OBJECT(ext, '$.audited'), \
+                                              GET_JSON_OBJECT(ext, '$.taskDetailId')        as task_detai_id, \
+                                              FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd') \
+                                       from vc.ods_db_vc_user_message_record_nd \
+                                       where sender = 5 \
+                                         and type = 1 \
+                                         and GET_JSON_OBJECT(ext, '$.subType') in (1020, 1021, 1022, 1023, 1024, 1025) \
+                                         and FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') \
+                                 group by task_info_id), \
+                     task_info as (select id, user_id, character_id, event_type, status, sub_event_type, play_type, \
+                                    FROM_UNIXTIME(create_time, 'yyyy-MM-dd HH:mm:ss') as create_time \
+                                   from vc.ods_db_vc_user_event_task_info_nd \
+                                   where FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') \
+                insert OVERWRITE table vc.dwd_vc_special_event_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select x2.id as event_id, \
+                       x2.user_id, \
+                       x2.character_id, \
+                       x2.event_type, \
+                       x2.play_type, \
+                       x2.sub_event_type, \
+                       x1.title, \
+                       x1.sub_type_set, \
+                       x2.status, \
+                       x2.create_time \
+                from message x1 \
+                         right join task_info x2 on x1.task_info_id = x2.id

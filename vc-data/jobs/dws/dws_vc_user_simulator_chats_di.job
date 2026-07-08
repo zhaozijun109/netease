@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table vc.dws_vc_user_simulator_chats_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select user_id, \
+       simulator_id, \
+       case when source = 1 and simulator_type in (1, 2, 5) then 'vc' \
+            when source = 2 and simulator_type in (1, 2, 5) then 'lofter' \
+            when source = 3 and simulator_type in (3, 4) then 'theater' \
+       end as simulator_def, \
+       count(1) as total_chats \
+from vc.dwd_vc_user_simulator_chats_info_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by user_id, simulator_id, source, simulator_type

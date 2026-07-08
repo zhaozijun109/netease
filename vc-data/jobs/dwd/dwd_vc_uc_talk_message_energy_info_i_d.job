@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01 = with asset_consume as (select user_id, \
+                                              asset_type, \
+                                              amount, \
+                                              message_id, \
+                                              items.id            as left_id, \
+                                              items.leftAmount    as leftAmount, \
+                                              items.consumeAmount as leftconsumeAmount, \
+                                              lofter_energy \
+                                       from (SELECT user_id, \
+                                                    asset_type, \
+                                                    amount, \
+                                                    scene_uniq_id as message_id, \
+                                                    explode_outer(from_json( \
+                                                            detail, \
+                                                            'ARRAY<STRUCT<id: BIGINT, leftAmount: BIGINT, consumeAmount: BIGINT>>' \
+                                                            ))    AS items, \
+                                                    ext_amount as lofter_energy \
+                                             FROM vc.ods_db_vc_user_asset_consume_flow_nd \
+                                             where create_time >= UNIX_TIMESTAMP(CONCAT('${azkaban.flow.1.days.ago}', ' 00:00:00')) \
+                                               and create_time < \
+                                                   UNIX_TIMESTAMP(CONCAT(DATE_ADD('${azkaban.flow.1.days.ago}', 1), ' 00:00:00')) \
+                                               and scene = 1 \
+                                               and consume_status = 2)), \
+                     asset_left as (select id, user_id, scene, total_amount, left_amount \
+                                    from vc.ods_db_vc_user_asset_left_nd \
+                                    where asset_type = 1) \
+                insert overwrite table vc.dwd_vc_uc_talk_message_energy_info_i_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.user_id, \
+                       x1.asset_type, \
+                       max(x1.amount) as total_consume, \
+                       x1.message_id, \
+                       sum(if(x2.scene in (1,5),x1.leftconsumeAmount,0)) as free_energy, \
+                       sum(if(x2.scene = 2,x1.leftconsumeAmount,0)) as buy_energy, \
+                       sum(if(x2.scene = 3,x1.leftconsumeAmount,0)) as reward_energy, \
+                       max(x1.lofter_energy)                        as lofter_energy \
+                from asset_consume x1 \
+                         left join asset_left x2 on x1.left_id = x2.id \
+                group by x1.user_id,x1.asset_type,x1.message_id ;

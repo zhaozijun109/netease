@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=\
+with postSource as ( \
+    select id, blogId, tags, url from lofter.dim_post_article lateral view explode(tags) as tag where contentType = '图片' and tag in ('插画', '壁纸') \
+) \
+insert overwrite table lofter_dm.ads_rec_wall_papers_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.id as postId, t1.blogId, t4.oh, t4.ow \
+from ( \
+    select id, blogId, tag, tags, url from postSource lateral view explode(tags) as tag \
+) t1 \
+join ( \
+    select ip  \
+    from lofter.dim_ip_dd  \
+    where dt = '${azkaban.flow.1.days.ago}' and ip in ('第五人格','崩坏星穹铁道','原神','火影忍者','凹凸世界','哪吒','文豪野犬','时代少年团','燕云十六声','王者荣耀','哈利波特','魔道祖师','苏丹的游戏','名侦探柯南','重返未来1999','盗墓笔记','明日方舟','封神演义','鬼眼狂刀','头七怪谈','咒术回战','代号鸢','恋与深空','绝区零','时光代理人','bangdream','排球少年','鬼灭之刃','全职高手','忘川风华录','弹丸论破','tf家族','喜羊羊与灰太狼','seventeen','名侦探学院','我家大师兄脑子有坑','hazbin hotel','诡秘之主','我在惊悚游戏里封神','蓝色监狱','变形金刚','188男团','偶像梦幻祭','女神异闻录','银魂','家庭教师','我不是戏神','哪吒之魔童降世','非人哉','漫威','天官赐福') \
+) t2 \
+on t1.tag = t2.ip \
+join ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 5000 \
+) t3 \
+on t1.id = t3.postId \
+join ( \
+    select id, cast(get_json_object(photoLinks, '$[0].ow') as bigint) as ow, cast(get_json_object(photoLinks, '$[0].oh') as bigint) as oh from lofter_db_dump.ods_db_photo_post_nd where get_json_object(photoLinks, '$[0].ow') between get_json_object(photoLinks, '$[0].oh') * 0.46 and get_json_object(photoLinks, '$[0].oh') * 0.828 \
+) t4 \
+on t1.id = t4.id \
+group by t1.id, t1.blogId, t1.tags, t1.url, t3.hot, t4.ow, t4.oh

@@ -1,0 +1,63 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_domain_tag_rank_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select domain, tag, hot_index, hot_rank, interact_1d, 100 * hot_score, if(hot_rank <= 10 and trend_rank <=3, 1, 0) as is_in_trend \
+from ( \
+    select *, \
+          row_number() over (partition by domain order by if(hot_rank <= 10, pv, 0) desc) as trend_rank \
+    from ( \
+        select domain, tag, hot_index, interact_1d, pv, \
+               row_number() over (partition by domain order by hot_index desc) as hot_rank, \
+               (hot_index - min(hot_index) over (partition by domain)) / (max(hot_index) over (partition by domain) - min(hot_index) over (partition by domain)) as hot_score \
+        from ( \
+            select a.domain, a.tag, \
+                   0.2 * ln(greatest(pv, 1)) + 0.4 * ln(greatest(publish, 1)) + 0.4 * ln(greatest(interact, 1)) as hot_index, \
+                   interact as interact_1d, pv \
+            from ( \
+                select tagName as tag, \
+                       case when hotListId in (16001) then 'cp' \
+                            when hotListId in (5006,5007,5008,5009) then 'game' \
+                            when hotListId in (6001,6002,6003,6004,9001) then 'tv' \
+                            when hotListId in (134001) then 'derive_role' \
+                            when hotListId in (133001) then 'derive_cp' \
+                            else '' end as domain \
+                from lofter_db_dump.ods_db_hot_list_tag_nd \
+                group by 1, 2 \
+            ) a \
+            join ( \
+                select tag, \
+                       nvl(sum(browse_count),0) as pv, \
+                       nvl(sum(publish_count),0) as publish, \
+                       nvl(sum(nvl(hot,0) + nvl(response_count,0) + nvl(share_count,0)),0) as interact \
+                from lofter.dws_tag_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by tag \
+            ) b on a.tag = b.tag \
+            where length(a.domain) > 0 \
+        ) t \
+    ) tt \
+) ttt
+hive.query.02=insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 5) \
+    select tag, is_in_trend, null as source, hot_score, null as postId, null as blogId, hot_index, hot_rank, interact_1d as interaction_count, \
+           null as searching_circle \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain = 'tv' and hot_rank <= 200
+hive.query.03=insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 6) \
+    select tag, is_in_trend, null as source, hot_score, null as postId, null as blogId, hot_index, hot_rank, interact_1d as interaction_count, \
+           null as searching_circle \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain = 'cp' and hot_rank <= 200
+hive.query.04=insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 7) \
+    select tag, is_in_trend, null as source, hot_score, null as postId, null as blogId, hot_index, hot_rank, interact_1d as interaction_count, \
+           null as searching_circle \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain = 'game' and hot_rank <= 200
+hive.query.05=insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 8) \
+    select tag, is_in_trend, null as source, hot_score, null as postId, null as blogId, hot_index, hot_rank, interact_1d as interaction_count, \
+           null as searching_circle \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain = 'derive_role' and hot_rank <= 200
+hive.query.06=insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 9) \
+    select tag, is_in_trend, null as source, hot_score, null as postId, null as blogId, hot_index, hot_rank, interact_1d as interaction_count, \
+           null as searching_circle \
+    from lofter_dm.ads_domain_tag_rank_di \
+    where dt = '${azkaban.flow.1.days.ago}' and domain = 'derive_cp' and hot_rank <= 200

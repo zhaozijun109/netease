@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_all_vip_search_paid_di partition(dt = '${azkaban.flow.1.days.ago}') \
+Select \
+count(distinct a.userid) as search_uv, \
+count(distinct b.userid) as all_buy_uv, \
+sum(amount) as all_money, \
+count(distinct case when revenue_module='书城会员' then b.userid else null end ) as boostore_uv, \
+sum(case when revenue_module='书城会员' then b.amount else 0 end ) as boostore_money, \
+count(distinct case when revenue_module='大会员' then b.userid else null end ) as membership_uv, \
+sum(case when revenue_module='大会员' then b.amount else 0 end ) as membership_money \
+from   \
+(select \
+              userid \
+            from \
+              lofter.dwd_growth_actpwd_access_di \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+              and content_type = '单日志' \
+              and settlement_type in ('CPS') \
+              and actpwd is not null \
+              and itemid is not null \
+            group by \
+             userid) a  \
+    left join  \
+(select userid,amount,order_id,postid,'书城会员' as revenue_module \
+from  \
+lofter.dwd_paid_subscribe_order_di  \
+where dt= '${azkaban.flow.1.days.ago}' \
+and order_type=3 \
+and is_internal_attribute_order=0 \
+and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+and actpwd is not null \
+union  \
+select userid,amount,order_id,postid,'大会员' as revenue_module \
+from  \
+lofter.dwd_membership_order_di  \
+where dt= '${azkaban.flow.1.days.ago}' \
+and is_internal_attribute_order=0 \
+and from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+and actpwd is not null \
+) b  \
+on a.userid=b.userid \

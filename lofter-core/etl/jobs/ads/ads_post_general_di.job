@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as postId, a.blogId, a.blogName, a.blogNickName, a.contentType, a.citedParentPostId, \
+      hot, newHot, publishCount, \
+      commendCount,commendUserCount,newCommendCount, \
+      praiseCount,praiseUserCount, \
+      reproduceCount,reproduceUserCount, \
+      recommendCount,recommendUserCount, \
+      subscribeCount,subscribeUserCount, \
+      a.tags, a.domains, a.publishTime, a.publishDate as postPublishDate, a.userId, a.allowView, a.valid \
+from lofter.dim_post a \
+left join ( \
+    select postId, count(1) as publishCount \
+    from lofter.dwd_post_publish_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) b on a.id = b.postId \
+left join ( \
+    select m.postId, count(1) as commendCount, \
+       sum(if(u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newCommendCount, \
+       count(distinct m.userId) as  commendUserCount \
+    from lofter.dwd_post_response_di m \
+         left join lofter.dim_user u on m.userId = u.id \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by m.postId \
+) c on a.id = c.postId \
+left join ( \
+    select m.postId, \
+           count(1) as hot, \
+           sum(if(u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newHot, \
+           sum(if(opType = 'praise', 1, 0)) as praiseCount, \
+           sum(if(opType = 'praise' and u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newPraiseCount, \
+           count(distinct if(opType = 'praise', userId, null)) as  praiseUserCount, \
+           sum(if(opType = 'reproduce', 1, 0))  as reproduceCount, \
+           sum(if(opType = 'reproduce' and u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newReproduceCount, \
+           count(distinct if(opType = 'reproduce', userId, null)) as reproduceUserCount, \
+           sum(if(opType = 'recommend', 1, 0)) as recommendCount, \
+           sum(if(opType = 'recommend' and u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newRecommendCount, \
+           count(distinct if(opType = 'recommend', userId, null)) as recommendUserCount, \
+           sum(if(opType = 'subscribe', 1, 0)) as subscribeCount, \
+           sum(if(opType = 'subscribe' and u.createDate >= '${azkaban.flow.7.days.ago}' and u.createDate <= '${azkaban.flow.1.days.ago}', 1, 0)) as newSubscribeCount, \
+           count(distinct if(opType = 'subscribe', userId, null)) as subscribeUserCount \
+    from lofter.dwd_post_hot_di m \
+         left join lofter.dim_user u on m.userId = u.id \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by m.postId \
+) d on a.id = d.postId \
+where b.postId is not null or c.postId is not null or d.postId is not null
+dependencies=

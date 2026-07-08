@@ -1,0 +1,83 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc_dm.ads_vc_character_dailyfree_token_cnt_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+WITH parsed_chat_logs AS ( \
+SELECT  \
+dt, \
+airequestid, \
+sum(GET_JSON_OBJECT(responsejson, '$.usage.total_tokens')) as total_tokens \
+FROM vc.ods_vc_log_ai_chat_di \
+WHERE dt = '${azkaban.flow.1.days.ago}'  \
+group by dt, \
+airequestid \
+), \
+message_record AS ( \
+SELECT  \
+from_unixtime(cast(r.create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+r.user_id, \
+GET_JSON_OBJECT(r.ext, '$.characterFreeType') as characterFreeType, \
+GET_JSON_OBJECT(r.ext, '$.requestId') as requestId, \
+COUNT(r.id) as message_count \
+FROM vc.ods_db_vc_user_message_record_nd r \
+WHERE from_unixtime(cast(r.create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  \
+AND r.user_id NOT IN (SELECT user_id FROM vc.dim_vc_discardted_users_a_d) \
+AND lower(nvl(from_json(r.ext, 'STRUCT<source: STRING>').source, 'vc')) != 'lofter' \
+and GET_JSON_OBJECT(r.ext, '$.characterFreeType') is not null \
+GROUP BY  \
+from_unixtime(cast(r.create_time / 1000 AS BIGINT), 'yyyy-MM-dd'), \
+r.user_id, \
+GET_JSON_OBJECT(r.ext, '$.characterFreeType'), \
+GET_JSON_OBJECT(r.ext, '$.requestId') \
+), \
+user_daily_benefits_flags AS ( \
+SELECT \
+d.user_id, \
+d.dt, \
+max(case when b.benefit_type in (1,15) then 1 else 0 end) as is_vip, \
+max(case when b.benefit_type = 2 then 1 else 0 end) as has_unlimited_chat_card, \
+max(case when b.benefit_type = 3 then 1 else 0 end) as has_new_critical_hit, \
+max(case when b.benefit_type in (8, 9, 10, 11) then 1 else 0 end) as has_free_chat_card_pack \
+FROM  \
+( \
+SELECT  \
+user_id,  \
+from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+FROM vc.ods_db_vc_user_message_record_nd \
+WHERE from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  \
+AND user_id NOT IN (SELECT user_id FROM vc.dim_vc_discardted_users_a_d) \
+AND lower(nvl(from_json(ext,'STRUCT<source: STRING>').source, 'vc')) != 'lofter' \
+group by user_id,  \
+from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  \
+) d  \
+LEFT JOIN vc.ods_db_vc_user_benefits_nd b \
+ON d.user_id = b.user_id  \
+AND d.dt BETWEEN from_unixtime(cast(b.valid_start_time AS BIGINT), 'yyyy-MM-dd')  \
+AND from_unixtime(cast(b.valid_end_time AS BIGINT), 'yyyy-MM-dd') \
+GROUP BY \
+d.user_id, d.dt \
+) \
+ \
+ \
+SELECT  \
+r.characterFreeType, \
+b.is_vip, \
+b.has_unlimited_chat_card, \
+b.has_new_critical_hit, \
+b.has_free_chat_card_pack, \
+SUM(r.message_count) as total_message_count, \
+COUNT(DISTINCT r.user_id) as user_count, \
+SUM(c.total_tokens) as sum_total_tokens \
+FROM message_record r \
+JOIN parsed_chat_logs c ON r.requestId = c.airequestid AND r.dt = c.dt \
+LEFT JOIN user_daily_benefits_flags b ON r.user_id = b.user_id AND r.dt = b.dt \
+GROUP BY  \
+r.characterFreeType \
+,b.is_vip, \
+b.has_unlimited_chat_card, \
+b.has_new_critical_hit, \
+b.has_free_chat_card_pack \
+ORDER BY \
+r.characterFreeType \
+,b.is_vip, \
+b.has_unlimited_chat_card, \
+b.has_new_critical_hit, \
+b.has_free_chat_card_pack \

@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_trade_summary_payamount_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+   id , \
+   FROM_UNIXTIME(CAST(paytime / 1000 AS BIGINT), 'yyyy-MM-dd') AS order_date , \
+   sum(payamount)/100 as payamount, \
+   sum(deliveramount)/100 as deliveramount \
+FROM lofter_db_dump.ods_db_c2_c_trade_order_nd  \
+WHERE FROM_UNIXTIME(CAST(paytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+and status not in ( '0','-1')  \
+group by 1,2

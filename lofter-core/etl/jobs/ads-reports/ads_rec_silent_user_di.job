@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=use lofter;
+hive.query.02=insert overwrite table lofter_dm.ads_rec_silent_user_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select \
+      distinct a.userid \
+    from \
+      ( \
+        select \
+          userid \
+        from \
+          lofter.dws_par_user_base_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' and \
+          datediff( \
+            '${azkaban.flow.current.date}', \
+            from_unixtime(cast(last_login_time / 1000 as bigint), 'yyyy-MM-dd') \
+          ) <= 14 \
+          and datediff( \
+            '${azkaban.flow.current.date}', \
+            from_unixtime(cast(last_login_time / 1000 as bigint), 'yyyy-MM-dd') \
+          ) >= 7 \
+      ) a \
+      join ( \
+        select \
+          from_unixtime(cast(createtime / 1000 as bigint), 'yyyy-MM-dd') day, \
+          id userid \
+        from \
+          lofter.dim_user \
+        where \
+          datediff( \
+            '${azkaban.flow.current.date}', \
+            from_unixtime(cast(createtime / 1000 as bigint), 'yyyy-MM-dd') \
+          ) >= 14 \
+      ) b on a.userid = b.userid \
+      join ( \
+        select userid \
+        from \
+          lofter.dws_par_user_push_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and datediff('${azkaban.flow.current.date}', from_unixtime(cast(update_time/1000 as bigint), 'yyyy-MM-dd')) <= 14 \
+          and is_push_on = 1 \
+      ) c on a.userid = c.userid \
+    distribute by 1
+dependencies=

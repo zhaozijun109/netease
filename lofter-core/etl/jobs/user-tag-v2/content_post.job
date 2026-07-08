@@ -1,0 +1,94 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag content_post --bitmap
+retries=0
+conf.spark.execute.sql = " select userid               as userId, \
+                                  'content_post' as tag_name, \
+                                  cat                  as dim1, \
+                                  grp               as dim2, \
+                                  ''                   as dim3, \
+                                  ''                   as dim4, \
+                                  subcat                  as grp, \
+                                  ''                   as value \
+                           from (         select userId, cat, subcat, grp \
+                                          from ( \
+                                            select userId, 'DAY_7' as cat, \
+                                                   case when col2 < 3 then 'COUNT_1_3' \
+                                                        when col2 < 6 then 'COUNT_3_6' \
+                                                        when col2 < 30 then 'COUNT_6_30' \
+                                                        else 'COUNT_30' end as subcat, \
+                                                  col1 as grp \
+                                            from ( \
+                                                select userId, \
+                                                       inline(array(named_struct('col1', '文字', 'col2', core_post_text_7d), named_struct('col1', '图片', 'col2', core_post_photo_7d), named_struct('col1', '视频', 'col2', core_post_video_7d), named_struct('col1', '长文章', 'col2', core_post_longtext_7d), named_struct('col1', '问答', 'col2', core_post_answer_7d), named_struct('col1', '聊聊', 'col2', core_post_chat_7d))) \
+                                                from lofter.dws_par_user_post_dd \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                            ) a \
+                                            where col2 > 0 \
+                                           \
+                                            union all \
+                                           \
+                                            select userId, 'DAY_15' as cat, \
+                                                   case when col2 < 3 then 'COUNT_1_3' \
+                                                        when col2 < 6 then 'COUNT_3_6' \
+                                                        when col2 < 30 then 'COUNT_6_30' \
+                                                        else 'COUNT_30' end as subcat, \
+                                                  col1 as grp \
+                                            from ( \
+                                                select userId, \
+                                                       inline(array(named_struct('col1', '文字', 'col2', core_post_text_15d), named_struct('col1', '图片', 'col2', core_post_photo_15d), named_struct('col1', '视频', 'col2', core_post_video_15d), named_struct('col1', '长文章', 'col2', core_post_longtext_15d), named_struct('col1', '问答', 'col2', core_post_answer_15d), named_struct('col1', '聊聊', 'col2', core_post_chat_15d))) \
+                                                from lofter.dws_par_user_post_dd \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                            ) a \
+                                            where col2 > 0 \
+                                           \
+                                            union all \
+                                           \
+                                            select userId, 'DAY_30' as cat, \
+                                                   case when col2 < 3 then 'COUNT_1_3' \
+                                                        when col2 < 6 then 'COUNT_3_6' \
+                                                        when col2 < 30 then 'COUNT_6_30' \
+                                                        else 'COUNT_30' end as subcat, \
+                                                  col1 as grp \
+                                            from ( \
+                                                select userId, \
+                                                       inline(array(named_struct('col1', '文字', 'col2', core_post_text_30d), named_struct('col1', '图片', 'col2', core_post_photo_30d), named_struct('col1', '视频', 'col2', core_post_video_30d), named_struct('col1', '长文章', 'col2', core_post_longtext_30d), named_struct('col1', '问答', 'col2', core_post_answer_30d), named_struct('col1', '聊聊', 'col2', core_post_chat_30d))) \
+                                                from lofter.dws_par_user_post_dd \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                            ) a \
+                                            where col2 > 0 \
+                                           \
+                                            union all \
+                                           \
+                                            select userId, 'DAY_90' as cat, \
+                                                   case when col2 < 3 then 'COUNT_1_3' \
+                                                        when col2 < 6 then 'COUNT_3_6' \
+                                                        when col2 < 30 then 'COUNT_6_30' \
+                                                        else 'COUNT_30' end as subcat, \
+                                                  col1 as grp \
+                                            from ( \
+                                                select userId, \
+                                                       inline(array(named_struct('col1', '文字', 'col2', core_post_text_90d), named_struct('col1', '图片', 'col2', core_post_photo_90d), named_struct('col1', '视频', 'col2', core_post_video_90d), named_struct('col1', '长文章', 'col2', core_post_longtext_90d), named_struct('col1', '问答', 'col2', core_post_answer_90d), named_struct('col1', '聊聊', 'col2', core_post_chat_90d))) \
+                                                from lofter.dws_par_user_post_dd \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                            ) a \
+                                            where col2 > 0 \
+                                           \
+                                            union all \
+                                           \
+                                            select userId, 'DAY_180' as cat, \
+                                                   case when col2 < 3 then 'COUNT_1_3' \
+                                                        when col2 < 6 then 'COUNT_3_6' \
+                                                        when col2 < 30 then 'COUNT_6_30' \
+                                                        else 'COUNT_30' end as subcat, \
+                                                  col1 as grp \
+                                            from ( \
+                                                select userId, \
+                                                       inline(array(named_struct('col1', '文字', 'col2', core_post_text_180d), named_struct('col1', '图片', 'col2', core_post_photo_180d), named_struct('col1', '视频', 'col2', core_post_video_180d), named_struct('col1', '长文章', 'col2', core_post_longtext_180d), named_struct('col1', '问答', 'col2', core_post_answer_180d), named_struct('col1', '聊聊', 'col2', core_post_chat_180d))) \
+                                                from lofter.dws_par_user_post_dd \
+                                                where dt = '${azkaban.flow.1.days.ago}' \
+                                            ) a \
+                                            where col2 > 0 \
+                                           \
+                                          ) t \
+                                          where userId > 0L  ) "

@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01 = with charater_talk as (select character_id, \
+                                              sum(talk_cnt)           as total_talk_cnt, \
+                                              count(DISTINCT user_id) as total_peoples \
+                                       from vc.dws_vc_uc_talk_summary_single_a_d \
+                                       where dt = '${azkaban.flow.1.days.ago}' \
+                                       group by character_id), \
+                     character_info as (select * from vc.dws_vc_character_behavior_info_view where status != -1), \
+                     pve_character_info as (select roleid as role_id, sum(sendcount) as total_talk_cnt \
+                                            from lofter_db_dump.ods_db_pve_ugc_role_record_nd \
+                                            where publicview = 1 \
+                                            group by roleid \
+                                            having total_talk_cnt != 0) \
+                insert overwrite table vc.dws_vc_character_tabulate_data_a_d partition (dt='${azkaban.flow.1.days.ago}') \
+                select x1.character_id, \
+                       x1.character_name, \
+                       x1.character_type, \
+                       nvl(x2.total_talk_cnt, 0) as total_talk_cnt, \
+                       nvl(x2.total_peoples, 0)  as total_peoples, \
+                       x1.status, \
+                       x1.audience_type, \
+                       x1.role_id, \
+                       nvl(x3.total_talk_cnt,0)  as pve_total_talk_cnt, \
+                       x1.public_scope \
+                from character_info x1 \
+                         left join charater_talk x2 on x1.character_id = x2.character_id \
+                         left join pve_character_info x3 on x1.role_id = x3.role_id;
+
+hive.query.02 = create or replace view vc.dws_vc_character_tabulate_data_view as \
+                                select * from vc.dws_vc_character_tabulate_data_a_d where dt = '${azkaban.flow.1.days.ago}'
+
+dependencies=dws_vc_uc_talk_summary_single_a_d,dws_vc_character_behavior_info_a_d

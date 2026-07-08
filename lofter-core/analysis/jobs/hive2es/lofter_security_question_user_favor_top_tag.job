@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(userId, '_', rnk) as id, userId, rnk as `rank`, tag from lofter_dm.ads_par_user_favorite_tag_top_dd where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_security_question_user_favor_top_tag --full --atom
+dependencies=lofter_security_question_user_tag

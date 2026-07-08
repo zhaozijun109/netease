@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_coupon_benefit_di partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(a.id,b.id) id, \
+       nvl(a.couponname,b.couponname) couponname, \
+       a.num_coupon get_nums,a.num_user get_user,b.num_coupon use_nums,b.num_user use_user,b.total_amount,b.total_preferential \
+from ( \
+    select a1.id,a1.name couponname,count(distinct a2.id) num_coupon,count(distinct a2.userid) num_user \
+    from ( \
+        select id,name,scene \
+        from lofter_db_dump.ods_db_benefit_new_coupon_nd \
+        where scene=0 \
+    ) a1 join ( \
+        select id,couponid,userid \
+        from lofter_db_dump.ods_db_benefit_coupon_user_nd \
+        where from_unixtime(cast(createtime as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) a2 on a1.id=a2.couponid \
+    group by a1.id,a1.name \
+) a \
+full join ( \
+    select b1.id,b1.name couponname, \
+           count(distinct b2.id) num_coupon,count(distinct b2.userid) num_user,sum(b2.amount) total_amount,sum(b2.newcouponpreferential) total_preferential \
+    from ( \
+        select id,name,scene \
+        from lofter_db_dump.ods_db_benefit_new_coupon_nd \
+        where scene=0 \
+    ) b1 join ( \
+        select id,newcouponid couponid,buyerid userid,amount,newcouponpreferential \
+        from lofter_db_dump.ods_db_benefit_order_nd \
+        where status in (1,3,4) and \
+              from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) b2 on b1.id=b2.couponid \
+    group by b1.id,b1.name \
+) b on a.id=b.id \
+distribute by 1

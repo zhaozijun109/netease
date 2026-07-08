@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_creator_revenue_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select pay_type, period, revenue_level, \
+    count(distinct blogId) as revenue_uv, \
+    sum(revenue_money) as revenue_money \
+from lofter_dm.ads_post_paid_creator_revenue_detail_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by 1,2,3
+dependencies=ads_post_paid_creator_revenue_detail_di

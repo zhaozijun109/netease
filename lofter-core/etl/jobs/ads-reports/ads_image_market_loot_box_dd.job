@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01=create or replace view lofter_dm.ads_image_market_loot_box_dd as select *, '${azkaban.flow.1.days.ago}' as dt from lofter_db_dump.ods_db_image_market_loot_box_nd;

@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_trace_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='1') \
+select product_type, adTrace, count(distinct userId) as buy_uv,sum(money) money \
+from ( \
+  select type as product_type, \
+          adTrace, buyerId as userId, storePrice * productNum - newCouponPreferential as money \
+  from lofter_db_dump.ods_db_benefit_order_product_nd \
+  where status in (1,4,3) and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t \
+group by product_type, adTrace \
+distribute by 1
+hive.query.02=insert overwrite table lofter_dm.ads_ec_trace_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='7') \
+select product_type, adTrace, count(distinct userId) as buy_uv,sum(money) money \
+from ( \
+  select type as product_type, \
+          adTrace, buyerId as userId, storePrice * productNum - newCouponPreferential as money \
+  from lofter_db_dump.ods_db_benefit_order_product_nd \
+  where status in (1,4,3) and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+         from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 7) \
+) t \
+group by product_type, adTrace \
+distribute by 1
+hive.query.03=insert overwrite table lofter_dm.ads_ec_trace_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='30') \
+select product_type, adTrace, count(distinct userId) as buy_uv,sum(money) money \
+from ( \
+  select type as product_type, \
+          adTrace, buyerId as userId, storePrice * productNum - newCouponPreferential as money \
+  from lofter_db_dump.ods_db_benefit_order_product_nd \
+  where status in (1,4,3) and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+         from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 30) \
+) t \
+group by product_type, adTrace \
+distribute by 1
+hive.query.04=insert overwrite table lofter_dm.ads_ec_trace_trade_di partition(dt='${azkaban.flow.1.days.ago}', period='all') \
+select product_type, adTrace, count(distinct userId) as buy_uv,sum(money) money \
+from ( \
+  select type as product_type, \
+          adTrace, buyerId as userId, storePrice * productNum - newCouponPreferential as money \
+  from lofter_db_dump.ods_db_benefit_order_product_nd \
+  where status in (1,4,3) and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) t \
+group by product_type, adTrace \
+distribute by 1

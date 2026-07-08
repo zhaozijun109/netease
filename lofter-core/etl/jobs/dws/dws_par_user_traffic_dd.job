@@ -1,0 +1,61 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=insert overwrite table lofter.dws_par_user_traffic_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select x.id as userId, \
+       y.paid_post_expose_count_30d, z.paid_post_browse_count_30d, \
+       y.paid_post_expose_count_7d, z.paid_post_browse_count_7d, \
+       z.post_browse_count_30d, z.real_post_browse_count_30d \
+from lofter.dim_user x \
+left join ( \
+    select userId, \
+           count(distinct a.postId) as paid_post_expose_count_30d, \
+           count(distinct if(is_in_week > 0, a.postId, null)) as paid_post_expose_count_7d \
+    from ( \
+        select userId, postId, \
+               if(dt >= '${azkaban.flow.7.days.ago}', 1, 0) as is_in_week \
+        from lofter.dwd_post_expose_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and userId > 0 and reaction is null \
+    ) a join ( \
+        select postId \
+        from ( \
+            select postId \
+            from lofter.dim_gift_post_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            union all \
+            select id as postId \
+            from lofter.dim_post_article \
+            where is_book_store > 0 \
+        ) t \
+        group by postId \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) y on x.id = y.userId \
+left join ( \
+    select userId, \
+           count(distinct if(is_real > 0, b.postId, null)) as paid_post_browse_count_30d, \
+           count(distinct if(is_real > 0 and is_in_week > 0, b.postId, null)) as paid_post_browse_count_7d, \
+           count(distinct a.postId) as post_browse_count_30d, \
+           count(distinct if(is_real > 0, a.postId, null)) as real_post_browse_count_30d \
+    from ( \
+        select userId, postId, \
+               if(dt >= '${azkaban.flow.7.days.ago}', 1, 0) as is_in_week, \
+               is_real \
+        from lofter.dwd_post_browse_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and userId > 0 \
+    ) a \
+    left join ( \
+        select postId \
+        from ( \
+            select postId \
+            from lofter.dim_gift_post_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            union all \
+            select id as postId \
+            from lofter.dim_post_article \
+            where is_book_store > 0 \
+        ) t \
+        group by postId \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) z on x.id = z.userId \
+where greatest(y.paid_post_expose_count_30d, z.post_browse_count_30d) > 0

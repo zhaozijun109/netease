@@ -1,0 +1,74 @@
+package com.netease.lofter.etl.dwd
+
+import com.netease.wm.util.Args
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.{SaveMode, SparkSession}
+
+object PaidPostIdDetailJob {
+  def main(args: Array[String]): Unit = {
+
+    val pargs = Args(args)
+    val spark = SparkSession.builder()
+      .appName("extract the paid article detail info")
+      .config("spark.sql.parquet.binaryAsString", value = true)
+      .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .getOrCreate()
+
+    val date = pargs.required("date")
+
+    val sql_res =
+      s"""
+         |select a.postid,a.sender,a.createtime,a.count as gift_num,a.coin,a.returngiftid as return_gift_id,
+         |    b.blogid,b.blogname,b.publishdate,b.contenttype,c.blogid as follow_blogid,d.postid as praise_postid,
+         |    case when c.blogid is not null and d.postid is null  and  contenttype not in ('视频','音乐')    then '博客引入'
+         |    when c.blogid is  null and d.postid is not null and  contenttype not in ('视频','音乐') then '单文签约'
+         |    when  c.blogid is  null and d.postid is null and  contenttype not in ('视频','音乐') then '图文UGC'
+         |    when  c.blogid is  null and d.postid is null and  contenttype  in ('视频','音乐') then '非图文'
+         |    else '其他' end as platform_type,
+         |    case when returngiftid>0 then '回礼' else '无回礼' end as return_gift_type,
+         |    case when f.createtime is not null then '首次付费' else '非首次付费' end  as is_first_pay,
+         |    case when e.postid is not null then 'cp' else 'nocp' end  as is_cp
+         |from
+         |(select count ,coin, postid, sender,createtime,returngiftid
+         |from lofter_db_dump.ods_db_trade_gift_present_record_nd
+         |where giftType=1 and  coin>0 and status=0 ) a
+         |
+         |join
+         |(select id as postid , blogid,blogname,publishdate,contenttype from lofter.dim_post ) b
+         |on a.postid=b.postid
+         |
+         |left join
+         |(select id as blogid from lofter.dim_user  where sourceType='PGC') c
+         |on b.blogid=c.blogid
+         |
+         |left join
+         |(select postid from lofter_db_dump.ods_db_post_hot_nd where publisheruserid=1943463653 and type=1 group by postid) d
+         |on a.postid=d.postid
+         |
+         |left  join
+         |(select postid from lofter.dim_post_category_dd  where dt='$date' and domain='同人CP' group by postid) e
+         |on a.postid=e.postid
+         |
+         |left join
+         |(select a.postid,a.sender,a.createtime
+         |from
+         |    (select  postid,sender,createtime,rank()over(partition by sender order by createtime asc ) as rk
+         |    from
+         |    lofter_db_dump.ods_db_trade_gift_present_record_nd
+         |    where  giftType=1 and  coin>0 and status=0) a
+         |where a.rk=1
+         |group by
+         |a.postid,a.sender,a.createtime) f
+         | on a.postid=f.postid and a.sender=f.sender and a.createtime=f.createtime
+         |""".stripMargin
+
+    spark.sql(sql_res)
+      .withColumn("dt", lit(date))
+      .repartition(10)
+      .write.mode(SaveMode.Overwrite)
+      .insertInto("lofter.dwd_paid_post_detail_dd")
+
+    spark.close()
+  }
+
+}

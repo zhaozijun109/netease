@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_suit_purchase_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select '1' as period,nvl(b.name,'all') as name, nvl(a.type,'all') as suit_type,    \
+              	    count(distinct userid) as uv,sum(price) as price,sum(num) product_num,count(1) as trade_num    \
+              from     \
+              (select suitid,userid,type,price,num,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt    \
+              from lofter_db_dump.ods_db_dressing_suit_order_nd     \
+              where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' and  status=1    \
+              ) a    \
+              join     \
+              (select id,name from lofter_db_dump.ods_db_dressing_suit_nd) b    \
+              on a.suitid=b.id    \
+              group by  period, b.name,a.type    \
+              grouping sets (period,(period, b.name,a.type),(period, a.type),(period, b.name))    \
+                  \
+              union all    \
+              select  'all' as period, nvl(b.name,'all') as name, nvl(a.type,'all') as suit_type,    \
+              	    count(distinct userid) as uv,sum(price) as price,sum(num) product_num,count(1) as trade_num    \
+              from     \
+              (Select suitid,userid,type,price,num    \
+              from lofter_db_dump.ods_db_dressing_suit_order_nd     \
+              where status=1 and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}') a    \
+              join     \
+              (select id,name from lofter_db_dump.ods_db_dressing_suit_nd) b    \
+              on a.suitid=b.id    \
+              group by  b.name,a.type    \
+              with cube    \
+              distribute by 1;
+hive.query.02=insert overwrite table lofter_dm.ads_suit_reserve_pay_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select '1' as period,nvl(b.name,'all') as name,     \
+              	    count(distinct a.userid) as reserve_uv,count(distinct c.userid) as pay_uv    \
+              from     \
+              (select suitid,userid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt    \
+              from lofter_db_dump.ods_db_dressing_suit_reserve_nd     \
+              where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'    \
+              ) a    \
+              join     \
+              (select id,name from lofter_db_dump.ods_db_dressing_suit_nd) b    \
+              on a.suitid=b.id    \
+              left join    \
+              (Select suitid,userid    \
+              from lofter_db_dump.ods_db_dressing_suit_order_nd     \
+              where status=1) c    \
+              on a.suitid=c.suitid and a.userid=c.userid    \
+              group by  period, b.name    \
+              grouping sets (period,(period, b.name))    \
+                  \
+              union all    \
+              select  'all' as period, nvl(b.name,'all') as name,    \
+              	    count(distinct a.userid) as reserve_uv,count(distinct c.userid) as pay_uv    \
+              from     \
+              (Select suitid,userid    \
+              from lofter_db_dump.ods_db_dressing_suit_reserve_nd    \
+              where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}'    \
+              ) a    \
+              join     \
+              (select id,name from lofter_db_dump.ods_db_dressing_suit_nd) b    \
+              on a.suitid=b.id    \
+              left join    \
+              (Select suitid,userid    \
+              from lofter_db_dump.ods_db_dressing_suit_order_nd     \
+              where status=1) c    \
+              on a.suitid=c.suitid and a.userid=c.userid    \
+              group by  b.name    \
+              with cube    \
+              distribute by 1

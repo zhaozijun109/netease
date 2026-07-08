@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_image_market_tag_stat_dd` PARTITION(`dt` = '${azkaban.flow.1.days.ago}') \
+SELECT tag, \
+       NVL(SUM(totalOrderCount),0) AS totalOrderCount, \
+       NVL(SUM(totalOrderSales),0) AS totalOrderSales, \
+       NVL(SUM(recent7DaysOrderCount),0) AS recent7DaysOrderCount, \
+       NVL(SUM(recent7DaysOrderSales),0) AS recent7DaysOrderSales \
+FROM ( \
+    SELECT itemId, \
+           itemType, \
+           tag \
+    FROM `lofter_dm`.`ads_image_market_product_tag_dd` \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp1 \
+LEFT JOIN ( \
+    SELECT itemId, \
+           itemType, \
+           totalOrderCount, \
+           totalOrderSales, \
+           recent7DaysOrderCount, \
+           recent7DaysOrderSales \
+    FROM `lofter_dm`.`ads_image_market_stat_dd` \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp2 \
+ON tmp1.itemId = tmp2.itemId AND tmp1.itemType = tmp2.itemType \
+GROUP BY tag
+dependencies=ads_image_market_product_tag_dd,ads_image_market_stat_dd

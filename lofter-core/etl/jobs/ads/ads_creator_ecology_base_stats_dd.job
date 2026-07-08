@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_base_stats_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  userId                             AS blogId, \
+        nvl(receive_hot_std,0)             AS totalHotCount, \
+        nvl(fans_cnt,0)                    AS followerCount, \
+        nvl(collection_subscribe_uv,0)     AS subCollectionCount, \
+        nvl(receive_comment_cnt,0)         AS commentCount, \
+        nvl(post_count_7d,0)               AS sevenDayPostCount, \
+        nvl(post_count_30d,0)              AS thirtyDayPostCount, \
+        nvl(post_hot_7d,0)                 AS sevenDayHotAddition, \
+        nvl(fans_cnt_7d,0)                 AS sevenDayFollowerAddition, \
+        nvl(collection_subscribe_uv_7d,0)  AS sevenDaySubCollectionAddition, \
+        nvl(receive_comment_cnt_7d,0)      AS sevenDayCommentAddition, \
+        nvl(post_hot_30d,0)                AS thirtyDayHotAddition, \
+        nvl(fans_cnt_30d,0)                AS thirtyDayFollowerAddition, \
+        nvl(collection_subscribe_uv_30d,0) AS thirtyDaySubCollectionAddition, \
+        nvl(receive_comment_cnt_30d,0)     AS thirtyDayCommentAddition \
+FROM `lofter`.`dws_par_creator_dd` \
+WHERE dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1

@@ -1,0 +1,38 @@
+type = sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_week_report_dau_detail_report_di partition(dt ='${azkaban.flow.1.days.ago}')   \
+select \
+mt, \
+a.week_number, \
+dau, \
+new_dau, \
+return_dau, \
+active_dau , \
+mau  \
+from( \
+SELECT  \
+ concat(substr(dt,1,7))    mt, \
+ WEEKOFYEAR(dt) AS week_number, \
+ dayofweek(dt) week, \
+ dt, \
+sum(device_cnt) as dau, \
+  SUM(CASE WHEN device_type = '近30日新增' THEN device_cnt ELSE 0 END) new_dau, \
+  SUM(CASE WHEN device_type = '近30日回流' THEN device_cnt ELSE 0 END) return_dau, \
+  SUM(CASE WHEN device_type = '持续活跃' THEN device_cnt ELSE 0 END) active_dau  \
+from    lofter_dm.ads_growth_channel_dau_stratify_di \
+where dt='${azkaban.flow.1.days.ago}' \
+group by 1,2,3,4 \
+) a  \
+left join  \
+( \
+SELECT  \
+ \
+WEEKOFYEAR(dt) AS week_number, \
+dayofweek(dt) week, \
+dt, \
+sum(mau) as MAU \
+from   lofter_dm.ads_device_platform_di \
+where dt = '${azkaban.flow.1.days.ago}'   \
+group by 1,2,3 \
+) b on a.dt=b.dt
+dependencies=ads_growth_channel_dau_stratify_di

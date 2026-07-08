@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=\
+with ad_reward_users as ( \
+    select dt, userId, '访问用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    union all \
+    select dt, userId, '新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_platform_new > 0 \
+    union all \
+    select dt, userId, '回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_platform_return > 0 \
+    union all \
+    select dt, userId, '权益中心新用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_new_user > 0 \
+    union all \
+    select dt, userId, '权益中心回流用户' as user_type from lofter.dwd_rewardcenter_user_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and is_return_user > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_reward_user_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select base_date, user_type, period, uv, retain_uv \
+from ( \
+    select a.dt as base_date, a.user_type, \
+        datediff('${azkaban.flow.1.days.ago}', a.dt) + 1 as period, \
+        count(distinct a.userId) as uv, count(distinct b.userId) as retain_uv \
+    from ( \
+        select * from ad_reward_users \
+    ) a \
+    left join ( \
+        select * from lofter.dwd_rewardcenter_user_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.userId = b.userId \
+    where (datediff('${azkaban.flow.1.days.ago}', a.dt) + 1) in (2, 7, 14, 30) \
+    group by 1, 2, 3 \
+) t \

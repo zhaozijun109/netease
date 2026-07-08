@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ads_vc_hive2redis_202503_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select CONCAT_WS('_', 'user_send_times:seven_day_chat_max', user_id, dt) as key, cast(character_id as string) as value \
+                from vc.ads_vc_uc_talk_top20_n_d \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                  and rk = 1 \
+                  and statistical_period = 'DAY_7' \
+                union all \
+                select CONCAT_WS('_', 'user_send_times:14_day_chat_max', user_id, dt) as key, cast(character_id as string) as value \
+                from vc.ads_vc_uc_talk_top20_n_d \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                  and rk = 1 \
+                  and statistical_period = 'DAY_14' \
+                union all \
+                select concat('user:', concat_ws('_', dt, 'exist_pay', user_id)) as key, sum(order_price) as value \
+                from vc.dwd_vc_order_i_d \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by user_id, dt \
+                union all \
+                select CONCAT_WS('_', 'user_send_times:seven_day_chat_max_list', user_id, dt) as key, \
+                       CONCAT_WS(',', COLLECT_SET(value))                                     as value \
+                from (select user_id, CONCAT_WS('-', rk, character_id) as value, dt \
+                      from vc.ads_vc_uc_talk_top20_n_d \
+                      where dt = '${azkaban.flow.1.days.ago}' \
+                        and statistical_period = 'DAY_7' \
+                        and rk <= 15) \
+                group by user_id, dt \
+                union all \
+                select CONCAT_WS('_','home_character_talk_count',character_id) as key,sum(talk_cnt) as value \
+                from vc.dws_vc_character_tc_info_i_d group by character_id
+
+dependencies=ads_vc_uc_talk_top20_n_d

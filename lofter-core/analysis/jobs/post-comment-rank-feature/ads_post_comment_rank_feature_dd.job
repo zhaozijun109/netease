@@ -1,0 +1,117 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+with postSource as ( \
+    select t1.postId \
+    from ( \
+        select id as postId \
+        from lofter.dim_post_article \
+        where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 \
+        and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+    ) t1 \
+    join ( \
+        select postId \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where replyL1commentId = 0 and from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 365) and \
+        from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by postId \
+        having count(1) >= 10 \
+    ) t2 \
+    on t1.postId = t2.postId \
+), \
+historyCommentSource as ( \
+    select t1.commentId, t1.postId, t1.blogId, publisherUserId, publishTime, commentHot, replyL1commentId, feedbackType, timeWeight, if(t3.commentId is not null, 1, 0) as creatorHotType \
+    from ( \
+        select id as commentId, postId, blogId, publisherUserId, publishTime, commentHot, replyL1commentId, if(get_json_object(ext, '$.feedbackType') is not null and get_json_object(ext, '$.feedbackType') > 0, 1, 0) as feedbackType, \
+        case when from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' then 1.7 \
+             when from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 6) and from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') < '${azkaban.flow.1.days.ago}' then 1.5 \
+             when from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 15) then 1.2 \
+             when from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') > date_sub('${azkaban.flow.1.days.ago}', 30) then 1.1 \
+             else 1 \
+        end as timeWeight \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where replyL1commentId = 0 \
+    ) t1 \
+    join postSource t2 \
+    on t1.postId = t2.postId \
+    left join ( \
+        select commentId, \
+               postId, \
+               userId as blogId \
+        from lofter_db_dump.ods_db_comment_hot_nd \
+        where status = 1 \
+    ) t3 \
+    on t1.commentId = t3.commentId and t1.postId = t3.postId and t1.blogId = t3.blogId \
+), \
+historyL2CommentSource as ( \
+    select t1.replyL1commentId, \
+           to_bitmap(publisherUserId) as l2UvBitmap \
+    from ( \
+        select id as commentId, \
+               publisherUserId, \
+               replyL1commentId \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where replyL1commentId > 0 and length(regexp_replace(content, '[\\\\ud800-\\\\udfff]|\\\\[\\\\{(.*)\\\\}\\\\]', '')) > 0 \
+    ) t1 \
+    left join ( \
+        select comment_id as commentId \
+        from rec.rec_data_ecology_neg_comment_minning \
+        where day <= '${azkaban.flow.1.days.ago}' and is_neg_comment = 1 \
+        group by comment_id \
+    ) t2 \
+    on t1.commentId = t2.commentId \
+    where t2.commentId is null \
+    group by t1.replyL1commentId \
+), \
+historyRecContentUnderstand as ( \
+    select t1.commentId, \
+           case when t2.commentId is not null and t1.level2_tag = '剧情分析' then 1.2 \
+                when t1.level2_tag in ('引战辱骂', '成分鉴定', '批评差评') then -0.2 \
+           end as contentUnderstandWeight \
+    from ( \
+        select itemId as commentId, \
+               level2_tag \
+        from lofter.dwd_rec_content_understand_dd \
+        where dt = '${azkaban.flow.2.days.ago}' and type = '评论体系分类' and level2_tag in ('剧情分析', '引战辱骂', '成分鉴定', '批评差评') \
+    ) t1 \
+    left join ( \
+        select commentId, \
+               postId, \
+               blogId, \
+               content, \
+               commentHot \
+        from ( \
+            select id as commentId, \
+                   postId, \
+                   blogId, \
+                   regexp_replace(regexp_replace(regexp_replace(content, '^["“”]|["“”]$', ''),'\\\\[.*?\\\\]|哇|哈|啊|呦|哟|阿|h|w|手动狗头',''), '([！!？?，,。.；;：:“”"‘’\\\'])\\\\1+', '$1') as content, \
+                   commentHot \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where commentHot >= 10 \
+        ) t \
+        where length(content) >= 50 \
+    ) t2 \
+    on t1.commentId = t2.commentId \
+) \
+insert overwrite table lofter_dm.ads_post_comment_rank_feature_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.commentId, \
+       t1.postId, \
+       t1.blogId, \
+       t1.publisherUserId, \
+       t1.publishTime, \
+       t1.commentHot, \
+       t1.replyL1commentId, \
+       t1.feedbackType, \
+       t1.timeWeight, \
+       t1.creatorHotType, \
+       t2.l2UvBitmap, \
+       nvl(t3.contentUnderstandWeight, 0) as contentUnderstandWeight \
+from historyCommentSource t1 \
+left join historyL2CommentSource t2 \
+on t1.commentId = t2.replyL1commentId \
+left join historyRecContentUnderstand t3 \
+on t1.commentId = t3.commentId \
+where greatest(commentHot, feedbackType, creatorHotType, bitmap_count(l2UvBitmap), abs(t3.contentUnderstandWeight)) > 0

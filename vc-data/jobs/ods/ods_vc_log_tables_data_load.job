@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01 = msck repair table vc.ods_vc_log_ai_chat_di;
+hive.query.02 = msck repair table vc.ods_vc_log_ai_scene_i_d;
+hive.query.03 = msck repair table vc.ods_vc_log_message_type_i_d;
+hive.query.04 = msck repair table vc.ods_vc_log_order_i_d;
+hive.query.05 = msck repair table vc.ods_vc_log_user_activity_i_d;
+hive.query.06 = msck repair table vc.ods_vc_log_vc_enum_i_d;
+hive.query.07 = msck repair table vc.ods_vc_log_free_character_day_i_d;
+hive.query.07 = msck repair table vc.ods_vc_log_common_ai_invoke_i_d;

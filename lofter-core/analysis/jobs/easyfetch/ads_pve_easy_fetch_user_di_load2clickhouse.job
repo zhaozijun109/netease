@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,userid,import_flg,usertradetype,tradeactivedays,chats_role_def,1d_total_chats,2d_total_chats,3d_total_chats,7d_total_chats,1d_chats_roles,2d_chats_roles,3d_chats_roles,7d_chats_roles,15d_chats_roles,30d_chats_roles,total_chats_roles,activetype,3d_active_days,7d_active_days,15d_active_days,30d_active_days,total_active_days,amount_role_def,1d_total_amount,2d_total_amount,3d_total_amount,5d_total_amount,7d_total_amount,15d_total_amount,30d_total_amount,total_amount,5d_chats_roles,5d_total_chats,15d_total_chats,30d_total_chats,5d_active_days from lofter_dm.ads_pve_easy_fetch_user_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_pve_easy_fetch_user_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_pve_easy_fetch_user_di

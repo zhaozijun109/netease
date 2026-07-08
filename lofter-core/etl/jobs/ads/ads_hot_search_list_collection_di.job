@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=\
+with hot_collection as ( \
+    select * \
+    from ( \
+        select collectionId, blogId, score, subscribe, hot, \
+            row_number() over (order by score desc) as rk, \
+            row_number() over (order by subscribe desc) as rk1, \
+            max(score) over () as max_score, min(score) over () as min_score \
+        from ( \
+            select collectionId, blogId, ln(nvl(hot_7d,1)) * 0.4 + ln(nvl(subscribe_uv_7d, 1)) * 0.6 as score, nvl(subscribe_uv_7d, 0) as subscribe, hot_7d as hot \
+            from lofter.dws_collection_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and update_post_1d > 0 and is_recommend > 0 and status = 0 \
+        ) t \
+    ) tt \
+    where rk <= 100 \
+) \
+insert overwrite table lofter_dm.ads_hot_search_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 10) \
+select null as targetWord, \
+    if(b.collectionId is not null, 1, 0) as icon, \
+    null as source, \
+    (80 + (score - min_score) * 20 / (max_score - min_score))  as score, \
+    a.collectionId as postId, \
+    a.blogId, \
+    a.score as indexValue, \
+    a.rk as listRank, \
+    null as interaction_count, \
+    null as searching_circle \
+from hot_collection a \
+left join ( \
+    select collectionId \
+    from hot_collection \
+    where rk<=10 \
+    order by rk1 asc \
+    limit 3 \
+) b on a.collectionId = b.collectionId \

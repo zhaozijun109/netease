@@ -1,0 +1,173 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_cp_data_creator_traffic_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userid      as blogid, \
+       expose_uv_1d  as post_expose_pv_1d, \
+       expose_uv_90d as post_expose_pv_90d, \
+       click_uv_1d   as post_click_pv_1d, \
+       click_uv_90d  as post_click_pv_90d, \
+       browse_pv_1d  as post_browse_pv_1d, \
+       browse_pv_90d as post_browse_pv_90d, \
+       post_expose_uv_1d, \
+       post_expose_uv_90d, \
+       post_click_uv_1d, \
+       post_click_uv_90d, \
+       post_real_browse_uv_1d, \
+       post_real_browse_uv_90d, \
+       post_support_induced_pv_1d, \
+       post_support_induced_pv_90d, \
+       discovery_click_pv_1d, \
+       discovery_click_pv_90d, \
+       related_article_click_pv_1d, \
+       related_article_click_pv_90d, \
+       tag_discovery_click_pv_1d, \
+       tag_discovery_click_pv_90d, \
+       tag_new_click_pv_1d, \
+       tag_new_click_pv_90d, \
+       tag_hot_click_pv_1d, \
+       tag_hot_click_pv_90d, \
+       collection_click_pv_1d, \
+       collection_click_pv_90d, \
+       attention_click_pv_1d, \
+       attention_click_pv_90d, \
+       discovery_expose_pv_1d, \
+       discovery_expose_pv_90d, \
+       related_article_expose_pv_1d, \
+       related_article_expose_pv_90d, \
+       tag_discovery_expose_pv_1d, \
+       tag_discovery_expose_pv_90d, \
+       tag_new_expose_pv_1d, \
+       tag_new_expose_pv_90d, \
+       tag_hot_expose_pv_1d, \
+       tag_hot_expose_pv_90d, \
+       collection_expose_pv_1d, \
+       collection_expose_pv_90d, \
+       attention_expose_pv_1d, \
+       attention_expose_pv_90d, \
+       discovery_browse_pv_1d, \
+       discovery_browse_pv_90d, \
+       related_article_browse_pv_1d, \
+       related_article_browse_pv_90d, \
+       tag_discovery_browse_pv_1d, \
+       tag_discovery_browse_pv_90d, \
+       tag_new_browse_pv_1d, \
+       tag_new_browse_pv_90d, \
+       tag_hot_browse_pv_1d, \
+       tag_hot_browse_pv_90d, \
+       collection_browse_pv_1d, \
+       collection_browse_pv_90d, \
+       attention_browse_pv_1d, \
+       attention_browse_pv_90d, \
+       expose_pv_90d, \
+       click_pv_90d, \
+       search_click_pv_1d, \
+       search_click_pv_90d, \
+       videolist_click_pv_1d, \
+       videolist_click_pv_90d, \
+       search_expose_pv_1d, \
+       search_expose_pv_90d, \
+       videolist_expose_pv_1d, \
+       videolist_expose_pv_90d, \
+       search_browse_pv_1d, \
+       search_browse_pv_90d, \
+       videolist_browse_pv_1d, \
+       videolist_browse_pv_90d, \
+       expose_pv_7d, \
+       expose_pv_30d, \
+       browse_pv_7d, \
+       browse_pv_30d \
+from ( \
+     select userid \
+     FROM lofter.dws_par_creator_dd \
+     WHERE post_count_365d IS NOT NULL \
+       AND post_count_365d > 0 \
+       AND dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+       select userid, \
+              expose_pv_1d, \
+              expose_pv_90d, \
+              click_pv_1d, \
+              click_pv_90d, \
+              browse_pv_1d, \
+              browse_pv_90d, \
+              post_expose_uv_1d, \
+              post_expose_uv_90d, \
+              post_click_uv_1d, \
+              post_click_uv_90d, \
+              post_real_browse_uv_1d, \
+              post_real_browse_uv_90d, \
+              post_support_induced_pv_1d, \
+              post_support_induced_pv_90d, \
+              discovery_click_pv_1d, \
+              discovery_click_pv_90d, \
+              related_article_click_pv_1d, \
+              related_article_click_pv_90d, \
+              tag_discovery_click_pv_1d, \
+              tag_discovery_click_pv_90d, \
+              tag_new_click_pv_1d, \
+              tag_new_click_pv_90d, \
+              tag_hot_click_pv_1d, \
+              tag_hot_click_pv_90d, \
+              collection_click_pv_1d, \
+              collection_click_pv_90d, \
+              attention_click_pv_1d, \
+              attention_click_pv_90d, \
+              discovery_expose_pv_1d, \
+              discovery_expose_pv_90d, \
+              related_article_expose_pv_1d, \
+              related_article_expose_pv_90d, \
+              tag_discovery_expose_pv_1d, \
+              tag_discovery_expose_pv_90d, \
+              tag_new_expose_pv_1d, \
+              tag_new_expose_pv_90d, \
+              tag_hot_expose_pv_1d, \
+              tag_hot_expose_pv_90d, \
+              collection_expose_pv_1d, \
+              collection_expose_pv_90d, \
+              attention_expose_pv_1d, \
+              attention_expose_pv_90d, \
+              discovery_browse_pv_1d, \
+              discovery_browse_pv_90d, \
+              related_article_browse_pv_1d, \
+              related_article_browse_pv_90d, \
+              tag_discovery_browse_pv_1d, \
+              tag_discovery_browse_pv_90d, \
+              tag_new_browse_pv_1d, \
+              tag_new_browse_pv_90d, \
+              tag_hot_browse_pv_1d, \
+              tag_hot_browse_pv_90d, \
+              collection_browse_pv_1d, \
+              collection_browse_pv_90d, \
+              attention_browse_pv_1d, \
+              attention_browse_pv_90d, \
+              search_click_pv_1d, \
+              search_click_pv_90d, \
+              videolist_click_pv_1d, \
+              videolist_click_pv_90d, \
+              search_expose_pv_1d, \
+              search_expose_pv_90d, \
+              videolist_expose_pv_1d, \
+              videolist_expose_pv_90d, \
+              search_browse_pv_1d, \
+              search_browse_pv_90d, \
+              videolist_browse_pv_1d, \
+              videolist_browse_pv_90d, \
+              expose_pv_7d, \
+              expose_pv_30d, \
+              browse_pv_7d, \
+              browse_pv_30d \
+       from lofter.dws_par_creator_traffic_dd \
+       where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userid = b.userid \
+left join ( \
+    select post_userId, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', expose_uv, 0)) as expose_uv_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, expose_uv, 0)) as expose_uv_90d, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', click_uv, 0)) as click_uv_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, click_uv, 0)) as click_uv_90d \
+    from lofter.dws_post_traffic_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',90) \
+    group by post_userId \
+) c on a.userid = c.post_userId \
+where b.browse_pv_90d > 0 or b.expose_pv_90d > 0 or b.click_pv_90d > 0

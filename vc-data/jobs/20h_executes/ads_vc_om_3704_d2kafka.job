@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select user_id as userId,data as characterDTOList,'OM3704_LOFTER_DELAY_NOTICE_METRIC' as metricId from vc.ads_vc_om_3704_d where dt = '${azkaban.flow.current.date}'"
+params= --topic vc_offline_emotion_event_notice_sync_topic --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092
+
+dependencies=ads_vc_om_3704_d

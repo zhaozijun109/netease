@@ -1,0 +1,334 @@
+type=sparksql
+hive.query.01= \
+with chat_base_data as ( \
+select t1.base_date, \
+COALESCE(t1.new_register_flag,2) as new_register_flag, \
+t1.origin_type, \
+t1.period, \
+t1.chat_uv, \
+t1.chat_uv_30up, \
+t1.chat_uv_100up, \
+t1.chat_characters, \
+t1.total_chat_rounds, \
+t1.mmt_cnt, \
+t1.heart_cnt, \
+t1.total_consume_nums, \
+t1.total_free_energy, \
+t1.total_buy_energy, \
+t1.total_reward_energy \
+from \
+( \
+select a.dt as base_date, \
+case when a.dt = b.register_date then 1 else 0 end   AS new_register_flag, \
+b.origin_type, \
+'0' as period, \
+count(distinct a.user_id) as chat_uv,   \
+count(distinct case when a.message_cnt>=30 then a.user_id end) as chat_uv_30up,   \
+count(distinct case when a.message_cnt>=100 then a.user_id end) as chat_uv_100up,   \
+sum(a.chat_characters)           as chat_characters,  \
+sum(a.message_cnt)               as total_chat_rounds, \
+sum(a.mmt_cnt)                   as mmt_cnt, \
+sum(a.heart_cnt)                 as heart_cnt, \
+sum(a.energy_consume)            as total_consume_nums, \
+sum(a.free_energy)               as total_free_energy, \
+sum(a.buy_energy)                as total_buy_energy, \
+sum(a.reward_energy)             as total_reward_energy \
+from ( \
+select  \
+dt, \
+user_id, \
+count(distinct character_id)     as chat_characters,  \
+sum(message_cnt)        as message_cnt, \
+sum(mmt_cnt)            as mmt_cnt, \
+sum(heart_cnt)          as heart_cnt, \
+sum(energy_consume)     as energy_consume, \
+sum(free_energy)        as free_energy, \
+sum(buy_energy)         as buy_energy, \
+sum(reward_energy)      as reward_energy, \
+sum(free_message_cnt)   as free_message_cnt, \
+sum(message_consume)    as message_consume \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+where dt = '${azkaban.flow.1.days.ago}' \
+and is_anonymity != 'Y' \
+group by dt,user_id \
+) a \
+left join \
+( \
+select  \
+user_id, \
+first_talk_date, \
+register_date, \
+origin_type \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+)b on a.user_id=b.user_id  \
+group by a.dt, \
+case when a.dt = b.register_date then 1 else 0 end, \
+b.origin_type \
+grouping sets( \
+(a.dt,origin_type), \
+(a.dt,case when a.dt = b.register_date then 1 else 0 end,origin_type) \
+) \
+) t1 \
+ \
+), \
+chat_retain_data as  \
+( \
+select base_date, \
+COALESCE(new_register_flag,2) as new_register_flag, \
+origin_type, \
+period, \
+uv as chat_uv, \
+uv_1d as chat_uv_1d, \
+uv_2d as chat_uv_2d, \
+uv_3d as chat_uv_3d, \
+uv_7d as chat_uv_7d, \
+uv_15d as chat_uv_15d, \
+uv_30d as chat_uv_30d \
+from \
+( \
+select \
+b.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', b.dt) as period, \
+d.origin_type, \
+case when b.dt = d.register_date then 1 else 0 end   AS new_register_flag, \
+count(DISTINCT b.user_id) AS uv, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 0) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_1d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 1) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_2d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 2) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (2) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_3d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 4) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (4) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_5d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 6) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_7d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 14) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_15d, \
+count( \
+DISTINCT CASE \
+WHEN f.dt = date_add(b.dt, 29) \
+AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN f.user_id \
+ELSE NULL \
+END \
+) AS uv_30d \
+from \
+( \
+select user_id,dt \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+and nvl(is_anonymity,'N') != 'Y' \
+group by dt,user_id \
+) b  \
+left join ( \
+select user_id, \
+register_date, \
+is_anonymity, \
+origin_type \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+) d on b.user_id = d.user_id \
+left join ( \
+select user_id,dt \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+group by dt,user_id \
+) f on b.user_id = f.user_id \
+AND f.dt BETWEEN date_add(b.dt, 0) \
+AND date_add(b.dt, 30) \
+WHERE datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 2, 4, 6, 14, 29) \
+group by b.dt, \
+datediff('${azkaban.flow.1.days.ago}', b.dt), \
+d.origin_type, \
+case when b.dt = d.register_date then 1 else 0 end \
+grouping sets( \
+(b.dt,datediff('${azkaban.flow.1.days.ago}', b.dt),d.origin_type), \
+(b.dt,datediff('${azkaban.flow.1.days.ago}', b.dt),d.origin_type,case when b.dt = d.register_date then 1 else 0 end) \
+) \
+) \
+), \
+duplicate_data as ( \
+select type, \
+data.id, \
+data.userid as user_code, \
+data.userdupid, \
+data.duplicateId, \
+data.userduptype, \
+data.sender, \
+data.requestid, \
+data.sortno, \
+data.roleid, \
+data.messagetype, \
+data.sendmessagetime, \
+data.costappstamina, \
+data.costlofterstamina, \
+data.coststatus, \
+dt \
+from vc.ods_vc_h5_ectypal_chat_i_d  \
+where dt >='2025-06-20' \
+), \
+ \
+doctor_duplicate_chat as ( \
+select base_date, \
+COALESCE(new_register_flag,2) as new_register_flag, \
+origin_type, \
+period, \
+doctor_chat_uv, \
+doctor_total_rounds, \
+doctor_cost_energy \
+from  \
+( \
+select t1.dt as base_date, \
+'0' as period, \
+case when t2.register_date=t1.dt then 1 else 0 end as new_register_flag, \
+t2.origin_type, \
+count(distinct t2.user_id) as doctor_chat_uv, \
+sum(t1.doctor_total_rounds) as doctor_total_rounds, \
+SUM(t1.doctor_cost_energy) as doctor_cost_energy \
+from \
+( \
+select dt, \
+user_code, \
+count(id) as doctor_total_rounds, \
+SUM(costappstamina + costlofterstamina) as doctor_cost_energy \
+from duplicate_data \
+where userduptype=3 \
+group by dt,user_code \
+)  t1 \
+left join ( \
+select user_id, \
+user_code, \
+register_date, \
+is_anonymity, \
+origin_type \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+) t2 on t1.user_code = t2.user_code \
+where t1.dt = '${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+case when t2.register_date=t1.dt then 1 else 0 end, \
+t2.origin_type \
+grouping sets( \
+(t1.dt,t2.origin_type), \
+(t1.dt,case when t1.dt = t2.register_date then 1 else 0 end,t2.origin_type) \
+) \
+)  \
+ \
+), \
+date_duplicate_chat as ( \
+select base_date, \
+COALESCE(new_register_flag,2) as new_register_flag, \
+origin_type, \
+period, \
+date_chat_uv, \
+date_total_rounds, \
+date_cost_energy \
+from  \
+( \
+select t1.dt as base_date, \
+'0' as period, \
+case when t2.register_date=t1.dt then 1 else 0 end as new_register_flag, \
+t2.origin_type, \
+count(distinct t2.user_id)  as date_chat_uv, \
+sum(t1.date_total_rounds) as date_total_rounds, \
+SUM(t1.date_cost_energy)  as date_cost_energy \
+from \
+( \
+select dt, \
+user_code, \
+count(id) as date_total_rounds, \
+SUM(costappstamina + costlofterstamina) as date_cost_energy \
+from duplicate_data \
+where userduptype=4 \
+group by dt,user_code \
+)  t1 \
+left join ( \
+select user_id, \
+user_code, \
+register_date, \
+is_anonymity, \
+origin_type \
+from \
+vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+) t2 on t1.user_code = t2.user_code \
+where t1.dt = '${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+case when t2.register_date=t1.dt then 1 else 0 end, \
+t2.origin_type \
+grouping sets( \
+(t1.dt,t2.origin_type), \
+(t1.dt,case when t1.dt = t2.register_date then 1 else 0 end,t2.origin_type) \
+) \
+)  \
+) \
+ \
+ \
+insert overwrite table vc_dm.ads_vc_user_chat_data_v2_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.base_date, \
+a.new_register_flag, \
+a.origin_type, \
+a.period, \
+a.chat_uv, \
+a.chat_uv_1d, \
+a.chat_uv_2d, \
+a.chat_uv_3d, \
+a.chat_uv_7d, \
+a.chat_uv_15d, \
+a.chat_uv_30d, \
+b.chat_uv_30up, \
+b.chat_uv_100up, \
+b.chat_characters, \
+b.total_chat_rounds, \
+b.mmt_cnt, \
+b.heart_cnt, \
+b.total_consume_nums, \
+b.total_free_energy, \
+b.total_buy_energy, \
+b.total_reward_energy, \
+c.doctor_chat_uv, \
+c.doctor_total_rounds, \
+c.doctor_cost_energy, \
+d.date_chat_uv, \
+d.date_total_rounds, \
+d.date_cost_energy \
+from chat_retain_data a  \
+left join chat_base_data b on a.base_date=b.base_date and a.new_register_flag=b.new_register_flag and a.origin_type=b.origin_type and a.period=b.period \
+left join doctor_duplicate_chat c on a.base_date=c.base_date and a.new_register_flag=c.new_register_flag and a.origin_type=c.origin_type and a.period=c.period \
+left join date_duplicate_chat d on a.base_date=d.base_date and a.new_register_flag=d.new_register_flag and a.origin_type=d.origin_type and a.period=d.period \

@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_content_new_level_cd_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select  \
+    base_date,postid,level,grade,content_type,title,url,publish_date,ips,collectionid_url,is_book_store \
+    ,new_devices,new_nature_devices,new_devices_7d,new_devices_30d,return_devices,return_nature_devices,return_devices_7d,return_devices_30d \
+    ,new_devices_std,return_devices_std,post_hot,current_year_new_devices_std,current_year_return_devices_std \
+    ,current_year_new_nature_devices_std,current_year_return_nature_devices_std \
+    ,retain_new_device_count,retain_return_device_count \
+from lofter_dm.ads_growth_content_new_level_report_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+and level in ('C','D') \

@@ -1,0 +1,180 @@
+type=sparksql
+hive.query.01= \
+ \
+INSERT OVERWRITE TABLE vc_dm.ads_vc_user_chat_preference_report_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+ \
+WITH \
+user_dimensions AS ( \
+    SELECT \
+        user_id, \
+        register_date, \
+        CASE \
+            WHEN is_lofter = 'Y' AND is_pve = 'Y' THEN 'LOFTER PVE' \
+            WHEN is_lofter = 'Y' AND is_pve = 'N' THEN 'LOFTER 非 PVE' \
+            ELSE '非 LOFTER' \
+        END AS lofter_origin_type \
+    FROM \
+        vc.dws_vc_user_behavior_info_a_d \
+    WHERE \
+        dt = (SELECT MAX(dt) FROM vc.dws_vc_user_behavior_info_a_d) \
+), \
+ \
+user_preference_daily AS ( \
+    SELECT \
+        act.dt, \
+        act.user_id, \
+        COALESCE(pref.total_talk_cnt_30d, 0) AS total_talk_cnt_30d, \
+        COALESCE(pref.ugc_talk_cnt_30d, 0) AS ugc_talk_cnt_30d, \
+        COALESCE(pref.ogc_talk_cnt_30d, 0) AS ogc_talk_cnt_30d, \
+        CASE \
+            WHEN COALESCE(pref.total_talk_cnt_30d, 0) > 0 AND (COALESCE(pref.ugc_talk_cnt_30d, 0) / pref.total_talk_cnt_30d) > 0.6 THEN '偏好UGC' \
+            WHEN COALESCE(pref.total_talk_cnt_30d, 0) > 0 AND (COALESCE(pref.ogc_talk_cnt_30d, 0) / pref.total_talk_cnt_30d) > 0.6 THEN '偏好OGC' \
+            ELSE '无偏好' \
+        END AS chat_preference \
+    FROM \
+        vc.dwd_vc_user_active_i_d act \
+    LEFT JOIN \
+        vc.dws_vc_user_ugc_ogc_talk_cnt_30d_di pref ON act.user_id = pref.user_id AND act.dt = pref.dt \
+    WHERE \
+        act.dt = '${azkaban.flow.1.days.ago}' and act.is_anonymity ='N' \
+), \
+ \
+user_chat_daily AS ( \
+    SELECT \
+        dt, \
+        user_id, \
+        SUM(talk_cnt) AS daily_talk_cnt \
+    FROM \
+        vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    WHERE \
+        dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY \
+        dt, user_id \
+), \
+ \
+user_payment_daily AS ( \
+    SELECT \
+        dt, \
+        user_id, \
+        SUM(order_price) AS daily_amount \
+    FROM \
+        vc.dwd_vc_order_i_d \
+    WHERE \
+        dt = '${azkaban.flow.1.days.ago}' \
+        AND order_status = 2 \
+    GROUP BY \
+        dt, user_id \
+), \
+ \
+retention_counts_daily AS ( \
+    SELECT \
+        base_day.dt, \
+        base_day.user_id, \
+        next_day_active.user_id AS retained_user_1d, \
+        t6_active.user_id AS retained_user_6d \
+    FROM \
+        vc.dwd_vc_user_active_i_d AS base_day \
+    LEFT JOIN \
+        vc.dwd_vc_user_active_i_d AS next_day_active \
+        ON base_day.user_id = next_day_active.user_id AND next_day_active.dt = date_add(base_day.dt, 1) \
+    LEFT JOIN \
+        vc.dwd_vc_user_active_i_d AS t6_active \
+        ON base_day.user_id = t6_active.user_id AND t6_active.dt = date_add(base_day.dt, 6) \
+    WHERE \
+        base_day.dt = '${azkaban.flow.1.days.ago}' \
+), \
+ \
+combined_user_metrics AS ( \
+    SELECT \
+        upd.dt, \
+        upd.user_id, \
+        upd.chat_preference, \
+        CASE \
+            WHEN dim.register_date IS NULL OR DATEDIFF(upd.dt, dim.register_date) <= 0 THEN '0天' \
+            WHEN DATEDIFF(upd.dt, dim.register_date) BETWEEN 1 AND 6 THEN '1-7天' \
+            ELSE '7天及以上' \
+        END AS registration_days_tier, \
+        CASE \
+            WHEN dim.register_date IS NULL OR DATEDIFF(upd.dt, dim.register_date) <= 0 THEN \
+                COALESCE(dim.lofter_origin_type, '非 LOFTER') \
+            ELSE '不区分' \
+        END AS lofter_origin_type_agg, \
+        COALESCE(ucd.daily_talk_cnt, 0) AS daily_talk_cnt, \
+        COALESCE(upd2.daily_amount, 0.0) AS daily_amount, \
+        ret.retained_user_1d, \
+        ret.retained_user_6d \
+    FROM \
+        user_preference_daily upd \
+    LEFT JOIN \
+        user_dimensions dim ON upd.user_id = dim.user_id \
+    LEFT JOIN \
+        user_chat_daily ucd ON upd.dt = ucd.dt AND upd.user_id = ucd.user_id \
+    LEFT JOIN \
+        user_payment_daily upd2 ON upd.dt = upd2.dt AND upd.user_id = upd2.user_id \
+    LEFT JOIN \
+        retention_counts_daily ret ON upd.dt = ret.dt AND upd.user_id = ret.user_id \
+), \
+ \
+final_aggregation AS ( \
+    SELECT \
+        dt, \
+        chat_preference, \
+        registration_days_tier, \
+        lofter_origin_type_agg, \
+        COUNT(DISTINCT user_id) AS active_uv, \
+        COUNT(DISTINCT CASE WHEN daily_talk_cnt > 0 THEN user_id ELSE NULL END) AS chat_uv, \
+        SUM(daily_talk_cnt) AS total_talk_rounds, \
+        SUM(daily_amount) AS total_amount, \
+        COUNT(DISTINCT CASE WHEN daily_amount > 0 THEN user_id ELSE NULL END) AS paid_uv, \
+        COUNT(DISTINCT retained_user_1d) AS next_day_active_uv, \
+        COUNT(DISTINCT retained_user_6d) AS t6_active_uv \
+    FROM \
+        combined_user_metrics \
+    GROUP BY \
+        GROUPING SETS ( \
+            (dt, chat_preference, registration_days_tier, lofter_origin_type_agg), \
+            (dt) \
+        ) \
+) \
+ \
+SELECT \
+    dt AS stat_date, \
+    COALESCE(chat_preference, '总计') AS chat_preference_group, \
+    COALESCE(registration_days_tier, '总计') AS registration_days_tier, \
+    COALESCE(lofter_origin_type_agg, '总计') AS lofter_origin_type, \
+    active_uv AS active_uv, \
+    next_day_active_uv AS next_day_active_uv, \
+    t6_active_uv AS t6_active_uv, \
+    CASE WHEN active_uv > 0 THEN chat_uv / active_uv ELSE 0 END AS active_user_chat_ratio, \
+    chat_uv AS chat_uv, \
+    total_talk_rounds AS total_talk_rounds, \
+    CASE WHEN chat_uv > 0 THEN total_talk_rounds / chat_uv ELSE 0 END AS avg_talk_rounds_per_chat_user, \
+    total_amount AS total_payment_amount, \
+    paid_uv AS paid_uv, \
+    CASE WHEN active_uv > 0 THEN paid_uv / active_uv ELSE 0 END AS active_user_payment_ratio, \
+    CASE WHEN active_uv > 0 THEN total_amount / active_uv ELSE 0 END AS arpu, \
+    CASE WHEN paid_uv > 0 THEN total_amount / paid_uv ELSE 0 END AS arppu \
+FROM \
+    final_aggregation \
+ORDER BY \
+    stat_date ASC, \
+    CASE WHEN chat_preference_group = '总计' THEN 0 ELSE 1 END ASC, \
+    CASE chat_preference_group \
+        WHEN '无偏好' THEN 1 \
+        WHEN '偏好UGC' THEN 2 \
+        WHEN '偏好OGC' THEN 3 \
+        ELSE 99 \
+    END ASC, \
+    CASE registration_days_tier \
+        WHEN '0天' THEN 1 \
+        WHEN '1-7天' THEN 2 \
+        WHEN '7天及以上' THEN 3 \
+        ELSE 99 \
+    END ASC, \
+    CASE lofter_origin_type \
+        WHEN '非 LOFTER' THEN 1 \
+        WHEN 'LOFTER 非 PVE' THEN 2 \
+        WHEN 'LOFTER PVE' THEN 3 \
+        WHEN '不区分' THEN 4 \
+        ELSE 99 \
+    END ASC;

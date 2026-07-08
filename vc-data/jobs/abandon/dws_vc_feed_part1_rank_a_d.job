@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dws_vc_feed_part1_rank_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select x1.package_id, \
+                       x1.character_id, \
+                       x2.character_type, \
+                       x2.talk_cnt_gn10_peoples, \
+                       x2.talk_cnt_peoples, \
+                       x2.ratio, \
+                       row_number() over (partition by package_id order by ratio desc) as rk, \
+                       x1.version \
+                from (select package_id, version , explode(characters) as character_id \
+                      from vc.dwd_vc_character_package_i_d \
+                      where dt = '${azkaban.flow.current.date}' \
+                        and h = '${azkaban.flow.start.hour}') x1 \
+                         left join \
+                     (select character_id, character_type, talk_cnt_gn10_peoples, talk_cnt_peoples, ratio \
+                      from vc.dwd_vc_p30d_talk_cnt_a_d \
+                      where dt = '${azkaban.flow.current.date}' \
+                        and h = '${azkaban.flow.start.hour}') x2 \
+                     on x1.character_id = x2.character_id
+
+dependencies=dwd_vc_character_package_i_d,dwd_vc_p30d_talk_cnt_a_d

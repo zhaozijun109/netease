@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_image_market_product_tag_dd` PARTITION(`dt` = '${azkaban.flow.1.days.ago}') \
+SELECT t1.itemId, \
+       t1.itemType, \
+       t1.tag \
+FROM ( \
+    SELECT  a.productId AS itemId, \
+            a.productType AS itemType, \
+            a.tag \
+    FROM lofter_db_dump.ods_db_image_market_product_tag_nd a \
+    left join lofter_db_dump.ods_db_image_market_product_nd b on a.productId = b.id \
+    where nvl(b.status,0) >= 0 \
+    GROUP BY 1, 2, 3 \
+) t1 \
+JOIN ( \
+    SELECT itemId, itemType \
+    FROM ( \
+      SELECT id AS itemId, 0 AS itemType FROM lofter_db_dump.ods_db_image_market_product_nd WHERE status = 1 AND recommendstatus = 1 \
+    ) a \
+    LEFT JOIN ( \
+        SELECT productid, lootboxid FROM lofter_db_dump.ods_db_image_market_product_loot_box_nd \
+    ) b \
+    ON a.itemId = b.productId \
+    WHERE b.productId IS NULL \
+    UNION \
+    SELECT id AS itemId, 1 AS itemType FROM lofter_db_dump.ods_db_image_market_loot_box_nd WHERE status = 1 AND recommendstatus = 1 \
+) t2 \
+ON t1.itemId = t2.itemId AND t1.itemType = t2.itemType
+dependencies=

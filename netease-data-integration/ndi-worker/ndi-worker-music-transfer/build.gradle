@@ -1,0 +1,99 @@
+subprojects {
+  apply plugin: "java"
+  apply plugin: "scala"
+
+  sourceSets {
+    main {
+      scala {
+        srcDirs = ["src/main/scala", "src/main/java"]
+      }
+      java {
+        srcDirs = []
+      }
+    }
+
+    test {
+      scala {
+        srcDirs = ["src/test/scala", "src/test/java"]
+      }
+      java {
+        srcDirs = []
+      }
+    }
+  }
+
+  sourceCompatibility = 1.8
+
+  repositories {
+    mavenCentral()
+  }
+}
+
+ext {
+  compileOnlyPackages = [
+    packages.scalaLibrary, packages.sparkCore, packages.sparkSQL
+  ]
+
+  modulePrefix = ":ndi-worker:ndi-worker-music-transfer"
+}
+
+task clean {
+  doFirst {
+    delete "build"
+  }
+}
+
+task build {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-common:createPackageDir"
+}
+
+task copyCommon(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-common:createPackageDir"
+  from("ndi-worker-music-transfer-common/build/package")
+  into("build/package/music-transfer/")
+}
+
+task copyMySQL(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-mysql:createPackageDir"
+  from("ndi-worker-music-transfer-mysql/build/package")
+  into("build/package/music-transfer/mysql/")
+}
+
+task copyHive(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-hive:createPackageDir"
+  from("ndi-worker-music-transfer-hive/build/package")
+  into("build/package/music-transfer/hive/")
+}
+
+task copyDDBQS(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-ddb-qs:createPackageDir"
+  from("ndi-worker-music-transfer-ddb-qs/build/package")
+  into("build/package/music-transfer/ddb-qs/")
+}
+
+task copyDDBDBI(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-ddb-dbi:createPackageDir"
+  from("ndi-worker-music-transfer-ddb-dbi/build/package")
+  into("build/package/music-transfer/ddb-dbi/")
+}
+
+task copyOracle(type: Copy) {
+  dependsOn "${modulePrefix}:ndi-worker-music-transfer-oracle:createPackageDir"
+  from("ndi-worker-music-transfer-oracle/build/package")
+  into("build/package/music-transfer/oracle/")
+}
+
+task createPackageTar(type: Tar) {
+  dependsOn copyCommon, copyMySQL, copyHive, copyDDBQS, copyDDBDBI, copyOracle
+  compression Compression.GZIP
+  from("build/package/")
+  archiveBaseName = "ndi-worker-music-transfer"
+  archiveExtension = "tar.gz"
+  archiveVersion = "${project.property("ndi-version")}"
+  destinationDirectory = file("build")
+
+  doFirst {
+    createVersionFile(file("build/package/music-transfer/VERSION"))
+  }
+}
+

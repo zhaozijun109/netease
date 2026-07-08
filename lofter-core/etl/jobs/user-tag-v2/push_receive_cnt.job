@@ -1,0 +1,27 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag push_receive_cnt
+retries=0
+conf.spark.execute.sql="select userId, \
+                            'push_receive_cnt'                as tag_name, \
+                            cat                               as dim1, \
+                            ''                                as dim2, \
+                            ''                                as dim3, \
+                            ''                                as dim4, \
+                            '1'                               as grp, \
+                            value \
+                        from (select \
+                                  userid, \
+                                  'push_receive_cnt' as tag, \
+                                  CASE \
+                                      day_interval \
+                                      WHEN 1 THEN 'DAY_1' \
+                                      WHEN 7 THEN 'DAY_7' \
+                                      WHEN 15 THEN 'DAY_15' \
+                                      WHEN 30 THEN 'DAY_30' \
+                                  END as cat, \
+                                  push_cnt as value \
+                              from \
+                                  lofter_dm.ads_user_touch_push_cnt_di \
+                              where \
+                                  dt = '${azkaban.flow.1.days.ago}')"

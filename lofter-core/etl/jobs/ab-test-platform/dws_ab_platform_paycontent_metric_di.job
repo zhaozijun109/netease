@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01= \
+with scene_source as( \
+    select * from lofter.dws_ab_platform_paycontent_scene_metric_di where dt = '${azkaban.flow.1.days.ago}' \
+), \
+creator_source as ( \
+    select userid,sum(money) as profit_sum,count(distinct postid) as post_cnt \
+    from ( \
+        select userid,postid,money \
+        from lofter.dwd_evt_post_paid_detail_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) \
+    group by userid \
+), \
+user_source as( \
+    select userid,sum(money) as gmv,if(sum(money)>0,1,0) as pay_uv \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_settle = 1 and userid is not null \
+    group by userid \
+) \
+insert overwrite table lofter.dws_ab_platform_paycontent_metric_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select userid,type,is_fans_vip,unlock_method,groupsetid,metric,metric_value \
+from( \
+    select userid,'creator' as type,null as is_fans_vip,null as unlock_method,null as groupsetid,'profit_sum' as metric,profit_sum as metric_value \
+    from creator_source \
+union all \
+    select userid,'creator' as type,null as is_fans_vip,null as unlock_method,null as groupsetid,'profit_per_post' as metric,cast(nvl(profit_sum/post_cnt,0) as double) as metric_value \
+    from creator_source \
+union all \
+    select userid,scene as type,if(is_fans_vip = 1,'高粉','非高粉') as is_fans_vip,unlock_method,groupsetid,'ecpm' as metric, cast(nvl(pay_amount/browse_pv,0) as double) as metric_value \
+    from scene_source \
+union all \
+    select userid,scene as type,if(is_fans_vip = 1,'高粉','非高粉') as is_fans_vip,unlock_method,groupsetid,'browse2pay_rate' as metric, cast(nvl(pay_uv/browse_uv,0) as double) as metric_value \
+    from scene_source \
+union all \
+    select userid,scene as type,if(is_fans_vip = 1,'高粉','非高粉') as is_fans_vip,unlock_method,groupsetid,'pay2good_rate' as metric, cast(nvl(pos_comment_uv/pay_uv,0) as double) as metric_value \
+    from scene_source \
+union all \
+    select userid,scene as type,if(is_fans_vip = 1,'高粉','非高粉') as is_fans_vip,unlock_method,groupsetid,'pay2bad_rate' as metric, cast(nvl(neg_comment_uv/pay_uv,0) as double) as metric_value \
+    from scene_source \
+union all \
+    select userid,scene as type,if(is_fans_vip = 1,'高粉','非高粉') as is_fans_vip,unlock_method,groupsetid,'pay_cnt' as metric, cast(nvl(pay_pv,0) as double) as metric_value \
+    from scene_source \
+union all \
+    select userid,'user' as type,null as is_fans_vip,null as unlock_method,null as groupsetid,'gmv' as metric,cast(nvl(gmv,0) as double) as metric_value \
+    from user_source \
+union all \
+    select userid,'user' as type,null as is_fans_vip,null as unlock_method,null as groupsetid,'pay_uv' as metric,cast(nvl(pay_uv,0) as double) as metric_value \
+    from user_source \
+)
+dependencies=dws_ab_platform_paycontent_scene_metric_di

@@ -1,0 +1,159 @@
+type=sparksql
+hive.query.01=\
+with cp_tag as ( \
+    select tag \
+    from ( \
+        select a.tagName as tag, row_number() over (order by a.joinednum desc ) as rk \
+        from lofter_db_dump.ods_db_tag_joined_nd a \
+        join lofter.dim_tag b on a.tagName = b.tag and b.cpflag > 0 \
+        union all \
+        select a.tag, row_number() over (order by hot desc) as rk \
+        from ( \
+            select tag, count(1) as hot \
+            from lofter.dwd_post_hot_di \
+                lateral view explode(post_tags) as tag \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+            group by 1 \
+        ) a \
+        join lofter.dim_tag b on a.tag = b.tag and b.cpflag > 0 \
+    ) t \
+    where rk <= 200 \
+    group by 1 \
+), \
+tag_comment as ( \
+    select * \
+    from ( \
+        select *, \
+            row_number() over(partition by tag order by rn1) as rn2 \
+        from ( \
+            select t1.id as postId, t1.blogId, t1.title, t1.tag, t1.url, t2.hot, t3.pid, t3.underscore_comment_pv, t3.underscore_comment_pv_30d, t4.content as `comment`, \
+                row_number() over(partition by t1.id, t1.tag order by t3.underscore_comment_pv desc) as rn1 \
+            from ( \
+                select id, blogId, title, tag, url from lofter.dim_post_article lateral view explode(tags) as tag where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 and recomstatus = 1 \
+            ) t1 \
+            join cp_tag t11 on t1.tag = t11.tag \
+            join ( \
+                select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 1000 \
+            ) t2 \
+            on t1.id = t2.postId \
+            join ( \
+                select postId, blogId, pid, count(1) as underscore_comment_pv, \
+                        sum(if(from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}', 1, 0)) as underscore_comment_pv_30d \
+                from lofter_db_dump.ods_db_post_response_nd \
+                where length(pid) > 0 \
+                group by postId, blogId, pid \
+            ) t3 \
+            on t1.id = t3.postId \
+            join ( \
+                select postId, blogId, pid, regexp_replace(regexp_replace(regexp_replace(content, '^["“”]|["“”]$', ''),'\\\\[.*?\\\\]|哇|哈|啊|呦|哟|阿|h|w|手动狗头',''), '([！!？?，,。.；;：:“”"‘’\\'])\\\\1+', '$1') as content \
+                from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' \
+            ) t4 \
+            on t3.postId = t4.postId and t3.pid = t4.pid \
+            where length(t4.content) > 10 \
+        ) t5 \
+        where rn1 <= 5 \
+    ) where rn2 <= 40 \
+), \
+hot_comments as ( \
+    select t1.url, t1.title, t1.tags, t2.postId, t2.hot, t3.underscore_comment_pv, t4.* \
+    from ( \
+        select id, title, tags, url from lofter.dim_post_article where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 and recomstatus = 1 \
+    ) t1 \
+    join ( \
+        select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 1000 \
+    ) t2 \
+    on t1.id = t2.postId \
+    join ( \
+        select postId, blogId, sum(underscore_comment_pv) as underscore_comment_pv from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' group by postId, blogId having sum(underscore_comment_pv) >= 10 \
+    ) t3 \
+    on t2.postId = t3.postId \
+    join ( \
+        select commentId, \
+            postId, \
+            blogId, \
+            content, \
+            commentHot \
+        from ( \
+            select commentId, \
+                postId, \
+                blogId, \
+                content, \
+                commentHot, \
+                row_number() over(partition by postId, blogId order by commentHot desc) as rn \
+            from ( \
+                select id as commentId, \
+                    postId, \
+                    blogId, \
+                    regexp_replace(regexp_replace(regexp_replace(content, '^["“”]|["“”]$', ''),'\\\\[.*?\\\\]|哇|哈|啊|呦|哟|阿|h|w|手动狗头',''), '([！!？?，,。.；;：:“”"‘’\\'])\\\\1+', '$1') as content, \
+                    commentHot \
+                from lofter_db_dump.ods_db_post_response_nd \
+                where commentHot >= 10 \
+            ) a \
+            where length(content) >= 5 and length(content) <= 20 \
+        ) b \
+        where rn <= 2 \
+    ) t4 \
+    on t3.postId = t4.postId and t3.blogId = t4.blogId \
+) \
+insert overwrite table lofter_dm.ads_push_rec_content_candidates_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.* \
+from ( \
+    select t1.postId as postId, t1.blogId as blogId, t1.tag as tag, \
+           t1.pid as contentId, 'pid' as contentType, t1.cleaned_comment as content, t2.underscore_comment_pv as hot \
+    from ( \
+        select postId, blogId, tag, url, pid, comment, cleaned_comment from ( \
+            select postId, blogId, tag, url, pid, comment, regexp_replace(comment, '<br>|<br />|<br/>|<strong>|</strong>', '') as cleaned_comment from tag_comment \
+        ) a \
+        where length(cleaned_comment) > 10 and length(cleaned_comment) < 50 \
+    ) t1 \
+    join ( \
+        select postId, pid, underscore_comment_pv from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) t2 \
+    on t1.postId = t2.postId and t1.pid = t2.pid \
+    union all \
+    select t1.postId as postId, t1.blogId as blogId, tag, \
+         cast(t1.postId as string) as contentId, \
+         'postId' as contentType, \
+        cleaned_title as content, \
+        hot \
+    from ( \
+        select postId, blogId, \
+            tag, \
+            title, \
+            CASE WHEN regexp_extract(title, '《.*?》', 0) <> '' THEN regexp_replace(regexp_extract(title, '《.*?》', 0), '[《》]','') \
+                 WHEN regexp_extract(title, '^【([^】]+)】$', 1) <> '' THEN regexp_replace(regexp_extract(title, '^【([^】]+)】$', 1), '[0-9]', '') \
+                 ELSE regexp_replace(regexp_replace(regexp_replace(title, '^[\\\\p{L}0-9_]*‖', ''), '\\\\[.*?\\\\]|\\\\(.*?\\\\)|\\\\{.*?\\\\}|【.*?】|（.*?）|「.*?」|·.*?·|.*?[｜\\\\|]|\\\\d+$|[\\\\ud800-\\\\udfff]|<br>|<br />|<br/>|<strong>|</strong>|&nbsp;|;', ''), '(?U)(\\\\[.*?\\\\]|[\\\\p{Punct}\\\\s])', '') \
+            END AS cleaned_title, \
+            url \
+        from tag_comment \
+    ) t1 \
+    join ( \
+        select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) t2 on t1.postId = t2.postId \
+    where length(t1.cleaned_title) >= 5 \
+    union all \
+    select postId, blogId, tag, cast(commentId as string) as contentId, 'commentId' as contentType, content, commenthot as hot \
+    from ( \
+        select commentId, content, commenthot, postId, blogId, t2.tag, \
+               row_number() over (partition by t2.tag order by commenthot desc) as rn \
+        from ( \
+            select t2.commentId, t2.content, t1.commenthot, t1.postId, t1.blogId \
+            from ( \
+                select id, postId, blogId, commenthot from lofter_db_dump.ods_db_post_response_nd \
+            ) t1 \
+            join ( \
+                select commentId, content from hot_comments \
+            ) t2 \
+            on t1.id = t2.commentId \
+            group by t2.commentId, t2.content, t1.commenthot, t1.postId, t1.blogId \
+        ) t1 \
+        join ( \
+            select id, tag from lofter.dim_post_article lateral view explode(tags) as tag \
+        ) t2 on t1.postId = t2.id \
+        join cp_tag t21 on t2.tag = t21.tag \
+        where length(content) >= 10 and length(content) < 50 \
+    ) t2 \
+    where rn <= 40 \
+) a \
+left join (select * from lofter_dm.ads_push_rec_content_candidates_di where dt <= '${azkaban.flow.2.days.ago}') b on a.contentid = b.contentId and a.contentType = b.contentType \
+where b.contentId is null \

@@ -1,0 +1,166 @@
+type=sparksql
+hive.query.01=\
+with \
+  yiciyuan_ad as ( \
+    select \
+      userid, \
+      appid, \
+      nvl(cache_position_name, positionName) positionname, \
+      bgpv, \
+      os, \
+      dspid, \
+      bid_amount, \
+      nvl(cache_position_id, positionId) as positionid, \
+      nvl(cache_req_id, req_id) as req_id, \
+      clickpv, \
+      if(cache_position_name is not null, 1, 0) as from_cache \
+    from \
+      lofter.dwd_ad_actions_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and appid in ('1L9KQGDL', 'Y8KJDFYR') \
+      and dspid > 0 and dspId != 1 \
+  ) \
+insert overwrite table lofter_dm.ads_ad_avg_trade_position_income_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.positionname, \
+  a.appid, \
+  a.adtype, \
+  a.req_uv, \
+  a.bg_uv, \
+  a.money, \
+  a.req_pv, \
+  a.bg_pv, \
+  null as dspid, \
+  a.os, \
+  null as groupname, \
+  a.click_uv, \
+  a.click_pv, \
+  from_cache \
+from \
+  ( \
+    select \
+      positionname, \
+      appid, \
+      case \
+        when positionname like '%激励%' then '激励广告' \
+        when positionname = '开机' then '开机' \
+        else '其他' \
+      end adtype, \
+      count(distinct req_id) as req_pv, \
+      sum( \
+        case \
+          when bgpv > 0 then bid_amount / 1000 \
+          else 0 \
+        end \
+      ) as money, \
+      count(distinct userid) as req_uv, \
+      count( \
+        distinct case \
+          when bgpv > 0 then userid \
+          else null \
+        end \
+      ) as bg_uv, \
+      count( \
+        distinct case \
+          when bgpv > 0 then req_id \
+          else null \
+        end \
+      ) as bg_pv, \
+      count( \
+        distinct case \
+          when clickpv > 0 then userid \
+          else null \
+        end \
+      ) as click_uv, \
+      count( \
+        distinct case \
+          when clickpv > 0 then req_id \
+          else null \
+        end \
+      ) as click_pv, \
+      os, \
+      from_cache \
+    from \
+      yiciyuan_ad \
+    group by \
+      positionname, \
+      appid, \
+      case \
+        when positionname like '%激励%' then '激励广告' \
+        when positionname = '开机' then '开机' \
+        else '其他' \
+      end, \
+      os, \
+      from_cache \
+    with \
+      cube \
+  ) a \
+union \
+select \
+  positionname, \
+  a.appid, \
+  case \
+    when positionname like '%激励%' then '激励广告' \
+    when positionname = '开机' then '开机' \
+    else '其他' \
+  end adtype, \
+  count(distinct userid) as req_uv, \
+  count( \
+    distinct case \
+      when bgpv > 0 then userid \
+      else null \
+    end \
+  ) as bg_uv, \
+  sum( \
+    case \
+      when bgpv > 0 then bid_amount / 1000 \
+      else 0 \
+    end \
+  ) as money, \
+  count(distinct req_id) as req_pv, \
+  count( \
+    distinct case \
+      when bgpv > 0 then req_id \
+      else null \
+    end \
+  ) as bg_pv, \
+  dspid, \
+  os, \
+  case \
+    when c.name is null then '未分组' \
+    else c.name \
+  end as groupname, \
+  count( \
+    distinct case \
+      when clickpv > 0 then userid \
+      else null \
+    end \
+  ) as click_uv, \
+  count( \
+    distinct case \
+      when clickpv > 0 then req_id \
+      else null \
+    end \
+  ) as click_pv, \
+  from_cache \
+from \
+  yiciyuan_ad a \
+  left join lofter_db_dump.ods_db_ad_position_nd b on a.positionid = b.id \
+  and a.appid = b.appid \
+  left join lofter_db_dump.ods_db_ad_position_group_nd c on b.groupid = c.id \
+  and b.appid = c.appid \
+group by \
+  positionname, \
+  a.appid, \
+  case \
+    when positionname like '%激励%' then '激励广告' \
+    when positionname = '开机' then '开机' \
+    else '其他' \
+  end, \
+  os, \
+  dspid, \
+  case \
+    when c.name is null then '未分组' \
+    else c.name \
+  end, from_cache \

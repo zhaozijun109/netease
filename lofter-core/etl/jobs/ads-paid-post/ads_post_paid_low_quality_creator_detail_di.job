@@ -1,0 +1,187 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_paid_low_quality_creator_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.blogid, \
+  level, \
+  concat('https://', f.blogName, '.lofter.com') as blog_url, \
+  f.blogNickName as blog_nickname, \
+  post_main_content_type, \
+  post_count_30d, \
+  a.paid_postnum, \
+  a.question_postnum, \
+  fumian_postnum, \
+  yinliu_postnum, \
+  dixinxi_postnum, \
+  chaping_postnum, \
+  youzhi_postnum, \
+  zonghe_money, \
+  gift_money, \
+  e.paid_uv, \
+  fenwei_70_num, \
+  avg_num, \
+  avg_money \
+from \
+  ( \
+    select \
+      a.blogid, \
+      count(distinct postid) as paid_postnum, \
+      count( \
+        distinct case \
+          when (fumian_flg + yinliu_flg + dixinxi_flg + chaping_flg) > 0 then postid \
+          else null \
+        end \
+      ) as question_postnum, \
+      count( \
+        distinct case \
+          when (fumian_flg) > 0 then postid \
+          else null \
+        end \
+      ) as fumian_postnum, \
+      count( \
+        distinct case \
+          when (yinliu_flg) > 0 then postid \
+          else null \
+        end \
+      ) as yinliu_postnum, \
+      count( \
+        distinct case \
+          when (dixinxi_flg) > 0 then postid \
+          else null \
+        end \
+      ) as dixinxi_postnum, \
+      count( \
+        distinct case \
+          when (chaping_flg) > 0 then postid \
+          else null \
+        end \
+      ) as chaping_postnum \
+    from \
+      ( \
+        select \
+          id, \
+          postid, \
+          blogid, \
+          case \
+            when review_status = -2 then 1 \
+            else 0 \
+          end as fumian_flg, \
+          case \
+            when array_contains (mark_tags, '引流') = 1 then 1 \
+            else 0 \
+          end as yinliu_flg, \
+          case \
+            when array_contains (mark_tags, '低信息') = 1 then 1 \
+            else 0 \
+          end as dixinxi_flg, \
+          case \
+            when fufankui_uv >= 3 then 1 \
+            else 0 \
+          end as chaping_flg \
+        from \
+          lofter.dim_gift_post_return a \
+          left join ( \
+            select \
+              return_gift_id, \
+              jiesuo_uv, \
+              zhengfankui_uv, \
+              fufankui_uv \
+            from \
+              lofter.dws_gift_post_return_dd \
+            where \
+              dt = '${azkaban.flow.1.days.ago}' \
+          ) b on a.id = b.return_gift_id \
+        where \
+          publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+          and blog_channel = 0 \
+          and ispay_returngift in (0, 1) \
+      ) a \
+    group by \
+      a.blogid \
+    having \
+      question_postnum >= 4 \
+  ) a \
+  left join ( \
+    select \
+      userid, \
+      level, \
+      post_main_content_type \
+    from \
+      lofter.dws_par_creator_level_scoring_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+  ) b on a.blogid = b.userid \
+  left join ( \
+    select \
+      blogid, \
+      count(distinct postid) as youzhi_postnum \
+    from \
+      lofter.dws_gift_post_premium_scoring_di \
+    where \
+      dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+      and type = '优质' \
+      and exposureuv >= 3000 \
+      and publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    group by \
+      blogid \
+  ) c on a.blogid = c.blogid \
+  left join ( \
+    select \
+      blogid, \
+      sum( \
+        case \
+          when pay_type = 'all' then trade_money \
+          else 0 \
+        end \
+      ) as zonghe_money, \
+      sum( \
+        case \
+          when pay_type = '礼物解锁' then trade_money \
+          else 0 \
+        end \
+      ) as gift_money \
+    from \
+      lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and period = '30' \
+    group by \
+      blogid \
+  ) d on a.blogid = d.blogid \
+  left join ( \
+    select \
+      blogid, \
+      count(distinct userid) as paid_uv, \
+      percentile(num, 0.7, 9999) as fenwei_70_num, \
+      sum(num) / count(distinct userid) as avg_num, \
+      sum(money) / count(distinct userid) as avg_money \
+    from \
+      ( \
+        SELECT \
+          blogid, \
+          userid, \
+          count(1) as num, \
+          sum(money) as money \
+        FROM \
+          lofter.dwd_gift_post_unlock_dd \
+        WHERE \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and money > 0 \
+          and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between  '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        GROUP BY \
+          blogid, \
+          userid \
+      ) a \
+    group by \
+      blogid \
+  ) e on a.blogid = e.blogid \
+  left join lofter.dim_blog f on a.blogId = f.id \
+  left join ( \
+    select blogId, count(distinct if(publishDate >= '${azkaban.flow.30.days.ago}', id, null)) as post_count_30d \
+    from lofter.dim_post \
+    where publishDate <= '${azkaban.flow.1.days.ago}' and is_book_store = 0 and \
+        isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+        isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ('图片','文字','视频') \
+    group by 1 \
+  ) g on a.blogId = g.blogId \
+
+dependencies=ads_post_paid_creator_revenue_detail_v2_di

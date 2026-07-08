@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="select CONCAT_WS('-', character_id, role_id) as id, \
+                                character_id, \
+                                role_id, \
+                                nvl(character_type, '') as character_type, \
+                                vc_total_talk_cnt, \
+                                pve_total_talk_cnt, \
+                                total_talk_cnt, \
+                                front_tags, \
+                                backend_tags, \
+                                tags, \
+                                character_tags \
+                         from vc.ads_pv_character_talk_cnt_dd \
+                         where dt = '${azkaban.flow.1.days.ago}'"
+
+params= --index vc_data_pv_charascters_tc_v2 --id id --update --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG
+
+dependencies=ads_pv_character_talk_cnt_dd

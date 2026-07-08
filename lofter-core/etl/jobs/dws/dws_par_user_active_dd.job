@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_active_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userId, u.isanonymous as is_anonymous, \
+       active_days_1d, active_days_7d, active_days_15d, active_days_30d, active_days_90d, \
+       active_days_3d \
+from ( \
+    select userId, \
+           count(distinct if(dt = '${azkaban.flow.1.days.ago}', dt, null)) as active_days_1d, \
+           count(distinct if(dt >= '${azkaban.flow.3.days.ago}', dt, null)) as active_days_3d, \
+           count(distinct if(dt >= '${azkaban.flow.7.days.ago}', dt, null)) as active_days_7d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as active_days_15d, \
+           count(distinct if(dt >= '${azkaban.flow.30.days.ago}', dt, null)) as active_days_30d, \
+           count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as active_days_90d \
+    from lofter.device_active \
+         lateral view explode(userIds) t as userId \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+    group by userId \
+) a \
+left join lofter.dim_user u on a.userId = u.id \
+distribute by 1

@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.04=insert overwrite table lofter_dm.ads_creator_private_zone_premium_posts_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, postId, concat_ws(',', collect_set(ip)) as ips \
+from ( \
+    select b.*, row_number() over (partition by a.ip, a.unlock_seg order by induction_efficiency desc) as induction_efficiency_rk \
+    from ( \
+        select * \
+        from ( \
+            select ip, blogId, unlock_seg, \
+                   row_number() over ( \
+                       partition by ip, unlock_seg \
+                       order by (nvl(private_public_browse_ratio,0) + nvl(private_public_unlock_ratio,0)) desc \
+                   ) as rk \
+            from lofter_dm.ads_creator_private_zone_conversion_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where rk <= 200 \
+    ) a \
+    join ( \
+        select blogId, ip, postId, induction_efficiency \
+        from ( \
+            select x.blogId, x.postId, x.ips, induction_pv / public_browse_uv as induction_efficiency \
+            from ( \
+                select blogId, postId, ips, (exp(hd_rate_ln)-1)/100 as hd_rate, qianbg_amount \
+                from lofter.dws_gift_post_premium_scoring_detail_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) x \
+            left join ( \
+                select postId, nvl(sum(non_public_unlock_money),0) + nvl(sum(public_unlock_money),0) as unlock_money \
+                from lofter.dws_post_pay_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                group by postId \
+                having unlock_money >= 10 \
+            ) y on x.postId = y.postId \
+            left join ( \
+                select postId, \
+                       sum(real_browse_pv) as real_browse_pv, \
+                       bitmap_count(bitmap_union(public_browse_device_bitmap)) as public_browse_uv \
+                from lofter.dws_post_traffic_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                group by postId \
+                having real_browse_pv >= 100 \
+            ) z on x.postId = z.postId \
+            left join ( \
+                select publicPostid as postId, count(distinct userId, privatePostId) as induction_pv \
+                from lofter_dm.ads_creator_private_zone_induction_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                group by 1 \
+            ) z1 on x.postId = z1.postId \
+            where nvl(y.postId, z.postId) is not null and \
+                  (x.hd_rate > 0.12 or x.qianbg_amount > 3) \
+        ) t \
+        lateral view explode(ips) as ip \
+    ) b on a.ip = b.ip and a.blogId = b.blogId \
+) t \
+where induction_efficiency_rk <= 50 \
+group by 1, 2 \
+
+dependencies=ads_creator_private_zone_induction_di,ads_creator_private_zone_conversion_di

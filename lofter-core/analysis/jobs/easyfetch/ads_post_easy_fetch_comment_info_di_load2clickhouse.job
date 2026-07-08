@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,item_id,postid,blogid,post_url,publisher_id,publisher_blogname,publisher_blognickname,publisher_blogurl,commentid,content,comment_time,comment_date,allblogfans,followusers,postnum,followblogs,praise_cnt,recommend_cnt,logindaycount,logintimes from lofter_dm.ads_post_easy_fetch_comment_info_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_post_easy_fetch_comment_info_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_post_easy_fetch_comment_info_di

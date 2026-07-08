@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dim_black_tag \
+select tag \
+from lofter.dim_tag_dd \
+where dt = '${azkaban.flow.1.days.ago}' and ( \
+      tag like '%娱乐%' or tag like '%绘画%' or tag like '%文学%' or tag like '%萌%' or \
+      tag like '%萌物%' or tag like '%同人%' or tag like '%摸鱼%' or tag like '%草图%' or \
+      tag like '%指绘%' or tag like '%找文%' or tag like '%美女%' or tag like '%同人文%' or \
+      tag like '%小说%' or tag like '%漫画%' or tag like '%生活%' or tag like '%搞笑%' or \
+      tag like '%有趣%' or tag like '%修图%' or tag like '%摘抄%' or tag like '%日常%' or \
+      tag like '%古风%' or tag like '%美食%' or tag like '%可爱%' or tag like '%治愈%' or \
+      tag like '%萌宠%' or tag like '%p图%' or tag like '%推文%' or tag like '%图片分享%' or \
+      tag like '%条漫%' or tag like '%插画%' or tag like '%图片%' or tag like '%互动抓人%' or \
+      tag like '%短视频%' or tag like '%搬运%' or tag like '%搞笑图片%' or tag like '%恶搞%' or \
+      tag like '%ai%' or tag like '%ai绘画%' or tag like '%破次元恋人%' or tag like '%吊图%' or \
+      tag like '%厨礼计划%' or tag like '%嗑cp%' or tag like '%乙女新风向%' or tag like '%家暴%' or \
+      tag like '%非原创%' or tag like '%新星计划%' or tag like '%壁纸%' or tag like '%搞怪头像%' or \
+      tag like '%全勤打卡计划%' or tag like '%秋日放映厅%' or tag like '%王者ip创作营%' or \
+      tag like '%原神好故事%' or tag like '%假期狂享礼%' or tag like '%成就计划%' or tag like '%启明计划%' or \
+      tag like '%我的cp报告%' or tag like '%来我作品玩%' or tag like '%在夏有礼%' or tag like '%老福特厨艺大赛%' or \
+      tag like '%破镜文学%' or tag like '%替身文学%' or tag like '%追妻文学%' or tag like '%灯塔计划%' or \
+      tag like '%古早味文学%' or tag like '%新剧捕手%' or tag like '%手术直播间%' or tag like '%故事的无限可能%' or \
+      tag like '%520cp节%' or tag like '%嗑糖大作战%' or tag like '%春节码字机%' or tag like '%cp百嗑%' or \
+      tag like '%图图计划%' or tag like '%神奇影院%' or tag like '%回家煮面%' or tag like '%玻璃渣爱好者%' or \
+      tag like '%我嗑过的cp%' or tag like '%神奇房间%' or tag like '%嗑一口动物塑%' or tag like '%企划%' or \
+      tag like '%我的定制%' or tag like '%回礼研究所%' or tag like '%灵感补给站%' or tag like '%剪刀手养成计划%' or \
+      tag like '%年夜饭%' or tag like '%QQ人嘉年华%' or tag like '%糖刀PK%' or tag like '%糖刀pk%' or \
+      tag like '%梗图嗑一口%' or tag like '%嗑学显微镜%' or tag like '%人间百太%' or tag like '%老福特擦擦节%' or \
+      tag like '%万物即可嗑%' or tag like '%对话体%' or tag like '%致歉%' or tag like '%退圈%' or \
+      tag like '%声明%' or tag like '%退圈声明%' or tag like '%通知%' or tag like '%美好%' or \
+      tag like '%同人小说%' or tag like '%联文%' or tag like '%召回计划%' or tag like '%磕cp%' or \
+      tag like '%禁止ky%' or tag like '%回礼试炼营%' or tag like '%稿件勿用%' \
+      or tag like '%瓷%' or tag like '%all瓷%' or tag like '%美瓷%' or tag like '%苏瓷%' or tag like '%中%' or tag like '%南瓷%' or tag like '%ch瓷%' or tag like '%中美%' or tag like '%美瓷only%' or tag like '%塞瓷%' or tag like '%苏瓷刀%' or tag like '%ch瓷美%' or tag like '%瓷美俄%' or tag like '%美瓷美%' or tag like '%瓷朝%' or tag like '%中朝%' or tag like '%俄瓷俄%' or tag like '%中南%' or tag like '%白瓷%' or tag like '%南瓷刀%' or tag like '%巴瓷%' or tag like '%乌瓷%' or tag like '%白俄瓷%' or tag like '%瓷俄%' or tag like '%瓷苏%' or tag like '%瓷左%' or tag like '%瓷英%' or tag like '%ch美瓷%' or tag like '%瓷共%' or tag like '%ch瓷妈%' or tag like '%瓷巴%' or tag like '%共瓷%' or tag like '%瓷美%' or tag like '%美瓷文%' or tag like '%ch中朝%' or tag like '%【all瓷】这个世界有病%' or tag like '%朝瓷%' or tag like '%瓷妈%' or tag like '%美瓷俄%' or tag like '%美瓷同人文%' or tag like '%罗瓷%' or tag like '%ch瓷爹%' or tag like '%ch意王%' or tag like '%微苏瓷%' or tag like '%瓷苏瓷%' or tag like '%中左%' or tag like '%意瓷%' or tag like '%苏瓷ch%' or tag like '%美瓷cp%' or tag like '%苏中 露中%' or tag like '%only美瓷%' or tag like '%中俄%' or tag like '%瓷塞%' or tag like '%共瓷共%' or tag like '%德三瓷%' or tag like '%苏瓷同人文%' or tag like '%地政中俄%' or tag like '%ch中国%' or tag like '%中日%' or tag like '%双瓷%' or tag like '%微俄瓷%' or tag like '%美中%' or tag like '%英瓷%' or tag like '%瓷中心%' or tag like '%瓷爹拟人%' or tag like '%美瓷 俄瓷%' or tag like '%苏瓷俄%' or tag like '%地政美中%' or tag like '%ch苏瓷%' or tag like '%ch南瓷%' or tag like '%中苏%' or tag like '%南瓷苏%' or tag like '%俄瓷美%' or tag like '%俄中%' or tag like '%ch瓷俄%' or tag like '%瓷美瓷%' or tag like '%china%' or tag like '%朝中%' or tag like '%苏瓷苏%' or tag like '%瓷巴瓷%' or tag like '%ch俄瓷%' or tag like '%巴瓷/瓷巴%' or tag like '%ch黑三角%' or tag like '%苏瓷南%' or tag like '%俄瓷%' or tag like '%法瓷%' or tag like '%瓷右%' or tag like '%哄堂大孝子%' or tag like '%sh瓷%' or tag like '%zb瓷%' or tag like '%中露苏%' or tag like '%美瓷苏%' or tag like '%瓷妈全拟注意⚠️%' or tag like '%芬瓷%' or tag like '%ch中%' or tag like '%瓷爹%' or tag like '%罗马×瓷%' or tag like '%微all瓷%' or tag like '%chn%' or tag like '%瓷英或英瓷%' or tag like '%中巴%' or tag like '%瓷南%' or tag like '%瓷all%' or tag like '%人间瓷画%' or tag like '%瓷右七夕特供24h旋转餐厅%' or tag like '%瓷美双人互骂套房%' or tag like '%2022地政中美520活动%' or tag like '%英清%' or tag like '%美清%' or tag like '%唐日%' or tag like '%瓷湾%' or tag like '%头莎%' or tag like '%莎头%' or tag like '%5114%' or tag like '%4115%' or tag like '%汐阳红%' or tag like '%圆满%' or tag like '%远曼%' or tag like '%胖莎%' or tag like '%温文尔雅%' or tag like '%梁王%' or tag like '%昶梁%' or tag like '%梁王组合%' or tag like '%敞亮%' or tag like '%东昱%' or tag like '%确认存活%' or tag like '%mastiff draak%' or tag like '%獒🐉%' or tag like '%乐乐茶%' or tag like '%乐乐茶cp%' or tag like '%胖莎%' or tag like '%胖莎 阵营cp%' or tag like '%全红婵%' or tag like '%陈芋汐%' or tag like '%王楚钦%' or tag like '%孙颖莎%' or tag like '%张本智和%' or tag like '%马龙%' or tag like '%樊振东%' or tag like '%两岸%' or tag like '%台湾%' or tag like '%湾湾%' or tag like '%台北%' or tag like '%taipei%' or tag like '%taiwan%' or tag like '%香港%' or tag like '%港港%' or tag like '%hongkong%' or tag like '%特区%' or tag like '%粤港澳%' or tag like '%大湾区%' or tag like '%港珠澳%' or tag like '%港澳%' or tag like '%澳门%' or tag like '%macau%' or tag like '%新藏%' or tag like '%西藏%' or tag like '%新疆%' or tag like '%阿蓝%' or tag like '%阿绿%' or tag like '%蓝绿%' or tag like '%民进%' or tag like '%果%' or tag like '%共%' or tag like '%台%' or tag like '%港%' or tag like '%民%' or tag like '%中台%' or tag like '%贡果%' or tag like '%果贡%' or tag like '%果共%' or tag like '%蓝绿党%' or tag like '%绿蓝党%' or tag like '%国共%' or tag like '%瓷民%' or tag like '%湾瓷%' or tag like '%瓷湾%' or tag like '%民瓷%' \
+)
+dependencies=dim_tag_dd

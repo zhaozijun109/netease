@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_fans_vip_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a1.period as period, \
+    if(c.sourceType = 'PGC', 'PGC', 'UGC') as blog_type, \
+    count(distinct a.postid) as vip_post_num, \
+    sum(money) as vip_money, \
+    count(distinct blogid) as vip_blog_num, \
+    count(distinct userid) as vip_uv, \
+    count(distinct if(a.rk = 1, userid, null)) as new_vip_uv, \
+    count(distinct b.postId) as fans_only_post_num, \
+    sum(if(b.postId is not null, money, 0)) as fans_only_money, \
+    count(distinct if(b.postId is not null, a.blogid, null)) as fans_only_blog_num, \
+    count(distinct if(b.postId is not null, a.userid, null)) as fans_only_uv, \
+    count(distinct if(b.postId is not null and a.rk = 1, userid, null)) as new_fans_only_uv \
+from ( \
+    select postId,blogId, userId, money, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+            rank() over(partition by userId order by createtime asc) as rk \
+    from lofter.dwd_evt_post_paid_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and pay_type in ('粉丝会员') \
+) a \
+join lofter.bridge_calendar_date a1 on a.dt = a1.relate_date \
+left join ( \
+    select postid \
+    from lofter_db_dump.ods_db_post_fans_post_nd \
+    where fansPostType = 1 \
+    group by postid \
+) b on a.postid=b.postid \
+left join lofter.dim_user c on a.blogId = c.id \
+where a1.calendar_date = '${azkaban.flow.1.days.ago}' and a1.period in ('1', '7', '30', 'week', 'month', 'quarter') \
+group by 1, 2 \
+union all \
+select 'history' as period, \
+    if(c.sourceType = 'PGC', 'PGC', 'UGC') as blog_type, \
+    count(distinct a.postid) as vip_post_num, \
+    sum(money) as vip_money, \
+    count(distinct blogid) as vip_blog_num, \
+    count(distinct userid) as vip_uv, \
+    count(distinct if(a.rk = 1, userid, null)) as new_vip_uv, \
+    count(distinct b.postId) as fans_only_post_num, \
+    sum(if(b.postId is not null, money, 0)) as fans_only_money, \
+    count(distinct if(b.postId is not null, a.blogid, null)) as fans_only_blog_num, \
+    count(distinct if(b.postId is not null, a.userid, null)) as fans_only_uv, \
+    count(distinct if(b.postId is not null and a.rk = 1, userid, null)) as new_fans_only_uv \
+from ( \
+    select postId,blogId, userId, money, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+            rank() over(partition by userId order by createtime asc) as rk \
+    from lofter.dwd_evt_post_paid_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and pay_type in ('粉丝会员') and \
+          from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select postid \
+    from lofter_db_dump.ods_db_post_fans_post_nd \
+    where fansPostType = 1 \
+    group by postid \
+) b on a.postid=b.postid \
+left join lofter.dim_user c on a.blogId = c.id \
+group by 1, 2 \

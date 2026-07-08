@@ -1,0 +1,73 @@
+type=sparksql
+hive.query.01=\
+with userTagSource as ( \
+    select t1.user_id, \
+           t2.user_code, \
+           nvl(t3.ip, '原创') as tag \
+    from ( \
+        select user_id \
+        from vc_dm.ads_vc_user_chats_churn_di \
+        where dt = '${azkaban.flow.1.days.ago}' and simulator_def = 'theater' \
+    ) t1 \
+    join ( \
+        select id, user_code from vc.ods_db_vc_user_account_nd \
+    ) t2 \
+    on t1.user_id = t2.id \
+    left join ( \
+        select user_id, split(ip, ':')[0] as ip \
+        from rec.rec_lofter_user_profile_ips_kv lateral view explode(split(prefer_ips, ',')) as ip \
+        where day between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+    ) t3 \
+    on t2.user_code = t3.user_id \
+) \
+insert overwrite table vc_dm.ads_vc_data_user_plotsimulator_model_dd partition (dt='${azkaban.flow.1.days.ago}') \
+select t1.user_id, \
+       t1.user_code, \
+       t1.simulator_id \
+from ( \
+    select user_id, \
+           user_code, \
+           simulator_id \
+    from ( \
+        select user_id, \
+               user_code, \
+               simulator_id, \
+               row_number() over(partition by user_id order by total_consume_7d desc) as rn \
+        from ( \
+            select t1.user_id, \
+                   t1.user_code, \
+                   t2.simulator_id, \
+                   nvl(t3.total_consume_7d, 0) as total_consume_7d \
+            from userTagSource t1 \
+            join ( \
+                select simulator_id, tag \
+                from vc.ods_db_vc_simulator_info_nd lateral view explode(split(concat_ws(',', front_tags, backend_tags), ',')) as tag \
+                where tag <> '' \
+                group by simulator_id, tag \
+            ) t2 \
+            on t1.tag = t2.tag \
+            left join ( \
+                select simulator_id, \
+                       sum(total_consume) as total_consume_7d \
+                from vc.dws_vc_user_simulator_energy_consume_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and simulator_def = 'theater' \
+                group by simulator_id \
+            ) t3 \
+            on t2.simulator_id = t3.simulator_id \
+            left join ( \
+                select user_id, \
+                       simulator_id \
+                from vc_dm.ads_vc_data_user_plotsimulator_model_dd \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+            ) t4 \
+            on t1.user_id = t4.user_id and t2.simulator_id = t4.simulator_id \
+            where t4.simulator_id is null \
+        ) t \
+    ) tt \
+    where rn = 1 \
+) t1 \
+join ( \
+    select simulator_id from vc.ods_db_vc_simulator_info_nd where is_trial = 0 and status = 3 group by simulator_id \
+) t2 \
+on t1.simulator_id = t2.simulator_id
+dependencies=ads_vc_user_chats_churn_di

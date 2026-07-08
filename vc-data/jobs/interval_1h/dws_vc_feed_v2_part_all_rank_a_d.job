@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01 = add jar hdfs://gy-cluster8/user/virtual_character/lib/wm-udx-assembly-0.3.15.jar;
+hive.query.02 = create temporary function nos_rows as 'com.netease.wm.udf.NosRowList';
+hive.query.03 = insert OVERWRITE table vc.dws_vc_feed_v2_part_all_rank_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select package_id, \
+                       rk, \
+                       version, \
+                       flatten(COLLECT_SET(characters)) as characters, \
+                       max(nums)                        as nums, \
+                       COLLECT_SET(characters_data)     as characters_data \
+                from (select package_id, \
+                             rk, \
+                             version, \
+                             characters, \
+                             count(*) over (partition by package_id) as nums, \
+                             'db'                                    as source, \
+                             characters_data \
+                      from (select COALESCE(x1.package_id, x2.package_id, x3.package_id)    as package_id, \
+                                   COALESCE(x1.rk, x2.rk, x3.rk)                            as rk, \
+                                   COALESCE(x1.version, x2.version, x3.version)             as version, \
+                                   array_distinct(filter(array(x1.character_id, x2.character_id, x3.character_id), \
+                                                         x -> x is not null))               as characters, \
+                                   named_struct('source', 'db', 'characterIds', \
+                                                array_distinct(filter(array(x1.character_id, x2.character_id, x3.character_id), \
+                                                                      x -> x is not null))) as characters_data \
+                            from (select package_id, character_id, rk, version \
+                                  from vc.dws_vc_feed_v2_part1_rank_a_d \
+                                  where dt = '${azkaban.flow.current.date}' \
+                                    and h = '${azkaban.flow.start.hour}') x1 \
+                                     full join \
+                                 (select package_id, character_id, rk, version \
+                                  from vc.dws_vc_feed_v2_part2_rank_a_d \
+                                  where dt = '${azkaban.flow.current.date}' \
+                                    and h = '${azkaban.flow.start.hour}') x2 on x1.rk = x2.rk and x1.package_id = x2.package_id \
+                                     full join \
+                                 (select package_id, character_id, rk, version \
+                                  from vc.dws_vc_feed_v2_part3_rank_a_d \
+                                  where dt = '${azkaban.flow.current.date}' \
+                                    and h = '${azkaban.flow.start.hour}') x3 on x3.rk = x2.rk and x3.package_id = x2.package_id \
+                               ) \
+                      union all \
+                      select package_id, \
+                             trim(split(character_rk, ',')[1])                                                       as rk, \
+                             version, \
+                             array(trim(split(character_rk, ',')[0]))                                                as characters, \
+                             count(*) over (partition by package_id)                                                 as nums, \
+                             'csv'                                                                                   as source, \
+                             named_struct('source', 'csv', 'characterIds', array(trim(split(character_rk, ',')[0]))) as characters_data \
+                      from (select package_id, explode(characters) as character_rk, version \
+                            from (select id                           as package_id, \
+                                         nos_rows(character_file_url) as characters, \
+                                         version + 1                  as version \
+                                  from vc.ods_db_rt1h_vc_character_package_config_nd \
+                                  where character_file_url != ''))) \
+                group by package_id, rk, version
+
+
+dependencies=dws_vc_feed_v2_part1_rank_a_d,dws_vc_feed_v2_part2_rank_a_d,dws_vc_feed_v2_part3_rank_a_d

@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_yiyou_traffic_limit_truncate_post_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid \
+from ( \
+    select dt, postid, tag_state,return_gift_id, \
+        row_number() over(partition by return_gift_id,postid order by dt desc ) as rk \
+    from lofter_dm.ads_gift_return_tag_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and tag='truncate' \
+    group by dt,postid, tag_state,return_gift_id \
+) a \
+where rk=1 and tag_state='超级截断' \
+group by postid \
+
+dependencies=ads_gift_return_tag_di

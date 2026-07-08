@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_supply_demand_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select blog_level,collection_post_type, \
+count(case when from_unixtime(cast(createtime/1000 as bigint), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' then collectionid end) create_collection_cnt, \
+count(case when update_post_1d>0 then collectionid end) update_collection_1d,sum(update_post_1d) update_post_1d, \
+count(case when update_post_7d>0 then collectionid end) update_collection_7d,sum(update_post_7d) update_post_7d, \
+count(case when update_post_30d>0 then collectionid end) update_collection_30d,sum(update_post_30d) update_post_30d, \
+count(collectionid) sum_collection_count, \
+sum(postcount) sum_post_count, \
+count(case when subscribe_uv_acc>0 then collectionid end ) subscribed_collection_acc, sum(subscribe_uv_acc) sum_subscribe_pv_acc, \
+count(case when subscribe_uv_1d>0 then collectionid end ) subscribed_collection_1d, sum(subscribe_uv_1d) sum_subscribe_pv_1d, \
+count(case when subscribe_uv_7d>0 then collectionid end ) subscribed_collection_7d, sum(subscribe_uv_7d) sum_subscribe_pv_7d, \
+count(case when subscribe_uv_30d>0 then collectionid end ) subscribed_collection_30d, sum(subscribe_uv_30d) sum_subscribe_pv_30d, \
+count(case when new_devices>0 then collectionid end ) newdevice_collection_1d,sum(new_devices) sum_newdevice_1d, \
+count(case when new_devices_7d>0 then collectionid end ) newdevice_collection_7d,sum(new_devices_7d) sum_newdevice_7d, \
+count(case when new_devices_30d>0 then collectionid end ) newdevice_collection_30d,sum(new_devices_30d) sum_newdevice_30d \
+from  \
+( \
+    select * \
+    from lofter.dws_collection_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and status=0 \
+) a \
+left join \
+( \
+    select content_id,new_devices,new_devices_7d,new_devices_30d \
+    from lofter_dm.ads_growth_content_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    and content_type='合集' \
+) b \
+on a.collectionid=b.content_id \
+group by blog_level,collection_post_type \

@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_user_consume_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT business_type \
+	,stat_period \
+	,CASE  \
+		WHEN MONEY > 0 \
+			AND MONEY < 20 \
+			THEN '(0,20)' \
+		WHEN MONEY >= 20 \
+			AND MONEY < 50 \
+			THEN '[20,50)' \
+		WHEN MONEY >= 50 \
+			AND MONEY < 100 \
+			THEN '[50,100)' \
+		WHEN MONEY >= 100 \
+			AND MONEY < 500 \
+			THEN '[100,500)' \
+		WHEN MONEY >= 500 \
+			AND MONEY < 1000 \
+			THEN '[500,1000)' \
+		WHEN MONEY >= 1000 \
+			THEN '[1000,)' \
+		ELSE '0' \
+		END AS pay_level \
+	,count(DISTINCT userid) AS uv \
+	,sum(MONEY) AS MONEY \
+FROM ( \
+	SELECT b.period as stat_period, userId, 'all' AS business_type, \
+		sum(money) AS MONEY \
+    FROM ( \
+          select userId, revenue_module, money, pay_date \
+          from lofter.dwd_user_order_dd \
+          where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' and \
+                order_type = 'benefit' \
+    ) a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+    WHERE b.calendar_date = '${azkaban.flow.1.days.ago}' \
+    GROUP BY 1, 2, 3 \
+	 \
+	UNION ALL \
+	 \
+	SELECT b.period as stat_period, userId, revenue_module as business_type, \
+		   sum(money) AS MONEY \
+    FROM ( \
+          select userId, revenue_module, money, pay_date \
+          from lofter.dwd_user_order_dd \
+          where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' and \
+                order_type = 'benefit' \
+    ) a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+    WHERE b.calendar_date = '${azkaban.flow.1.days.ago}' \
+    GROUP BY 1, 2, 3 \
+) a \
+GROUP BY 1, 2, 3 \

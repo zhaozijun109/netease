@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_finance_revenue_monitor_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  sum(amount * 0.01) as amount, \
+  '书城' as pay_type, \
+  '无' as sub_type \
+from \
+  lofter_db_dump.ods_db_money_store_vip_split_sum_nd \
+where \
+  concat_ws( \
+    '-', \
+    substr(cast(day as string), 1, 4), \
+    substr(cast(day as string), 5, 2), \
+    substr(cast(day as string), 7, 2) \
+  ) = '${azkaban.flow.1.days.ago}' \
+union \
+select \
+  sum( \
+    case \
+      when daytime <= 20240705 then amount / 0.7 + ioschannelfee + pullnewchannelfee \
+      else amount / 0.75 + ioschannelfee + pullnewchannelfee \
+    end \
+  ) as amount, \
+  '高粉' as pay_type, \
+  '无' as sub_type \
+from \
+  lofter_db_dump.ods_db_trade_fans_vip_order_income_daily_nd \
+where \
+  concat_ws( \
+    '-', \
+    substr(cast(daytime as string), 1, 4), \
+    substr(cast(daytime as string), 5, 2), \
+    substr(cast(daytime as string), 7, 2) \
+  ) = '${azkaban.flow.1.days.ago}' \
+union \
+select \
+  sum(delta * -1 * 0.1) as amount, \
+  '乐乎币' as pay_type, \
+  cast (type as string) as sub_type \
+from \
+  lofter_db_dump.ods_db_trade_coin_balance_log_nd \
+where \
+  delta < 0 \
+  and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by \
+  cast (type as string) \
+union \
+Select \
+  sum(unitAmount) as amount, \
+  '糖果券' as pay_type, \
+  cast (scene as string) as sub_type \
+from \
+  lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+where \
+  from_unixtime(cast(exchangeTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by \
+  cast (scene as string) \
+union \
+select \
+  sum(money) as amount, \
+  order_type as pay_type, \
+  mbo_lv2_module as sub_type \
+from \
+  lofter.dwd_user_order_dd \
+where \
+  dt = '${azkaban.flow.1.days.ago}' \
+  and order_date = '${azkaban.flow.1.days.ago}' \
+group by \
+  order_type, \
+  mbo_lv2_module \
+
+dependencies=ods_db_money_store_vip_split_sum_nd

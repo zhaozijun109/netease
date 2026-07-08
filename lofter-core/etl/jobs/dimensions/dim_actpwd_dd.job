@@ -1,0 +1,109 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=insert overwrite table lofter.dim_actpwd_dd partition  (dt = '${azkaban.flow.1.days.ago}') \
+    select x.actpwd, x.channel, x.itemId, x.content_type, y.tags, y.title, nvl(x.link,y.url) as url, actpwd_type, \
+           startTime, settlement_type, is_first_level_channel, \
+           is_paid_subscribe, endTime, promote_channels, kol_nickname \
+    from ( \
+        select actpwd, channel, itemId, content_type, actpwd_type, startTime, endTime, settlement_type, \
+               is_first_level_channel, is_paid_subscribe, promote_channels, kol_nickname, link, \
+               row_number() over (partition by actpwd order by startTime desc) as rnk \
+        from ( \
+            select a.word as actpwd, a.startTime, a.endTime, \
+                   concat('米良[', b.nickName, ']') as channel, \
+                   content_type, itemId, \
+                   '搜索置顶' as actpwd_type, \
+                   a.settlementType as settlement_type, \
+                   if(b.leaderId == 0, 1, 0) as is_first_level_channel, \
+                   case when a.settlementType == 'CPS' then 1 \
+                        when a.settlementType == 'FANS' and a.channel = 1 then 2 \
+                        else 0 end as is_paid_subscribe, \
+                   promote_channels, \
+                   c.nickName as kol_nickname, null as link \
+            from ( \
+                select word, userId, leaderId, startTime, endTime, \
+                       case resourceType when 'post' then '单日志' when 'collection' then '合集' when 'grain' then '粮单' end as content_type, \
+                       resourceId as itemId, \
+                       parse_array(get_json_object(feedback, '$.sites')) as promote_channels, \
+                       channel, \
+                       settlementType \
+                from lofter_db_dump.ods_db_kol_promote_word_nd \
+            ) a left join lofter_db_dump.ods_db_kol_user_nd b on a.leaderId = b.userId \
+                left join lofter_db_dump.ods_db_kol_user_nd c on a.userId = c.userId \
+          union all \
+            select actPwd, startTime, endTime, oneLevelChannel as channel, \
+                   case when link like '%.lofter.com/post/%' then '单日志' \
+                        when link like '%grainId=%' then '粮单' \
+                        when link like '%collectionId=%' then '合集' \
+                        else '活动' end as content_type, \
+                   case when parse_url(link, 'PATH') like '/post/%' and (length(parse_url(link, 'PATH'))- instr(parse_url(link, 'PATH'),'_')) between 1 and 11 then cast(conv(split(split(split(link, 'post/')[1],'\#')[0],'_')[1], 16, 10) as bigint) \
+                        when link like '%grainId=%' then cast(parse_url(link,"QUERY","grainId") as bigint) \
+                        when link like '%collectionId=%' then cast(parse_url(link,"QUERY","collectionId") as bigint) \
+                        end as itemid, \
+                   case when searchTopChannel > 0 then '搜索置顶' when clipBoardChannel > 0 then '剪贴板' else '搜索' end as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   if(oneLevelChannel LIKE '%订阅' or oneLevelChannel LIKE '%会员]', 1, 0) as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, link \
+            from lofter_db_dump.ods_db_act_activity_password_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '活动' as content_type, activityid as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_act_incantation_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '合集' as content_type, collectionId as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_collection_incantation_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '粮单' as content_type, grainId as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_grain_incantation_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '单日志' as content_type, postId as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_post_incantation_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '拉新' as content_type, shareUserid as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_acquisition_incantation_nd \
+          union all \
+            select incantation as actpwd, createTime as startTime, expiredTime as endTime, '自分享' as channel, \
+                   '推集' as content_type, folderid as itemId,  '剪贴板' as actpwd_type, \
+                   null as settlement_type, 1 as is_first_level_channel, \
+                   0 as is_paid_subscribe, \
+                   null as promote_channels, null as kol_nickname, null as link \
+            from lofter_db_dump.ods_db_sub_folder_incantation_nd \
+        ) t \
+    ) x \
+    left join ( \
+        select '单日志' as content_type,id as itemid,concat_ws(',', tags) tags,title,concat('https://',blogname,'.lofter.com/post/',lower(conv(blogId, 10, 16)),'_',lower(conv(id, 10, 16))) as url \
+        from lofter.dim_post \
+        union all \
+        select '合集' as content_type,id as itemid,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) url \
+        from lofter_db_dump.ods_db_post_collection_nd \
+        union all \
+        select '粮单' as content_type,id as itemid,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) url \
+        from lofter_db_dump.ods_db_grain_info_nd \
+        union all \
+        select '推集' as content_type, id as itemid, tags, name as title, concat('https://www.lofter.com/front/blog/collection-push/detail?folderId=',id) url \
+        from lofter_db_dump.ods_db_user_subscribe_folder_nd \
+    ) y on x.itemId = y.itemId and x.content_type = y.content_type \
+    where rnk = 1 and \
+          case when actpwd_type = '剪贴板' \
+               then datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(startTime/1000 as bigint), 'yyyy-MM-dd')) <= 30 \
+          else true end
+dependencies=dim_post

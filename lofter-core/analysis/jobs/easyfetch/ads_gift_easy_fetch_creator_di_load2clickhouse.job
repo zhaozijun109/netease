@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,userid,gift_open_date,gift_permission_type,gift_grade,gift_ability_status,blackrank,punishrank,fans_vip_open_date,fans_vip_price_level,30_fans_vip_trade_money,1_all_trade_money,7_all_trade_money,30_all_trade_money,creatorlevel,creatorstatus,first_unlock_uv,first_unlock_money,first_unlock_fans_uv,first_unlock_collection_subscribe_uv,first_unlock_non_fans_collection_subscribe_uv,first_unlock_uv_1d,first_unlock_money_1d,public_expose_pv_1d,public_expose_uv_1d,non_public_expose_pv_1d,non_public_expose_uv_1d,new_fans_1d,post_ips_1d,post_ips_7d,post_ips_30d,non_public_unlock_money_1d,fans_unlock_money_1d,publish_post_count_1d,publish_pay_post_count_1d,blog_channel,blog_url,contenttype_prefer,element_prefer,article_money_1d,photo_money_1d,article_money_7d,photo_money_7d,article_money_30d,photo_money_30d from lofter_dm.ads_gift_easy_fetch_creator_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_gift_easy_fetch_creator_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_gift_easy_fetch_creator_di

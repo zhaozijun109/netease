@@ -1,0 +1,43 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags lofter_vc_30d_active_user --bitmap
+retries=0
+conf.spark.execute.sql="\
+select userId, \
+       '30日活跃用户' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'lofter_vc_30d_active_user' as tag \
+from ( \
+        select cast(userid as string) as userId, \
+            '30日里世界活跃' as grp \
+    from ( \
+        select userid \
+        from lofter.dwd_act_pve_action_di \
+        where dt > date_sub('${azkaban.flow.1.days.ago}', 30) \
+          and dt <= '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) pve \
+    \
+    union all \
+    \
+    select dim.user_code as userId, \
+           '30日破次元APP活跃' as grp \
+    from ( \
+        select user_id \
+        from vc.dwd_vc_user_active_i_d \
+        where dt > date_sub('${azkaban.flow.1.days.ago}', 30) \
+          and dt <= '${azkaban.flow.1.days.ago}' \
+        group by user_id \
+    ) vc \
+    join ( \
+        select id, user_code from vc.ods_db_vc_user_account_nd \
+    ) dim \
+    on vc.user_id = dim.id \
+) t "
+dependencies=vc_30d_active_user

@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_flat_di partition(dt='${azkaban.flow.1.days.ago}') \
+       select a.tag, \
+           a.subscribeCount, b.subscribeCount as subscribeCount7, c.subscribeCount as subscribeCount30, \
+           a.unsubscribeCount, b.unsubscribeCount as unsubscribeCount7, c.unsubscribeCount as unsubscribeCount30, \
+           a.postCount, b.postCount as postCount7, c.postCount as postCount30, \
+           a.hot, b.hot as hot7, c.hot as hot30, \
+           a.browsingcount as pv , b.browsingcount as pv7, c.browsingcount as pv30, \
+           a.clientTagBrowsingCount, a.pcTagBrowsingCount, a.h5TagBrowsingCount, \
+           0L as wechatFriendsShareCount, 0L as wechatFriendsCircleShareCount, 0L as wechatWeiboShareCount, \
+           0L as wechatQQFriendsShareCount, 0L as wechatQQSpaceShareCount, e.isCold \
+      from (select * from lofter_dm.ads_tag_general_di where dt = '${azkaban.flow.1.days.ago}') a \
+      left join (select * from lofter_dm.ads_tag_general_7d where dt = '${azkaban.flow.1.days.ago}') b on a.tag = b.tag and (a.domainName = b.domainName  or a.domainName is null) \
+      left join (select * from lofter_dm.ads_tag_general_30d where dt = '${azkaban.flow.1.days.ago}') c on a.tag = c.tag and (a.domainName = c.domainName or a.domainName is null) \
+      left join ( \
+        select tag, case when maxPostCount > 10 then 0 else 1 end as isCold \
+        from ( \
+            select tag,max(postCount) as maxPostCount \
+            from lofter_dm.ads_tag_general_di \
+            where dt >= '${azkaban.flow.7.days.ago}'  and dt <= '${azkaban.flow.1.days.ago}' \
+            group by tag \
+        ) a \
+      ) e on a.tag=e.tag \
+      where length(a.tag) != 0
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=ads_tag_general_di,ads_tag_general_7d,ads_tag_general_30d,ads_post_general_di

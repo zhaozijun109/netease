@@ -1,0 +1,124 @@
+type = sparksql
+hive.query.01 =  \
+WITH vc_energy_user AS (  \
+SELECT \
+a.dt, \
+a.user_id,	 \
+a.expired_energy, \
+a.rest_energy, \
+a.free_rest_energy, \
+a.buy_rest_energy, \
+a.reward_rest_energy, \
+ \
+b.get_free_energy, \
+b.get_buy_energy, \
+b.get_reward_energy, \
+b.get_total_energy, \
+ \
+c.total_consume, \
+c.buy_nums_consume, \
+c.reward_nums_consume, \
+c.free_nums_consume, \
+c.lofter_nums_consume, \
+ \
+d.free_energy_consume_talk, \
+d.reward_energy_consume_talk, \
+d.buy_energy_consume_talk, \
+d.ttl_energy_consume_talk, \
+ \
+free_expire_amount, \
+buy_expire_amount, \
+reward_expire_amount \
+ \
+ \
+from  vc.dws_vc_user_behavior_info_a_d a \
+left  join  \
+( \
+    SELECT  t1.dt, \
+          t1.user_id,  \
+          sum(CASE WHEN t1.scene IN (1,5)  \
+              AND reward_id=1 THEN t1.amount END) AS get_free_energy,  \
+          sum(CASE WHEN t1.scene = 2  \
+              AND reward_id=1 THEN t1.amount END) AS get_buy_energy,  \
+          sum(CASE WHEN t1.scene in(3,6)  \
+              AND reward_id=1 THEN t1.amount END) AS get_reward_energy,  \
+          sum(CASE WHEN t1.scene  in (1,5,2,3,6)   \
+              AND reward_id=1 THEN t1.amount END) AS get_total_energy            \
+   FROM vc.dwd_vc_user_income_record_i_d t1  \
+   WHERE t1.reward_type=1  \
+   AND t1.dt ='${azkaban.flow.1.days.ago}'     \
+   GROUP BY 1 ,2 \
+) b  on a.user_id=b.user_id  and a.dt=b.dt  \
+left  join  \
+( \
+select dt,user_id,sum(total_consume)total_consume,sum(buy_nums)buy_nums_consume,sum(reward_nums) reward_nums_consume,sum(free_nums)free_nums_consume,SUM(lofter_nums)lofter_nums_consume \
+from  vc.dwd_vc_asset_consume_info_i_d \
+where dt='${azkaban.flow.1.days.ago}'    \
+and asset_type_desc='能量' \
+group  by dt, user_id \
+ \
+)  c on  a.user_id=c.user_id  and a.dt=c.dt  \
+left  join  \
+( \
+select dt,user_id,  \
+ sum(free_energy) free_energy_consume_talk,  \
+sum(reward_energy) reward_energy_consume_talk,  \
+ sum(buy_energy) buy_energy_consume_talk,  \
+ sum(energy_consume) ttl_energy_consume_talk  \
+ from  vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+WHERE dt ='${azkaban.flow.1.days.ago}'     \
+group by 1 ,2 \
+ \
+) d  on a.user_id=d.user_id  and a.dt=d.dt  \
+left join  \
+( \
+SELECT user_id, \
+date_format(from_unixtime(valid_end_time), 'yyyy-MM-dd') AS dt, \
+sum(case when scene in (1,5) then left_amount end) as free_expire_amount , \
+sum(case when scene =2 then left_amount end) as buy_expire_amount , \
+sum(case when scene =3 then left_amount end) as reward_expire_amount  \
+from vc.ods_db_vc_user_asset_left_nd \
+where asset_type = 1  \
+and date_format(from_unixtime(valid_end_time), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'   \
+group by 1,2 \
+) e  on a.user_id=e.user_id  and a.dt=e.dt   \
+ \
+where a.dt='${azkaban.flow.1.days.ago}'  \
+and a.is_anonymity='N' \
+AND a.is_test_user='N' \
+) \
+ \
+insert overwrite table vc_dm.ads_vc_energy_kpi_report_di partition(dt ='${azkaban.flow.1.days.ago}')  \
+select  \
+sum(expired_energy)expired_energy , \
+count(distinct user_id) ttl_user_cnt, \
+sum(rest_energy)rest_energy, \
+sum(free_rest_energy)free_rest_energy, \
+sum(buy_rest_energy)buy_rest_energy, \
+sum(reward_rest_energy)reward_rest_energy, \
+ \
+sum(get_free_energy)get_free_energy, \
+sum(get_buy_energy)get_buy_energy, \
+sum(get_reward_energy)get_reward_energy, \
+sum(get_total_energy) get_total_energy, \
+ \
+sum(expired_energy)+sum(buy_nums_consume) +sum(reward_nums_consume)+ sum(free_nums_consume)  real_ttl_consume_expire, \
+sum(total_consume)total_consume_contain_lofter, \
+sum(buy_nums_consume)+sum(reward_nums_consume)+sum(free_nums_consume) total_consume_except_lofter, \
+ \
+sum(buy_nums_consume)+sum(buy_expire_amount) real_buy_consume_expire, \
+sum(reward_nums_consume)+sum(reward_expire_amount) real_reward_consume_expire, \
+sum(free_nums_consume)+sum(free_expire_amount) real_free_consume_expire, \
+ \
+ \
+sum(buy_nums_consume) buy_nums_consume, \
+sum(reward_nums_consume)reward_nums_consume, \
+sum(free_nums_consume)free_nums_consume, \
+sum(lofter_nums_consume) lofter_nums_consume, \
+ \
+sum(free_energy_consume_talk) free_energy_consume_talk, \
+sum(reward_energy_consume_talk) reward_energy_consume_talk, \
+sum(buy_energy_consume_talk)buy_energy_consume_talk, \
+sum(ttl_energy_consume_talk)ttl_energy_consume_talk \
+ \
+from  vc_energy_user

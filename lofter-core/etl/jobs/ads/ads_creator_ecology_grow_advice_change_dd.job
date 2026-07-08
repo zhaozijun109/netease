@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_grow_advice_change_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.blogId, \
+        tmp1.growAdviceType, \
+        if(tmp2.blogId IS NULL OR tmp1.growadvicetype <> tmp2.growadvicetype,1,0) AS growAdviceChangeStatus, \
+        tmp1.createFrequencyRate, \
+        tmp1.followInteractNumRate, \
+        tmp1.totalHotRate, \
+        if(nvl(tmp1.createFrequencyRateLevel,'')>nvl(tmp2.createFrequencyRateLevel,''),1,0) AS createFrequencyPromote, \
+        if(nvl(tmp1.followInteractNumRateLevel,'')>nvl(tmp2.followInteractNumRateLevel,''),1,0) AS followInteractNumPromote, \
+        if(nvl(tmp1.totalHotRateLevel,'')>nvl(tmp2.totalHotRateLevel,''),1,0) AS totalHotPromote, \
+        tmp1.easterEggAchieveType, \
+        tmp1.easterEggAchieveNum, \
+        concat_ws(',',array_except(split(tmp1.easterEggAchieveType,','),nvl(split(tmp2.easterEggAchieveType,','),array()))) as easterEggChangeType, \
+        tmp1.createPostNums, \
+        tmp1.followInteractNums, \
+        tmp1.totalHotNums, \
+        tmp1.nextLevelFollowNums, \
+        tmp1.hotChallengeTarget \
+FROM \
+( \
+	SELECT  blogId, \
+	        growAdviceType, \
+	        createFrequencyRate, \
+            followInteractNumRate, \
+            totalHotRate, \
+            createFrequencyRateLevel, \
+            followInteractNumRateLevel, \
+            totalHotRateLevel, \
+            easterEggAchieveType, \
+            easterEggAchieveNum, \
+            createPostNums, \
+            followInteractNums, \
+            totalHotNums, \
+            nextLevelFollowNums, \
+            hotChallengeTarget \
+	FROM lofter_dm.ads_creator_ecology_grow_advice_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT  blogId, \
+	        growAdviceType, \
+	        createFrequencyRate, \
+            followInteractNumRate, \
+            totalHotRate, \
+            createFrequencyRateLevel, \
+            followInteractNumRateLevel, \
+            totalHotRateLevel, \
+            easterEggAchieveType, \
+            easterEggAchieveNum, \
+            createPostNums, \
+            followInteractNums, \
+            totalHotNums, \
+            nextLevelFollowNums, \
+            hotChallengeTarget \
+	FROM lofter_dm.ads_creator_ecology_grow_advice_dd \
+	WHERE dt = '${azkaban.flow.2.days.ago}' \
+) tmp2 \
+ON tmp1.blogId = tmp2.blogId
+dependencies=ads_creator_ecology_grow_advice_dd

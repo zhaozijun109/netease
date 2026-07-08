@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01 = with ad_info as (select dt, platform, channel, ad_id, device_udid \
+                                 from (select dt, \
+                                              platform, \
+                                              channel, \
+                                              advertiserId                                        as ad_id, \
+                                              daDeviceId                                          as device_udid, \
+                                              rank() over (partition by daDeviceId order by time) as rk \
+                                       from lofter.ods_log_ad_new_linkup_di \
+                                       where dt = '${azkaban.flow.1.days.ago}' \
+                                         and appid = 'virtualapp' \
+                                         and newuserflag = 'true' \
+                                         and daDeviceId is not null) \
+                                 where rk = 1), \
+                     user_info as (select user_id, first_active_deviceudid, last_active_deviceudid \
+                                   from vc.dws_vc_user_behavior_info_a_d \
+                                   where dt = '${azkaban.flow.1.days.ago}'), \
+                     talk_info as (select user_id \
+                                   from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                   where dt >= '${azkaban.flow.7.days.ago}' \
+                                   group by user_id \
+                                   having sum(talk_cnt) >= 5), \
+                     ad_user_info as (select dt, platform, channel, ad_id, device_udid, x2.user_id \
+                                      from ad_info x1 \
+                                               inner join user_info x2 \
+                                                          on (x1.device_udid = x2.first_active_deviceudid or \
+                                                              x1.device_udid = x2.last_active_deviceudid) \
+                                               inner join talk_info x3 on x2.user_id = x3.user_id), \
+                     uc_talk_info as (select user_id, character_id, sum(talk_cnt) as talk_cnt \
+                                      from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                                      where dt >= '${azkaban.flow.7.days.ago}' \
+                                      group by user_id, character_id) \
+                insert OVERWRITE table vc.ads_vc_om_3116_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select platform, channel, ad_id, CONCAT_WS(',',COLLECT_SET(value)) as value \
+                from (select dt, \
+                             platform, \
+                             channel, \
+                             ad_id, \
+                             character_id, \
+                             talk_cnt, \
+                             CONCAT_WS(':', character_id, talk_cnt)            as value, \
+                             nums, \
+                             rank() over (partition by dt,platform,channel,ad_id order by talk_cnt desc) as rk \
+                      from (select dt, \
+                                   platform, \
+                                   channel, \
+                                   ad_id, \
+                                   character_id, \
+                                   count(distinct x1.user_id) as nums, \
+                                   sum(talk_cnt)              as talk_cnt \
+                            from ad_user_info x1 \
+                                     left join uc_talk_info x2 on x1.user_id = x2.user_id \
+                            group by dt, platform, channel, ad_id, character_id)) \
+                where rk <= 20 \
+                group by dt, platform, channel, ad_id ;

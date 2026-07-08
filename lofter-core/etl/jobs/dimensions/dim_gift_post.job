@@ -1,0 +1,114 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_gift_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select b.postId, \
+    b.title, b.tags, b.url, b.contentType, b.publishDate, \
+    a.userid, a.accept_gift_flag, a.agree_day, b.blogName, b.blogNickname, \
+    d.return_gift_ids, \
+    case when e.postid is not null then 'cp' else 'nocp' end  as cp_type, \
+    case when f.blogid is not null and g.postid is null then '博客引入' \
+         when f.blogid is  null and g.postid is not null  then '单文签约' \
+         when  f.blogid is  null and g.postid is null   then '图文UGC' \
+         else '其他' end as platform_type, \
+    nvl(i.is_pay_return_gift,'0') as is_pay_return_gift \
+from ( \
+   select aa.userId, aa.accept_gift_flag, from_unixtime(cast(bb.agreeTime / 1000 AS BIGINT), 'yyyy-MM-dd') as agree_day \
+   from ( \
+       select a.userid, accept_gift_flag \
+       from ( \
+           select userid, accept_gift_flag, \
+                  row_number() over(partition by userid order by status desc, `type` desc ) as rk \
+           from ( \
+               select  userid, 2 as `type`, acceptGiftFlag as accept_gift_flag, status \
+               from lofter_db_dump.ods_db_trade_gift_account_nd \
+               where status = 2 \
+             union \
+               select userid, 1 as `type`, acceptGiftFlag as accept_gift_flag, status \
+               from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+               where status = 2 \
+           ) a \
+       ) a \
+       where a.rk = 1 \
+   ) aa \
+   left join ( \
+       select a1.userid, min(agreetime) as agreetime \
+       from ( \
+           select userid,agreetime \
+           from lofter_db_dump.ods_db_trade_gift_account_nd \
+           where status in (2) \
+         union \
+           select userid,agreetime \
+           from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+           where status in (2) \
+       ) a1 \
+       group by a1.userid \
+   ) bb on aa.userid=bb.userid \
+) a \
+join ( \
+    select id as postid,blogid,blogName,blogNickname,title,tags,contentType,publishDate, \
+           concat(blogName,'.lofter.com/post/',conv(blogId, 10, 16),'_',conv(id, 10, 16)) as url \
+    from lofter.dim_post \
+    where contentType not in ('视频','音乐') \
+) b on a.userid=b.blogid \
+left join ( \
+    select postid, \
+           concat_ws(';',collect_set(get_json_object(giftJson ,'$.giftIds'))) as return_gift_ids \
+    from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+    where status=1 and auditStatus=1 \
+    group by postid \
+) d on b.postid=d.postid \
+left join ( \
+    select postid from lofter.dim_post_category_dd  where domain='同人CP' group by postid \
+) e on b.postid=e.postid \
+left join ( \
+    select id as blogid from lofter.dim_user where sourceType='PGC' \
+) f on a.userid=f.blogid \
+left join ( \
+    select postid \
+    from lofter_db_dump.ods_db_post_hot_nd \
+    where publisherUserid = 1943463653 and type=1 \
+    group by postid \
+) g on b.postid=g.postid \
+left join ( \
+    select postid, \
+      case when num1>0 and num2>0 and num3>0 then '7' \
+           when num1>0 and num2>0 and num3=0 then '6' \
+           when num1>0 and num2=0 and num3>0 then '5' \
+           when num1>0 and num2=0 and num3=0 then '4' \
+           when num1=0 and num2>0 and num3>0 then '3' \
+           when num1=0 and num2>0 and num3=0 then '2' \
+           when num1=0 and num2=0 and num3>0 then '1' \
+           end as is_pay_return_gift \
+    from ( \
+        select postid, \
+               count(case when is_pay_return_gift='付费免费' then id else null end) as num1, \
+               count(case when is_pay_return_gift='仅付费' then id else null end ) as num2, \
+               count(case when is_pay_return_gift='仅免费' then id else null end ) as num3 \
+        from ( \
+            select a.postid, a.id, \
+              case when a.isPayNum>0 and a.noPayNum>0 then '付费免费' \
+                   when a.isPayNum>0 and a.noPayNum=0 then '仅付费' \
+                   when a.isPayNum=0 and a.noPayNum>0 then '仅免费' \
+                   end as is_pay_return_gift \
+            from ( \
+                select a.postid,a.id,count(case when b.isPay=1 then b.giftId else null end) as isPayNum, \
+                       count(case when b.isPay=0 then b.giftId else null end ) as noPayNum \
+                from ( \
+                    select id, postid, regexp_replace(giftId,'\\\\[|\\\\]', '') as giftId \
+                    from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+                         LATERAL VIEW explode(split(get_json_object(giftJson ,'$.giftIds') ,',')) t2 AS giftId \
+                    where status=1 and auditStatus=1  group by id, postid,giftId \
+                ) a \
+                join ( \
+                    select id as giftId, is_pay as isPay \
+                    from lofter.dim_gift \
+                ) b on a.giftId = b.giftId \
+                group by a.postid,a.id \
+            ) a \
+            group by 1,2,3 \
+        ) a \
+        group by postid \
+    ) a \
+    group by 1,2 \
+) i on b.postid=i.postid
+hive.query.02=create or replace view lofter.dim_gift_post as select * from lofter.dim_gift_post_dd where dt = '${azkaban.flow.1.days.ago}';
+dependencies=dim_post,dim_user,dim_gift

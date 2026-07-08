@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Clickhouse8NodeLoad
+conf.spark.default.parallelism=400
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=5
+conf.spark.executor.cores=4
+conf.spark.source.query="\
+select day, \
+       scene, \
+       userId, \
+       recListJson, \
+       postCount, \
+       paidPostCount, \
+       clickCount \
+from lofter_dm.ads_alg_data_user_item_agg_di \
+where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.ads_alg_data_user_item_agg_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_alg_data_user_item_agg_di

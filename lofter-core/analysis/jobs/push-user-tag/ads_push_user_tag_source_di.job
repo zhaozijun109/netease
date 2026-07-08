@@ -1,0 +1,331 @@
+type=sparksql
+driver-memory=6g
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=150
+conf.spark.executor.cores=3
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=create temporary function bitmap_and as 'com.netease.wm.udf.bitmap.BitmapAndUDF';
+hive.query.04=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.05=\
+with cp_ip_tag as ( \
+    select x.tag, y.ip \
+    from ( \
+        select a.tagName as tag, row_number() over (order by a.joinednum desc ) as rk \
+        from lofter_db_dump.ods_db_tag_joined_nd a \
+        join lofter.dim_tag b on a.tagName = b.tag and b.cpflag > 0 and derivedflag > 0 \
+        union all \
+        select a.tag, row_number() over (order by hot desc) as rk \
+        from ( \
+            select tag, count(1) as hot \
+            from lofter.dwd_post_hot_di \
+                lateral view explode(post_tags) as tag \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+            group by 1 \
+        ) a \
+        join lofter.dim_tag b on a.tag = b.tag and b.cpflag > 0 and derivedflag > 0 \
+    ) x \
+    join lofter.dwd_tag_ip_mapping_nd y on x.tag = y.tag \
+    where rk <= 200 \
+    group by 1, 2 \
+), \
+cp_ip as ( \
+   select ip from cp_ip_tag group by 1 \
+), \
+valid_active_source as ( \
+    select dt, \
+           userId, \
+           row_number() over(partition by userId order by dt desc) as rn \
+    from lofter.dws_par_user_content_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' and userId > 0 and browse_pv > 0 \
+), \
+stg1 as ( \
+    select t1.dt, \
+           t1.userId, \
+           t1.rn, \
+           t2.ip, \
+           t2.pv \
+    from ( \
+        select dt, \
+               userId, \
+               rn \
+        from valid_active_source \
+        where rn <= 7 \
+    ) t1 \
+    left join ( \
+        select dt, \
+               userId, \
+               ip, \
+               pv \
+        from lofter.dws_ip_user_consume_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' and \
+              userId > 0 \
+    ) t2 \
+    on t1.dt = t2.dt and t1.userId = t2.userId \
+), \
+stg2 as ( \
+    select t1.userId, \
+           t1.ip, \
+           max(t1.ip_active_days) as ip_active_days, \
+           nvl(count(distinct if(t2.dt >= t1.first_3pv_dt, t2.dt, null)), 0) as start_from_first_3pv_active_days \
+    from ( \
+        select a.userId, \
+               a.ip, \
+               count(1) as ip_active_days, \
+               min(if(a.pv > 3, a.dt, null)) as first_3pv_dt \
+        from lofter.dws_ip_user_consume_di a \
+             join cp_ip b on a.ip = b.ip \
+        where a.dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' and \
+              a.userId > 0 and length(a.ip) > 0 \
+        group by a.userId, a.ip \
+    ) t1 \
+    left join valid_active_source t2 \
+    on t1.userId = t2.userId \
+    group by t1.userId, t1.ip \
+), \
+ip_user_classify ( \
+    select userId, ip, user_type \
+    from ( \
+        select userId, \
+               ip, \
+               case when start_from_first_3pv_active_days > 3 and ((ip_active_days >= 5 and ip_active_days < 7 and latest_7_valid_active_ip_pv_cnt >= 20 and latest_30d_active_days > 2) or (ip_active_days >= 7 and latest_7_valid_active_ip_pv_cnt >= 15 and latest_7_valid_active_ip_pv_cnt < 20 and latest_30d_active_days > 2) or (ip_active_days >= 7 and latest_7_valid_active_ip_pv_cnt >= 20 and latest_30d_active_days >= 1 and latest_30d_active_days <= 2)) then '成熟期用户' \
+               when start_from_first_3pv_active_days >= 1 and start_from_first_3pv_active_days <= 3 then '新用户' \
+               when start_from_first_3pv_active_days = 0 and latest_3_valid_active_ip_pv_cnt >= 2 then '潜力用户' \
+               else null \
+               end as user_type \
+        from ( \
+            select t1.userId, \
+                   t1.ip, \
+                   nvl(t1.ip_active_days, 0) as ip_active_days, \
+                   nvl(t1.start_from_first_3pv_active_days, 0) as start_from_first_3pv_active_days, \
+                   nvl(t2.latest_30d_active_days, 0) as latest_30d_active_days, \
+                   nvl(t3.latest_30d_ip_pv_cnt, 0) as latest_30d_ip_pv_cnt, \
+                   nvl(t4.latest_7_valid_active_ip_pv_cnt, 0) as latest_7_valid_active_ip_pv_cnt, \
+                   nvl(t4.latest_3_valid_active_ip_pv_cnt, 0) as latest_3_valid_active_ip_pv_cnt, \
+                   nvl(t4.latest_1_valid_active_ip_pv, 0) as latest_1_valid_active_ip_pv, \
+                   nvl(t4.latest_2_valid_active_ip_pv, 0) as latest_2_valid_active_ip_pv, \
+                   nvl(t4.latest_3_valid_active_ip_pv, 0) as latest_3_valid_active_ip_pv \
+            from ( \
+                select userId, \
+                       ip, \
+                       ip_active_days, \
+                       start_from_first_3pv_active_days \
+                from stg2 \
+            ) t1 \
+            join ( \
+                select userId, \
+                       count(distinct if(dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}', dt, null)) as latest_30d_active_days \
+                from lofter.dwd_user_active_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' \
+                group by userId \
+            ) t2 \
+            on t1.userId = t2.userId \
+            left join ( \
+                select a.userId, \
+                       a.ip, \
+                       sum(a.pv) as latest_30d_ip_pv_cnt \
+                from lofter.dws_ip_user_consume_di a \
+                     join cp_ip b on a.ip = b.ip \
+                where a.dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+                group by a.userId, a.ip \
+            ) t3 \
+            on t1.userId = t3.userId and t1.ip = t3.ip \
+            left join ( \
+                select userId, \
+                       ip, \
+                       sum(pv) as latest_7_valid_active_ip_pv_cnt, \
+                       sum(if(rn <= 3, pv, null)) as latest_3_valid_active_ip_pv_cnt, \
+                       max(if(rn = 1, pv, null)) as latest_1_valid_active_ip_pv, \
+                       max(if(rn = 2, pv, null)) as latest_2_valid_active_ip_pv, \
+                       max(if(rn = 3, pv, null)) as latest_3_valid_active_ip_pv \
+                from stg1 \
+                group by userId, ip \
+            ) t4 \
+            on t1.userId = t4.userId and t1.ip = t4.ip \
+        ) t5 \
+    ) tmp1 \
+    where user_type is not null \
+), \
+ip_user_register_new as ( \
+    select * \
+    from ( \
+        select createDate, \
+            userId, \
+            tag, \
+            dt, \
+            post_count_7d, \
+            row_number() over(partition by userId order by post_count_7d desc) as rn \
+        from ( \
+            select t1.createDate, \
+                t2.userId, \
+                t2.tag, \
+                t2.dt, \
+                t3.post_count_7d \
+            from ( \
+                select id, createDate from lofter.dim_user where createDate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            join ( \
+                select userId, tag, dt from lofter.dws_tag_user_consume_di where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and pv >= 2 \
+            ) t2 \
+            on t1.id = t2.userId and t1.createDate = t2.dt \
+            join cp_ip_tag t4 on t2.tag = t4.tag \
+            left join ( \
+                select tag, post_count_7d from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' \
+            ) t3 \
+            on t2.tag = t3.tag \
+        ) t4 \
+    ) t5 \
+    where rn = 1 \
+), \
+calendarDate as ( \
+    select date_sub(next_day('${azkaban.flow.1.days.ago}', 'MO'), 21) as start_date \
+), \
+dateSource as ( \
+    select date_add(start_date, 0) as last_last_week_start, \
+           date_add(start_date, 6) as last_last_week_end, \
+           date_add(start_date, 7) as last_week_start, \
+           date_add(start_date, 13) as last_week_end, \
+           date_add(start_date, 14) as current_week_start, \
+           date_add(start_date, 20) as current_week_end \
+    from calendarDate \
+), \
+ipSource as ( \
+    select ip, \
+           nvl((last_week_cnt - last_last_week_cnt)/last_last_week_cnt, 0) as growth_rate \
+    from ( \
+        select ip, \
+            count(distinct case when type = 'last_last_week' then id else null end) as last_last_week_cnt, \
+            count(distinct case when type = 'last_week' then id else null end) as last_week_cnt \
+        from ( \
+            select id, \
+                ip, \
+                case when publishDate between last_last_week_start and last_last_week_end then 'last_last_week' \
+                        when publishDate between last_week_start and last_week_end then 'last_week' \
+                        else null \
+                end as type \
+            from ( \
+                select t1.id, \
+                    t1.ip, \
+                    t1.publishDate, \
+                    t2.last_last_week_start, \
+                    t2.last_last_week_end, \
+                    t2.last_week_start, \
+                    t2.last_week_end \
+                from ( \
+                    select id, ip, publishDate from lofter.dim_post_article lateral view explode(ips) as ip where publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                ) t1 \
+                cross join ( \
+                    select last_last_week_start, last_last_week_end, last_week_start, last_week_end from dateSource \
+                ) t2 \
+            ) t3 \
+        ) t4 \
+        where type is not null \
+        group by ip \
+    ) t5 \
+), \
+userIpSource as ( \
+    select t1.userId, t1.ip, t1.user_type, t3.post_7d \
+    from ip_user_classify t1 \
+    join ( \
+        select userId, ip, post_7d from lofter.dws_ip_user_consume_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) t3 \
+    on t1.userId = t3.userId and t1.ip = t3.ip \
+), \
+ip_user_classify_final as ( \
+    select userId, \
+           ip, \
+           user_type \
+    from ( \
+        select t1.userId, \
+            t1.ip, \
+            t1.user_type, \
+            row_number() over(partition by t1.userId, t1.user_type order by if(t2.growth_rate < 0.2, 0, t2.growth_rate) desc, t1.post_7d desc) as rn \
+        from userIpSource t1 \
+        left join ipSource t2 \
+        on t1.ip = t2.ip \
+    ) t \
+    where rn = 1 \
+), \
+ip_content as ( \
+    select tag, postId, blogId, regexp_replace(regexp_replace(content, ' ', ' '), '观影体', '') as content, a.contentType as type, hot, \
+           row_number() over (partition by a.tag order by case a.contentType when 'pid' then 1 when 'postId' then 2 else 3 end, hot desc) as rn \
+    from ( \
+        select * \
+        from lofter_dm.ads_push_rec_content_candidates_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and contentType in ('postId', 'pid') \
+    ) a \
+    join ( \
+        select contentId, contentType, max(probability) as score \
+        from rec.content_reg_push_output \
+        where day <= '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) b on a.contentId = b.contentId and a.contentType = b.contentType \
+    where b.score >= 0.9 \
+) \
+insert overwrite table lofter_dm.ads_push_user_tag_source_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, \
+       ip, \
+       userType, \
+       tag, \
+       postId, \
+       blogId, \
+       content \
+from ( \
+    select t1.userId as userId, \
+        t1.ip as ip, \
+        t1.userType as userType, \
+        t3.tag as tag, \
+        t3.postId as postId, \
+        t3.blogId as blogId, \
+        t3.content as content, \
+        row_number() over(partition by t1.userId, t1.ip order by t4.post_30d desc, t3.hot desc) as rn \
+    from ( \
+        select userId, \
+            ip, \
+            user_type as userType \
+        from ip_user_classify_final \
+    ) t1 \
+    join cp_ip_tag t2 on t1.ip = t2.ip \
+    join ( \
+        select postId, \
+            blogId, \
+            tag, \
+            content, \
+            hot \
+        from ip_content \
+    ) t3 on t2.tag = t3.tag \
+    join ( \
+        select a.tag, \
+               a.userId, \
+               a.post_30d \
+        from lofter.dws_tag_user_consume_dd a \
+             join cp_ip_tag b on a.tag = b.tag \
+        where a.dt = '${azkaban.flow.1.days.ago}' and \
+              length(a.tag) > 0 and a.userId > 0 and \
+              post_30d >= 3 \
+    ) t4 on t1.userId = t4.userId and t2.tag = t4.tag \
+    left join ( \
+        select userId, postId \
+        from lofter_dm.ads_push_user_tag_di \
+        where dt < '${azkaban.flow.current.date}' \
+      union all \
+        select userId, postId \
+        from lofter_dm.ads_push_user_tag_source_di \
+        where dt < '${azkaban.flow.current.date}' \
+      union all \
+        select userId, postId from lofter_dm.ads_push_tag_golden_active_di where dt < '${azkaban.flow.current.date}' \
+      union all \
+        select userId, postId from lofter_dm.ads_push_tag_golden_inactive_di where dt < '${azkaban.flow.current.date}' \
+    ) tt on t1.userId = tt.userId and t3.postId = tt.postId \
+  union all \
+    select a.userId as userId, c.ip as ip, a.userType as userType, \
+            a.tag as tag, b.postId as postId, b.blogId as blogId, b.content as content, b.rn as rn \
+    from ( \
+      select userId, tag, '注册新用户' as userType \
+      from ip_user_register_new \
+    ) a \
+    join ip_content b on a.tag = b.tag \
+    join cp_ip_tag c on a.tag = c.tag \
+) t5 \
+where rn = 1 \

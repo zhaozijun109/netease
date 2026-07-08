@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE `lofter`.`dim_grain_creator_dd` PARTITION(`dt`='${azkaban.flow.1.days.ago}') \
+              SELECT \
+              	tmp1.`grainid` AS `grainid`, \
+              	tmp1.`tags` AS `tags`, \
+              	tmp1.`userid` AS `userid`, \
+              	tmp1.`cover_url` AS `cover_url`, \
+              	tmp1.`name` AS `name`, \
+              	tmp1.`createtime` AS `createtime`, \
+              	tmp1.`lastpublishtime` AS `lastpublishtime`, \
+              	tmp1.`graintype` AS `graintype`, \
+              	tmp1.`status` AS `status`, \
+              	tmp1.`sourcetype` AS `sourcetype`, \
+              	tmp1.`hotplantype` AS `hotplantype`, \
+              	tmp1.`level` AS `level`, \
+              	tmp1.`blog_url` AS `blog_url`, \
+              	tmp2.`contenttype` AS `content_type` \
+              FROM ( \
+              	SELECT \
+              		a.`id` AS `grainid`, \
+              		a.`tags`, \
+              		a.`userid`, \
+              		a.`coverurl` AS `cover_url`, \
+              		a.`name`, \
+              		a.`createtime`, \
+              		a.`updatetime` AS `lastpublishtime`, \
+              		a.`type` AS `graintype`, \
+              		a.`status`, \
+              		a.`sourcetype`, \
+              		a.`hotplantype`, \
+              		b.`level`, \
+              		b.`blog_url` \
+              	FROM \
+              		`lofter_db_dump`.`ods_db_grain_info_nd` AS a \
+              	LEFT JOIN ( \
+              			SELECT \
+              				`userid`, \
+              				`blog_url`, \
+              				`level` \
+              			FROM \
+              				`lofter`.`dws_par_creator_dd` \
+              			WHERE `dt` = '${azkaban.flow.1.days.ago}' \
+              			GROUP BY `userid`,`blog_url`,`level` \
+              		) AS b \
+              	ON a.`userid` = b.`userid` \
+              	) tmp1 \
+              LEFT JOIN ( \
+              	SELECT \
+              		e.`grainid`, \
+              		e.`contenttype` \
+              	FROM ( \
+              		  SELECT \
+              		  		c.`grainid`, \
+              		  		d.`contenttype`, \
+              		  		row_number() over(partition by c.`grainid` order by d.`cnt` desc) AS `rn` \
+              		  FROM ( \
+              		  		SELECT `grainid`,`postid` FROM `lofter_db_dump`.`ods_db_grain_post_nd` GROUP BY `grainid`,`postid` \
+              		  ) AS c \
+              		  LEFT JOIN ( \
+              		  		SELECT `id`,`contenttype`,COUNT(1) AS `cnt` FROM `lofter`.`dim_post` GROUP BY `id`,`contenttype` \
+              		  ) AS d \
+              		  ON c.`postid` = d.`id` \
+              		) AS e \
+              	WHERE e.`rn` = 1 \
+              ) tmp2 \
+              ON  tmp1.`grainid` = tmp2.`grainid`

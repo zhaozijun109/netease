@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+dau AS ( \
+    SELECT  \
+        COUNT(DISTINCT deviceudid) AS dau_cnt \
+    FROM  \
+        lofter.device_active \
+    WHERE  \
+        dt = '${azkaban.flow.1.days.ago}' \
+), \
+browse_user AS ( \
+    SELECT  \
+        deviceudid, \
+        MAX(CASE WHEN post_content_type = '图片' THEN 1 ELSE 0 END) AS has_photo, \
+        MAX(CASE WHEN post_content_type = '文字' THEN 1 ELSE 0 END) AS has_text, \
+        MAX(CASE WHEN post_content_type = '视频' THEN 1 ELSE 0 END) AS has_video \
+    FROM  \
+        lofter.dwd_post_browse_di \
+    WHERE  \
+        dt = '${azkaban.flow.1.days.ago}' \
+        AND is_real = 1 \
+    GROUP BY  \
+        deviceudid \
+), \
+stats AS ( \
+    SELECT \
+        SUM(has_photo) AS photo_users, \
+        SUM(has_text)  AS text_users, \
+        SUM(has_video) AS video_users, \
+        SUM(CASE WHEN has_photo = 1 AND has_video = 1 THEN 1 ELSE 0 END) AS photo_video_users, \
+        SUM(CASE WHEN has_text = 1  AND has_video = 1 THEN 1 ELSE 0 END) AS text_video_users, \
+        SUM(CASE WHEN has_photo = 1 AND has_text = 1 AND has_video = 1 THEN 1 ELSE 0 END) AS photo_text_video_users \
+    FROM  \
+        browse_user \
+), \
+summary AS ( \
+    SELECT  \
+        s.*, \
+        d.dau_cnt \
+    FROM stats s  \
+    CROSS JOIN dau d \
+) \
+insert overwrite table lofter_dm.ads_post_browse_penetration_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT '有效浏览图片用户' AS metric_name, photo_users AS user_cnt, dau_cnt AS dau,photo_users  / NULLIF(dau_cnt, 0) AS penetration_rate_pct FROM summary \
+UNION ALL \
+SELECT '有效浏览文字用户', text_users, dau_cnt,text_users  / NULLIF(dau_cnt, 0) FROM summary \
+UNION ALL \
+SELECT '有效浏览视频用户', video_users, dau_cnt,video_users  / NULLIF(dau_cnt, 0) FROM summary \
+UNION ALL \
+SELECT '图+视频用户', photo_video_users, dau_cnt,photo_video_users  / NULLIF(dau_cnt, 0) FROM summary \
+UNION ALL \
+SELECT '文+视频用户', text_video_users, dau_cnt,text_video_users  / NULLIF(dau_cnt, 0) FROM summary \
+UNION ALL \
+SELECT '图+文+视频用户', photo_text_video_users, dau_cnt,photo_text_video_users  / NULLIF(dau_cnt, 0) FROM summary

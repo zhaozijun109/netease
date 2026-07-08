@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=\
+with avg_apks as ( \
+    select parse_array(params['malls']) as apks, deviceUdid, deviceOs \
+    from avg.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId = 'mall-collect' and length(deviceOs) > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_device_collect_apk_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select apk_name,is_installed,count(distinct deviceudid) as uv, deviceOs, 'lofter' as appId \
+from \
+lofter.dwd_device_collect_apk_di \
+where dt= '${azkaban.flow.1.days.ago}' \
+group by  apk_name,is_installed, deviceOs \
+union all \
+select b.apk_name as apk_name, if(c.deviceUdid is null, 0, 1) as is_installed, count(distinct a.deviceUdid) as uv, a.deviceOs as deviceOs, 'avg' as appId \
+from ( \
+   select deviceUdid, deviceOs \
+   from avg_apks \
+   group by 1, 2 \
+) a \
+join ( \
+   select deviceOs, apk_name from avg_apks lateral view explode(apks) as apk_name group by 1, 2 \
+) b on a.deviceOs = b.deviceOs \
+left join ( \
+    select deviceUdid, apk_name \
+    from avg_apks \
+         lateral view explode(apks) as apk_name \
+    group by 1, 2 \
+) c on a.deviceUdid = c.deviceUdid and b.apk_name = c.apk_name \
+group by b.apk_name, if(c.deviceUdid is null, 0, 1), a.deviceOs \

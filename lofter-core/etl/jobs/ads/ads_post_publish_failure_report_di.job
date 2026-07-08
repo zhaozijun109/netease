@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_publish_failure_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+    appversion,  \
+    params['type'] as type,  \
+    eventid, \
+    deviceos, \
+    case when itemType in('1','TEXT') then '文字' \
+            when itemType in('2','PHOTO') then '图片' \
+            else '视频' \
+        end as itemType, \
+    get_json_object(params['ext'], '$.errorCode') as errorCode,  \
+    get_json_object(params['ext'], '$.msg') as msg,  \
+    nvl(count(*),0) as cnt, \
+    case when eventId in ('c10-30', 'c10-31', 'c10-32') then 'publish' \
+        else 'draft' \
+    end as source \
+from lofter.ods_mda_app_partition_di \
+where dt='${azkaban.flow.1.days.ago}' \
+    and ( cast(split(appversion,'\\\\.')[0] as int) > 8  \
+            or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 1)  \
+            or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 1 and cast(split(appversion,'\\\\.')[2] as int) >= 28 ))  \
+    and deviceos in ('Android','iOS') \
+    and eventid in ('c10-30', 'c10-31', 'c10-32', 'c10-70','c10-71','c10-72') \
+    and itemType in('TEXT','PHOTO','VIDEO','1','2','4') \
+    and ( case when deviceos = 'Android' then get_json_object(params['ext'], '$.msg') not in ('正在自动保存', '请输入日志内容', '定时发布时间已过', '正在发布上传', '日志内容已超限，请精简~', '标题长度超限') \
+            when deviceos = 'iOS' then get_json_object(params['ext'], '$.msg') not in ('上一篇正在发布', '文字文章无内容') \
+        end \
+    ) \
+group by appversion, type, eventId, get_json_object(params['ext'], '$.errorCode'), get_json_object(params['ext'], '$.msg'), itemType, deviceos, source

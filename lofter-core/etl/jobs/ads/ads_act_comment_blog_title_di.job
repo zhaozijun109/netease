@@ -1,0 +1,63 @@
+type=sparksql
+hive.query.01=\
+with data_source as( \
+    select blogid, \
+        count(distinct ( \
+            if(content REGEXP '神仙|神迹|女神|惊艳|伟大|大佬|巨佬|权威'  \
+                ,commentid,null) \
+            ) \
+        ) as god_cnt, \
+        count(distinct ( \
+            if(content REGEXP '好萌|超萌|太萌了|美丽|美腻|绝美|好看|好米|超米|超赞|超棒|太棒了|太会了|好喜欢|心动|超爱|爱死了' \
+                ,commentid,null) \
+            ) \
+        ) as love_cnt, \
+        count(distinct ( \
+            if(content REGEXP '大吃一口|狂吃|好吃|好香|香喷喷|美味|好味|馋死|大馋丫头|流口水|狂炫|炫饭|库库炫|大口炫|厨神|厨子|大厨|厨力|高产|生产队' \
+                ,commentid,null) \
+            ) \
+        ) as pot_cnt, \
+        count(distinct ( \
+            if(content REGEXP '太刀了|扎心|大虐|好虐|虐死|大哭|哭死|好痛|心痛|emo|泪目' \
+                ,commentid,null) \
+            ) \
+        ) as knife_cnt, \
+        count(distinct ( \
+            if(content REGEXP '99|般配|天生一对|一对|夫妻|老夫老妻|豹豹猫猫|锁死|囍|新婚|结婚|民政局|祝福|随份子|随礼' \
+                ,commentid,null) \
+            ) \
+        ) as couple_cnt, \
+        count(distinct ( \
+            if( size(split(regexp_replace(nvl(content, ''), '[^\\u4E00-\\u9FA5]', ''), '')) >= 100 ,commentid,null) \
+            ) \
+        ) as long_comment_cnt \
+    from( \
+        select blogid,commentid,content \
+        from lofter.dwd_post_response_di \
+        where dt = '${azkaban.flow.1.days.ago}' and userid <> blogid \
+    ) \
+    group by blogid \
+    having god_cnt >= 10 or love_cnt >=10 or pot_cnt >= 10 or knife_cnt >=10 or couple_cnt >=10 or long_comment_cnt >=10 \
+) \
+insert overwrite table lofter_dm.ads_act_comment_blog_title_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogid,title \
+from( \
+    select blogid,if(god_cnt >= 10,'神仙级别的',null) as title \
+    from data_source \
+    union all \
+    select blogid,if(love_cnt >= 10,'芳心纵火犯',null) as title \
+    from data_source \
+    union all \
+    select blogid,if(pot_cnt >= 10,'俺们村最好的厨子',null) as title \
+    from data_source \
+    union all \
+    select blogid,if(knife_cnt >= 10,'锻刀大师',null) as title \
+    from data_source \
+    union all \
+    select blogid,if(couple_cnt >= 10,'首席丘比特',null) as title \
+    from data_source \
+    union all \
+    select blogid,if(long_comment_cnt >= 10,'长评收割机',null) as title \
+    from data_source \
+) \
+where title is not null

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dwd.DeviceAllSummaryJob
+params=${azkaban.flow.1.days.ago}
+dependencies=dwd_device_growth_attribution_di

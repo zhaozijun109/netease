@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.02=insert overwrite table lofter_dm.ads_push_active_top1_post_di partition(dt = '${azkaban.flow.current.date}') \
+select x.*, y.postId, y.hot, y.blogId \
+from ( \
+    select a.userId, a1.prefer_ip \
+    from ( \
+        select userId \
+        from lofter.dwd_user_active_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+        group by 1 \
+    ) a \
+    join ( \
+      select userId, element_at(top_ips,1) as prefer_ip \
+      from lofter.dws_par_user_ip_prefer_dd \
+      where dt = '${azkaban.flow.1.days.ago}' \
+    ) a1 on a.userId = a1.userId \
+    left join ( \
+      select userId \
+      from `lofter`.`ods_binlog_user_statistic_di` \
+      where dt = '${azkaban.flow.current.date}' and `_bin_op` in (0,2) and \
+        from_unixtime(cast(lastLoginTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.current.date}' \
+      group by 1 \
+    ) b on a.userId = b.userId \
+    where b.userId is null \
+) x \
+join ( \
+    select * \
+    from ( \
+        select a.ip, a.postId, b.blogId, a.hot, \
+               row_number() over (partition by a.ip order by a.hot desc) as rk \
+        from ( \
+            select ip, postId, sum(hot_pv) as hot \
+            from lofter.dws_post_interaction_di \
+                 lateral view explode(resolve_tag_ip(post_tags)) as ip \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+            group by 1, 2 \
+        ) a \
+        join lofter.dim_post b on a.postId = b.id \
+        where b.valid = 0 and b.allowView = 0 and \
+              b.publishDate <= '${azkaban.flow.1.days.ago}' and \
+              b.publishDate >= '${azkaban.flow.7.days.ago}' and \
+              a.hot >= 500 \
+    ) t \
+    where rk = 1 \
+) y on x.prefer_ip = y.ip \
+left join ( \
+   select userId, postId from lofter_dm.ads_push_active_top1_post_di where dt < '${azkaban.flow.current.date}' group by 1,2 \
+) z on x.userId = z.userId and y.postId = z.postId \
+left join ( \
+    select userId, postId \
+    from lofter.dwd_post_browse_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) z1 on x.userId = z1.userId and y.postId = z1.postId \
+left join lofter_db_dump.ods_db_blacklist_user_nd z2 on x.userId = z2.userId and y.blogId = z2.blacklistBlogId \
+left join lofter_db_dump.ods_db_user_forbid_tag_nd z3 on x.userId = z3.userId \
+where z.userId is null and z1.postId is null and z2.userId is null and z3.userId is null and \
+      (x.userId % 10) < datediff('${azkaban.flow.current.date}', '2025-04-30') * 2 \

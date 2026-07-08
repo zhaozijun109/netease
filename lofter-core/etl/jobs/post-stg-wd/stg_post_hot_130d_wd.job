@@ -1,0 +1,39 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=200
+conf.spark.executor.cores=4
+hive.query.01=DROP TABLE IF EXISTS lofter_tmp.ods_db_post_hot_nd;
+hive.query.02=CREATE TABLE lofter_tmp.ods_db_post_hot_nd LIKE lofter_db_dump.ods_db_post_hot_nd LOCATION '/user/da_lofter/db_dump/PostHot/${azkaban.flow.1.days.ago}';
+hive.query.03=\
+INSERT OVERWRITE TABLE lofter.stg_post_hot_static_out_130d_wd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  id, \
+        postid, \
+        blogid, \
+        publisheruserid, \
+        frompostid, \
+        fromblogid, \
+        topostid, \
+        toblogid, \
+        content, \
+        optime, \
+        type, \
+        ip \
+FROM lofter_tmp.ods_db_post_hot_nd \
+WHERE DATEDIFF('${azkaban.flow.1.days.ago}', from_unixtime(cast(optime/1000 AS bigint), 'yyyy-MM-dd')) > 130;
+hive.query.04=\
+INSERT OVERWRITE TABLE lofter.stg_post_hot_dynamic_in_130d_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  id, \
+        postid, \
+        blogid, \
+        publisheruserid, \
+        frompostid, \
+        fromblogid, \
+        topostid, \
+        toblogid, \
+        content, \
+        optime, \
+        type, \
+        ip \
+FROM lofter_tmp.ods_db_post_hot_nd \
+WHERE DATEDIFF('${azkaban.flow.1.days.ago}', from_unixtime(cast(optime/1000 AS bigint), 'yyyy-MM-dd')) <= 130;
+hive.query.05=DROP TABLE IF EXISTS lofter_tmp.ods_db_post_hot_nd;

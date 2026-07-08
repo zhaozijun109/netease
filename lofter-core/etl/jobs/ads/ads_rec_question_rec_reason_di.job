@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_question_rec_reason_di partition(dt='${azkaban.flow.1.days.ago}') \
+select talkId as questionId, \
+       blogId, \
+       case when 1dScoreCount > 1000 or 1dDiscussCount > 500 then '24h热度飙升' \
+            when 7dScoreCount >= 100 or 7dDiscussCount >= 20 then '近7日热门' \
+       end as recReason, \
+       case when 1dScoreCount > 1000 then 5 \
+            when 1dDiscussCount > 500 then 6 \
+            when 7dScoreCount >= 100 then 7 \
+            when 7dDiscussCount >= 20 then 8 \
+       end as priority, \
+       case when 1dScoreCount > 1000 then 1dScoreCount \
+            when 1dDiscussCount > 500 then 1dDiscussCount \
+            when 7dScoreCount >= 100 then 7dScoreCount \
+            when 7dDiscussCount >= 20 then 7dDiscussCount \
+       end as weight, \
+       if(from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}', 2, 3) as tagLottieType \
+from lofter.dws_post_talk_question_interaction_dd \
+where dt = '${azkaban.flow.1.days.ago}' and ((1dScoreCount > 1000 or 1dDiscussCount > 500) or (7dScoreCount >= 100 or 7dDiscussCount >= 20))

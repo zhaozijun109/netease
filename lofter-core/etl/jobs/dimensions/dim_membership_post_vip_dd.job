@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_membership_post_vip_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.blogId, b.tags, b.ips, a.joinTime, \
+       from_unixtime(cast(a.joinTime/1000 as bigint), 'yyyy-MM-dd') as join_date \
+from ( \
+    select postId, blogId, joinTime \
+    from lofter_db_dump.ods_db_post_membership_post_nd \
+    where bizId = "membership" and status = 1 and postStatus = 1 and giftStatus = 1 \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+
+dependencies=dim_post

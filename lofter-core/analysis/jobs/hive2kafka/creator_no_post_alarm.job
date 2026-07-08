@@ -1,0 +1,34 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query=" \
+SELECT  tmp1.`blogId`, \
+        tmp1.`blogUrl`, \
+        tmp1.`blogNickName`, \
+        tmp1.`level`, \
+        tmp1.`type` \
+FROM \
+( \
+	SELECT  `blogid`        AS blogId, \
+	        `blog_url`      AS blogUrl, \
+	        `blog_nickname` AS blogNickName, \
+	        `level`, \
+	        0               AS type \
+	FROM `lofter_dm`.`ads_blog_score_di` \
+	WHERE `dt` = '${azkaban.flow.1.days.ago}' \
+	AND `level` IN ('S', 'A') \
+	GROUP BY  `blogid`, \
+	          `blog_url`, \
+	          `level`, \
+	          `blog_nickname` \
+	HAVING SUM(DATEDIFF('${azkaban.flow.1.days.ago}', `post_last_date`)) >= 30 \
+) tmp1 \
+LEFT JOIN \
+( \
+	SELECT  `id`, \
+	        `isofficial` \
+	FROM `lofter`.`dim_blog` \
+) tmp2 \
+ON tmp1.`blogid` = tmp2.`id` \
+WHERE tmp2.`isofficial` = 0 \
+"
+params= --messageType 86 --topic BI.DS.COMMON --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092,lofter-kafka-bi-risk4.gy.ntes:9092,lofter-kafka-bi-risk5.gy.ntes:9092,lofter-kafka-bi-risk6.gy.ntes:9092,lofter-kafka-bi-risk7.gy.ntes:9092,lofter-kafka-bi-risk8.gy.ntes:9092

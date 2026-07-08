@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+with user_ecpm as ( \
+    select userId, os, positionId, sum(client_win_price) / count(1) as avg_ecpm_7d \
+    from lofter.dwd_ad_dsp_win_fill_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and userId > 0 and \
+          client_win_price < 1000 \
+    group by 1, 2, 3 \
+), \
+os_percentiles as ( \
+    select os, positionId, group_percentiles, groupId + 1 as groupId, group_percentile \
+    from ( \
+        select os, positionId, percentile_approx(avg_ecpm_7d, array(0.5, 0.8)) as group_percentiles \
+        from user_ecpm \
+        group by os, positionId \
+    ) t \
+    lateral view posexplode(group_percentiles) a as groupId, group_percentile \
+) \
+insert overwrite table lofter_dm.ads_ad_waterfull_user_group_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select positionId, os, userId, avg_ecpm_7d as group_metric, group_percentiles, \
+    if(avg_ecpm_7d >= group_percentile, groupId, 0) as groupId, \
+    if(avg_ecpm_7d >= group_percentile, group_percentile, 0) as group_percentile \
+from ( \
+    select a.positionId, a.os, a.userId, a.avg_ecpm_7d, b.group_percentiles, b.groupId, b.group_percentile as group_percentile, \
+            row_number() over (partition by a.positionId, a.os, a.userId order by if(a.avg_ecpm_7d >= b.group_percentile, b.groupId, -1) desc) rk \
+    from user_ecpm a \
+    join os_percentiles b on a.os = b.os and a.positionId = b.positionId \
+) t \
+where rk = 1

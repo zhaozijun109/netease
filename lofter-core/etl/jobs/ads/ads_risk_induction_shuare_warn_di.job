@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_induction_shuare_warn_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.* \
+from ( \
+        select blogId, postId, '高等级创作者-付费 正文引流' as reason, 1 as userType \
+        from lofter_dm.ads_risk_induction_warn_posts_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+        select blogId, 0 as postId, '近30日发布内容命中引流内容达50%' as reason, user_type as userType \
+        from lofter_dm.ads_risk_induction_warn_blogs_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+        select blogId, 0 as postId, \
+              if(shuare_ratio_30d > 0.5, '用户近30天发布内容命中刷热模型的比例大于50%', '用户近30天发布内容同时命中付费引流+刷热的比例大于50%') as reason, \
+              user_type as userType \
+        from lofter_dm.ads_risk_shuare_warn_blogs_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select blogId \
+    from lofter_dm.ads_risk_induction_shuare_warn_di \
+    where dt <= '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) b on a.blogId = b.blogId \
+where b.blogId is null
+dependencies=ads_risk_induction_warn_posts_di,ads_risk_induction_warn_blogs_di,ads_risk_shuare_warn_blogs_di

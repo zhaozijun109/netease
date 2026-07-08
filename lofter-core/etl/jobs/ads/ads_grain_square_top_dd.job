@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_square_top_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select  tag,'acc' as period,id grainId ,rank grainIdRank,userid grainIdUser	 \
+              from 	 \
+              (	 \
+                  select a.* from 	 \
+                  (select id,userid,subscribedcount,'#粮单广场all' as tag,row_number() OVER (ORDER BY subscribedcount DESC)  as rank 	 \
+                  from   lofter_db_dump.ods_db_grain_info_nd	 \
+                  where  greatlevel in (1,2)	 \
+                  ) a	 \
+                  where rank<=12	 \
+              	 \
+              union all	 \
+              select  id,userid,subscribedcount,tag,rank	 \
+              from 	 \
+              	(select  id,userid,tag,subscribedcount,sum(count(distinct id))over(partition by tag ) total,	 \
+              		 row_number() OVER (partition by tag ORDER BY  subscribedcount  desc) rank	 \
+              	from lofter_db_dump.ods_db_grain_info_nd	 \
+              	lateral view explode(split(lower(trim(tags)),','))  t1 as tag	 \
+              	where subscribedcount>=1	 \
+              	group by id,userid,tag,subscribedcount	 \
+              	)	 \
+              where  total>=30 and  rank<=12	 \
+              )	 \
+              union all	 \
+              select tag,'7d' as period,id grainId ,rank grainIdRank,userid grainIdUser	 \
+              from 	 \
+              (select a.* from 	 \
+              	(select id,userid,subscribe_pv_new7d,'#粮单广场all' as tag, row_number() OVER (ORDER BY subscribe_pv_new7d DESC)  as rank 	 \
+              	from   lofter_dm.ads_grain_detail_dd	 \
+              	where dt='${azkaban.flow.1.days.ago}' and greatlevel in (1,2) 	 \
+              	) a	 \
+              where rank<=12	 \
+              union all	 \
+              select  id,userid,subscribe_pv_new7d,tag,rank	 \
+              from 	 \
+              	(select  id,userid,tag,subscribe_pv_new7d,sum(count(distinct id))over(partition by tag ) total,	 \
+              		row_number() OVER (partition by tag  ORDER BY  subscribe_pv_new7d  desc) rank	 \
+              	from  (select * from lofter_dm.ads_grain_detail_dd where dt='${azkaban.flow.1.days.ago}') a 	 \
+              	lateral view explode(split(lower(trim(tags)),','))  t1 as tag	 \
+              	where subscribe_pv>=1	 \
+              	group by id,userid,tag,subscribe_pv_new7d	 \
+              	) b	 \
+              where  total>=30 and  rank<=12	 \
+              )     \
+              distribute by 1
+dependencies=ads_grain_detail_dd
+

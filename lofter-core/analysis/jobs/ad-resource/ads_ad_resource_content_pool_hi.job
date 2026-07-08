@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_ad_resource_content_pool_hi partition(dt = '${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select x.* \
+from ( \
+    select a.postId, a.blogId, a.groupId, \
+           row_number() over (partition by a.groupId order by c.real_browse_uv desc) as group_rank \
+    from ( \
+        select x.postId, x.blogId, z.main_ip as groupId \
+        from ( \
+            select id as postId, blogId, ips \
+            from lofter.dim_post_article \
+            where is_book_store = 0 and \
+                  isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                  isMoved = 0 and isActivityAutoPost=0 and isImported=0 and \
+                  contentType in ('图片', '文字') and valid = 0 \
+        ) x \
+        left join ( \
+            select postId \
+            from lofter.dim_gift_post_return_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and status = 1 and auditStatus = 1 and isPayNum > 0 and \
+                  contentType = '文字' and return_gift_plantype not in ('原图') \
+            group by 1 \
+        ) y on x.postId = y.postId \
+        join ( \
+            select userId, element_at(post_top_ips, 1) as main_ip \
+            from lofter.dws_par_creator_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and size(post_top_ips) > 0 \
+        ) z on x.blogId = z.userId \
+        where y.postId is null and \
+              z.main_ip in ('时空中的绘旅人', '破次元恋人', '第五人格', '燕云十六声', '恋与深空') and \
+              array_contains(x.ips, z.main_ip) \
+    ) a \
+    join ( \
+        select userId \
+        from ( \
+            select *, row_number() over (partition by userId order by `_bin_op_time` desc) as rk \
+            from lofter.ods_binlog_rta_creator_ad_switch_di \
+            where dt = '${azkaban.flow.current.date}' \
+        ) t \
+        where rk = 1 and openAd =  1 and _bin_op in (0,2) \
+        union \
+        select userId \
+        from lofter_db_dump.ods_db_rta_creator_ad_switch_nd \
+        where openAd = 1 \
+    ) b on a.blogId = b.userId \
+    join ( \
+        select postId, real_browse_uv \
+        from lofter.dws_post_traffic_di \
+        where dt = '${azkaban.flow.1.days.ago}' and real_browse_uv > 10 \
+    ) c on a.postId = c.postId \
+) x \
+join ( \
+    select a.userId \
+    from ( \
+        select userId \
+        from ( \
+            select *, row_number() over (partition by userId order by `_bin_op_time` desc) as rk \
+            from lofter.ods_binlog_rta_creator_ad_switch_di \
+            where dt = '${azkaban.flow.current.date}' \
+        ) t \
+        where rk = 1 and openAd = 1 and _bin_op in (0,2) \
+    ) a \
+    left join ( \
+        select userId \
+        from lofter_db_dump.ods_db_rta_creator_ad_switch_nd \
+        where openAd = 1 \
+    ) b on a.userId = b.userId \
+    where b.userId is null \
+) y on x.blogId = y.userId \
+left join ( \
+    select postId \
+    from lofter_dm.ads_ad_resource_content_pool_hi \
+    where dt = '${azkaban.flow.current.date}' and hour < ${azkaban.flow.start.hour} \
+) z on x.postId = z.postId \
+where x.group_rank <= 100000 and z.postId is null \

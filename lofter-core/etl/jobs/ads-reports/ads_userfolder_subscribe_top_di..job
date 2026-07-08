@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_userfolder_subscribe_top_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.id as userfolder_id, a.userid, a.name as userfolder_name, \
+       b.blogName, b.blognickname, \
+       a.postCount, a.tags, a.subscribedCount, \
+       concat('https://www.lofter.com/front/blog/collection-push/detail?folderId=',a.id) url \
+from ( \
+    select id,userid,name,postCount,tags,subscribedCount \
+    from lofter_db_dump.ods_db_user_subscribe_folder_nd \
+    order by subscribedCount desc \
+    limit 100 \
+) a \
+left join ( \
+    select id,blogName,blogNickname \
+    from lofter.dim_blog \
+) b \
+on a.userid=b.id \
+distribute by 1

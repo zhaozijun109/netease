@@ -1,0 +1,459 @@
+type=sparksql
+hive.query.01=\
+WITH visit_today AS ( \
+    SELECT userId, \
+           nvl(nullif(trim(source_type), ''), 'unknown') as source_type, \
+           nvl(nullif(trim(source), ''), 'unknown') as source \
+    FROM ( \
+        SELECT userId, source_type, source, \
+               row_number() over ( \
+                   partition by userId \
+                   order by CASE WHEN source IS NULL OR trim(source) = '' \
+                                   OR source_type IS NULL OR trim(source_type) = '' \
+                                 THEN 1 ELSE 0 END, \
+                            occurtime asc \
+               ) as rn \
+        FROM lofter.dwd_rewardcenter_visit_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND userId > 0 \
+    ) t \
+    WHERE rn = 1 \
+), \
+visit_d1 AS ( \
+    SELECT userId, \
+           nvl(nullif(trim(source_type), ''), 'unknown') as source_type, \
+           nvl(nullif(trim(source), ''), 'unknown') as source \
+    FROM ( \
+        SELECT userId, source_type, source, \
+               row_number() over ( \
+                   partition by userId \
+                   order by CASE WHEN source IS NULL OR trim(source) = '' \
+                                   OR source_type IS NULL OR trim(source_type) = '' \
+                                 THEN 1 ELSE 0 END, \
+                            occurtime asc \
+               ) as rn \
+        FROM lofter.dwd_rewardcenter_visit_di \
+        WHERE dt = '${azkaban.flow.2.days.ago}' \
+          AND userId > 0 \
+    ) t \
+    WHERE rn = 1 \
+), \
+visit_d7 AS ( \
+    SELECT userId, \
+           nvl(nullif(trim(source_type), ''), 'unknown') as source_type, \
+           nvl(nullif(trim(source), ''), 'unknown') as source \
+    FROM ( \
+        SELECT userId, source_type, source, \
+               row_number() over ( \
+                   partition by userId \
+                   order by CASE WHEN source IS NULL OR trim(source) = '' \
+                                   OR source_type IS NULL OR trim(source_type) = '' \
+                                 THEN 1 ELSE 0 END, \
+                            occurtime asc \
+               ) as rn \
+        FROM lofter.dwd_rewardcenter_visit_di \
+        WHERE dt = '${azkaban.flow.7.days.ago}' \
+          AND userId > 0 \
+    ) t \
+    WHERE rn = 1 \
+), \
+visit_d30 AS ( \
+    SELECT userId, \
+           nvl(nullif(trim(source_type), ''), 'unknown') as source_type, \
+           nvl(nullif(trim(source), ''), 'unknown') as source \
+    FROM ( \
+        SELECT userId, source_type, source, \
+               row_number() over ( \
+                   partition by userId \
+                   order by CASE WHEN source IS NULL OR trim(source) = '' \
+                                   OR source_type IS NULL OR trim(source_type) = '' \
+                                 THEN 1 ELSE 0 END, \
+                            occurtime asc \
+               ) as rn \
+        FROM lofter.dwd_rewardcenter_visit_di \
+        WHERE dt = '${azkaban.flow.30.days.ago}' \
+          AND userId > 0 \
+    ) t \
+    WHERE rn = 1 \
+), \
+user_types AS ( \
+    SELECT userId, \
+           CASE WHEN is_new_user > 0 THEN '权益中心新用户' \
+                WHEN is_return_user > 0 THEN '权益中心回流用户' \
+                ELSE '普通访问用户' END as user_type \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+user_types_d1 AS ( \
+    SELECT userId, \
+           CASE WHEN is_new_user > 0 THEN '权益中心新用户' \
+                WHEN is_return_user > 0 THEN '权益中心回流用户' \
+                ELSE '普通访问用户' END as user_type \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.2.days.ago}' \
+), \
+user_types_d7 AS ( \
+    SELECT userId, \
+           CASE WHEN is_new_user > 0 THEN '权益中心新用户' \
+                WHEN is_return_user > 0 THEN '权益中心回流用户' \
+                ELSE '普通访问用户' END as user_type \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.7.days.ago}' \
+), \
+user_types_d30 AS ( \
+    SELECT userId, \
+           CASE WHEN is_new_user > 0 THEN '权益中心新用户' \
+                WHEN is_return_user > 0 THEN '权益中心回流用户' \
+                ELSE '普通访问用户' END as user_type \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.30.days.ago}' \
+), \
+ad_watch_today AS ( \
+    SELECT userId, count(*) as pv \
+    FROM lofter.dwd_ad_reward_task_complete_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND task_pay_type = 1 \
+      AND userId > 0 \
+    GROUP BY userId \
+), \
+exchange_today AS ( \
+    SELECT userId, count(*) as pv \
+    FROM lofter.dwd_ad_reward_score_product_exchange_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+    GROUP BY userId \
+), \
+ad_revenue_today AS ( \
+    SELECT userId, sum(money) as ad_revenue \
+    FROM lofter.dwd_user_ad_revenue_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND position_name like '%权益中心%' \
+      AND userId > 0 \
+    GROUP BY userId \
+), \
+rc_revisit_today AS ( \
+    SELECT userId \
+    FROM lofter.dwd_rewardcenter_visit_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+    GROUP BY userId \
+), \
+app_active_today AS ( \
+    SELECT userId \
+    FROM lofter.dws_par_user_active_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+    GROUP BY userId \
+), \
+dau AS ( \
+    SELECT count(distinct userId) as lofter_dau \
+    FROM lofter.dws_par_user_active_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 and is_anonymous = 0 \
+), \
+ec_base AS ( \
+    SELECT userId, \
+           CASE WHEN eventid in ('e1-73','e1-74') THEN 'fixed' \
+                WHEN eventid in ('e1-75','e1-76') THEN 'attract' \
+                WHEN eventid in ('g3-103','g3-104') THEN 'fixed' \
+                WHEN eventid in ('a1-37','a1-36') THEN 'attract' \
+                WHEN eventid in ('b1-45','b1-46') THEN 'attract' \
+                WHEN eventid = 'e2-17' THEN 'fixed' \
+                WHEN eventid = 'im2-52' THEN 'attract' \
+                WHEN eventid = 'rd-1' THEN 'recall' \
+                WHEN eventid = 'e1-45' THEN 'fixed' \
+                WHEN eventid in ('ad-65','ad-37') THEN 'attract' \
+           END as source_type, \
+           CASE WHEN eventid in ('e1-73','e1-74') THEN 'mine_account_loftgrain' \
+                WHEN eventid in ('e1-75','e1-76') THEN 'mine_account_banner' \
+                WHEN eventid in ('g3-103','g3-104') THEN 'giftbag_grain_ticket' \
+                WHEN eventid in ('a1-37','a1-36') THEN 'home_upperleft' \
+                WHEN eventid in ('b1-45','b1-46') THEN 'explorefeednative_11' \
+                WHEN eventid = 'e2-17' THEN 'rc_subscribe' \
+                WHEN eventid = 'im2-52' THEN 'privatemessage' \
+                WHEN eventid = 'rd-1' THEN 'push' \
+                WHEN eventid = 'e1-45' THEN 'mine_entrance' \
+                WHEN eventid in ('ad-65','ad-37') THEN 'home_float' \
+           END as source, \
+           CASE WHEN eventid in ('e1-73','e1-75','g3-103','a1-37','b1-45','ad-65') THEN 'expose' \
+                WHEN eventid in ('e1-74','e1-76','g3-104','a1-36','b1-46','e2-17','im2-52','rd-1','e1-45','ad-37') THEN 'click' \
+           END as evt \
+    FROM lofter.ods_mda_app_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+      AND eventid in ('e1-73','e1-74','e1-75','e1-76','g3-103','g3-104','a1-37','a1-36','b1-45','b1-46','e2-17','im2-52','rd-1','e1-45','ad-65','ad-37') \
+), \
+expose_click AS ( \
+    SELECT b.source_type, b.source, \
+           nvl(ut.user_type, '未访问用户') as user_type, \
+           count(distinct if(b.evt = 'expose', b.userId, null)) as expose_uv, \
+           count(if(b.evt = 'expose', 1, null)) as expose_pv, \
+           count(distinct if(b.evt = 'click', b.userId, null)) as click_uv, \
+           count(if(b.evt = 'click', 1, null)) as click_pv \
+    FROM ec_base b \
+    LEFT JOIN user_types ut ON b.userId = ut.userId \
+    GROUP BY b.source_type, b.source, nvl(ut.user_type, '未访问用户') \
+), \
+today_metrics AS ( \
+    SELECT v.source_type, v.source, ut.user_type, \
+           count(distinct v.userId) as rc_visit_uv, \
+           count(distinct if(aw.userId is not null, v.userId, null)) as ad_watch_uv, \
+           count(distinct if(ex.userId is not null, v.userId, null)) as product_exchange_uv, \
+           sum(nvl(ar.ad_revenue, 0)) as ad_revenue \
+    FROM visit_today v \
+    JOIN user_types ut ON v.userId = ut.userId \
+    LEFT JOIN ad_watch_today aw ON v.userId = aw.userId \
+    LEFT JOIN exchange_today ex ON v.userId = ex.userId \
+    LEFT JOIN ad_revenue_today ar ON v.userId = ar.userId \
+    GROUP BY v.source_type, v.source, ut.user_type \
+), \
+visits_ts AS ( \
+    SELECT userId, source_type, source, occurtime \
+    FROM lofter.dwd_rewardcenter_visit_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND userId > 0 \
+      AND source_type IS NOT NULL AND trim(source_type) <> '' \
+      AND source IS NOT NULL AND trim(source) <> '' \
+), \
+landing_metrics AS ( \
+    SELECT nvl(nullif(trim(v.source_type), ''), 'unknown') as source_type, \
+           nvl(nullif(trim(v.source), ''), 'unknown') as source, \
+           ut.user_type, \
+           count(distinct v.userId) as rc_landing_uv, \
+           count(*) as rc_landing_pv \
+    FROM lofter.dwd_rewardcenter_visit_di v \
+    JOIN user_types ut ON v.userId = ut.userId \
+    WHERE v.dt = '${azkaban.flow.1.days.ago}' \
+      AND v.userId > 0 \
+    GROUP BY nvl(nullif(trim(v.source_type), ''), 'unknown'), nvl(nullif(trim(v.source), ''), 'unknown'), ut.user_type \
+), \
+ad_watch_attr AS ( \
+    SELECT source_type, source, userId FROM ( \
+        SELECT nvl(v.source_type, 'unknown') as source_type, \
+               nvl(v.source, 'unknown') as source, \
+               r.userId, r.rid, \
+               row_number() over ( \
+                   partition by r.rid \
+                   order by CASE WHEN v.occurtime IS NULL THEN 1 ELSE 0 END, v.occurtime desc \
+               ) as rn \
+        FROM ( \
+            SELECT userId, reward_time as op_time, monotonically_increasing_id() as rid \
+            FROM lofter.dwd_ad_reward_task_complete_di \
+            WHERE dt = '${azkaban.flow.1.days.ago}' \
+              AND task_pay_type = 1 \
+              AND userId > 0 \
+        ) r \
+        LEFT JOIN visits_ts v ON r.userId = v.userId AND v.occurtime <= r.op_time \
+    ) t \
+    WHERE rn = 1 \
+), \
+ad_watch_metrics AS ( \
+    SELECT a.source_type, a.source, ut.user_type, \
+           count(distinct a.userId) as ad_watch_uv_recent, \
+           count(*) as ad_watch_pv \
+    FROM ad_watch_attr a \
+    JOIN user_types ut ON a.userId = ut.userId \
+    GROUP BY a.source_type, a.source, ut.user_type \
+), \
+exchange_attr AS ( \
+    SELECT source_type, source, userId FROM ( \
+        SELECT nvl(v.source_type, 'unknown') as source_type, \
+               nvl(v.source, 'unknown') as source, \
+               r.userId, r.rid, \
+               row_number() over ( \
+                   partition by r.rid \
+                   order by CASE WHEN v.occurtime IS NULL THEN 1 ELSE 0 END, v.occurtime desc \
+               ) as rn \
+        FROM ( \
+            SELECT userId, exchange_time as op_time, monotonically_increasing_id() as rid \
+            FROM lofter.dwd_ad_reward_score_product_exchange_di \
+            WHERE dt = '${azkaban.flow.1.days.ago}' \
+              AND userId > 0 \
+        ) r \
+        LEFT JOIN visits_ts v ON r.userId = v.userId AND v.occurtime <= r.op_time \
+    ) t \
+    WHERE rn = 1 \
+), \
+exchange_metrics AS ( \
+    SELECT a.source_type, a.source, ut.user_type, \
+           count(distinct a.userId) as product_exchange_uv_recent, \
+           count(*) as product_exchange_pv \
+    FROM exchange_attr a \
+    JOIN user_types ut ON a.userId = ut.userId \
+    GROUP BY a.source_type, a.source, ut.user_type \
+), \
+revenue_attr AS ( \
+    SELECT source_type, source, userId, money FROM ( \
+        SELECT nvl(v.source_type, 'unknown') as source_type, \
+               nvl(v.source, 'unknown') as source, \
+               r.userId, r.money, r.rid, \
+               row_number() over ( \
+                   partition by r.rid \
+                   order by CASE WHEN v.occurtime IS NULL THEN 1 ELSE 0 END, v.occurtime desc \
+               ) as rn \
+        FROM ( \
+            SELECT userId, money, request_time as op_time, monotonically_increasing_id() as rid \
+            FROM lofter.dwd_user_ad_revenue_di \
+            WHERE dt = '${azkaban.flow.1.days.ago}' \
+              AND position_name like '%权益中心%' \
+              AND userId > 0 \
+        ) r \
+        LEFT JOIN visits_ts v ON r.userId = v.userId AND v.occurtime <= r.op_time \
+    ) t \
+    WHERE rn = 1 \
+), \
+revenue_metrics AS ( \
+    SELECT a.source_type, a.source, ut.user_type, \
+           sum(nvl(a.money, 0)) as ad_revenue_recent \
+    FROM revenue_attr a \
+    JOIN user_types ut ON a.userId = ut.userId \
+    GROUP BY a.source_type, a.source, ut.user_type \
+), \
+sign_attr AS ( \
+    SELECT source_type, source, userId FROM ( \
+        SELECT nvl(v.source_type, 'unknown') as source_type, \
+               nvl(v.source, 'unknown') as source, \
+               r.userId, r.rid, \
+               row_number() over ( \
+                   partition by r.rid \
+                   order by CASE WHEN v.occurtime IS NULL THEN 1 ELSE 0 END, v.occurtime desc \
+               ) as rn \
+        FROM ( \
+            SELECT userId, finishtime as op_time, monotonically_increasing_id() as rid \
+            FROM lofter_db_dump.ods_db_reward_particular_score_task_nd \
+            WHERE type = 2 \
+              AND `date` = cast(regexp_replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) \
+              AND userId > 0 \
+        ) r \
+        LEFT JOIN visits_ts v ON r.userId = v.userId AND v.occurtime <= r.op_time \
+    ) t \
+    WHERE rn = 1 \
+), \
+sign_metrics AS ( \
+    SELECT a.source_type, a.source, ut.user_type, \
+           count(distinct a.userId) as sign_uv \
+    FROM sign_attr a \
+    JOIN user_types ut ON a.userId = ut.userId \
+    GROUP BY a.source_type, a.source, ut.user_type \
+), \
+retain_1d AS ( \
+    SELECT v.source_type, v.source, ut.user_type, \
+           count(distinct v.userId) as base_uv, \
+           count(distinct if(rv.userId is not null, v.userId, null)) as rc_uv, \
+           count(distinct if(aa.userId is not null, v.userId, null)) as app_uv \
+    FROM visit_d1 v \
+    JOIN user_types_d1 ut ON v.userId = ut.userId \
+    LEFT JOIN rc_revisit_today rv ON v.userId = rv.userId \
+    LEFT JOIN app_active_today aa ON v.userId = aa.userId \
+    GROUP BY v.source_type, v.source, ut.user_type \
+), \
+retain_7d AS ( \
+    SELECT v.source_type, v.source, ut.user_type, \
+           count(distinct v.userId) as base_uv, \
+           count(distinct if(rv.userId is not null, v.userId, null)) as rc_uv, \
+           count(distinct if(aa.userId is not null, v.userId, null)) as app_uv \
+    FROM visit_d7 v \
+    JOIN user_types_d7 ut ON v.userId = ut.userId \
+    LEFT JOIN rc_revisit_today rv ON v.userId = rv.userId \
+    LEFT JOIN app_active_today aa ON v.userId = aa.userId \
+    GROUP BY v.source_type, v.source, ut.user_type \
+), \
+retain_30d AS ( \
+    SELECT v.source_type, v.source, ut.user_type, \
+           count(distinct v.userId) as base_uv, \
+           count(distinct if(rv.userId is not null, v.userId, null)) as rc_uv, \
+           count(distinct if(aa.userId is not null, v.userId, null)) as app_uv \
+    FROM visit_d30 v \
+    JOIN user_types_d30 ut ON v.userId = ut.userId \
+    LEFT JOIN rc_revisit_today rv ON v.userId = rv.userId \
+    LEFT JOIN app_active_today aa ON v.userId = aa.userId \
+    GROUP BY v.source_type, v.source, ut.user_type \
+), \
+all_keys AS ( \
+    SELECT source_type, source, user_type FROM today_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM landing_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM ad_watch_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM exchange_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM revenue_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM sign_metrics \
+    UNION \
+    SELECT source_type, source, user_type FROM expose_click \
+    UNION \
+    SELECT source_type, source, user_type FROM retain_1d \
+    UNION \
+    SELECT source_type, source, user_type FROM retain_7d \
+    UNION \
+    SELECT source_type, source, user_type FROM retain_30d \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_reward_center_source_visit_report_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT k.source_type, k.source, k.user_type, \
+       nvl(t.rc_visit_uv, 0) as rc_visit_uv, \
+       nvl(t.ad_watch_uv, 0) as ad_watch_uv, \
+       nvl(t.product_exchange_uv, 0) as product_exchange_uv, \
+       nvl(t.ad_revenue, 0) as ad_revenue, \
+       CASE WHEN nvl(t.rc_visit_uv, 0) = 0 THEN 0 \
+            ELSE cast(t.ad_watch_uv as decimal(20,6)) / t.rc_visit_uv END as ad_watch_rate, \
+       CASE WHEN nvl(t.rc_visit_uv, 0) = 0 THEN 0 \
+            ELSE cast(t.product_exchange_uv as decimal(20,6)) / t.rc_visit_uv END as product_exchange_rate, \
+       nvl(r1.base_uv, 0) as rc_retain_base_1d, \
+       nvl(r1.rc_uv, 0) as rc_retain_uv_1d, \
+       CASE WHEN nvl(r1.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r1.rc_uv as decimal(20,6)) / r1.base_uv END as rc_retain_rate_1d, \
+       nvl(r7.base_uv, 0) as rc_retain_base_7d, \
+       nvl(r7.rc_uv, 0) as rc_retain_uv_7d, \
+       CASE WHEN nvl(r7.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r7.rc_uv as decimal(20,6)) / r7.base_uv END as rc_retain_rate_7d, \
+       nvl(r30.base_uv, 0) as rc_retain_base_30d, \
+       nvl(r30.rc_uv, 0) as rc_retain_uv_30d, \
+       CASE WHEN nvl(r30.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r30.rc_uv as decimal(20,6)) / r30.base_uv END as rc_retain_rate_30d, \
+       nvl(r1.base_uv, 0) as app_retain_base_1d, \
+       nvl(r1.app_uv, 0) as app_retain_uv_1d, \
+       CASE WHEN nvl(r1.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r1.app_uv as decimal(20,6)) / r1.base_uv END as app_retain_rate_1d, \
+       nvl(r7.base_uv, 0) as app_retain_base_7d, \
+       nvl(r7.app_uv, 0) as app_retain_uv_7d, \
+       CASE WHEN nvl(r7.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r7.app_uv as decimal(20,6)) / r7.base_uv END as app_retain_rate_7d, \
+       nvl(r30.base_uv, 0) as app_retain_base_30d, \
+       nvl(r30.app_uv, 0) as app_retain_uv_30d, \
+       CASE WHEN nvl(r30.base_uv, 0) = 0 THEN 0 \
+            ELSE cast(r30.app_uv as decimal(20,6)) / r30.base_uv END as app_retain_rate_30d, \
+       nvl(ec.expose_uv, 0) as expose_uv, \
+       nvl(ec.expose_pv, 0) as expose_pv, \
+       nvl(ec.click_uv, 0) as click_uv, \
+       nvl(ec.click_pv, 0) as click_pv, \
+       nvl(lm.rc_landing_uv, 0) as rc_landing_uv, \
+       nvl(lm.rc_landing_pv, 0) as rc_landing_pv, \
+       nvl(awm.ad_watch_uv_recent, 0) as ad_watch_uv_recent, \
+       nvl(awm.ad_watch_pv, 0) as ad_watch_pv, \
+       nvl(rvm.ad_revenue_recent, 0) as ad_revenue_recent, \
+       nvl(exm.product_exchange_uv_recent, 0) as product_exchange_uv_recent, \
+       nvl(exm.product_exchange_pv, 0) as product_exchange_pv, \
+       nvl(sgm.sign_uv, 0) as sign_uv, \
+       CASE WHEN nvl(lm.rc_landing_uv, 0) = 0 THEN 0 \
+            ELSE cast(nvl(sgm.sign_uv, 0) as decimal(20,6)) / lm.rc_landing_uv END as sign_rate, \
+       nvl(d.lofter_dau, 0) as lofter_dau, \
+       CASE WHEN nvl(d.lofter_dau, 0) = 0 THEN 0 \
+            ELSE cast(nvl(lm.rc_landing_uv, 0) as decimal(20,6)) / d.lofter_dau END as rc_penetration_rate \
+FROM all_keys k \
+LEFT JOIN today_metrics t ON k.source_type = t.source_type AND k.source = t.source AND k.user_type = t.user_type \
+LEFT JOIN landing_metrics lm ON k.source_type = lm.source_type AND k.source = lm.source AND k.user_type = lm.user_type \
+LEFT JOIN ad_watch_metrics awm ON k.source_type = awm.source_type AND k.source = awm.source AND k.user_type = awm.user_type \
+LEFT JOIN exchange_metrics exm ON k.source_type = exm.source_type AND k.source = exm.source AND k.user_type = exm.user_type \
+LEFT JOIN revenue_metrics rvm ON k.source_type = rvm.source_type AND k.source = rvm.source AND k.user_type = rvm.user_type \
+LEFT JOIN sign_metrics sgm ON k.source_type = sgm.source_type AND k.source = sgm.source AND k.user_type = sgm.user_type \
+LEFT JOIN expose_click ec ON k.source_type = ec.source_type AND k.source = ec.source AND k.user_type = ec.user_type \
+LEFT JOIN retain_1d r1 ON k.source_type = r1.source_type AND k.source = r1.source AND k.user_type = r1.user_type \
+LEFT JOIN retain_7d r7 ON k.source_type = r7.source_type AND k.source = r7.source AND k.user_type = r7.user_type \
+LEFT JOIN retain_30d r30 ON k.source_type = r30.source_type AND k.source = r30.source AND k.user_type = r30.user_type \
+CROSS JOIN dau d \
+DISTRIBUTE BY 1
+
+dependencies=

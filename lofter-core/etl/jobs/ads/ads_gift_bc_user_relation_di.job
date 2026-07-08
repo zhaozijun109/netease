@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_bc_user_relation_di partition (dt='${azkaban.flow.1.days.ago}') \
+select nvl(x.userId, y.userId) as userId, \
+    x.blog, y.collection \
+from ( \
+    select a.userId, \
+        concat_ws(',', transform(sort_array(collect_set(struct(rk, post_count,blogId)), true), x -> concat_ws(':', x.blogId, '2.1', x.post_count))) as blog \
+    from ( \
+        select userId, blogId, post_count, row_number() over(partition by userId order by unlock_time desc) rk \
+        from ( \
+            select userId, blogId, count(distinct postId) post_count, max(unlock_time) as unlock_time \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt='${azkaban.flow.1.days.ago}' and (coin > 0 or money > 0) \
+            group by 1,2 \
+            having post_count >= 2 \
+        ) t \
+    ) a \
+    join ( \
+        select userId \
+        from lofter.dwd_user_order_dd \
+        where dt='${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', pay_date) <= 60 \
+        group by 1 \
+    ) b on a.userId = b.userId \
+    where a.rk <= 20 \
+    group by 1 \
+) x \
+full outer join ( \
+    select a.userId, concat_ws(',', transform(sort_array(collect_set(struct(rk, post_count,collectionId)), true), x -> concat_ws(':', x.collectionId, '3.1', x.post_count))) as collection \
+    from ( \
+        select userId, collectionId, post_count, row_number() over(partition by userId order by unlock_time desc) as rk \
+        from ( \
+            select x.userId, y.collectionId, count(distinct x.postId) post_count, max(unlock_time) as unlock_time \
+            from ( \
+                select userId, postId, max(unlock_time) as unlock_time \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt='${azkaban.flow.1.days.ago}' and (coin > 0 or money > 0) and unlock_unit != '合集' \
+                group by 1,2 \
+            ) x \
+            join lofter.bridge_collection_post y on x.postId = y.postId \
+            group by 1, 2 \
+            having post_count >= 2 \
+        ) t \
+    ) a \
+    join ( \
+        select userId \
+        from lofter.dwd_user_order_dd \
+        where dt='${azkaban.flow.1.days.ago}' and datediff('${azkaban.flow.1.days.ago}', pay_date) <= 60 \
+        group by 1 \
+    ) b on a.userId = b.userId \
+    where a.rk <= 20 \
+    group by 1 \
+) y on x.userId = y.userId \

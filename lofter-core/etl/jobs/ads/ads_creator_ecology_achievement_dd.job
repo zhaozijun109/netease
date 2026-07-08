@@ -1,0 +1,206 @@
+type=sparksql
+hive.query.01=\
+with month_date as ( \
+    select relate_date from lofter.bridge_calendar_date_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and period = 'month' and calendar_date = '${azkaban.flow.1.days.ago}' \
+), \
+month_dwd_post_publish_di as ( \
+    select userid, \
+           postid, \
+           post_publish_date \
+    from ( \
+        select userid, \
+               postid, \
+               post_publish_date, \
+               dt \
+        from lofter.dwd_post_publish_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.dt = b.relate_date \
+) \
+insert overwrite table lofter_dm.ads_creator_ecology_achievement_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select tmp1.userId as blogId, \
+       tmp2.max_continuous_days, \
+       tmp2.accumulated_update_days, \
+       tmp3.words_count_cnt, \
+       tmp3.photo_count_cnt, \
+       tmp3.lottery_cnt, \
+       tmp3.underscore_comment_pv_cnt, \
+       tmp4.circle_comment_cnt, \
+       tmp5.receive_comment_cnt, \
+       tmp6.fans_cnt, \
+       tmp7.collection_subscribe_uv, \
+       tmp8.vote_cnt \
+from ( \
+    select userid \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1 \
+) tmp1 \
+left join ( \
+    select userid, \
+           max(continuous_days) as max_continuous_days, \
+           sum(continuous_days) as accumulated_update_days \
+    from ( \
+        select userid, \
+                date_sub(post_publish_date, rk) as date_interval, \
+                count(1) as continuous_days \
+        from ( \
+            select userid, \
+                   post_publish_date, \
+                   dense_rank() over(partition by userid order by post_publish_date) as rk \
+            from ( \
+                select userid, \
+                       post_publish_date \
+                from month_dwd_post_publish_di \
+                group by userid, post_publish_date \
+            ) t1 \
+        ) t2 \
+        group by userid, date_sub(post_publish_date, rk) \
+    ) t3 \
+    group by userid \
+) tmp2 \
+on tmp1.userid = tmp2.userid \
+left join ( \
+    select t1.userid, \
+           sum(nvl(t2.words_count,0)) as words_count_cnt, \
+           sum(nvl(t2.photo_count,0)) as photo_count_cnt, \
+           sum(nvl(t3.lottery,0)) as lottery_cnt, \
+           sum(nvl(underscore_comment_pv,0)) as underscore_comment_pv_cnt \
+    from ( \
+        select userid, \
+               postid \
+        from month_dwd_post_publish_di \
+    ) t1 \
+    left join ( \
+        select postid, \
+               words_count, \
+               photo_count \
+        from lofter.dwd_post_length_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t2 \
+    on t1.postid = t2.postid \
+    left join ( \
+        select postid, \
+               lottery \
+        from ( \
+            select postid, \
+                   1 as lottery, \
+                   from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') as dt \
+            from lofter_db_dump.ods_db_lucky_boy_config_nd \
+            where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' and status = 2 \
+        ) a \
+        join ( \
+            select relate_date from month_date \
+        ) b \
+        on a.dt = b.relate_date \
+    ) t3 \
+    on t1.postid = t3.postid \
+    left join ( \
+        select postid, \
+               underscore_comment_pv \
+        from ( \
+            select postid, \
+                   underscore_comment_pv, \
+                   post_publish_date \
+            from lofter_dm.ads_post_highlight_comment_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and post_publish_date between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' and underscore_comment_pv is not null \
+        ) a \
+        join ( \
+            select relate_date from month_date \
+        ) b \
+        on a.post_publish_date = b.relate_date \
+    ) t4 \
+    on t1.postid = t4.postid \
+    group by t1.userid \
+) tmp3 \
+on tmp1.userid = tmp3.userid \
+left join ( \
+    select blogId, \
+           sum(is_circle_comment) as circle_comment_cnt \
+    from ( \
+        select blogId, \
+               is_circle_comment, \
+               dt \
+        from lofter.dwd_post_response_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' and is_circle_comment is not null \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.dt = b.relate_date \
+    group by blogId \
+) tmp4 \
+on tmp1.userid = tmp4.blogId \
+left join ( \
+    select blogId, \
+        sum(comment_cnt) as receive_comment_cnt \
+    from ( \
+        select blogId, \
+               from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') as dt, \
+               1 as comment_cnt \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.dt = b.relate_date \
+    group by blogId \
+) tmp5 \
+on tmp1.userid = tmp5.blogId \
+left join ( \
+    select blogId, \
+           sum(fans_cnt) as fans_cnt \
+    from ( \
+        select blogId, \
+               from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') as dt, \
+               1 as fans_cnt \
+        from lofter_db_dump.ods_db_user_following_nd \
+        where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.dt = b.relate_date \
+    group by blogId \
+) tmp6 \
+on tmp1.userid = tmp6.blogId \
+left join ( \
+    select blogId, \
+           sum(subscribe_uv_1d) as collection_subscribe_uv \
+    from ( \
+        select blogId, \
+               subscribe_uv_1d, \
+               dt \
+        from lofter.dws_collection_dd \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.dt = b.relate_date \
+    group by blogId \
+) tmp7 \
+on tmp1.userid = tmp7.blogId \
+left join ( \
+    select a.blogId, \
+           count(1) as vote_cnt \
+    from ( \
+        select blogId, \
+               postId, \
+               title, \
+               from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') as publishDate \
+        from lofter_db_dump.ods_db_vote_info_nd \
+        where status = 1 and postId > 0 \
+    ) a \
+    join ( \
+        select relate_date from month_date \
+    ) b \
+    on a.publishDate = b.relate_date \
+    group by a.blogId \
+) tmp8 \
+on tmp1.userid = tmp8.blogId
+dependencies=ads_post_highlight_comment_dd

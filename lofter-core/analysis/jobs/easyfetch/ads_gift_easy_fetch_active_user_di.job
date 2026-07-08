@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01=WITH t_driver AS ( \
+    SELECT userid, \
+    CASE \
+        WHEN trade_money > 0 THEN '付费' \
+        WHEN post_cnt > 0 THEN '发文' \
+        WHEN discuss > 0 THEN '讨论' \
+        WHEN valid_pv > 0 THEN '潜客(仅浏览)' \
+        ELSE '其他' \
+    END as active_type \
+    FROM lofter.dws_par_user_stratify_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+t_consume AS ( \
+    SELECT userid, \
+    SUM(money) AS total_pay_amount_1d, \
+    SUM(CASE WHEN revenue_module = '券包' THEN money ELSE 0 END) AS coupon_buy_amount_1d \
+    FROM lofter.dwd_user_order_dd \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND pay_date = '${azkaban.flow.1.days.ago}' \
+      AND revenue_module IN ('付费礼物','券包','粉丝会员','书城会员','大会员') \
+    GROUP BY userid \
+), \
+t_browse AS ( \
+    SELECT a.userid, \
+    COUNT(1) AS valid_pay_browse_pv_1d \
+    FROM ( \
+        SELECT userid, postid \
+        FROM lofter.dwd_post_browse_di \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND is_real = 1 \
+    ) a \
+    JOIN ( \
+        SELECT postid \
+        FROM lofter.dim_gift_post_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+          AND is_pay_return_gift NOT IN ('0', '1') \
+        GROUP BY postid \
+    ) b ON a.postid = b.postid \
+    GROUP BY a.userid \
+), \
+t_recharge AS ( \
+    SELECT userid, \
+    SUM(amount) AS coin_recharge_amount_1d \
+    FROM lofter_db_dump.ods_db_trade_buy_coin_order_nd \
+    WHERE from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      AND status = 1 \
+    GROUP BY userid \
+), \
+t_user_set AS ( \
+    SELECT \
+        u.userid, \
+        COALESCE(d.active_type, '其他') AS active_type \
+    FROM ( \
+        SELECT userid FROM t_driver GROUP BY userid \
+        UNION \
+        SELECT userid FROM t_consume GROUP BY userid \
+        UNION \
+        SELECT userid FROM t_browse  GROUP BY userid \
+        UNION \
+        SELECT userid FROM t_recharge GROUP BY userid \
+    ) u \
+    LEFT JOIN t_driver d ON u.userid = d.userid \
+    WHERE u.userid IS NOT NULL \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_gift_easy_fetch_active_user_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    t0.userid, \
+    t0.active_type, \
+    COALESCE(t1.total_pay_amount_1d, 0.0) AS total_pay_amount_1d, \
+    COALESCE(t2.valid_pay_browse_pv_1d, 0) AS valid_pay_browse_pv_1d, \
+    COALESCE(t3.coin_recharge_amount_1d, 0.0) AS coin_recharge_amount_1d, \
+    COALESCE(t1.coupon_buy_amount_1d, 0.0) AS coupon_buy_amount_1d \
+FROM t_user_set t0 \
+LEFT JOIN t_consume t1 ON t0.userid = t1.userid \
+LEFT JOIN t_browse t2 ON t0.userid = t2.userid \
+LEFT JOIN t_recharge t3 ON t0.userid = t3.userid

@@ -1,0 +1,237 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_lottery_path_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select eventid_1,occurtime_1, \
+        eventid_2,occurtime_2, \
+        eventid_3,occurtime_3, \
+        if(path_rk = 1,eventid_click,null) as eventid_click,if(path_rk = 1,occurtime_click,null) as occurtime_click,last_occurtime, \
+        tabname,text, \
+        userid,if(path_rk = 1,tradeid,null) as tradeid,if(path_rk = 1,itemid,null) as itemid, \
+        if(path_rk = 1,product_money,null) as product_money \
+from( \
+      select eventid_1,occurtime_1, \
+              eventid_2,occurtime_2, \
+              eventid_3,occurtime_3, \
+              eventid_click,occurtime_click,last_occurtime, \
+              tabname,text, \
+              userid,tradeid,itemid,product_money, \
+              if(rk = 1,rank()over(partition by tradeid order by (occurtime_click - ifnull(occurtime_1,0),occurtime_click - ifnull(occurtime_2,0),occurtime_click - ifnull(occurtime_3,0))) ,null)as path_rk \
+      from( \
+            select eventid_1,occurtime_1, \
+            eventid_2,occurtime_2, \
+            eventid_3,occurtime_3, \
+            eventid_click,occurtime_click,e.last_occurtime, \
+            tabname,text, \
+            e.userid,order.tradeid,itemid, \
+            product_money,if(occurtime_click is not null and order.tradetime is not null, \
+            rank()over(partition by tradeid order by (e.occurtime_click - order.tradetime)) ,null)as rk \
+      from( \
+            select b.eventid as eventid_1,b.occurtime as occurtime_1, \
+                    null as eventid_2,null as occurtime_2, \
+                    null as eventid_3,null as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,b.params['tabName'] as tabname,b.params['text'] as text,b.userid,d.itemid \
+            from \
+                ( \
+                select eventid,userid,params,occurtime,params['tabName'],params['text'], \
+                        lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                from lofter.ods_mda_app_partition_di \
+                where dt ='${azkaban.flow.1.days.ago}' and \
+                      actionType in ('other', 'benefit_market') and \
+                     ((eventid ='w1-19' and scene = 'market_mainpage') \
+                      or (eventid ='w1-54' and scene = 'market_mainpage')) \
+                ) as b \
+            left join \
+                ( \
+                select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                from lofter.ods_mda_app_partition_di \
+                where dt ='${azkaban.flow.1.days.ago}' and \
+                      actionType in ('other', 'benefit_market') and \
+                      eventid = 'w15-6' \
+                ) as d \
+            on b.userid = d.userid and (d.occurtime >= b.occurtime and (d.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            union \
+            select a.eventid as eventid_1,a.occurtime as occurtime_1, \
+                    b.eventid as eventid_2,b.occurtime as occurtime_2, \
+                    null as eventid_3,null as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,null as tabname,null as text,a.userid,d.itemid \
+            from( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            eventid ='w10-15' \
+                   ) \
+            ) as a \
+            left join \
+                  ( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            eventid in('w10-3','w10-4','w10-5','w10-13') ) \
+                  )as b \
+            on a.userid = b.userid and (b.occurtime >= a.occurtime and (b.occurtime <= a.next_occurtime or a.next_occurtime is null )) \
+            left join \
+                  ( \
+                  select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w15-6' \
+                  ) as d \
+            on a.userid = d.userid and (d.occurtime >= b.occurtime and (d.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            union \
+            select a.eventid as eventid_1,a.occurtime as occurtime_1, \
+                    b.eventid as eventid_2,b.occurtime as occurtime_2, \
+                    null as eventid_3,null as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,b.params['tabName'] as tabname,b.params['text'] as text,a.userid,d.itemid \
+            from( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            ((eventid ='e1-45' and substr(params['URL'], 39, 15) = 'cardAggregation' )or \
+                             ( eventid ='w1-21' and substr(params['url'], 39, 15) = 'cardAggregation')or (eventid ='w1-33' and scene = 'market_mainpage')) \
+                      ) \
+                  ) as a \
+            left join \
+                  ( \
+                  select eventid,userid,params,occurtime,params['tabName'],params['text'],lead(occurtime, 1) over(partition by userid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            eventid ='w1-19' and scene = 'card_mainpage' ) \
+                  ) as b \
+            on a.userid = b.userid and (b.occurtime >= a.occurtime and (b.occurtime <= a.next_occurtime or a.next_occurtime is null )) \
+            left join \
+                  ( \
+                  select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w15-6' \
+                  ) as d \
+            on a.userid = d.userid and (d.occurtime >= b.occurtime and (d.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            union \
+            select a.eventid as eventid_1,a.occurtime as occurtime_1, \
+                    b.eventid as eventid_2,b.occurtime as occurtime_2, \
+                    null as eventid_3,null as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,null as tabname,null as text,a.userid,d.itemid \
+            from( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            ((eventid ='e1-45' and substr(params['URL'], 39, 15) = 'cardAggregation' ) \
+                             or (eventid ='w1-21' and substr(params['url'], 39, 15) = 'cardAggregation' ) or (eventid ='w1-33' and scene = 'market_mainpage'))) \
+                  ) as a \
+            left join \
+                  ( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid order by occurtime) next_occurtime \
+                  from( \
+                      select eventid,userid,params,occurtime \
+                      from lofter.ods_mda_app_partition_di \
+                      where dt='${azkaban.flow.1.days.ago}' and \
+                            actionType in ('other', 'benefit_market') and \
+                            eventid ='w1-54' and scene = 'card_mainpage' \
+                      ) \
+                  ) as b \
+            on a.userid = b.userid and (b.occurtime >= a.occurtime and (b.occurtime <= a.next_occurtime or a.next_occurtime is null )) \
+            left join \
+                  ( \
+                  select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w15-6' \
+                  ) as d \
+            on a.userid = d.userid and (d.occurtime >= b.occurtime and (d.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            union \
+            select a.eventid as eventid_1,a.occurtime as occurtime_1, \
+                    b.eventid as eventid_2,b.occurtime as occurtime_2, \
+                    c.eventid as eventid_3,c.occurtime as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,null as tabname,null as text,a.userid,d.itemid \
+            from( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from( \
+                        select eventid,userid,params,occurtime \
+                        from lofter.ods_mda_app_partition_di \
+                        where dt='${azkaban.flow.1.days.ago}' and \
+                              actionType in ('other', 'benefit_market') and \
+                              ((eventid ='e1-45' and substr(params['URL'], 39, 15) = 'cardAggregation' ) \
+                               or (eventid ='w1-21' and substr(params['url'], 39, 15) = 'cardAggregation' )) \
+                        ) \
+                  ) as a \
+            left join \
+                  ( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid order by occurtime) next_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w1-51' \
+                  ) as b \
+            on a.userid = b.userid and (b.occurtime >= a.occurtime and (b.occurtime <= a.next_occurtime or a.next_occurtime is null )) \
+            left join \
+                  ( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid in('w10-3','w10-4','w10-12') \
+                  ) as c \
+            on a.userid = c.userid and (c.occurtime >= b.occurtime and (c.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            left join \
+                  ( \
+                  select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w15-6' \
+                  ) as d \
+            on a.userid = d.userid and (d.occurtime >= c.occurtime and (d.occurtime <= c.next_occurtime or c.next_occurtime is null )) \
+            union \
+            select b.eventid as eventid_1,b.occurtime as occurtime_1, \
+                    null as eventid_2,null as occurtime_2, \
+                    null as eventid_3,null as occurtime_3, \
+                    d.eventid as eventid_click,d.occurtime as occurtime_click,d.last_occurtime,null as tabname,null as text,b.userid,d.itemid \
+            from \
+                  ( \
+                  select eventid,userid,params,occurtime,lead(occurtime, 1) over(partition by userid,eventid order by occurtime) next_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        ( eventid in ( 'ad-22','ad-37','f1-5','ad-54' ) \
+                            or (eventid in('f1-33','g1-41')and itemtype in('CARD','BOX')) \
+                            or (eventid in('e11-1','e10-1')and params['blogid'] in ('1230207','1278856871','503525182')) \
+                            or (eventid = 'a2-76' and substr(params['URL'], 39, 8) = 'cardHome') ) \
+                  ) as b \
+            left join \
+                  ( \
+                  select eventid,userid,params,itemid,occurtime,lag(occurtime, 1) over(partition by userid order by occurtime) last_occurtime \
+                  from lofter.ods_mda_app_partition_di \
+                  where dt ='${azkaban.flow.1.days.ago}' and \
+                        actionType in ('other', 'benefit_market') and \
+                        eventid = 'w15-6' \
+                  ) as d \
+            on b.userid = d.userid and (d.occurtime >= b.occurtime and (d.occurtime <= b.next_occurtime or b.next_occurtime is null )) \
+            )as e \
+      left join ( \
+            select c.tradeid,c.tradetime, c.userid,c. productid, c.product_money,c.producttype,d.activitycode \
+            from lofter.dwd_benefit_trade_order_product_dd  as c \
+            left join lofter.dim_benefit_product as d \
+            on c.productid = d.productid \
+            where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(tradetime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                   and status in(1,3,4)  and c.producttype = '5' \
+            ) as order \
+      on e.userid = order.userid and e.itemid = order.activitycode \
+      and order.tradetime  <= e.occurtime_click and (order.tradetime > e.last_occurtime or e.last_occurtime is null ) \
+      ) \
+) \

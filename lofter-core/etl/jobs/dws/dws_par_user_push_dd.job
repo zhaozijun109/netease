@@ -1,0 +1,19 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=insert overwrite table lofter.dws_par_user_push_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, is_push_on, update_time \
+from ( \
+    select userId, is_push_on, update_time, row_number() over (partition by userId order by update_time desc) rnk \
+    from ( \
+       select userId, is_push_on, update_time \
+       from lofter.dws_par_user_push_dd \
+       where dt = '${azkaban.flow.2.days.ago}' \
+     union all \
+       select userId, is_push_option_on as is_push_on, occurTime as update_time \
+       from lofter.dwd_push_action_di \
+       where dt = '${azkaban.flow.1.days.ago}' and userId > 0 and \
+             is_push_option_on is not null and action = 4 \
+    ) t \
+) tt \
+where rnk = 1 \
+distribute by 1

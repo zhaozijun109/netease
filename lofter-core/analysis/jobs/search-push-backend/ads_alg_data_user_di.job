@@ -1,0 +1,87 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_alg_data_user_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select t1.userId,  \
+    nvl(browse_pv,0) browse_pv,  \
+    nvl(interaction_cnt, 0) interaction_cnt,  \
+    nvl(paid_post_cnt,0) paid_post_cnt, \
+    nvl(cost,0.0) cost \
+from ( \
+    select userId \
+    from lofter.dwd_user_active_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+)t1 \
+left join ( \
+    select userId, count(1) as browse_pv \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and action_type = 'page_view' \
+    group by userId \
+)t2 \
+on t1.userId = t2.userId \
+left join( \
+    select \
+        userId \
+        ,sum(interact_pv) as interaction_cnt \
+    from   \
+        (select \
+            dt ,userid ,interact_pv \
+        from   \
+            (select  \
+                dt  \
+                ,userid \
+                ,nvl(hot_pv,0)+nvl(comment_pv,0)+nvl(comment_like_pv,0)+nvl(sweet_marks,0)+nvl(bitter_marks,0) \
+                +nvl(tag_subscribe_pv,0)+nvl(collection_subscribe_pv,0)+nvl(follow_uv,0)+nvl(free_gift_present_pv,0)+nvl(share_pv,0) as interact_pv \
+            from lofter.dws_user_post_interaction_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            )t  \
+        where interact_pv>0 \
+    union all  \
+        select   \
+            dt ,blogid as userid ,count(distinct id) interact_pv \
+        from  \
+            (select  \
+                a.* \
+                ,case when b.blogid is not null and questiontype=0 then 1 else 0 end 1v1_official_blogid  \
+            from lofter.dwd_post_talk_publish_di a  \
+            left join lofter_db_dump.ods_db_blog_official_blog_nd b \
+            on a.blogid=b.blogid \
+            where dt ='${azkaban.flow.1.days.ago}' \
+            )t \
+        where  1v1_official_blogid=0 \
+        group by  dt ,blogid  \
+    union all  \
+        select \
+            dt ,userid ,interact_pv \
+        from   \
+            (select  \
+                dt  \
+                ,userid  \
+                ,nvl(praise_pv,0)+nvl(comment_pv,0)+nvl(comment_like_pv,0)+nvl(share_pv,0)+nvl(cp_score_pv,0) as interact_pv \
+            from lofter.dws_user_post_talk_interaction_di \
+            where dt ='${azkaban.flow.1.days.ago}' \
+            )t  \
+        where interact_pv>0 \
+    union all  \
+        select  \
+            dt ,userid  \
+            ,(ti_pv + luck_boy_pv + vote_blog_pv + vote_user_pv) as interaction_pv \
+        from lofter.dws_user_post_other_interaction_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        )T  \
+    group by userId \
+)t3 \
+on t1.userId = t3.userId \
+left join( \
+    select userId, count(distinct postId) as paid_post_cnt \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(unlock_time/1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+)t4 \
+on t1.userId = t4.userId \
+left join( \
+    select userId, sum(money) as cost \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and order_date = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+)t5 \
+on t1.userId = t5.userId

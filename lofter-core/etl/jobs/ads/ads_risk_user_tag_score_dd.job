@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_user_tag_score_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select m.userId, m.tag, nvl(m.score,0) + nvl(n.score,0) as score \
+from ( \
+    select nvl(x.userId, y.userId) as userId, \
+           nvl(x.tag, y.tag) as tag, \
+           nvl(x.score,0) + nvl(y.score,0) as score \
+    from ( \
+        select userId, tagName as tag, 10 as score \
+        from lofter_db_dump.ods_db_favorite_tag_nd \
+        where  datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(addTagTime/1000 as bigint),'yyyy-MM-dd')) > 90 \
+    ) x \
+    full outer join ( \
+        select userId, tag, post_7d * 0.5 as score \
+        from lofter.dws_tag_user_consume_dd \
+        where dt='${azkaban.flow.1.days.ago}' and post_7d > 0 \
+    ) y on x.userId = y.userId and x.tag = y.tag \
+) m \
+left join ( \
+    select a.userId, \
+        if(datediff('${azkaban.flow.1.days.ago}', a.createDate) >= 90, 10,0) \
+        + if(b.userId is not null, -20, 0) \
+        + if(c.userId is not null, 5, 0) as score \
+    from ( \
+        select id as userId, createDate \
+        from lofter.dim_user \
+    ) a \
+    left join ( \
+        select blogId as userId \
+        from lofter_db_dump.ods_db_risk_blog_dispose_nd \
+        where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) <= 90 and status = 1 \
+        group by 1 \
+    ) b on a.userId = b.userId \
+    left join ( \
+        select userId \
+        from lofter_db_dump.ods_db_connect_phone_account_nd \
+        group by 1 \
+    ) c on a.userId = c.userId \
+) n on m.userId = n.userId \
+distribute by userId % 10 \

@@ -1,0 +1,19 @@
+# java
+**/target/*
+
+# idea
+.idea
+*.iml
+coverage-error.log
+
+# data
+/data
+*.zip
+*.DS_Store
+
+# test
+bak
+**/spark-warehouse
+
+# assembly
+/easyml

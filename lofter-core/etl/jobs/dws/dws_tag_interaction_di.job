@@ -1,0 +1,38 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_tag_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag,is_cmb_tag,ips,categories, \
+count(distinct userid) sum_valid_interaction_uv, \
+ifnull(sum(valid_interaction_pv),0) sum_valid_interaction_pv, \
+count(distinct case when optype='recommend' then userid end) recommend_uv, \
+ifnull(sum(case when optype='recommend' then valid_interaction_pv end),0) recommend_pv, \
+count(distinct case when optype='valid_comment' then userid end) valid_comment_uv, \
+ifnull(sum(case when optype='valid_comment' then valid_interaction_pv end),0) valid_comment_pv, \
+count(distinct case when optype='share' then userid end) share_uv, \
+ifnull(sum(case when optype='share' then valid_interaction_pv end),0) share_pv \
+from \
+( \
+    select tag,userid,optype,count(postid) as valid_interaction_pv \
+    from lofter.dwd_post_hot_di \
+    lateral view explode(post_tags) t1 as tag  \
+    where dt ='${azkaban.flow.1.days.ago}' and optype='recommend' \
+    group by tag,userid,optype \
+    union all \
+    select tag,userid,'valid_comment' as optype,count(postid) as valid_interaction_pv \
+    from lofter.dwd_post_response_di \
+    lateral view explode(post_tags) t1 as tag  \
+    where dt ='${azkaban.flow.1.days.ago}' and is_valid=1 \
+    group by tag,userid,optype \
+    union all \
+    select tag,userid,'share' as optype,count(postid) as valid_interaction_pv \
+    from lofter.dwd_post_share_di \
+    lateral view explode(post_tags) t1 as tag  \
+    where dt ='${azkaban.flow.1.days.ago}'  \
+    group by tag,userid,optype \
+) a \
+left join \
+( \
+    select tag,is_cmb_tag,ips,categories \
+    from lofter.dim_tag \
+) b \
+on a.tag=b.tag \
+group by a.tag,is_cmb_tag,ips,categories \

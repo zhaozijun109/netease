@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_cp_data_ai_infringe_blog_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+       complaint_uv, \
+       complaint_user_uv, \
+       complaint_partner_uv, \
+       complaint_uv_1d, \
+       complaint_uv_3d, \
+       complaint_uv_5d, \
+       complaint_uv_7d, \
+       complaint_uv_15d, \
+       complaint_uv_30d, \
+       complaint_uv_60d, \
+       complaint_uv_90d, \
+       complaint_user_uv_1d, \
+       complaint_user_uv_3d, \
+       complaint_user_uv_5d, \
+       complaint_user_uv_7d, \
+       complaint_user_uv_15d, \
+       complaint_user_uv_30d, \
+       complaint_user_uv_60d, \
+       complaint_user_uv_90d, \
+       complaint_partner_uv_1d, \
+       complaint_partner_uv_3d, \
+       complaint_partner_uv_5d, \
+       complaint_partner_uv_7d, \
+       complaint_partner_uv_15d, \
+       complaint_partner_uv_30d, \
+       complaint_partner_uv_60d, \
+       complaint_partner_uv_90d, \
+       first_complaint_date, \
+       last_complaint_date, \
+       rec_ai_recognition_cnt, \
+       partner_judge_cnt \
+from lofter.dws_ecology_ai_infringe_blog_dd \
+where dt = '${azkaban.flow.1.days.ago}'

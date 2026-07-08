@@ -1,0 +1,142 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_risk_shuare_model_stat_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  tmp3.postId, \
+                      tmp3.blogId, \
+                      tmp3.shuaHot, \
+                      tmp4.hisHot, \
+                      tmp3.dailyShuaHot, \
+                      tmp4.dailyHot, \
+                      tmp4.url, \
+                      CONCAT_WS(',',tmp4.tags) AS tags, \
+                      tmp5.comment_cnt, \
+                      tmp5.comment_cnt_1d, \
+                      tmp6.level               AS creator_level, \
+                      tmp6.fans, \
+                      IF(tmp7.postId IS NOT NULL, 1, 0) AS isPay \
+              FROM ( \
+              	      SELECT  tmp1.postId, \
+              	              tmp1.blogId, \
+              	              SUM(tmp2.hot)      AS shuaHot, \
+              	              SUM(tmp2.dailyHot) AS dailyShuaHot \
+              	      FROM ( \
+              	      	      SELECT  postId, \
+              	      	              blogId, \
+              	      	              publisherUserId, \
+              	      	              ip \
+              	      	      FROM ( \
+              	      	      	      SELECT  postId, \
+              	      	      	              blogId, \
+              	      	      	              publisherUserId, \
+              	      	      	              ip, \
+              	      	      	              hisPraise, \
+              	      	      	              (profileIpUvFlg+deviceNum_ipNumFlg+loginIp_userNum_loginIp_deviceNumFlg+cityNumFlg+ hotIpUvFlg+1minIpUvFlg+10minIpUvFlg+appDeviceUdid_wabWapUserIdFlg+isBlackPhoneFlag) AS flg1, \
+              	      	      	              (fanFlg+postNumFlg+hotUserIdHotFlg) AS flg2 \
+              	      	      	      FROM ( \
+              	      	      	      	      SELECT  *, \
+              	      	      	      	              CASE WHEN ipUv >= 20 AND createIp IS NOT NULL AND createIp != '127.0.1' AND createIp != '127.0.0.1' THEN 1 ELSE 0 END AS profileIpUvFlg, \
+              	      	      	      	              CASE WHEN deviceNum >= 10 OR ipNum >= 10 AND ip NOT IN ('10.189.176.10','10.189.176.11') THEN 1 ELSE 0 END AS deviceNum_ipNumFlg, \
+              	      	      	      	              CASE WHEN loginIpUv >= 20 OR loginIpDeviceUv >= 15 THEN 1 ELSE 0 END AS loginIp_userNum_loginIp_deviceNumFlg, \
+              	      	      	      	              CASE WHEN cityNum >= 2 THEN 1 ELSE 0 END AS cityNumFlg, \
+              	      	      	      	              CASE WHEN hotUv >= 10 AND ip NOT IN ('10.189.176.10','10.189.176.11') THEN 1 ELSE 0 END AS hotIpUvFlg, \
+              	      	      	      	              CASE WHEN 1minIpUv >= 4 AND ip NOT IN ('10.189.176.10','10.189.176.11') THEN 1 ELSE 0 END AS 1minIpUvFlg, \
+              	      	      	      	              CASE WHEN 10minIpUv >= 8 AND ip NOT IN ('10.189.176.10','10.189.176.11') THEN 1 ELSE 0 END AS 10minIpUvFlg, \
+              	      	      	      	              CASE WHEN (appUserId IS NOT NULL AND appDeviceUdid IS NULL) OR (pcUserId IS NOT NULL AND pcDeviceId IS NULL) THEN 2 ELSE 0 END AS appDeviceUdid_wabWapUserIdFlg, \
+              	      	      	      	              CASE WHEN fans <= 15 OR fans IS NULL THEN 1 ELSE 0 END AS fanFlg, \
+              	      	      	      	              CASE WHEN postNum <= 10 OR postNum IS NULL THEN 1 ELSE 0 END AS postNumFlg, \
+              	      	      	      	              CASE WHEN userHot <= 10 OR userHot IS NULL THEN 1 ELSE 0 END AS hotUserIdHotFlg \
+              	      	      	      	      FROM lofter.dwd_risk_shuare_model_di \
+              	      	      	      	      WHERE dt = '${azkaban.flow.1.days.ago}' AND userLevel = '普通用户' \
+              	      	      	      ) a1 \
+              	              ) a \
+              	      	      WHERE a.flg1 >= 5 AND a.flg2 >= 2 \
+              	      	      GROUP BY  postId, \
+                                        blogId, \
+                                        publisherUserId, \
+                                        ip \
+              	      ) tmp1 \
+              	      JOIN ( \
+              	      	      SELECT  postId, \
+              	      	              blogId, \
+              	      	              userId   AS publisherUserid, \
+              	      	              ip, \
+              	      	              COUNT(1) AS hot, \
+              	      	              SUM(if(dt = '${azkaban.flow.1.days.ago}',1,0)) AS dailyHot \
+              	      	      FROM lofter.dwd_post_hot_di \
+              	      	      WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	      	      GROUP BY  postId, \
+              	      	                blogId, \
+              	      	                userId, \
+              	      	                ip \
+              	      ) tmp2 \
+              	      ON tmp2.postId = tmp1.postId AND tmp2.blogId = tmp1.blogId AND tmp2.publisherUserId = tmp1.publisherUserId AND tmp2.ip = tmp1.ip \
+              	      GROUP BY  tmp1.postId, \
+              	                tmp1.blogId \
+              ) tmp3 \
+              JOIN ( \
+              	      SELECT  postId, \
+              	              blogId, \
+              	              hisHot, \
+              	              dailyHot, \
+              	              CONCAT(blogName,'.lofter.com/post/',CONV(blogId,10,16),'_',CONV(postId,10,16)) AS url, \
+              	              tags \
+              	      FROM ( \
+              	      	      SELECT  a.postId, \
+              	      	              a.blogId, \
+              	      	              b.blogName, \
+              	      	              contentType, \
+              	      	              publishDate, \
+              	      	              tags, \
+              	      	              dailyPraise, \
+              	      	              hisPraise, \
+              	      	              dailyHot, \
+              	      	              hisHot \
+              	      	      FROM ( \
+              	      	      	      SELECT  postId, \
+              	      	      	              blogId, \
+              	      	      	              COUNT(CASE WHEN type = 1 AND FROM_UNIXTIME(CAST (opTime/1000 AS bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN id ELSE NULL END) AS dailyPraise, \
+              	      	      	              COUNT(CASE WHEN type = 1 THEN id ELSE NULL END) AS hisPraise, \
+              	      	      	              COUNT(CASE WHEN FROM_UNIXTIME(CAST (opTime/1000 AS bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN id ELSE NULL END) AS dailyHot, \
+              	      	      	              COUNT(1) AS hisHot \
+              	      	      	      FROM lofter_db_dump.ods_db_post_hot_nd \
+              	      	      	      GROUP BY  postId, \
+              	      	      	                blogId \
+              	      	      	      HAVING dailyPraise > 0 AND hisPraise >= 80 \
+              	      	      ) a \
+              	      	      JOIN lofter.dim_post b \
+              	      	      ON a.postId = b.id AND a.blogId = b.blogId \
+              	      ) \
+              ) tmp4 \
+              ON tmp3.postId = tmp4.postId AND tmp3.blogId = tmp4.blogId \
+              LEFT JOIN ( \
+              	      SELECT  postId, \
+              	              blogId, \
+              	              comment_cnt, \
+              	              comment_cnt_1d \
+              	      FROM lofter.dws_post_interaction_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) tmp5 \
+              ON tmp3.postId = tmp5.postId AND tmp3.blogId = tmp5.blogId \
+              LEFT JOIN ( \
+              	      SELECT  userId, \
+              	              level, \
+              	              fans_std AS fans \
+              	      FROM lofter.dws_par_creator_level_scoring_dd \
+              	      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) tmp6 \
+              ON tmp3.blogId = tmp6.userId \
+              LEFT JOIN ( \
+                    SELECT postId, \
+                           blogId \
+                    FROM lofter.dim_gift_post_return \
+                    WHERE isPay_returnGift in (0,1) \
+                    GROUP BY postId, \
+                             blogId \
+              ) tmp7 \
+              ON tmp3.postId = tmp7.postId and tmp3.blogId = tmp7.blogId \
+              WHERE tmp3.shuaHot >= 30
+dependencies=

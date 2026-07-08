@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(replace(substring(dt, 0, 7), '-'), '-', orgId, '-', blogId, '-',postId) as id, cast(replace(substring(dt, 0, 7),'-') as int) as month, dt,orgId,blogId,postId,publishTime,realPlayNum from lofter_dm.ads_video_blog_bind_mi where dt = '${azkaban.flow.1.days.ago}'"
+params= --dest lofter_video_blog_bind_monthly

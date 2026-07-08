@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.backend.FirstPostStimulus
+conf.spark.sql.shuffle.partitions=200
+params=

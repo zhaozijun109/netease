@@ -1,0 +1,203 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter.dwd_device_growth_attribution_v2_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.device_type, a.deviceUdid, a.origin_type, a.origin_channel, a.origin_actpwd, \
+       a.land_nonrec_userid, a.land_nonrec_itemid, a.land_nonrec_content_type, a.land_nonrec_link, a.land_nonrec_occurTime, \
+       a.land_rec_userid, a.land_rec_itemid, a.land_rec_content_type, a.land_rec_occurTime, \
+       a.is_whiteboard, \
+       a.is_paid_subscribe, \
+       a.occurTime, a.deviceOs, \
+       tmp1.origin_type_level2 as origin_type_level2, \
+       land_nonrec_loose_userid,land_nonrec_loose_itemid,land_nonrec_loose_content_type,land_nonrec_loose_occurtime, \
+       land_nonrec_loose_link,land_rec_loose_userid,land_rec_loose_itemid,land_rec_loose_content_type,land_rec_loose_occurtime \
+from ( \
+    select b1.deviceUdid, b1.device_type, b1.time_1 as occurTime, \
+           b1.origin_type, b1.origin_channel, b1.origin_actpwd, b1.is_paid_subscribe, \
+           nvl(b2.userid, if(b3.time_2 - b1.time_1 <= 180000, b3.userid, null)) as land_nonrec_userid, \
+           nvl(b2.itemid, if(b3.time_2 - b1.time_1 <= 180000, b3.itemid, null)) as land_nonrec_itemid, \
+           nvl(b2.content_type, if(b3.time_2 - b1.time_1 <= 180000, b3.content_type, null)) as land_nonrec_content_type, \
+           nvl(b2.time_2, if(b3.time_2 - b1.time_1 <= 180000, b3.time_2, null)) as land_nonrec_occurTime, \
+           b2.link as land_nonrec_link, \
+           if(b4.time_2 - b1.time_1 <= 180000, b4.userid, null) as land_rec_userid, \
+           if(b4.time_2 - b1.time_1 <= 180000, b4.itemid, null) as land_rec_itemid, \
+           if(b4.time_2 - b1.time_1 <= 180000, b4.content_type, null) as land_rec_content_type, \
+           if(b4.time_2 - b1.time_1 <= 180000, b4.time_2, null) as land_rec_occurTime, \
+           if(c.real_browse_pv > if(b1.origin_type = '口令',1,0) or if(b1.origin_type = '口令', false, c.search_cnt > 0) or c.recommend_cnt > 0 or c.collect_cnt > 0 or c.like_cnt > 0 or c.reproduce_cnt > 0 or  c.response_cnt > 0 or c.post_cnt > 0, 0, 1) as is_whiteboard, \
+           b1.deviceOs, \
+           nvl(b2.userid, if(b3.time_2 - b1.time_1 <= 3600000, b3.userid, null)) as land_nonrec_loose_userid, \
+           nvl(b2.itemid, if(b3.time_2 - b1.time_1 <= 3600000, b3.itemid, null)) as land_nonrec_loose_itemid, \
+           nvl(b2.content_type, if(b3.time_2 - b1.time_1 <= 3600000, b3.content_type, null)) as land_nonrec_loose_content_type, \
+           nvl(b2.time_2, if(b3.time_2 - b1.time_1 <= 3600000, b3.time_2, null)) as land_nonrec_loose_occurTime, \
+           b2.link as land_nonrec_loose_link, \
+           if(b4.time_2 - b1.time_1 <= 3600000, b4.userid, null) as land_rec_loose_userid, \
+           if(b4.time_2 - b1.time_1 <= 3600000, b4.itemid, null) as land_rec_loose_itemid, \
+           if(b4.time_2 - b1.time_1 <= 3600000, b4.content_type, null) as land_rec_loose_content_type, \
+           if(b4.time_2 - b1.time_1 <= 3600000, b4.time_2, null) as land_rec_loose_occurTime \
+    from ( \
+            select t1.deviceUdid, t1.time_1, t1.device_type, \
+                   nvl(t2.type, nvl(t3.type, '自然')) as origin_type, \
+                   nvl(t2.channel, t3.channel) as origin_channel, \
+                   case when t2.deviceudid is not null then t2.actpwd end as origin_actpwd, \
+                   nvl(t2.is_paid_subscribe, 0) as is_paid_subscribe, \
+                   t1.deviceOs \
+            from ( \
+                select deviceUdid,dt,firstAccessTime time_1,'new' device_type, deviceOs \
+                from lofter.device_new \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                union all \
+                select deviceUdid,dt,returnOccurTime time_1,'return_30' device_type, deviceOs \
+                from lofter.device_return \
+                where period = 30 and dt = '${azkaban.flow.1.days.ago}' \
+            ) t1 \
+            left join ( \
+                select actpwd, nvl(channel, '') as channel, deviceUdid, '口令' as type, is_paid_subscribe \
+                from ( \
+                    select actpwd,channel, deviceUdid, is_paid_subscribe, row_number() over (partition by deviceUdid order by time asc, is_new desc ) as rk \
+                    from lofter.dwd_growth_actpwd_access_di \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                ) tt \
+                where rk=1 \
+            ) t2 on t1.deviceUdid = t2.deviceUdid \
+            left join ( \
+                select deviceUdid, media as channel, '广告' as type \
+                from ( \
+                        select media, deviceUdid, "点击归因" as type \
+                        from ( \
+                            select case when a.channel='GDT' then '广点通'  \
+                                       when a.channel='bilibili' then '哔哩哔哩' \
+                                       when a.channel='music' then '麦穗' \
+                                       when a.channel='youdao' then '有道智选' \
+                                       when a.channel='toutiao' then '巨量引擎' \
+                                       when a.channel='baidu' then '百度' \
+                                       when a.channel='kuaishou' then '快手' \
+                                       else channel end media, \
+                                  daDeviceId deviceUdid, \
+                                  row_number() over (partition by daDeviceId order by time) as rnk \
+                            from ( \
+                                select * \
+                                from lofter.ods_log_ad_new_linkup_di \
+                                where dt >= '${azkaban.flow.1.days.ago}' and dt <= '${azkaban.flow.current.date}' \
+                            ) a \
+                            left join ( \
+                                select distinct advertiserId, proxy, media \
+                                from ( \
+                                    select advertiserId, proxy, media, \
+                                           row_number() over (partition by appid, advertiserId order by createTime desc) as cfg_rk \
+                                    from lofter_db_dump.ods_db_ad_channel_config_nd \
+                                ) cfg where cfg_rk = 1 \
+                            ) b on a.advertiserId = b.advertiserId \
+                        ) t \
+                        where rnk = 1 \
+                        union all \
+                        select t2.media, t1.deviceUdid, "渠道归因" as type \
+                        from ( \
+                            select a.* \
+                            from ( \
+                                select deviceUdid,appChannel,deviceOs \
+                                from lofter.device_new \
+                                where dt = '${azkaban.flow.1.days.ago}' \
+                                union all \
+                                select deviceUdid,appChannels[0] as appChannel,deviceOs \
+                                from lofter.device_return \
+                                where period = 30 and dt = '${azkaban.flow.1.days.ago}' \
+                            ) a \
+                            left join ( \
+                                select * \
+                                from lofter.ods_log_ad_new_linkup_di \
+                                where dt >= '${azkaban.flow.1.days.ago}' and dt <= '${azkaban.flow.current.date}' \
+                            ) b on a.deviceUdid = b.daDeviceId \
+                            where b.daDeviceId is null \
+                        ) t1 \
+                        join ( \
+                            select channelPackage appChannel,advertiserId,proxy,media \
+                            from ( \
+                                select channelPackage,advertiserId,proxy,media, \
+                                       row_number() over (partition by appid, channelPackage order by createTime desc) as cfg_rk \
+                                from lofter_db_dump.ods_db_ad_channel_config_nd \
+                                where channelPackage is not null and channelPackage <> '' \
+                            ) cfg where cfg_rk = 1 \
+                        ) t2 on t1.appChannel = t2.appChannel \
+                ) aa \
+                where media is not null \
+                group by deviceUdid, media \
+            ) t3 on t1.deviceUdid = t3.deviceUdid \
+    ) b1 \
+    left join ( \
+        select deviceUdid,userid,time as time_2, \
+                case when link like '%.lofter.com/post/%' then '单日志' \
+                    when link like '%grainId=%' then '粮单' \
+                    when link like '%collectionId=%' then '合集' \
+                    else '活动' end as content_type, \
+               case when link like '%.lofter.com/post/%' and (length(link)- instr(link,'_')) between 1 and 11 then cast(conv(split(split(split(link, 'post/')[1],'\#')[0],'_')[1], 16, 10) as bigint) \
+                    when link like '%grainId=%' then substring_index(split(link, '&')[0],'grainId=',-1) \
+                    when link like '%collectionId=%' then substring_index(link,'collectionId=',-1) \
+                    end as itemid, \
+                link \
+        from ( \
+            select userid, deviceUdid, link, time, row_number() over (partition by deviceUdid order by time asc, is_new desc) as rk \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where rk=1 \
+    ) b2 on b1.deviceUdid = b2.deviceUdid \
+    left join ( \
+        select deviceUdid, userid, time_2, cast(itemid as string) as itemid, content_type \
+        from ( \
+            select deviceUdid, userid, time_2, content_type, itemid, \
+                   row_number() over(partition by deviceUdid order by time_2 asc) rn \
+            from ( \
+                select deviceUdid, userid,occurTime as time_2, source, scene, eventId, itemid, \
+                       is_rec as isRec, item_type as content_type \
+                from lofter.dwd_content_browse_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) t \
+            where isRec = 0 \
+        ) tt \
+        where rn = 1 \
+    ) b3 on b1.deviceUdid = b3.deviceUdid and b3.time_2 >= b1.time_1 \
+    left join ( \
+            select deviceUdid, userid, time_2, cast(itemid as string) as itemid, content_type \
+            from ( \
+                select deviceUdid, userid, time_2, content_type, itemid, \
+                       row_number() over(partition by deviceUdid order by time_2 asc) rn \
+                from ( \
+                    select deviceUdid, userid,occurTime as time_2, source, scene, \
+                           eventId, itemid, is_rec as isRec, item_type as content_type \
+                    from lofter.dwd_content_browse_di \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                ) t \
+                where isRec = 1 \
+            ) tt \
+            where rn = 1 \
+    ) b4 on b1.deviceUdid = b4.deviceUdid and b4.time_2 >= b1.time_1 \
+    left join ( \
+             select deviceUdid, \
+                  sum(if(actionType = 'page_duration' and \
+                         ((itemType = 'VIDEO' and costTime > 5000) or \
+                          (itemType != 'VIDEO' and costTime > 3000)), 1, 0)) as real_browse_pv, \
+                  sum(if(actionType = 'search', 1, 0)) as search_cnt, \
+                  sum(if(actionType = 'post', 1, 0)) as post_cnt, \
+                  sum(if(actionType = 'like', 1, 0)) as like_cnt, \
+                  sum(if(actionType = 'recommend', 1, 0)) as recommend_cnt, \
+                  sum(if(actionType = 'subscribe', 1, 0)) as collect_cnt, \
+                  sum(if(actionType = 'reproduce', 1, 0)) as reproduce_cnt, \
+                  sum(if(actionType = 'comment', 1, 0)) as response_cnt \
+             from lofter.ods_mda_app_partition_di \
+             where dt = '${azkaban.flow.1.days.ago}' and \
+                   actionType in ('post','like','reproduce','recommend','subscribe','share','comment','page_duration','search') \
+             group by deviceUdid \
+    ) c on b1.deviceUdid = c.deviceUdid \
+) a \
+left join ( \
+    select  deviceUdid, occurTime, '分享' as origin_type_level2 \
+    from ( \
+        select deviceUdid, params['url'] as url, occurTime, \
+               row_number() over(partition by deviceUdid order by occurTime asc) as rk \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId = 'rd-4' \
+    ) t \
+    where rk = 1 and url like '%lofter%' \
+) tmp1 on a.origin_type = '自然' and a.deviceUdid = tmp1.deviceUdid and (tmp1.occurtime - a.occurtime)/1000 between 0 and 30 \
+
+distribute by 1
+dependencies=device_return,dwd_growth_actpwd_access_di,dwd_content_browse_di

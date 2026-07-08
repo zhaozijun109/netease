@@ -1,0 +1,49 @@
+type = sparksql
+hive.query.01=insert overwrite table vc_dm.ads_theater_user_chat_retain_vc_report_di  partition(dt ='${azkaban.flow.1.days.ago}')   \
+ \
+with chat_plot as ( \
+select  a.dt,a.user_id userid,count(distinct c.name)cnt_juchang,count(distinct a.req_id) cnt_huihe \
+from  \
+( \
+select dt,user_id,req_id,biz_id \
+from(     \
+select  a.dt, a.user_id ,req_id,biz_id,ROW_NUMBER() OVER (PARTITION BY id ORDER BY _bin_op_seqno DESC, _bin_op_time DESC) AS rk       \
+from vc.ods_binlog_vc_user_dungeon_chat_record_di a  \
+where a.dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+and a.scene ='PLOT_SIMULATOR_CHAT' \
+and a.sender = 2   \
+) aa \
+where rk=1 \
+group by 1,2,3,4 \
+) a  \
+left join (select id, simulator_id from  vc.ods_db_vc_user_simulator_init_info_nd where status=2 group by 1,2    )b on a.biz_id=b.id \
+left join (select  simulator_id ,name from vc.ods_db_vc_simulator_info_nd where channel = 3 and type in (3, 4)  group by 1,2) c on b.simulator_id=c.simulator_id \
+group by 1,2  \
+)  \
+ \
+select  \
+a.dt date1, \
+datediff('${azkaban.flow.1.days.ago}',  a.dt) diff,   \
+count(distinct a.userid) active_uv, \
+count(distinct case when  a.dt=date_sub(b.dt,1) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =1 then b.userid end)  active_uv_1d, \
+count(distinct case when   a.dt=date_sub(b.dt,2) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =2 then b.userid end)  active_uv_3d, \
+count(distinct case when   a.dt=date_sub(b.dt,6) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =6 then b.userid end)  active_uv_7d, \
+count(distinct case when   a.dt=date_sub(b.dt,14) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =14 then b.userid end)  active_uv_15d, \
+count(distinct case when  a.dt=date_sub(b.dt,29) and  datediff('${azkaban.flow.1.days.ago}',  a.dt) =29 then b.userid end)  active_uv_30d \
+from  \
+( \
+select userid, dt \
+from chat_plot b  \
+where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+group by 1,2 \
+) a  \
+left join  \
+( \
+select userid, dt \
+from chat_plot b  \
+where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'    \
+group by 1,2 \
+) b on a.userid=b.userid and a.dt<b.dt  \
+where datediff('${azkaban.flow.1.days.ago}' ,a.dt ) in (0,1,2,6,14,29) \
+group by 1 ,2 \
+ \

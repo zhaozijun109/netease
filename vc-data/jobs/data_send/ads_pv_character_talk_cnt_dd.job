@@ -1,0 +1,85 @@
+type=sparksql
+hive.query.01 = \
+with front_backend_tags as ( \
+    select id as character_id, \
+           front_tags, \
+           backend_tags \
+    from vc.ods_db_vc_character_nd \
+), \
+tags as ( \
+    select t1.character_id, \
+           concat_ws(',', collect_set(t2.name)) as tags \
+    from ( \
+        select character_id, \
+               tag_id \
+        from vc.ods_db_vc_character_tag_relation_nd \
+        where status = 2 \
+    ) t1 \
+    join ( \
+        select id as tag_id, \
+               name \
+        from vc.ods_db_vc_tag_nd \
+        where status = 2 \
+    ) t2 \
+    on t1.tag_id = t2.tag_id \
+    group by t1.character_id \
+), \
+character_tags as ( \
+    select character_id, \
+           concat_ws(',', collect_set(character_tag)) as character_tags \
+    from ( \
+        select character_id, \
+               character_tag \
+        from ( \
+            select t1.character_id, \
+                   concat_ws(',', front_tags, backend_tags, tags) as merge_tags \
+            from front_backend_tags t1 \
+            join tags t2 \
+            on t1.character_id = t2.character_id \
+        ) t lateral view explode(split(merge_tags, ',')) as character_tag \
+    ) tt \
+    group by character_id \
+) \
+insert overwrite table vc.ads_pv_character_talk_cnt_dd PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select nvl(x1.character_id, 0)                                                          as character_id, \
+       nvl(x1.role_id, x2.role_id)                                                      as role_id, \
+       x1.character_type, \
+       nvl(x1.vc_total_talk_cnt, 0)                                                     as vc_total_talk_cnt, \
+       nvl(x1.pve_total_talk_cnt, x2.pve_total_talk_cnt)                                as pve_total_talk_cnt, \
+       nvl(x1.vc_total_talk_cnt, 0) + nvl(x1.pve_total_talk_cnt, x2.pve_total_talk_cnt) as total_talk_cnt, \
+       split(x3.front_tags, ',') as front_tags, \
+       split(x3.backend_tags, ',') as backend_tags, \
+       split(x4.tags, ',') as tags, \
+       split(x5.character_tags, ',') as character_tags \
+from ( \
+    select character_id, \
+           role_id, \
+           character_type, \
+           total_talk_cnt as vc_total_talk_cnt, \
+           pve_total_talk_cnt \
+    from vc.dws_vc_character_tabulate_data_view \
+    where public_scope = 1 \
+) x1 \
+full join ( \
+    select roleid as role_id, \
+           sum(sendcount) as pve_total_talk_cnt \
+    from lofter_db_dump.ods_db_pve_ugc_role_record_nd \
+    where publicview = 1 \
+    group by roleid \
+    having pve_total_talk_cnt <> 0 \
+) x2 \
+on x1.role_id = x2.role_id \
+left join ( \
+    select * from front_backend_tags \
+) x3 \
+on x1.character_id = x3.character_id \
+left join ( \
+    select * from tags \
+) x4 \
+on x1.character_id = x4.character_id \
+left join ( \
+    select * from character_tags \
+) x5 \
+on x1.character_id = x5.character_id
+
+

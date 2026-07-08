@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id, tag as tagName, score as hotCount, dataType from lofter_dm.ads_search_tag_score_top_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --dest lofter_search_tag_more_options

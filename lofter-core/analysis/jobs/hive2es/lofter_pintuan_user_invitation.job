@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select blogId as id, blogId, recUserIds, dt from lofter_dm.ads_pintuan_user_invitation_di where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_pintuan_user_invitation --postfixsep --full --atom
+dependencies=

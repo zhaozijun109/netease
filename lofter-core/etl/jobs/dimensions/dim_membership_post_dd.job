@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_membership_post_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, b.blogId, b.tags, b.ips, b.publishTime as joinTime, \
+       from_unixtime(cast(b.publishTime/1000 as bigint), 'yyyy-MM-dd') as join_date, \
+       a.pay_gift_type, \
+       if(c.postId is not null, 1, 0) as is_vip \
+from ( \
+    select postId, is_pay_return_gift as pay_gift_type \
+    from lofter.dim_gift_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_pay_return_gift not in ('0', '1') \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select postId \
+    from lofter.dim_membership_post_vip_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId \
+left join ( \
+    select postId \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '$${azkaban.flow.1.days.ago}' and (unlockType = 1 or return_gift_plantype in ('原图', '装扮')) and status = 1 and auditStatus = 1 \
+    group by 1 \
+) d on a.postId = d.postId \
+where b.contentType = '文字' and nvl(b.is_book_store,0) = 0 and d.postId is null \
+
+dependencies=dim_membership_post_vip_dd,dim_gift_post_return,dim_gift_post

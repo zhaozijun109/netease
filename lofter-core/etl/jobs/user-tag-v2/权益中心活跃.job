@@ -1,0 +1,45 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 权益中心活跃 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '权益中心活跃'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '权益中心活跃' as tag, 'DAY_1' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_1d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '权益中心活跃' as tag, 'DAY_7' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_7d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '权益中心活跃' as tag, 'DAY_15' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_15d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '权益中心活跃' as tag, 'DAY_30' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '权益中心活跃' as tag, 'DAY_90' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_90d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '权益中心活跃' as tag, 'DAY_180' as cat, '活跃' as grp \
+                                  from lofter.dws_par_user_reward_center_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_180d > 0 ) "

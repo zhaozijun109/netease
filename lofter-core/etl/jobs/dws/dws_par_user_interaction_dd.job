@@ -1,0 +1,87 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter.dws_par_user_interaction_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select u.id as userId, \
+       send_hot_std, send_hot_7d, send_hot_15d, send_hot_30d, send_hot_90d, send_hot_180d, \
+       send_like_cnt, send_reproduce_cnt, send_recommend_cnt, send_collect_cnt, \
+       send_comment_cnt_std, send_comment_cnt_7d, send_comment_cnt_15d, send_comment_cnt_30d, send_comment_cnt_90d, send_comment_cnt_180d, \
+       send_like_cnt_7d,send_like_cnt_30d,send_reproduce_cnt_7d,send_reproduce_cnt_30d, \
+       send_recommend_cnt_7d,send_recommend_cnt_30d,send_collect_cnt_7d,send_collect_cnt_30d, send_comment_cnt_1y, \
+       send_comment_interaction_cnt_30d, send_comment_hot_30d, send_comment_reply_cnt_30d, \
+       send_comment_post_cnt,send_comment_blog_cnt,send_like_post_cnt,send_like_blog_cnt,  \
+       send_reproduce_post_cnt,send_reproduce_blog_cnt,send_recommend_post_cnt,send_recommend_blog_cnt, \
+       send_collect_post_cnt,send_collect_blog_cnt, \
+       send_like_cnt_90d, send_like_cnt_180d, send_reproduce_cnt_90d, send_reproduce_cnt_180d, send_recommend_cnt_90d, send_recommend_cnt_180d, send_collect_cnt_90d, send_collect_cnt_180d, \
+       send_like_cnt_15d, send_reproduce_cnt_15d, send_recommend_cnt_15d, send_collect_cnt_15d \
+from lofter.dim_user u \
+    left join ( \
+         select userId, \
+                count(1) as send_comment_cnt_std, \
+                bitmap_count(to_bitmap(postId)) as send_comment_post_cnt, \
+                bitmap_count(to_bitmap(blogId)) as send_comment_blog_cnt, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, 1, 0)) as send_comment_cnt_7d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, 0)) as send_comment_cnt_15d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, 1, 0)) as send_comment_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 90, 1, 0)) as send_comment_cnt_90d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 180, 1, 0)) as send_comment_cnt_180d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 365, 1, 0)) as send_comment_cnt_1y, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, send_comment_interaction_cnt, 0)) as send_comment_interaction_cnt_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, send_comment_hot, 0)) as send_comment_hot_30d, \
+                sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, send_comment_reply_cnt, 0)) as send_comment_reply_cnt_30d \
+         from ( \
+           select publisherUserId as userId, postId, blogId, from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') as dt, \
+                  commentHot + replyL2Count as send_comment_interaction_cnt, \
+                  commentHot as send_comment_hot, replyL2Count as send_comment_reply_cnt \
+           from lofter_db_dump.ods_db_post_response_nd \
+           where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and postId>0 \
+         ) tt \
+         group by userId \
+    ) b on u.id = b.userId \
+    left join ( \
+        select publisherUserId as userId, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 7 and type = 1, 1, 0)) as send_like_cnt_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 30 and type = 1, 1, 0)) as send_like_cnt_30d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 7 and type = 2, 1, 0)) as send_reproduce_cnt_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 30 and type = 2, 1, 0)) as send_reproduce_cnt_30d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 7 and type = 3, 1, 0)) as send_recommend_cnt_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 30 and type = 3, 1, 0)) as send_recommend_cnt_30d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 7 and type = 4, 1, 0)) as send_collect_cnt_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 30 and type = 4, 1, 0)) as send_collect_cnt_30d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 7, 1, 0)) as send_hot_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 15, 1, 0)) as send_hot_15d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 30, 1, 0)) as send_hot_30d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 90, 1, 0)) as send_hot_90d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 180, 1, 0)) as send_hot_180d, \
+          count(1) send_hot_std, \
+          sum(if(type = 1, 1, 0)) as send_like_post_cnt, \
+          bitmap_count(to_bitmap(if(type = 1, blogId, null))) as send_like_blog_cnt, \
+          sum(if(type = 2, 1, 0)) as send_reproduce_post_cnt, \
+          bitmap_count(to_bitmap(if(type = 2, blogId, null))) as send_reproduce_blog_cnt, \
+          sum(if(type = 3, 1, 0)) as send_recommend_post_cnt, \
+          bitmap_count(to_bitmap(if(type = 3, blogId, null))) as send_recommend_blog_cnt, \
+          sum(if(type = 4, 1, 0)) as send_collect_post_cnt, \
+          bitmap_count(to_bitmap(if(type = 4, blogId, null))) as send_collect_blog_cnt, \
+          sum(if(type = 1, 1, 0)) as send_like_cnt, \
+          sum(if(type = 2, 1, 0)) as send_reproduce_cnt, \
+          sum(if(type = 3, 1, 0)) as send_recommend_cnt, \
+          sum(if(type = 4, 1, 0)) as send_collect_cnt, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 90 and type = 1, 1, 0)) as send_like_cnt_90d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 180 and type = 1, 1, 0)) as send_like_cnt_180d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 90 and type = 2, 1, 0)) as send_reproduce_cnt_90d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 180 and type = 2, 1, 0)) as send_reproduce_cnt_180d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 90 and type = 3, 1, 0)) as send_recommend_cnt_90d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 180 and type = 3, 1, 0)) as send_recommend_cnt_180d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 90 and type = 4, 1, 0)) as send_collect_cnt_90d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 180 and type = 4, 1, 0)) as send_collect_cnt_180d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 15 and type = 1, 1, 0)) as send_like_cnt_15d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 15 and type = 2, 1, 0)) as send_reproduce_cnt_15d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 15 and type = 3, 1, 0)) as send_recommend_cnt_15d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd')) < 15 and type = 4, 1, 0)) as send_collect_cnt_15d \
+        from lofter_db_dump.ods_db_post_hot_nd \
+        where from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by publisherUserId \
+    ) c on u.id = c.userId \
+  where u.isanonymous = 0 and nvl(b.userId, c.userId) is not null
+dependencies=

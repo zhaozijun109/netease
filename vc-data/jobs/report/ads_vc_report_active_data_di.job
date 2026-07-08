@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_report_active_data_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.active_device, \
+t1.active_user, \
+t2.new_device \
+from \
+( \
+select dt, \
+count(distinct deviceudid) as active_device, \
+count(distinct case when userid>0 then userid else null end) as active_user \
+from vc.dwd_device_active_di \
+LATERAL VIEW explode( case when size(userids)<1 then array(0) else userids end) t2 AS userid \
+where dt='${azkaban.flow.1.days.ago}' \
+group by dt \
+) t1 \
+left join \
+(select dt,count(distinct deviceudid) as new_device \
+from vc.dwd_device_new_di \
+where dt='${azkaban.flow.1.days.ago}' \
+group by dt \
+) t2 on t1.dt=t2.dt \

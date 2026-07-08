@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.WriterHiveDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.WriterHiveDO">
+    <id column="id" jdbcType="BIGINT" property="id" />
+    <result column="data_source" jdbcType="OTHER" property="dataSource"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler" />
+    <result column="insert_type" jdbcType="TINYINT" property="insertType" />
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime" />
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime" />
+    <result column="conf" jdbcType="VARCHAR" property="conf" />
+    <result column="partition_list" jdbcType="VARCHAR" property="partitionList" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, data_source, insert_type, create_time, modify_time, conf, partition_list
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from writer_hive
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from writer_hive
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterHiveDO" useGeneratedKeys="true" keyProperty="id">
+    insert into writer_hive (id, data_source, insert_type,
+                             create_time, modify_time, conf,
+                             partition_list)
+    values (#{id,jdbcType=BIGINT}, #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler}, #{insertType,jdbcType=TINYINT},
+            #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP}, #{conf,jdbcType=VARCHAR},
+            #{partitionList,jdbcType=VARCHAR})
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterHiveDO" useGeneratedKeys="true" keyProperty="id">
+    insert into writer_hive
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="dataSource != null">
+        data_source,
+      </if>
+      <if test="insertType != null">
+        insert_type,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+      <if test="conf != null">
+        conf,
+      </if>
+      <if test="partitionList != null">
+        partition_list,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="dataSource != null">
+        #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="insertType != null">
+        #{insertType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="conf != null">
+        #{conf,jdbcType=VARCHAR},
+      </if>
+      <if test="partitionList != null">
+        #{partitionList,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterHiveDO">
+    update writer_hive
+    <set>
+      <if test="dataSource != null">
+        data_source = #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="insertType != null">
+        insert_type = #{insertType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="conf != null">
+        conf = #{conf,jdbcType=VARCHAR},
+      </if>
+      <if test="partitionList != null">
+        partition_list = #{partitionList,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterHiveDO">
+    update writer_hive
+    set data_source = #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+        insert_type = #{insertType,jdbcType=TINYINT},
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+        conf = #{conf,jdbcType=VARCHAR},
+        partition_list = #{partitionList,jdbcType=VARCHAR}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+</mapper>

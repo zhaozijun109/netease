@@ -1,0 +1,68 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_showcase_user_group_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId \
+from ( \
+    select blogId, count(distinct x.collectionId) c \
+    from ( \
+        select blogId, collectionId \
+        from lofter.dws_collection_dd \
+        where dt='${azkaban.flow.1.days.ago}' and subscribe_uv_acc > 1000 \
+    ) x \
+    left join ( \
+        select b.collectionId \
+        from lofter.ods_risk_limit a \
+        join lofter.bridge_collection_post b on a.postId = b.postId \
+        where a.status = 0 and a.postId > 0 \
+        group by 1 \
+    ) y on x.collectionId = y.collectionId \
+    where y.collectionId is null \
+    group by 1 \
+    having c > 1 \
+  union all \
+    select x.blogId as blogId, count(distinct x.postId) as c \
+    from ( \
+        select blogId, postId \
+        from lofter.dws_post_interaction_dd \
+        where dt='${azkaban.flow.1.days.ago}' and hot > 3000 \
+    ) x \
+    join (select id as postId from lofter.dim_post where valid = 0 and allowView = 0 and contentType in ('文字', '图片', '视频')) x1 on x.postId = x1.postId \
+    left join (select postId from lofter.ods_risk_limit where postId > 0 and status = 0) y on x.postId = y.postId \
+    where y.postId is null \
+    group by 1 \
+    having c > 1 \
+  union all \
+    select userId as blogId, 1 as c from lofter_db_dump.ods_db_user_showcase_config_nd \
+) a \
+left join ( \
+    select blogId \
+    from lofter.dws_user_security_level_di \
+    where dt='${azkaban.flow.1.days.ago}' and grade in (2) \
+) b on a.blogId = b.blogId \
+left join ( \
+    select userId as blogId \
+    from ( \
+        select userId, ip, \
+            row_number() over (partition by userId order by hot desc) as user_ip_rk \
+        from ( \
+            select b.userId, b.ip, sum(a.hot) as hot \
+            from ( \
+                select postId, hot \
+                from lofter.dws_post_interaction_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) a \
+            join ( \
+                select id as postId, userId, ip \
+                from lofter.dim_post \
+                    lateral view explode(ips) as ip \
+            ) b on a.postId = b.postId \
+            group by 1, 2 \
+        ) t \
+    ) tt \
+    where user_ip_rk = 1 and ip = '国家拟人' \
+) c on a.blogId = c.blogId \
+left join lofter_db_dump.ods_db_user_showcase_config_nd d on a.blogId = d.userId \
+left join ( \
+    select userId from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' and infringe_post_cnt_30d >= 3 \
+) e on a.blogId = e.userId \
+where d.userId is not null or (b.blogId is null and c.blogId is null and e.userId is null) \
+group by 1

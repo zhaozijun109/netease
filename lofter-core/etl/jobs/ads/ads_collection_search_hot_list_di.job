@@ -1,0 +1,249 @@
+type=sparksql
+hive.query.01=\
+with ip_collection as ( \
+    select collectionId, ip, collection_ip_post_count / collection_post_count as ip_percent \
+    from ( \
+        select x.collectionId, y.ip, collection_post_count, collection_ip_post_count, \
+            row_number() over (partition by x.collectionId order by collection_ip_post_count desc) as ip_rk \
+        from ( \
+            select collectionId, count(distinct postId) collection_post_count \
+            from lofter.bridge_collection_post \
+            group by 1 \
+        ) x \
+        join ( \
+            select a.collectionId, b.ip, count(distinct b.postId) collection_ip_post_count \
+            from lofter.bridge_collection_post a \
+            join ( \
+                select id as postId, ip \
+                from lofter.dim_post \
+                    lateral view explode(ips) as ip \
+            ) b on a.postId = b.postId \
+            group by 1, 2 \
+        ) y on x.collectionId = y.collectionId \
+    ) t \
+    where ip_rk = 1 and (collection_ip_post_count * 1.0 / collection_post_count) > 0.9 and collection_post_count > 3 \
+), \
+ip_collection_rankings as ( \
+    select b.ip, a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (partition by b.ip order by hot_7d desc) hot_rk, \
+           row_number() over (partition by b.ip order by subscribe_uv_7d desc) subscribe_rk, \
+           row_number() over (partition by b.ip order by browse_uv_7d desc) browse_rk, \
+           count(1) over (partition by b.ip) as collection_count \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+    join ip_collection b on a.collectionId = b.collectionId \
+), \
+cp_collection as ( \
+    select collectionId, tag, collection_tag_post_count / collection_post_count as ip_percent \
+    from ( \
+        select x.collectionId, y.tag, collection_post_count, collection_tag_post_count, \
+            row_number() over (partition by x.collectionId order by collection_tag_post_count desc) as tag_rk \
+        from ( \
+            select collectionId, count(distinct postId) collection_post_count \
+            from lofter.bridge_collection_post \
+            group by 1 \
+        ) x \
+        join ( \
+            select a.collectionId, b.tag, count(distinct b.postId) collection_tag_post_count \
+            from lofter.bridge_collection_post a \
+            join ( \
+                select id as postId, tag \
+                from lofter.dim_post \
+                    lateral view explode(tags) as tag \
+            ) b on a.postId = b.postId \
+            join ( \
+                 select name as tag \
+                 from lofter_db_dump.ods_db_cmb_tag_nd \
+                 where cpFlag > 0 and status = 0 \
+            ) c on b.tag = c.tag \
+            group by 1, 2 \
+        ) y on x.collectionId = y.collectionId \
+    ) t \
+    where tag_rk = 1 and (collection_tag_post_count * 1.0 / collection_post_count) > 0.9 and collection_post_count >= 10 \
+), \
+cp_collection_rankings as ( \
+    select b.tag, a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (partition by b.tag order by hot_7d desc) hot_rk, \
+           row_number() over (partition by b.tag order by subscribe_uv_7d desc) subscribe_rk, \
+           row_number() over (partition by b.tag order by browse_uv_7d desc) browse_rk, \
+           count(1) over (partition by b.tag) as collection_count \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+    join cp_collection b on a.collectionId = b.collectionId \
+), \
+specialty_collection as ( \
+    select collectionId, category, collection_category_post_count / collection_post_count as ip_percent \
+    from ( \
+        select x.collectionId, y.category, collection_post_count, collection_category_post_count, \
+            row_number() over (partition by x.collectionId order by collection_category_post_count desc) as category_rk \
+        from ( \
+            select collectionId, count(distinct postId) collection_post_count \
+            from lofter.bridge_collection_post \
+            group by 1 \
+        ) x \
+        join ( \
+            select a.collectionId, b.category, count(distinct b.postId) collection_category_post_count \
+            from lofter.bridge_collection_post a \
+            join ( \
+                select postId, specialty as category \
+                from lofter_dm.ads_creator_double_perspective_post_di \
+                     lateral view explode(split(double_perspective_type,'\\\\|')) t as specialty \
+                where dt='${azkaban.flow.1.days.ago}' \
+            ) b on a.postId = b.postId \
+            group by 1, 2 \
+        ) y on x.collectionId = y.collectionId \
+    ) t \
+    where category_rk = 1 and (collection_category_post_count * 1.0 / collection_post_count) > 0.8 and collection_post_count >= 10 \
+), \
+specialty_collection_rankings as ( \
+    select b.category, a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (partition by b.category order by hot_7d desc) hot_rk, \
+           row_number() over (partition by b.category order by subscribe_uv_7d desc) subscribe_rk, \
+           row_number() over (partition by b.category order by browse_uv_7d desc) browse_rk, \
+           count(1) over (partition by b.category) as collection_count \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+    join specialty_collection b on a.collectionId = b.collectionId \
+), \
+wmyzy_collection as ( \
+    select collectionId, category, collection_category_post_count / collection_post_count as ip_percent \
+    from ( \
+        select x.collectionId, y.category, collection_post_count, collection_category_post_count, \
+            row_number() over (partition by x.collectionId order by collection_category_post_count desc) as category_rk \
+        from ( \
+            select collectionId, count(distinct postId) collection_post_count \
+            from lofter.bridge_collection_post \
+            group by 1 \
+        ) x \
+        join ( \
+            select a.collectionId, b.category, count(distinct b.postId) collection_category_post_count \
+            from lofter.bridge_collection_post a \
+            join ( \
+                select postId, \
+                       case when cats like '游戏%' then '游戏' \
+                            when cats like '影视%' then '影视' \
+                            when cats like '二次元-国产动漫%' then '动漫' \
+                            when cats like '二次元-日本动漫%' then '动漫' \
+                            when cats like '二次元-欧美动漫%' then '动漫' \
+                            when cats like '娱乐-综艺%' then '综艺' \
+                            else '' end as category \
+                from lofter_dm.ads_wmyzy_post_publish_di \
+                     lateral view explode(split(categories,'\\\\|')) t as cats \
+                where dt='${azkaban.flow.1.days.ago}' \
+            ) b on a.postId = b.postId \
+            where length(category) > 0 \
+            group by 1, 2 \
+        ) y on x.collectionId = y.collectionId \
+    ) t \
+    where category_rk = 1 and (collection_category_post_count * 1.0 / collection_post_count) > 0.9 and collection_post_count >= 10 \
+), \
+wmyzy_collection_rankings as ( \
+    select b.category, a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (partition by b.category order by hot_7d desc) hot_rk, \
+           row_number() over (partition by b.category order by subscribe_uv_7d desc) subscribe_rk, \
+           row_number() over (partition by b.category order by browse_uv_7d desc) browse_rk, \
+           count(1) over (partition by b.category) as collection_count \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+    join wmyzy_collection b on a.collectionId = b.collectionId \
+), \
+content_type_collection as ( \
+    select collectionId, content_type, collection_content_post_count / collection_post_count as content_percent \
+    from ( \
+        select x.collectionId, y.content_type, collection_post_count, collection_content_post_count, \
+            row_number() over (partition by x.collectionId order by collection_content_post_count desc) as tag_rk \
+        from ( \
+            select collectionId, count(distinct postId) collection_post_count \
+            from lofter.bridge_collection_post \
+            group by 1 \
+        ) x \
+        join ( \
+            select a.collectionId, b.content_type, count(distinct b.postId) collection_content_post_count \
+            from lofter.bridge_collection_post a \
+            join ( \
+                select id as postId, contentType as content_type \
+                from lofter.dim_post \
+            ) b on a.postId = b.postId \
+            group by 1, 2 \
+        ) y on x.collectionId = y.collectionId \
+    ) t \
+    where tag_rk = 1 and (collection_content_post_count * 1.0 / collection_post_count) > 0.9 and collection_post_count >= 10 \
+), \
+content_type_collection_rankings as ( \
+    select b.content_type, a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (partition by b.content_type order by hot_7d desc) hot_rk, \
+           row_number() over (partition by b.content_type order by subscribe_uv_7d desc) subscribe_rk, \
+           row_number() over (partition by b.content_type order by browse_uv_7d desc) browse_rk \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+    join content_type_collection b on a.collectionId = b.collectionId \
+), \
+hot_collection_rankings as ( \
+    select a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (order by hot_7d desc) hot_rk \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+), \
+subscribe_collection_rankings as ( \
+    select a.blogId, a.collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d, \
+           row_number() over (order by subscribe_uv_7d desc) subscribe_rk \
+    from ( \
+        select blogId, collectionId, update_post_7d, subscribe_uv_7d, hot_7d, browse_uv_7d \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and update_post_7d > 0 \
+    ) a \
+) \
+insert overwrite table lofter_dm.ads_collection_search_hot_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+select collectionId, blogId, hot_rk as sortNo, 1 as first_level, 1 as second_level, ip as rankName from ip_collection_rankings where hot_rk <= 20 and hot_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, browse_rk as sortNo, 1 as first_level, 2 as second_level, ip as rankName from ip_collection_rankings where browse_rk <= 20 and browse_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 1 as first_level, 3 as second_level, ip as rankName from ip_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, hot_rk as sortNo, 2 as first_level, 1 as second_level, tag as rankName from cp_collection_rankings where hot_rk <= 20 and hot_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, browse_rk as sortNo, 2 as first_level, 2 as second_level, tag as rankName from cp_collection_rankings where browse_rk <= 20 and browse_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 2 as first_level, 3 as second_level, tag as rankName from cp_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, hot_rk as sortNo, 3 as first_level, 1 as second_level, category as rankName from specialty_collection_rankings where hot_rk <= 20 and hot_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, browse_rk as sortNo, 3 as first_level, 2 as second_level, category as rankName from specialty_collection_rankings where browse_rk <= 20 and browse_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 3 as first_level, 3 as second_level, category as rankName from specialty_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, hot_rk as sortNo, 4 as first_level, 1 as second_level, category as rankName from wmyzy_collection_rankings where hot_rk <= 20 and hot_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, browse_rk as sortNo, 4 as first_level, 2 as second_level, category as rankName from wmyzy_collection_rankings where browse_rk <= 20 and browse_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 4 as first_level, 3 as second_level, category as rankName from wmyzy_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 and collection_count >= 10 \
+union all \
+select collectionId, blogId, hot_rk as sortNo, 6 as first_level, 1 as second_level, content_type as rankName from content_type_collection_rankings where hot_rk <= 20 and hot_7d > 0 \
+union all \
+select collectionId, blogId, browse_rk as sortNo, 6 as first_level, 2 as second_level, content_type as rankName from content_type_collection_rankings where browse_rk <= 20 and browse_uv_7d > 0 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 6 as first_level, 3 as second_level, content_type as rankName from content_type_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 \
+union all \
+select collectionId, blogId, hot_rk as sortNo, 7 as first_level, 1 as second_level, '' as rankName from hot_collection_rankings where hot_rk <= 20 and hot_7d > 0 \
+union all \
+select collectionId, blogId, subscribe_rk as sortNo, 8 as first_level, 3 as second_level, '' as rankName from subscribe_collection_rankings where subscribe_rk <= 20 and subscribe_uv_7d > 0 \
+
+dependencies=ads_creator_double_perspective_post_di,ads_wmyzy_post_publish_di

@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select b.giftId as giftId, a.postId as postId, a.blogId as blogId, a.previewStatus as previewStatus \
+from ( \
+    select postId, blogId, -1 as previewStatus \
+    from lofter_dm.ads_gift_post_similarity_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+    select id as giftId, postId \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and createDate = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+group by 1, 2, 3, 4 \
+"
+params= --topic LOFTER.COMMON.GIFT.COPY --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

@@ -1,0 +1,93 @@
+type = sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_week_report_dau_total_report_di partition(dt ='${azkaban.flow.1.days.ago}')   \
+select  \
+'周对比' mark, \
+a.week_number, \
+a.cnt_days, \
+a.dau, \
+a.new_dau, \
+a.return_dau, \
+a.active_dau, \
+b.MAU \
+from( \
+select week_number, \
+count(distinct dt) cnt_days, \
+avg(dau)dau, \
+avg(new_dau)new_dau, \
+avg(return_dau) return_dau, \
+avg(active_dau)active_dau \
+from( \
+SELECT  \
+ WEEKOFYEAR(dt) AS week_number, \
+ dt, \
+sum(device_cnt) as dau, \
+  SUM(CASE WHEN device_type = '近30日新增' THEN device_cnt ELSE 0 END) new_dau, \
+  SUM(CASE WHEN device_type = '近30日回流' THEN device_cnt ELSE 0 END) return_dau, \
+  SUM(CASE WHEN device_type = '持续活跃' THEN device_cnt ELSE 0 END) active_dau  \
+ \
+from    lofter_dm.ads_growth_channel_dau_stratify_di \
+ \
+where dt>= date_sub( '${azkaban.flow.1.days.ago}'  ,13)  \
+group by 1,2 \
+) a  \
+group by 1  \
+) a  \
+left join  \
+( \
+select week_number, \
+count(distinct dt) cnt_days, \
+avg(MAU)MAU  \
+from( \
+SELECT  \
+WEEKOFYEAR(dt) AS week_number, \
+dayofweek(dt) week, \
+dt, \
+sum(mau) as MAU \
+ \
+from   lofter_dm.ads_device_platform_di \
+where dt >= date_sub( '${azkaban.flow.1.days.ago}'  ,13)  \
+group by 1,2,3 \
+) a   \
+group by 1  \
+) b on a.week_number=b.week_number  \
+ \
+union all \
+SELECT  \
+'月对比' , \
+a.mtd, \
+count(distinct a.dt) cnt_days, \
+avg(dau)dau, \
+avg(new_dau)new_dau, \
+avg(return_dau) return_dau, \
+avg(active_dau)active_dau, \
+avg(MAU) MAU \
+FROM( \
+SELECT  \
+ \
+ concat(substr(dt,1,7),'-','-MTD')     MTD, \
+ dt, \
+sum(device_cnt) as dau, \
+  SUM(CASE WHEN device_type = '近30日新增' THEN device_cnt ELSE 0 END) new_dau, \
+  SUM(CASE WHEN device_type = '近30日回流' THEN device_cnt ELSE 0 END) return_dau, \
+  SUM(CASE WHEN device_type = '持续活跃' THEN device_cnt ELSE 0 END) active_dau  \
+ \
+from    lofter_dm.ads_growth_channel_dau_stratify_di \
+ \
+where (dt>= trunc('${azkaban.flow.1.days.ago}' , 'MM') and dt<='${azkaban.flow.1.days.ago}') \
+or (dt>= trunc(add_months('${azkaban.flow.1.days.ago}' , -1), 'MM') and dt<=add_months('${azkaban.flow.1.days.ago}' , -1)) \
+group by 1,2 \
+) a  \
+left join  \
+( \
+SELECT  \
+concat(substr(dt,1,7),'-','-MTD')    MTD, \
+dt, \
+sum(mau) as MAU \
+from   lofter_dm.ads_device_platform_di \
+where (dt>= trunc('${azkaban.flow.1.days.ago}' , 'MM') and dt<='${azkaban.flow.1.days.ago}') \
+or (dt>= trunc(add_months('${azkaban.flow.1.days.ago}' , -1), 'MM') and dt<=add_months('${azkaban.flow.1.days.ago}' , -1)) \
+group by 1,2 \
+) b on a.dt=b.dt  \
+group by 1 ,2
+dependencies=ads_growth_channel_dau_stratify_di

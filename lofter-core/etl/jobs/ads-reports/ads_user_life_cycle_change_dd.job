@@ -1,0 +1,80 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_life_cycle_change_monitor_dd partition(dt='${azkaban.flow.1.days.ago}') \
+     select is_life_cycle_change,yesterday_life_cycle_type,today_life_cycle_type,   \
+     	count(userid) as all_user,   \
+     	count(case when real_browse_pv_15d>2 then userid end) real_browse_uv_15d ,   \
+     	count(case when discuss_browse_15d>2 then userid end) discuss_browse_uv_15d,   \
+     	count(case when paid_content_real_browse_pv_15d>2 then userid end) paid_content_real_browse_uv_15d,   \
+     	count(case when card_browse_pv_15d+product_browse_pv_15d>2 then userid end) card_product_browse_uv_15d,   \
+     	count(case when post_cnt_15d>0 then userid end) post_uv_15d,   \
+     	count(case when discuss_cnt_15d>0 then userid end) discuss_uv_15d,   \
+     	count(case when send_comment_cnt_15d>0 then userid end) send_comment_uv_15d,   \
+     	count(case when trade_money_15d>0 then userid end) trade_uv_15d   \
+     from   \
+     (select t1.userid,t1.yesterday_life_cycle_type,t1.today_life_cycle_type,is_life_cycle_change,   \
+     	real_browse_pv_15d,paid_content_real_browse_pv_15d,discuss_browse_15d,card_browse_pv_15d,   \
+     	product_browse_pv_15d,post_cnt_15d,send_comment_cnt_15d,discuss_cnt_15d,trade_money_15d   \
+     from   \
+     (   \
+     select a.userid,b.life_cycle_type as yesterday_life_cycle_type,a.life_cycle_type as today_life_cycle_type,   \
+     	if(b.life_cycle_type=a.life_cycle_type,0,1) as is_life_cycle_change   \
+     from    \
+     (   \
+         select userid,life_cycle_type   \
+         from lofter.dws_user_life_circle_judge_dd    \
+         where dt ='${azkaban.flow.1.days.ago}'   \
+     ) a   \
+     left join   \
+     (   \
+         select userid,life_cycle_type   \
+         from lofter.dws_user_life_circle_judge_dd    \
+         where dt ='${azkaban.flow.2.days.ago}'   \
+     ) b   \
+     on a.userid=b.userid   \
+     ) t1   \
+     left join   \
+     (   \
+         select userid,real_browse_pv_15d,discuss_browse_15d,post_cnt_15d,discuss_cnt_15d,send_comment_cnt_15d,trade_money_15d,paid_content_real_browse_pv_15d,product_browse_pv_15d,card_browse_pv_15d   \
+         from lofter.dws_user_life_circle_index_dd   \
+         where dt='${azkaban.flow.1.days.ago}'   \
+     ) t2   \
+     on t1.userid=t2.userid   \
+     )   \
+     group by is_life_cycle_change,yesterday_life_cycle_type,today_life_cycle_type  \
+     distribute by 1;
+hive.query.02=insert overwrite table lofter_dm.ads_user_life_cycle_change_pay_uv_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select is_life_cycle_change,yesterday_life_cycle_type,today_life_cycle_type,pay_type,count(distinct userid) as trade_uv_15d   \
+    from   \
+    (select t1.userid,t1.yesterday_life_cycle_type,t1.today_life_cycle_type,is_life_cycle_change,pay_type,trade_money   \
+    from   \
+    (   \
+    select a.userid,b.life_cycle_type as yesterday_life_cycle_type,a.life_cycle_type as today_life_cycle_type,   \
+    	if(b.life_cycle_type=a.life_cycle_type,0,1) as is_life_cycle_change   \
+    from    \
+    (   \
+        select userid,life_cycle_type   \
+        from lofter.dws_user_life_circle_judge_dd    \
+        where dt ='${azkaban.flow.1.days.ago}'   \
+    ) a   \
+    left join   \
+    (   \
+        select userid,life_cycle_type   \
+        from lofter.dws_user_life_circle_judge_dd    \
+        where dt ='${azkaban.flow.2.days.ago}'   \
+    ) b   \
+    on a.userid=b.userid   \
+    ) t1   \
+    inner join   \
+    (   \
+        select userId, revenue_module as pay_type, sum(money) as trade_money  \
+        from lofter.dwd_user_order_dd \
+        where dt='${azkaban.flow.1.days.ago}' and money > 0 and \
+              pay_date <= '${azkaban.flow.1.days.ago}' and \
+              datediff('${azkaban.flow.1.days.ago}', pay_date) < 15 \
+        group by 1, 2 \
+    ) t3   \
+    on t1.userid=t3.userid   \
+    )   \
+    group by is_life_cycle_change,yesterday_life_cycle_type,today_life_cycle_type,pay_type  \
+    distribute by 1
+dependencies=ads_user_life_cycle_uv_dd

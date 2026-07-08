@@ -1,0 +1,168 @@
+type=sparksql
+hive.query.01=\
+with t1 as ( \
+    select userid, \
+           from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as createdate \
+    from lofter_db_dump.ods_db_pve_user_dialogue_nd \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and sender = 1 \
+    group by userid,createdate \
+), \
+t2 as ( \
+    select userid, \
+           count(1) as sender1_cnt \
+    from t1 \
+    group by userid \
+    having count(1) >= 5 \
+), \
+t3 as ( \
+    select a.blogid,createdate,interestips,1stinterest_post_count,real_browse_pv,send_hot_std,interest_names \
+    from ( \
+        select id blogid, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') createdate \
+        from lofter.dim_blog \
+        where isvalid=1 and istest=0 and isofficial=0 \
+              and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select userid, \
+               max(post_30d) as 1stinterest_post_count, \
+               count(ip) as interestips \
+        from lofter.dws_ip_user_consume_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having 1stinterest_post_count>=100 and interestips>=10 \
+    ) b \
+    on a.blogid=b.userid \
+    join ( \
+        select userid,avg(browse_pv) real_browse_pv \
+        from lofter.dws_par_user_content_di \
+        where browse_pv>0 \
+        and dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having real_browse_pv>40 \
+    ) c \
+    on a.blogid=c.userid \
+    join ( \
+        select userid,avg(send_hot_std) send_hot_std \
+        from lofter.dws_par_user_interaction_dd \
+        where send_hot_std>0 \
+        and dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having send_hot_std>15 \
+    ) d \
+    on a.blogid=d.userid \
+    join ( \
+        select userid, \
+               regexp_replace(concat_ws(',',collect_list(concat_ws(':',cast(rk as string),cast(ip as string)))),'\\d+\:','') interest_names \
+        from lofter_dm.ads_ip_user_top_di \
+        where rk<=5 and dt = '${azkaban.flow.1.days.ago}' \
+        group by userid \
+    ) e \
+    on a.blogid=e.userid \
+    left join \
+    ( \
+        select blogid \
+        from lofter.dim_post \
+        where  ispublished=true and isforbidden=false and iscitedpost=false and allowview=0 and isactivityautopost=0 and isimported=0 and ismoved=0 \
+        and contenttype in ("图片","文字","视频") and publishdate between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by blogid \
+    ) f \
+    on a.blogid=f.blogid \
+    where f.blogid is null \
+), \
+t4 as ( \
+    select a.blogid,createdate,interestips,1stinterest_post_count,real_browse_pv,send_hot_std,send_comment_cnt_std,interest_names \
+    from \
+    ( \
+        select id as blogid, from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as createdate \
+        from lofter.dim_blog \
+        where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 31) and date_sub('${azkaban.flow.1.days.ago}', 24) \
+        and isvalid=1 and istest=0 and isofficial=0 \
+    ) a \
+    join ( \
+        select userid, \
+               max(post_30d) as 1stinterest_post_count, \
+               count(ip) as interestips \
+        from lofter.dws_ip_user_consume_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having 1stinterest_post_count>=350 and interestips>=25 \
+    ) b \
+    on a.blogid=b.userid \
+    join ( \
+        select userid, \
+               avg(browse_pv) as real_browse_pv \
+        from lofter.dws_par_user_content_di \
+        where browse_pv>0 \
+        and dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having real_browse_pv>60 \
+    ) c \
+    on a.blogid=c.userid \
+    join ( \
+        select userid, \
+               avg(send_hot_std) as send_hot_std, \
+               avg(send_comment_cnt_std) as send_comment_cnt_std \
+        from lofter.dws_par_user_interaction_dd \
+        where send_hot_std>0 \
+        and dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having send_hot_std>70 and send_comment_cnt_std>1 \
+    ) d \
+    on a.blogid=d.userid \
+    join ( \
+        select userid, \
+               regexp_replace(concat_ws(',',collect_list(concat_ws(':',cast(rk as string),cast(ip as string)))),'\\d+\:','') as interest_names \
+        from lofter_dm.ads_ip_user_top_di \
+        where rk<=5 \
+        and dt = '${azkaban.flow.30.days.ago}' \
+        group by userid \
+    ) e \
+    on a.blogid=e.userid \
+    left join \
+    ( \
+        select blogid \
+        from lofter.dim_post \
+        where  ispublished=true and isforbidden=false and iscitedpost=false \
+        and allowview=0 and isactivityautopost=0 and isimported=0 and ismoved=0 and contenttype in ("图片","文字","视频") \
+        and publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by blogid \
+    ) f \
+    on a.blogid=f.blogid \
+    where f.blogid is null \
+), \
+t5 as ( \
+    select blogid,creatorstatus \
+    from lofter_dm.ads_creator_ecology_identity_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+t6 as ( \
+    select userid \
+    from lofter.dwd_user_active_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userid \
+) \
+insert overwrite table lofter_dm.ads_pve_homepage_user_group_di PARTITION(`dt`='${azkaban.flow.1.days.ago}') \
+select userId \
+from ( \
+    select t2.userId \
+    from t2 \
+    join t6 \
+    on t2.userid = t6.userid \
+    left join t3 \
+    on t2.userid = t3.blogid \
+    left join t4 \
+    on t2.userid = t4.blogid \
+    left join t5 \
+    on t2.userid = t5.blogid \
+    where t3.blogid is null and t4.blogid is null and t5.blogid is null \
+    group by t2.userId \
+    union all \
+    select userId \
+    from lofter.dws_pve_user_role_amount_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+    having sum(total_amount) >= 10 \
+) t1 \
+group by userId \
+limit 200000
+dependencies=ads_ip_user_top_di,ads_creator_ecology_identity_dd

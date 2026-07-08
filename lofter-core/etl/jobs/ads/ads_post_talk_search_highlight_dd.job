@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_talk_search_highlight_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select tmp1.id, \
+       tmp1.title, \
+       tmp1.cleaned_title \
+from ( \
+    select id, \
+           title, \
+           CASE WHEN regexp_extract(title, '《.*?》', 0) <> '' THEN regexp_replace(regexp_extract(title, '《.*?》', 0), '[《》]','') \
+                WHEN regexp_extract(title, '^【([^】]+)】$', 1) <> '' THEN regexp_replace(regexp_extract(title, '^【([^】]+)】$', 1), '[0-9]', '') \
+                ELSE regexp_replace(regexp_replace(title, '\\\\[.*?\\\\]|\\\\(.*?\\\\)|\\\\{.*?\\\\}|【.*?】|（.*?）|「.*?」|·.*?·|.*?[｜\\\\|]|\\\\d+$|[\\\\ud800-\\\\udfff]', ''), '(?U)(\\\\[.*?\\\\]|[\\\\p{Punct}\\\\s])', '') \
+            END AS cleaned_title \
+    from ( \
+        select id, url, title \
+        from lofter.dim_post_article \
+        where isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and contentType = '文字' \
+        and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 and title is not null and title <> '' \
+    ) t1 \
+    join ( \
+        select postId from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 10000 \
+    ) t2 \
+    on t1.id = t2.postId \
+) tmp1 \
+left join ( \
+    select tag from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1000 \
+) tmp2 \
+on tmp1.title = tmp2.tag \
+where tmp1.cleaned_title <> '' and length(tmp1.cleaned_title) > 2 and tmp2.tag is null
+
+
+
+
+
+
+
+
+
+
+
+

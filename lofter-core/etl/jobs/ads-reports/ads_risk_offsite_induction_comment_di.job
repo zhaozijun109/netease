@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_offsite_induction_comment_di partition(dt='${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select postId, blogId, id as commentId, publisherUserid as userId, content \
+    from lofter_db_dump.ods_db_post_response_nd \
+    where from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+    ( \
+        content rlike '(?i)(豆瓣|郫县|Douban|鹅组|微博|围脖|女厕所|🧣|大眼仔|wb|weibo|粪坑|渣浪|vb|QQ|qq|扣扣|球球|企鹅|丘丘号|南极贱畜|鹅厂|爱发电|afd|紫色鱼|紫色鱼鱼|💓⚡|紫蝾螈|晋江|兔区|驴江|垃圾场|jj|长佩|长佩文学城app|青花鱼论坛|贴吧|男厕所|恶臭聚集地|半次元|ACG爱好者社区|bcy|知乎|逼乎|B乎|资乎|故事乎|小蓝书|逼呼|废文|废文网|废文小站|SosadFun|B站|哔哩哔哩|bilibili|小破站|呷哺呷哺|噼里啪啦|发电厂|陈睿|批站|kuaikan|布咕|泛糖|afd|cpp|粮仓app|知乎|inner|tagtree|树站|长佩|半次元|晋江|每天读点故事|平行大陆|一纸倾城|wland|废文|po18|supplystation|萤火圈|橙光|疯读小说|锦文小说|一纸倾城|岳麓网|紫狐|华夏天空|铭文创|爱作品网|酥皮app|传奇中文|衍文|蓝海阅读|爱奇艺|添喜郎|讀墨電子書|首页搜索|综合搜索|公众号|三[打达]不[溜留])' \
+        or \
+        content rlike '(?i)(kuai[^a-zA-Z0-9\\\\u4e00-\\\\u9fa5]{0,1}kan)|(泛[^a-zA-Z0-9\\\\u4e00-\\\\u9fa5]{0,1}tang)|(fan.{0,1}糖)' \
+    ) \
+    and content not rlike '为爱发电|海棠花|话不离本|会说话就出本书|电话本|漫画版本' \
+  union all \
+    select  a.* \
+    from ( \
+        select postId, blogId, id as commentId, publisherUserid as userId, content \
+            from lofter_db_dump.ods_db_post_response_nd \
+            where from_unixtime(cast(publishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select content, count(1) pv \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+            content rlike '[a-zA-Z0-9]{2,}。[a-zA-Z0-9]{2,}' \
+        group by content \
+        having pv >= 10 \
+    ) b on a.content = b.content \
+) t \

@@ -1,0 +1,239 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_pve_user_amount_info_di PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT t1.tradeId, \
+       t1.userId, \
+       t1.stamina, \
+       t1.platform, \
+       t1.payType, \
+       t1.amount, \
+       t1.createTime, \
+       t1.finishTime, \
+       t1.productId, \
+       t1.bankOrderSn, \
+       t1.bankOrderTime, \
+       t1.sandbox, \
+       t1.productType, \
+       t2.id as roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type as roleType, \
+       t2.status as roleStatus, \
+       t2.publicView as rolePublicView, \
+       t2.creatorUid as roleCreatorUid, \
+       null as groupId, \
+       null as groupRoleType, \
+       0 as attributionChatType \
+FROM ( \
+       SELECT tradeId, \
+              userId, \
+              stamina, \
+              platform, \
+              payType, \
+              amount, \
+              createTime, \
+              finishTime, \
+              productId, \
+              bankOrderSn, \
+              bankOrderTime, \
+              sandbox, \
+              roleUserId, \
+              productType \
+       FROM lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+       WHERE status = 1 AND FROM_UNIXTIME(CAST(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+       AND roleUserId <> 0 AND FROM_UNIXTIME(CAST(finishTime/1000 as bigint), 'yyyy-MM-dd') >= '2024-05-24' \
+       AND productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+) t1 \
+LEFT JOIN ( \
+       SELECT Id, \
+              userId as pveUserId, \
+              roleName, \
+              status, \
+              type, \
+              publicView, \
+              creatorUid \
+       from lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.roleUserId = t2.Id \
+UNION ALL \
+SELECT t1.tradeId, \
+       t1.userId, \
+       t1.stamina, \
+       t1.platform, \
+       t1.payType, \
+       t1.amount, \
+       t1.createTime, \
+       t1.finishTime, \
+       t1.productId, \
+       t1.bankOrderSn, \
+       t1.bankOrderTime, \
+       t1.sandbox, \
+       t1.productType, \
+       t2.id as roleId, \
+       t2.pveUserId, \
+       t2.roleName, \
+       t2.type as roleType, \
+       t2.status as roleStatus, \
+       t2.publicView as rolePublicView, \
+       t2.creatorUid as roleCreatorUid, \
+       null as groupId, \
+       null as groupRoleType, \
+       0 as attributionChatType \
+FROM ( \
+       SELECT tradeId, \
+              userId, \
+              stamina, \
+              platform, \
+              payType, \
+              amount, \
+              createTime, \
+              finishTime, \
+              productId, \
+              bankOrderSn, \
+              bankOrderTime, \
+              sandbox, \
+              roleUserId, \
+              productType \
+       FROM lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+       WHERE status = 1 AND FROM_UNIXTIME(CAST(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+       AND roleUserId <> 0 AND FROM_UNIXTIME(CAST(finishTime/1000 as bigint), 'yyyy-MM-dd') < '2024-05-24' \
+       AND productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+) t1 \
+LEFT JOIN ( \
+       SELECT Id, \
+              userId as pveUserId, \
+              roleName, \
+              status, \
+              type, \
+              publicView, \
+              creatorUid \
+       from lofter_db_dump.ods_db_pve_role_info_nd \
+) t2 \
+ON t1.roleUserId = t2.pveUserId \
+UNION ALL \
+SELECT tradeId, \
+       userId, \
+       stamina, \
+       platform, \
+       payType, \
+       amount, \
+       createTime, \
+       finishTime, \
+       productId, \
+       bankOrderSn, \
+       bankOrderTime, \
+       sandbox, \
+       productType, \
+       roleId, \
+       pveUserId, \
+       roleName, \
+       roleType, \
+       roleStatus, \
+       rolePublicView, \
+       roleCreatorUid, \
+       groupId, \
+       groupRoleType, \
+       chatType AS attributionChatType \
+FROM ( \
+       SELECT t1.tradeId, \
+              t1.userId, \
+              t1.stamina, \
+              t1.platform, \
+              t1.payType, \
+              t1.amount, \
+              t1.createTime, \
+              t1.finishTime, \
+              t1.productId, \
+              t1.bankOrderSn, \
+              t1.bankOrderTime, \
+              t1.sandbox, \
+              t1.roleUserId, \
+              t1.productType, \
+              t2.roleId, \
+              t2.pveUserId, \
+              t2.roleName, \
+              t2.roleType, \
+              t2.roleStatus, \
+              t2.rolePublicView, \
+              t2.roleCreatorUid, \
+              t2.chatType, \
+              t2.groupId, \
+              t2.groupRoleType, \
+              ROW_NUMBER() OVER(PARTITION BY t1.userId, t1.finishTime ORDER BY ABS(t1.finishTime - t2.createTime)) AS rn \
+       FROM ( \
+              SELECT tradeId, \
+                     userId, \
+                     stamina, \
+                     platform, \
+                     payType, \
+                     amount, \
+                     createTime, \
+                     finishTime, \
+                     productId, \
+                     bankOrderSn, \
+                     bankOrderTime, \
+                     sandbox, \
+                     roleUserId, \
+                     productType \
+              FROM lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+              WHERE status = 1 AND FROM_UNIXTIME(CAST(finishTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND roleUserId = 0 \
+              AND productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+       ) t1 \
+       LEFT JOIN ( \
+              SELECT userId, \
+                     createTime, \
+                     roleId, \
+                     pveUserId, \
+                     roleName, \
+                     roleType, \
+                     roleStatus, \
+                     rolePublicView, \
+                     roleCreatorUid, \
+                     chatType, \
+                     NULL AS groupId, \
+                     NULL AS groupRoleType \
+              FROM lofter.dwd_pve_user_chats_info_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' \
+              UNION ALL \
+              SELECT userId, \
+                     createTime, \
+                     NULL AS roleId, \
+                     NULL AS pveUserId, \
+                     NULL AS roleName, \
+                     NULL AS roleType, \
+                     NULL AS roleStatus, \
+                     NULL AS rolePublicView, \
+                     NULL AS roleCreatorUid, \
+                     2 AS chatType, \
+                     a1.groupId, \
+                     IF(minRoleType = maxRoleType, minRoleType, -1) AS groupRoleType \
+              FROM ( \
+                     SELECT userId, \
+                            createTime, \
+                            groupId \
+                     FROM lofter.dwd_pve_user_chats_group_info_di \
+                     WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) a1 \
+              JOIN ( \
+                     SELECT a.groupId, \
+                            MIN(b.roleType) AS minRoleType, \
+                            MAX(b.roleType) AS maxRoleType \
+                     FROM ( \
+                            SELECT groupId, \
+                                   roleId \
+                            FROM lofter_db_dump.ods_db_pve_role_group_member_nd \
+                     ) a \
+                     LEFT JOIN ( \
+                            select id as roleId, \
+                                   type as roleType \
+                            from lofter_db_dump.ods_db_pve_role_info_nd \
+                     ) b \
+                     ON a.roleId = b.roleId \
+                     GROUP BY a.groupId \
+              ) b1 \
+              ON a1.groupId = b1.groupId \
+       ) t2 \
+       ON t1.userId = t2.userId AND t1.finishTime - t2.createTime BETWEEN -10 * 60 * 1000 AND 10 * 60 * 1000 \
+) tmp1 \
+where rn = 1
+dependencies=dwd_pve_user_chats_info_di,dwd_pve_user_chats_group_info_di

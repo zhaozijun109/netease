@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.03=insert overwrite table lofter_dm.ads_post_category_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.contentType as content_type, a.category, a.category2, a.category3, a.domain, \
+        if(category = 'CP', 1, 0) as is_cp, \
+        sum(post_pv) as post_pv, \
+        to_bitmap(d.userId) as post_user_bitmap, \
+        sum(hd_pv) as hd_pv, \
+        bitmap_union(hd_device_bitmap) as hd_device_bitmap, \
+        sum(hot) as hot, \
+        sum(expose_pv) as expose_pv, \
+        bitmap_union(expose_device_bitmap) as expose_device_bitmap, \
+        sum(real_browse_pv) as real_browse_pv, \
+        bitmap_union(real_browse_device_bitmap) as real_browse_device_bitmap, \
+        sum(real_browse_duration) as real_browse_duration \
+from ( \
+    select postid,blogid,contentType,category,category2,category3,domain \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+  select postId, \
+         expose_pv, \
+         expose_device_bitmap, \
+         real_browse_pv, \
+         real_browse_device_bitmap, \
+         real_browse_duration \
+  from lofter.dws_post_traffic_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+  select postId, \
+        count(1) as hd_pv, \
+        to_bitmap(deviceId) as hd_device_bitmap, \
+        sum(hot) as hot \
+  from ( \
+      select postId, 1 as hot, deviceId \
+      from lofter.dwd_post_hot_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+      select postId, 0 as hot, deviceId \
+      from lofter.dwd_post_response_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+  ) t \
+  group by postId \
+) c on a.postId = c.postId \
+left join ( \
+    select id as postId, userId, 1 as post_pv \
+    from lofter.dim_post \
+    where isPublished = true and isForbidden = false and isCitedPost = false and allowView = 0 and \
+            isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 and contentType in ("图片","文字","视频") and \
+            publishDate = '${azkaban.flow.1.days.ago}' \
+) d on a.postId = d.postId \
+group by 1,2,3,4,5,6

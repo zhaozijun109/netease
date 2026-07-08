@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_paid_subscribe_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.search_devices, a.new_devices, a.return_devices, a.order_devices, a.order_cnt, a.order_amount, \
+       b.total_pay_order_cnt, b.total_pay_order_amount, b.internal_order_cnt, b.internal_order_amount, \
+       b.exempted_order_cnt, b.exempted_order_amount, \
+       a.mini_order_cnt, a.mini_order_amount, b.total_mini_pay_order_cnt, b.total_mini_pay_order_amount \
+from ( \
+    select dt, sum(all_devices) as search_devices, \
+           sum(new_devices) as new_devices, \
+           sum(return_devices) as return_devices, \
+           sum(order_trade_devices) as order_devices, \
+           sum(order_cnt) as order_cnt, \
+           sum(order_trade_devices_money) as order_amount, \
+           sum(if(is_mini = 1, order_cnt, 0)) as mini_order_cnt, \
+           sum(if(is_mini = 1, order_trade_devices_money, 0)) as mini_order_amount \
+    from lofter_dm.ads_ec_paid_subscribe_actpwd_funnel_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) a left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(1) as total_pay_order_cnt, sum(amount) as total_pay_order_amount, \
+           sum(if(is_internal_attribute_order = 1, 1, 0)) as internal_order_cnt, \
+           sum(if(is_internal_attribute_order = 1, amount, 0)) as internal_order_amount, \
+           sum(if(is_internal_attribute_order = 2, 1, 0)) as exempted_order_cnt, \
+           sum(if(is_internal_attribute_order = 2, amount, 0)) as exempted_order_amount, \
+           sum(if(order_type = 4, 1, 0)) as total_mini_pay_order_cnt, \
+           sum(if(order_type = 4, amount, 0)) as total_mini_pay_order_amount \
+    from lofter.dwd_paid_subscribe_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and (is_official > 0 or is_vip_fans > 0) \
+) b
+dependencies=

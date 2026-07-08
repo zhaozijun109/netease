@@ -1,0 +1,79 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=create temporary function resolve_mda_action_type as 'com.netease.wm.udf.ResolveMdaActionType'
+hive.query.02= \
+with new_return_users as ( \
+    select userId, 'new' as user_type \
+    from lofter.dwd_user_new_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select userId, 'return' as user_type \
+    from lofter.dwd_user_return_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+no_historical_interest_users as ( \
+    select n.userId, n.user_type \
+    from new_return_users n \
+    left join lofter_db_dump.ods_db_blog_settings_nd b on n.userId = b.blogId \
+    where (b.interests is null or b.interests = '{}' or b.interests = '') \
+      and (b.blogId is null or b.blogId = n.userId) \
+), \
+user_behavior_check as ( \
+    select userId, \
+           count(distinct case when resolve_mda_action_type(eventId) IN ('page_view', 'page_duration') then CAST(itemId AS bigint) end) as browse_count, \
+           count(distinct case when resolve_mda_action_type(eventId) IN ('like', 'recommend', 'reproduce', 'collect') then CAST(itemId AS bigint) end) as interact_count, \
+           count(distinct case when resolve_mda_action_type(eventId) = 'comment' then CAST(itemId AS bigint) end) as comment_count, \
+           count(distinct case when resolve_mda_action_type(eventId) = 'search' and length(nvl(nvl(params['text'], nvl(params['queryname'], nvl(params['QueryName'], nvl(params['QUERYNAME'], params['queryName'])))), '')) > 0 then nvl(nvl(params['text'], nvl(params['queryname'], nvl(params['QueryName'], nvl(params['QUERYNAME'], params['queryName'])))), '') end) as search_count \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and userId > 0 \
+      and resolve_mda_action_type(eventId) IN ('page_view', 'page_duration', 'like', 'recommend', 'reproduce', 'collect', 'comment', 'search') \
+    group by userId \
+), \
+beginner_guide_behavior_check as ( \
+    select userId, \
+           nvl(click_choose_category_cnt, 0) + nvl(click_choose_ip_cnt, 0) + nvl(click_choose_tag_cnt, 0) as total_interest_clicks, \
+           nvl(click_skip_cnt, 0) as skip_count \
+    from lofter.dwd_beginner_guide_page_events_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+no_behavior_users as ( \
+    select n.userId, n.user_type \
+    from no_historical_interest_users n \
+    left join user_behavior_check u on n.userId = u.userId \
+    left join beginner_guide_behavior_check b on n.userId = b.userId \
+    where (u.userId is null \
+           or (nvl(u.browse_count, 0) = 0 \
+               and nvl(u.interact_count, 0) = 0 \
+               and nvl(u.comment_count, 0) = 0 \
+               and nvl(u.search_count, 0) = 0)) \
+      and (b.userId is null or nvl(b.total_interest_clicks, 0) = 0) \
+), \
+next_day_active_users as ( \
+    select userId \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.current.date}' \
+      and from_unixtime(cast(occurTime/1000 as bigint), 'HH:mm') < '19:30' \
+      and userId > 0 \
+      and resolve_mda_action_type(eventId) IN ('page_view', 'page_duration', 'click', 'like', 'comment', 'search') \
+    group by userId \
+), \
+final_target_users as ( \
+    select n.userId \
+    from no_behavior_users n \
+    left join next_day_active_users a on n.userId = a.userId \
+    where a.userId is null \
+    group by 1 \
+), \
+historical_push_filter as ( \
+    select userId \
+    from lofter_dm.ads_push_new_return_user_hot_content_di \
+    where dt >= date_sub('${azkaban.flow.current.date}', 7) \
+      and dt < '${azkaban.flow.current.date}' \
+) \
+insert overwrite table lofter_dm.ads_push_new_return_user_hot_content_di partition(dt = '${azkaban.flow.current.date}') \
+select a.userId \
+from final_target_users a \
+join lofter.dim_user a1 on a.userId = a1.id and a1.isanonymous = 0 \
+left join historical_push_filter b on a.userId = b.userId \
+where b.userId is null \

@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_post_misc_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       count(distinct comment_id) as quality_comment_std, \
+       count(distinct if(day >= '${azkaban.flow.30.days.ago}', comment_id, null)) as quality_comment_30d \
+from ( \
+    select cast(conv(split(split(item_id,'\#')[0],'_')[1], 16, 10) as bigint) as postid, comment_id, day \
+    from rec.rec_data_ecology_comment_detail \
+    where is_quality_comment = 1 and \
+          day >= '2023-11-15' and \
+          day <= '${azkaban.flow.1.days.ago}' \
+  union all \
+    select cast(conv(split(split(item_id,'\#')[0],'_')[1], 16, 10) as bigint) as postid, comment_id, '2023-11-14' as day \
+    from rec.tmp_rec_data_ecology_quality_long_comment_v2 \
+    where is_quality = 1 \
+) t \
+group by postId

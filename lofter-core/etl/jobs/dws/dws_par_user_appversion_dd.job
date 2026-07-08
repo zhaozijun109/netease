@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_appversion_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, appVersion as last_appversion, occurTime as last_time \
+from ( \
+    select userId, appVersion, occurTime, row_number() over (partition by userId order by occurTime desc) as rk \
+    from ( \
+        select userId, appVersion, max(occurTime) as occurTime \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+      union all \
+         select userId, last_appversion as appVersion, last_time as occurTime \
+         from lofter.dws_par_user_appversion_dd where dt = '${azkaban.flow.2.days.ago}' \
+    ) t \
+) tt \
+where rk = 1 \

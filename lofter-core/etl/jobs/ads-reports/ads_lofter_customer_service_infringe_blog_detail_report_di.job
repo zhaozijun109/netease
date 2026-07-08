@@ -1,0 +1,69 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_lofter_customer_service_infringe_blog_detail_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.blogid, \
+  a.complaint_first_day, \
+  a.complaint_last_day, \
+  b.level, \
+  post_main_content_type, \
+  b.gift_open_flg, \
+  c.handle_first_day, \
+  c.handle_last_day, \
+  case \
+    when complaint_last_day is not null \
+    and handle_first_day is not null \
+    and complaint_last_day > handle_first_day then 1 \
+    else 0 \
+  end as repeated_flg \
+from \
+  ( \
+    SELECT \
+      min( \
+        from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as complaint_first_day, \
+      max( \
+        from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as complaint_last_day, \
+      blogid \
+    from \
+      lofter_db_dump.ods_db_infringe_post_nd \
+    where \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) \
+      and '${azkaban.flow.1.days.ago}' \
+      and reporttype in (2, 3) \
+    group by \
+      blogid \
+  ) a \
+  left join ( \
+    select \
+      userid, \
+      level, \
+      post_main_content_type, \
+      case \
+        when gift_open_time is null then 0 \
+        else 1 \
+      end as gift_open_flg \
+    from \
+      lofter.dws_par_creator_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+  ) b on a.blogid = b.userid \
+  left join ( \
+    SELECT \
+      min( \
+        from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as handle_first_day, \
+      max( \
+        from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+      ) as handle_last_day, \
+      blogid \
+    from \
+      lofter_db_dump.ods_db_infringe_post_nd \
+    where \
+      from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 364) \
+      and '${azkaban.flow.1.days.ago}' \
+      and reporttype in (2, 3) \
+      and status in (1, 2) \
+    group by \
+      blogid \
+  ) c on a.blogid = c.blogid \

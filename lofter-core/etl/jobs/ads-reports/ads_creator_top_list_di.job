@@ -1,0 +1,92 @@
+type=sparksql
+hive.query.01=with creator_base \
+as \
+( \
+select t1.userid,blog_nickname,blog_url,post_main_content_type,nvl(level, if(is_new > 0, 'new_no', 'old_no')) as creator_level,post_top_categories,post_top_ips,active_days_30d,post_count_30d,post_last_date,active_last_date, \
+ifnull(fans_1d,0) fans_1d,ifnull(fans_7d,0) fans_7d,ifnull(fans_30d,0) fans_30d, \
+ifnull(receive_hot_1d,0) receive_hot_1d, \
+ifnull(receive_hot_7d,0) receive_hot_7d, \
+ifnull(receive_hot_30d,0) receive_hot_30d, \
+ifnull(receive_comment_cnt_1d,0) receive_comment_cnt_1d, \
+ifnull(receive_comment_cnt_7d,0) receive_comment_cnt_7d, \
+ifnull(receive_comment_cnt_30d,0) receive_comment_cnt_30d, \
+ifnull(receive_hot_1d,0) + ifnull(receive_comment_cnt_1d,0)  hd_1d, \
+ifnull(receive_hot_7d,0) + ifnull(receive_comment_cnt_7d,0)  hd_7d, \
+ifnull(receive_hot_30d,0) + ifnull(receive_comment_cnt_30d,0)  hd_30d \
+from \
+    ( \
+        select userid,blog_nickname,blog_url,post_main_content_type,level, if(datediff(dt, post_first_date) <= 30, 1, 0) as is_new,concat_ws('|',post_top_categories) post_top_categories,concat_ws('|',post_top_ips) post_top_ips,active_days_30d,post_count_30d,post_last_date,active_last_date \
+        from lofter.dws_par_creator_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    left join \
+    ( \
+        select userid,fans_1d,fans_7d,fans_30d \
+        from lofter.dws_par_user_fans_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        and fans_30d>0 \
+    ) t2 \
+    on t1.userid=t2.userid \
+    left join \
+    ( \
+        select userid,receive_comment_cnt_7d,receive_like_cnt_7d+receive_reproduce_cnt_7d+receive_recommend_cnt_7d+receive_collect_cnt_7d receive_hot_7d,receive_like_cnt_30d+receive_reproduce_cnt_30d+receive_recommend_cnt_30d+receive_collect_cnt_30d receive_hot_30d,receive_comment_cnt_30d \
+        from lofter.dws_par_creator_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        and (ifnull(receive_like_cnt_30d,0)+ifnull(receive_reproduce_cnt_30d,0)+ifnull(receive_recommend_cnt_30d,0)+ifnull(receive_collect_cnt_30d,0)+ifnull(receive_comment_cnt_30d,0))>0  \
+    ) t3 \
+    on t1.userid=t3.userid \
+    left join \
+    ( \
+        select userid,receive_hot receive_hot_1d,receive_comment_cnt receive_comment_cnt_1d \
+        from lofter.dws_par_creator_interaction_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        and (ifnull(receive_hot,0)+ifnull(receive_comment_cnt,0))>0 \
+    ) t4 \
+    on t1.userid=t4.userid \
+) \
+insert overwrite table lofter_dm.ads_creator_top_list_di partition(dt = '${azkaban.flow.1.days.ago}')   \
+    select a.* \
+    from  creator_base a \
+    left join \
+    ( \
+        select userid,row_number()over(order by fans_1d desc) fans_1d_rank \
+        from creator_base \
+        where fans_1d>0 \
+    ) b \
+    on a.userid=b.userid \
+    left join \
+    ( \
+        select userid,row_number()over(order by fans_7d desc) fans_7d_rank \
+        from creator_base \
+        where fans_7d>0  \
+    ) c \
+    on a.userid=c.userid \
+    left join \
+    ( \
+        select userid,row_number()over(order by fans_30d desc) fans_30d_rank \
+        from creator_base \
+        where fans_30d>0  \
+    ) d \
+    on a.userid=d.userid \
+    left join \
+    ( \
+        select userid,row_number()over(order by hd_1d desc) hd_1d_rank \
+        from creator_base \
+        where hd_1d>0  \
+    ) e \
+    on a.userid=e.userid \
+    left join \
+    ( \
+        select userid,row_number()over(order by hd_7d desc) hd_7d_rank \
+        from creator_base \
+        where hd_7d>0  \
+    ) f \
+    on a.userid=f.userid \
+    left join \
+    ( \
+        select userid,row_number()over(order by hd_30d desc) hd_30d_rank \
+        from creator_base \
+        where hd_30d>0  \
+    ) g \
+    on a.userid=g.userid \
+    where fans_1d_rank<=500 or fans_7d_rank<=500 or fans_30d_rank<=500 or hd_1d_rank<=500 or hd_7d_rank<=500 or hd_30d_rank<=500 \

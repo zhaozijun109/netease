@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_user_talk_period_cnt_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+              select x1.user_id, \
+                     x2.register_date, \
+                     'DAY_7'                                                                      as statistical_period, \
+                     if(register_date <= DATE_SUB('${azkaban.flow.1.days.ago}', 7), '老用户', '新用户') as user_type, \
+                     sum(x1.talk_cnt)                                                             as talk_cnt \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                       left join \
+                   (select user_id, \
+                           register_date \
+                    from vc.dim_vc_user_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') x2 on x1.user_id = x2.user_id \
+              group by x1.user_id, x2.register_date \
+              union all \
+              select x1.user_id, \
+                     x2.register_date, \
+                     'DAY_15'                                                                      as statistical_period, \
+                     if(register_date <= DATE_SUB('${azkaban.flow.1.days.ago}', 15), '老用户', '新用户') as user_type, \
+                     sum(x1.talk_cnt)                                                              as talk_cnt \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                       left join \
+                   (select user_id, \
+                           register_date \
+                    from vc.dim_vc_user_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') x2 on x1.user_id = x2.user_id \
+              group by x1.user_id, x2.register_date \
+              union all \
+              select x1.user_id, \
+                     x2.register_date, \
+                     'DAY_30'                                                                      as statistical_period, \
+                     if(register_date <= DATE_SUB('${azkaban.flow.1.days.ago}', 30), '老用户', '新用户') as user_type, \
+                     sum(x1.talk_cnt)                                                              as talk_cnt \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                       left join \
+                   (select user_id, \
+                           register_date \
+                    from vc.dim_vc_user_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') x2 on x1.user_id = x2.user_id \
+              group by x1.user_id, x2.register_date \
+              union all \
+              select x1.user_id, \
+                     x2.register_date, \
+                     'DAY_90'                                                                      as statistical_period, \
+                     if(register_date <= DATE_SUB('${azkaban.flow.1.days.ago}', 90), '老用户', '新用户') as user_type, \
+                     sum(x1.talk_cnt)                                                              as talk_cnt \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                       left join \
+                   (select user_id, \
+                           register_date \
+                    from vc.dim_vc_user_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') x2 on x1.user_id = x2.user_id \
+              group by x1.user_id, x2.register_date \
+              union all \
+              select x1.user_id, \
+                     x2.register_date, \
+                     'DAY_180'                                                                      as statistical_period, \
+                     if(register_date <= DATE_SUB('${azkaban.flow.1.days.ago}', 180), '老用户', '新用户') as user_type, \
+                     sum(x1.talk_cnt)                                                               as talk_cnt \
+              from vc.dws_vc_uc_talk_day_cnt_single_i_d x1 \
+                       left join \
+                   (select user_id, \
+                           register_date \
+                    from vc.dim_vc_user_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') x2 on x1.user_id = x2.user_id \
+              group by x1.user_id, x2.register_date;

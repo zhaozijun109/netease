@@ -1,0 +1,86 @@
+type = sparksql
+hive.query.01 = insert overwrite table vc_dm.ads_vc_new_device_login_active_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    t1.dt as base_date, \
+    t1.deviceos, \
+    t1.device_type, \
+    t1.origin_type, \
+	t1.appchannel, \
+	t1.appversion, \
+    datediff ('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+    count(distinct t1.deviceudid) as active_device, \
+	count(distinct case when t3.user_id is not null then t1.deviceudid end) as active_uv, \
+    count( \
+        distinct case \
+            when t2.dt = date_add (t1.dt, 0) \
+            and datediff ('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t2.deviceudid \
+        end \
+    ) as active_device_1d, \
+    count( \
+        distinct case \
+            when t2.dt = date_add (t1.dt, 1) \
+            and datediff ('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t2.deviceudid \
+        end \
+    ) as active_device_2d, \
+    count( \
+        distinct case \
+            when t2.dt = date_add (t1.dt, 6) \
+            and datediff ('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t2.deviceudid \
+        end \
+    ) as active_device_7d, \
+    count( \
+        distinct case \
+            when t2.dt = date_add (t1.dt, 14) \
+            and datediff ('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t2.deviceudid \
+        end \
+    ) as active_device_15d, \
+    count( \
+        distinct case \
+            when t2.dt = date_add (t1.dt, 29) \
+            and datediff ('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t2.deviceudid \
+        end \
+    ) as active_device_30d \
+from \
+    ( \
+        select \
+            dt, \
+            deviceos, \
+            device_type, \
+            origin_type, \
+			appchannel, \
+			appversion, \
+            device_udid as deviceudid, \
+			user_id \
+        from \
+            vc.dwd_vc_device_growth_attribution_i_d \
+        where \
+            dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    left join ( \
+        select \
+            dt, \
+            deviceos, \
+            deviceudid \
+        from \
+            vc.dwd_device_active_di \
+        where \
+            dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+    ) t2 on t1.deviceudid = t2.deviceudid \
+    and t1.deviceos = t2.deviceos \
+    AND t2.dt BETWEEN date_add (t1.dt, 0) AND date_add  (t1.dt, 30) \
+	left join \
+	( \
+	select register_date,user_id,is_anonymity \
+	from vc.dws_vc_user_behavior_info_a_d  \
+	where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+	and is_anonymity='N' \
+	) t3 on t1.user_id=t3.user_id \
+WHERE \
+    datediff ('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 6, 14, 29) \
+group by \
+    t1.dt, \
+    t1.deviceos, \
+    t1.device_type, \
+    t1.origin_type, \
+	t1.appchannel, \
+	t1.appversion \

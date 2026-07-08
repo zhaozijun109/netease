@@ -1,0 +1,50 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--cktable vc.user_portrait_datas --b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_user_simulator_chats
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '用户模拟器聊天轮次' as tag_name, \
+       period as dim1, \
+       simulator_def as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       '' as grp, \
+       total_chats as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_user_simulator_chats' as tag \
+from ( \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_1' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+   union all \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_7' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+   union all \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_15' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 14) and '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+   union all \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_30' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+   union all \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_90' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 89) and '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+   union all \
+   select user_id, nvl(simulator_def, 'all') as simulator_def, 'DAY_180' as period, sum(total_chats) as total_chats \
+   from vc.dws_vc_user_simulator_chats_di \
+   where dt between date_sub('${azkaban.flow.1.days.ago}', 180) and '${azkaban.flow.1.days.ago}' \
+   group by grouping sets((user_id), (user_id, simulator_def)) \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id "
+dependencies=

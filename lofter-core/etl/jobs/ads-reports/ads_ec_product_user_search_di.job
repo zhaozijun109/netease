@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_user_search_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select \
+case when eventid='w10-13' then '点击联想词'  \
+when eventid='w10-3' then '点击搜索按钮' \
+when eventid='w10-4' then '点击搜索历史' \
+when eventid='w10-5' then '点击寻迹ip' end as type, \
+case when eventid='w10-13' then params['text']  \
+when eventid='w10-3' then params['QueryName'] \
+when eventid='w10-4' then params['text'] \
+when eventid='w10-5' then params['text'] end as text, \
+deviceos, \
+count(distinct deviceudid) as  uv,count(deviceudid) as pv \
+from ( \
+    select deviceudid,userid,dt,occurtime,eventid,params,itemid,itemtype,deviceos \
+    from lofter.ods_mda_app_partition_di \
+    where dt= '${azkaban.flow.1.days.ago}' and \
+          actionType in ('other', 'benefit_market') and \
+          eventid in ('w10-3', 'w10-4', 'w10-5', 'w10-13') \
+) a \
+group by dt, \
+case when eventid='w10-13' then '点击联想词'  \
+when eventid='w10-3' then '点击搜索按钮' \
+when eventid='w10-4' then '点击搜索历史' \
+when eventid='w10-5' then '点击寻迹ip' end , \
+case when eventid='w10-13' then params['text']  \
+when eventid='w10-3' then params['QueryName'] \
+when eventid='w10-4' then params['text'] \
+when eventid='w10-5' then params['text'] end , \
+deviceos \
+grouping sets((dt, \
+case when eventid='w10-13' then '点击联想词'  \
+when eventid='w10-3' then '点击搜索按钮' \
+when eventid='w10-4' then '点击搜索历史' \
+when eventid='w10-5' then '点击寻迹ip' end , \
+case when eventid='w10-13' then params['text']  \
+when eventid='w10-3' then params['QueryName'] \
+when eventid='w10-4' then params['text'] \
+when eventid='w10-5' then params['text'] end , \
+deviceos),(dt, \
+case when eventid='w10-13' then params['text']  \
+when eventid='w10-3' then params['QueryName'] \
+when eventid='w10-4' then params['text'] \
+when eventid='w10-5' then params['text'] end , \
+deviceos)) \

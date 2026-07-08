@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=\
+with tag_source as( \
+    SELECT tag \
+    FROM lofter_db_dump.ods_db_challenge_tag_nd \
+    where type = 2 and status = 1 \
+    group by tag \
+    union all \
+    select tagname as tag \
+    from lofter_db_dump.ods_db_tag_resource_nd \
+    where tagname in('公嬷挑战','互相禁用绘画功能挑战','“你”的构成','小猫影子','奶龙气球','网恋奔现','限制100笔绘画挑战','剪衣挑战','流泪问卷','4杯咖啡5个领导','哭哭眼镜','互相禁用写作功能挑战','CP差异问卷','网恋奔现','我不是天才吗','我的生活组成') and movefrom like '内部打标:Cmb%' \
+    group by 1 \
+) \
+insert overwrite table lofter_dm.ads_summer_act_challenge_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  cast(REPLACE('${azkaban.flow.1.days.ago}','-','') as int) as `date`, challenge_tag, rn as rank, hot_24h \
+from( \
+    select challenge_tag, hot_24h, row_number() over(order by hot_24h desc) as rn \
+    from( \
+        select challenge_tag, nvl(count(1),0) as hot_24h \
+        from( \
+            select tag as challenge_tag from tag_source \
+        )a \
+        join ( \
+            SELECT tag, blogid, postId \
+            from lofter.dwd_post_hot_di \
+            lateral view explode(post_tags) as tag \
+            where dt = '${azkaban.flow.1.days.ago}' and userId <> blogId \
+            group by 1,2,3 \
+        ) b \
+        on a.challenge_tag = b.tag \
+        join( select blogId, id as postId from lofter.dim_post where contenttype in ('图片','视频')) c on b.postId = c.postId and b.blogId = c.blogId \
+        group by challenge_tag \
+    ) \
+) \
+where rn <= 20

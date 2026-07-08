@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query=" \
+SELECT \
+    userid, \
+    tag, \
+    type \
+FROM lofter_dm.ads_tag_ship_push_result_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' and type = 1 \
+"
+params= --topic tag.ship.push.msg --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

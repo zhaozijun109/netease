@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_hive2kafka_202501_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select user_id, character_id,talk_cnt,'USER_SEND_COUNT_T3' as sign \
+from vc.ads_vc_uct_persons_n_d where dt='${azkaban.flow.1.days.ago}' and sign = 'last_3_days' \
+
+dependencies=ads_vc_uct_persons_n_d

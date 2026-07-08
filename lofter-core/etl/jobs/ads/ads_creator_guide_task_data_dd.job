@@ -1,0 +1,71 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF'
+hive.query.04=insert overwrite table lofter_dm.ads_creator_guide_task_data_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, \
+    count(distinct b.postId) as post_count, \
+    count(distinct if(b1.words_count >= 3000 and nvl(c.gift_return_count,0) == 0 and nvl(b2.hot,0) >= 10, b.postId, null)) as no_return_post_count, \
+    count(distinct if(b1.words_count >= 3000 and c.return_words >= 1000 and nvl(b2.hot,0) >= 10, b.postId, null)) as normal_return_post_count, \
+    count(distinct if(b1.words_count >= 1500 and c.return_words >= 1000 and nvl(b2.hot,0) >= 10, b.postId, null)) as normal2_return_post_count, \
+    count(distinct if(b1.words_count >= 3000 and c.return_words >= 1500 and nvl(b2.hot,0) >= 10, b.postId, null)) as normal3_return_post_count, \
+    count(distinct if(b1.words_count >= 3000 and c.return_words >= 1000 and (array_contains(b.tags, '回忆故事机') or array_contains(b.tags, 'lingorm') or array_contains(b.tags, 'ip宇宙') or array_contains(b.tags, '论坛爆了') or array_contains(b.tags, '乙女新风向')), b.postId, null)) as creative_return_post_count, \
+    count(distinct if(b1.words_count >= 3000 and c.return_words >= 1000 and nvl(b2.hot,0) >= 3000, b.postId, null)) as hot_post_count, \
+    bitmap_count(bitmap_union(new_unlock_users)) as new_unlock_uv, \
+    count(distinct if(b1.words_count >= 3000 and c.return_words >= 1000 and d.postId is null and nvl(c.negative_reviews,0) == 0 , b.postId, null)) as nonhomo_return_post_count, \
+    count(distinct if(b1.words_count >= 2000 and c.return_words >= 1000 and nvl(b2.hot,0) >= 10 and is_pay_return_gift = '2' and (b2.like_cnt / f.real_browse_uv) > 0.3 , b.postId, null)) as user_like_post_count, \
+    count(distinct if(b1.words_count >= 2000 and c.return_words >= 1000 and nvl(b2.hot,0) >= 10 and is_pay_return_gift = '2' and unlock_users > 30 , b.postId, null)) as high_unlock_post_count \
+from ( \
+    select userId \
+    from lofter_db_dump.ods_db_blog_pay_creator_warn_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= '2025-09-25' \
+    group by 1 \
+) a \
+join ( \
+    select postId, tags, userId, is_pay_return_gift \
+    from lofter.dim_gift_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          contentType = '文字' and \
+          publishDate >= '2025-09-25' \
+) b on a.userId = b.userId \
+join (select postId, words_count from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}') b1 on b.postId = b1.postId \
+left join (select postId, hot, like_cnt from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}') b2 on b.postId = b2.postId \
+left join ( \
+    select postId, \
+        count(distinct id) as gift_return_count, \
+        sum(text_length) as return_words, \
+        sum(if(review_status == -2,1,0)) as negative_reviews \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and status = 1 \
+    group by 1 \
+) c on b.postId = c.postId \
+left join ( \
+    select postId \
+    from ( \
+        select post_id as postId, result as tag, classify, row_number() over (partition by post_id, classify order by day desc) as rk \
+        from rec.content_reg_payed_title_classify_output2 \
+        where day <= '${azkaban.flow.1.days.ago}'  \
+    ) t \
+    where rk = 1 and tag in ('同质化套路场景型','擦边型', '套路场景型') \
+) d on b.postId = d.postId \
+left join ( \
+    select x.postId, to_bitmap(if(y.userId is null, x.userId, null)) as new_unlock_users, count(distinct x.userId) as unlock_users \
+    from ( \
+        select userId, postId, from_unixtime(cast(unlock_time/1000 as bigint)) dt from lofter.dwd_gift_post_unlock_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    left join ( \
+        select userId, date_add(dt, 1) as dt \
+        from lofter.dws_par_user_active_dd \
+        where dt < '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+              active_days_90d > 0 \
+    ) y on x.userId = y.userId and x.dt = y.dt \
+    where x.dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) e on b.postId = e.postId \
+left join ( \
+    select postId, count(distinct userId) as real_browse_uv \
+    from lofter.dwd_post_browse_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and dt >= '2025-09-25' and is_real > 0 \
+    group by 1 \
+) f on b.postId = f.postId \
+group by 1 \

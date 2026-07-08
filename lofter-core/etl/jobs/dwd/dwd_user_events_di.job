@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_user_events_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, eventId \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' \

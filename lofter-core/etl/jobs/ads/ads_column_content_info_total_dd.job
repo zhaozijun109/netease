@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_content_info_total_dd` partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT columnId, \
+       columnType, \
+       contentId, \
+       SUM(exposureCount) AS exposureCount, \
+       SUM(clickCount) AS clickCount, \
+       NVL(SUM(clickCount)/SUM(exposureCount),0) AS clickRateCount \
+FROM ( \
+      SELECT  tmp1.clid          AS columnId, \
+            tmp1.cltype        AS columnType, \
+            tmp1.contentId, \
+            NVL(tmp2.exposureCount, 0) AS exposureCount, \
+            NVL(tmp2.clickCount, 0) AS clickCount \
+      FROM ( \
+          SELECT  cltype, \
+                  clid, \
+                  CASE WHEN cltype IN ('BLOG', 'COLLECTION') THEN contentId \
+                      WHEN cltype = 'ARTICLE' THEN CONV(SPLIT(contentId, '_')[1], 16, 10) \
+                      ELSE '' \
+                  END AS contentId, \
+                  url \
+          FROM `lofter_db_dump`.`ods_db_column_model_nd` \
+      ) tmp1 \
+      LEFT JOIN ( \
+          SELECT columnId, \
+                contentId, \
+                SUM(NVL(exposureCount,0)) AS exposureCount, \
+                SUM(NVL(clickCount,0)) AS clickCount \
+          FROM ( \
+              SELECT  userId, \
+                      GET_JSON_OBJECT(params['ext'],'$.itemId') AS columnId, \
+                      itemId                                    AS contentId, \
+                      COUNT(DISTINCT CASE WHEN eventId = 'w9-3' THEN userId ELSE NULL END) AS exposureCount, \
+                      COUNT(DISTINCT CASE WHEN eventId = 'w9-10' THEN userId ELSE NULL END) AS clickCount \
+              FROM lofter.ods_mda_app_partition_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' and actionType = 'benefit_market' AND GET_JSON_OBJECT(params['ext'], '$.itemType') = 'COLUMN' AND \
+                    eventId IN ('w9-3', 'w9-10') AND itemId IS NOT NULL \
+              GROUP BY  userId, \
+                        GET_JSON_OBJECT(params['ext'],'$.itemId'), \
+                        itemId \
+          ) a \
+          GROUP BY columnId, \
+                  contentId \
+      ) tmp2 \
+      ON tmp1.clid = tmp2.columnId AND tmp1.contentId = tmp2.contentId \
+      UNION ALL \
+      SELECT  `columnId`, \
+              `columnType`, \
+              `contentid`, \
+              `exposureCount`, \
+              `clickCount` \
+      FROM `lofter_dm`.`ads_column_content_info_total_dd` \
+      WHERE dt = '${azkaban.flow.2.days.ago}' \
+) tmp3 \
+GROUP BY columnId, \
+         columnType, \
+         contentId
+dependencies=

@@ -1,0 +1,67 @@
+type=sparksql
+hive.query.01=\
+WITH dialogue_group_ai_response_source AS ( \
+    SELECT dtId,aiSource \
+    FROM ( \
+        SELECT dtId, \
+               aiSource, \
+               ROW_NUMBER() OVER (PARTITION BY dtId ORDER BY createTime DESC) AS rn \
+        FROM lofter_db_dump.ods_db_pve_role_group_dialogue_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 0 \
+        AND aiSource >= 0 AND dtId IS NOT NULL \
+    ) t1 \
+    WHERE rn = 1 \
+) \
+INSERT OVERWRITE TABLE lofter.dwd_pve_user_chats_group_info_di PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT t1.id AS dialogueId, \
+       t1.userId, \
+       t1.groupId, \
+       t1.pveUserId, \
+       t1.roleId, \
+       t1.roleType, \
+       t1.content, \
+       t1.type, \
+       t1.audioFlag, \
+       t1.sortNo, \
+       t1.ext, \
+       t1.createTime, \
+       t1.requestId, \
+       t1.sessionId, \
+       t1.status, \
+       t2.aiSource, \
+       t1.messageType, \
+       t1.dtId, \
+       t1.groupType, \
+       t1.sender, \
+       t1.targetRoleIds, \
+       2 AS chatType \
+FROM ( \
+    SELECT id, \
+           userid, \
+           groupId, \
+           pveUserId, \
+           roleId, \
+           roleType, \
+           content, \
+           type, \
+           audioFlag, \
+           sortNo, \
+           ext, \
+           createTime, \
+           requestId, \
+           sessionId, \
+           status, \
+           aiSource, \
+           messageType, \
+           dtId, \
+           groupType, \
+           sender, \
+           targetRoleIds \
+    FROM lofter_db_dump.ods_db_pve_role_group_dialogue_nd \
+    WHERE FROM_UNIXTIME(CAST(createTime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' AND sender = 1 AND groupType = 1 \
+) t1 \
+LEFT JOIN ( \
+    SELECT dtId,aiSource \
+    FROM dialogue_group_ai_response_source \
+) t2 \
+ON t1.dtId = t2.dtId

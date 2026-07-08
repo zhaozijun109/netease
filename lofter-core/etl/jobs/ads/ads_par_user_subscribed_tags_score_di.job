@@ -1,0 +1,46 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01= \
+    with week_posts as ( \
+       select id,blogId,userId,tags,publishTime,publishDate \
+       from lofter.dim_post \
+       where publishDate >= '${azkaban.flow.7.days.ago}' and publishDate <= '${azkaban.flow.1.days.ago}' and \
+             isPublished = true and allowView = 0 and valid in (0,12) and size(tags) > 0 \
+    ) \
+    insert overwrite table lofter_dm.ads_par_user_subscribed_tags_score_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select userId,collect_list(tagScore) as tagScores \
+    from ( \
+       select userid as userId, named_struct('tagName', tagName, 'score', score) as tagScore \
+       from ( \
+         select a.userId, a.tagName, nvl(b.openCount,0) * 2 + if(c.postCount>0,1,0) + if(d.postNum>0,2,0) as score \
+         from lofter_db_dump.ods_db_favorite_tag_nd a \
+           left join ( \
+             select userId, tag, count(1) openCount \
+             from lofter.dwd_tag_browse_di \
+             where dt >= '${azkaban.flow.7.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' and userId != -1 and tab = 'entry' \
+             group by userId, tag \
+          ) b on a.userId = b.userId and a.tagName = b.tag \
+           left join ( \
+             select tag,count(distinct id) postCount \
+             from week_posts \
+             lateral view outer explode(tags) myTable as tag \
+             where publishDate = '${azkaban.flow.1.days.ago}' \
+             group by tag \
+           ) c on a.tagName = c.tag \
+           left join ( \
+               select b.userId,b.tagName,count(d.postId) as postNum,count(distinct d.publishUserId) as postUv \
+               from lofter_db_dump.ods_db_favorite_tag_nd b \
+                 join ( \
+                   select a.userId,c1.postId, c1.tags,c1.userId as publishUserId \
+                   from lofter_db_dump.ods_db_user_following_nd a \
+                   join ( \
+                      select id as postId,blogId,userId,tags,publishTime \
+                      from week_posts \
+                      where publishDate='${azkaban.flow.1.days.ago}' \
+                   ) c1 on  a.blogId=c1.blogId \
+                 ) d on b.userId=d.userId and array_contains(d.tags,b.tagName) \
+               group by b.userId,b.tagName \
+           ) d on a.tagName = d.tagName and a.userid=d.userId \
+       )t1 where score > 2 \
+    ) t2 \
+    group by userId

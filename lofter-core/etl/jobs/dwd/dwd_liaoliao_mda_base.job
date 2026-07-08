@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter.dwd_liaoliao_mda_base PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  deviceUdid, \
+                      eventId \
+              FROM lofter.ods_mda_app_partition_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' and actionType in ('other', 'page_view')  and ((eventid = 'f1-61' AND params['tab'] rlike ('聊聊|讨论|动态')) OR (eventid IN ('m5-1', 'm1-1', 'gc-1'))) \
+              distribute by 1 \

@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ES
+conf.spark.source.query="\
+    select deviceUdid, max(dt) as last_login_date \
+    from vc.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.1.days.ago}' and length(deviceUdid) > 0 \
+    group by 1 \
+"
+params= --id deviceUdid --dest vc_data_dim_device_offline/_doc --update --url lofter-data-common1.gy.ntes:7000,lofter-data-common2.gy.ntes:7000,lofter-data-common3.gy.ntes:7000,lofter-data-common4.gy.ntes:7000 --username data-analysis-gz --password Dvzo@vdwTs

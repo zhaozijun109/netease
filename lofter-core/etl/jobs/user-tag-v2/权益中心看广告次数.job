@@ -1,0 +1,73 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 权益中心看广告次数 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '权益中心看广告次数'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from ( \
+                                 select userId, \
+                                        'DAY_1'                  as cat, \
+                                        cast(ad_watch_count_1d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_1d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_7'                  as cat, \
+                                        cast(ad_watch_count_7d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_7d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_15'                 as cat, \
+                                        cast(ad_watch_count_15d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_15d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_30'                 as cat, \
+                                        cast(ad_watch_count_30d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_30d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_90'                 as cat, \
+                                        cast(ad_watch_count_90d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_90d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_180'                as cat, \
+                                        cast(ad_watch_count_180d as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_180d > 0 \
+                         \
+                                 union all \
+                         \
+                                 select userId, \
+                                        'DAY_ALL'                as cat, \
+                                        cast(ad_watch_count_total as string) as grp \
+                                 from lofter.dws_par_user_reward_center_ad_watch_dd \
+                                 where dt = '${azkaban.flow.1.days.ago}' \
+                                   and ad_watch_count_total > 0 ) "

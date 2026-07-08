@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_user_pay_item_detail_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId as user_id,  concat(hex(blogid), '_', hex(postId)) as item_id, 1 as is_pay, \
+       from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') pay_date \
+from ( \
+    select pay_time as payTime, postId, blogId, userId \
+    from lofter.dwd_paid_subscribe_order_di \
+    where from_unixtime(cast(pay_time/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    union all \
+    select createTime as payTime, postId, blogId, sender as userId \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where coin > 0 \
+) t \
+group by userId, postId, blogId, from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') \
+distribute by 1

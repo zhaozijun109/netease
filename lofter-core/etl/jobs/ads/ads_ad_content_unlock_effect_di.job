@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_unlock_effect_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    u.module, \
+    u.blogId, \
+    u.unlock_uv, \
+    coalesce(f.follow_net_uv, 0) as follow_net_uv, \
+    coalesce(p.praise_net_uv, 0) as praise_net_uv, \
+    coalesce(p.praise_net_count, 0) as praise_net_count \
+from ( \
+    select module, blogId, count(distinct userId) as unlock_uv \
+    from lofter.dwd_ad_content_unlock_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by module, blogId \
+) u \
+left join ( \
+    select unlock.module, unlock.blogId, \
+           count(distinct follow.userId) as follow_net_uv \
+    from ( \
+        select module, userId, blogId, min(unlock_time) as first_unlock_time \
+        from lofter.dwd_ad_content_unlock_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by module, userId, blogId \
+    ) unlock \
+    join ( \
+        select userId, blogId, followTime \
+        from ( \
+            select userId, blogId, followTime, _bin_op, \
+                   row_number() over (partition by userId, blogId order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+            from lofter.ods_binlog_user_following_di \
+            where dt = '${azkaban.flow.1.days.ago}' and _bin_op < 2 \
+        ) t \
+        where rk = 1 and _bin_op = 0 \
+              and from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) follow on unlock.userId = follow.userId \
+             and unlock.blogId = follow.blogId \
+             and follow.followTime > unlock.first_unlock_time \
+    group by unlock.module, unlock.blogId \
+) f on u.module = f.module and u.blogId = f.blogId \
+left join ( \
+    select unlock.module, unlock.blogId, \
+           count(distinct praise.userId) as praise_net_uv, \
+           count(1) as praise_net_count \
+    from ( \
+        select module, userId, postId, blogId, min(unlock_time) as first_unlock_time \
+        from lofter.dwd_ad_content_unlock_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by module, userId, postId, blogId \
+    ) unlock \
+    join ( \
+        select publisherUserid as userId, postId, opTime \
+        from ( \
+            select publisherUserid, postId, opTime, _bin_op, \
+                   row_number() over (partition by publisherUserid, postId, type order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+            from lofter.ods_binlog_post_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and _bin_op < 2 and type = 1 \
+        ) t \
+        where rk = 1 and _bin_op = 0 \
+              and from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) praise on unlock.userId = praise.userId \
+             and unlock.postId = praise.postId \
+             and praise.opTime > unlock.first_unlock_time \
+    group by unlock.module, unlock.blogId \
+) p on u.module = p.module and u.blogId = p.blogId \
+
+dependencies=

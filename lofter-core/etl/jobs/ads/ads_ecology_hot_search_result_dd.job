@@ -1,0 +1,171 @@
+type=sparksql
+hive.query.01=\
+with tagSource as ( \
+    select tag, \
+           search, \
+           publish, \
+           response, \
+           hot, \
+           browse, \
+           score \
+    from ( \
+        select tag, \
+               search, \
+               publish, \
+               response, \
+               hot, \
+               browse, \
+               score, \
+               row_number() over(order by score desc) as rn \
+        from ( \
+            select t2.tag, search, publish, response, hot, browse, \
+                log1p(coalesce(search, 0)) * 0.4 +  log1p(coalesce(publish, 0)) * 0.3 + log1p(coalesce(response, 0)) * 0.15 + log1p(coalesce(hot, 0)) * 0.1 + log1p(coalesce(browse, 0)) * 0.05 as score \
+            from ( \
+                select name as tag \
+                from lofter_db_dump.ods_db_cmb_tag_nd \
+                where ipflag = 1 or cpflag = 1 or roleflag = 1 \
+            ) t1 \
+            left join ( \
+                select tag, sum(publish_count) as publish, sum(response_count) as response, sum(hot) as hot, sum(browse_count) as browse \
+                from lofter.dws_tag_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+                group by tag \
+            ) t2 \
+            on t1.tag = t2.tag \
+            left join ( \
+                select targetWord as tag, \
+                    sum(indexValue) as search \
+                from lofter_dm.ads_hot_search_list_di \
+                where dt between date_sub('${azkaban.flow.1.days.ago}', 1) and '${azkaban.flow.1.days.ago}' and listName = 1 \
+                group by targetWord \
+            ) t3 \
+            on t1.tag = t3.tag \
+        ) t \
+    ) tt \
+    where rn <= 100 \
+), \
+postSource as ( \
+    select postId, blogId, tag, hot_7d, rn, 1 as type \
+    from ( \
+        select t1.postId, blogId, tag, hot_7d, \
+            row_number() over(partition by tag order by hot_7d desc) as rn \
+        from ( \
+            select id as postId, \
+                blogId, \
+                tag, \
+                contentType \
+            from lofter.dim_post lateral view explode(tags) as tag \
+            where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and isCitedPost = false and isForbidden = false and \
+            allowView = 0 and contentType in ('图片', '文字', '视频') and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 and recomStatus = 1 \
+        ) t1 \
+        join ( \
+            select postId, hot_7d from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot >= 500 and hot_7d > 0 \
+        ) t2 \
+        on t1.postId = t2.postId \
+        left join ( \
+            select postId from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count >= 8000 \
+        ) t3 \
+        on t1.postId = t3.postId \
+        left join ( \
+            select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+        ) t4 \
+        on t1.postId = t4.postId \
+        where (t1.contentType = '文字' and t3.postId is not null and t4.postId is null) or (t1.contentType <> '文字' and t4.postId is null) \
+    ) t \
+    where rn <= 3 \
+), \
+collectionSource as ( \
+    select collectionId, \
+           blogId, \
+           tag, \
+           subscribe_uv_7d, \
+           rn, \
+           2 as type \
+    from ( \
+        select collectionId, \
+            blogId, \
+            tag, \
+            subscribe_uv_7d, \
+            row_number() over(partition by tag order by subscribe_uv_7d desc) as rn \
+        from lofter.dws_collection_dd lateral view explode(split(tags, ',')) as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and status = 0 and subscribe_uv_7d >= 100 \
+    ) t \
+    where rn = 1 \
+), \
+audioSource as ( \
+    select postId, \
+           blogId, \
+           collectionId, \
+           uv, \
+           tag, \
+           rn, \
+           3 as type \
+    from ( \
+        select t1.postId, \
+               collectionId, \
+               uv, \
+               t2.tag, \
+               blogId, \
+               row_number() over(partition by t2.tag order by uv desc) as rn \
+        from ( \
+            select postId, collectionId, count(distinct userId) as uv \
+            from lofter.dwd_post_audio_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' and maxprogress >= 0.6 and is_valid = 1 \
+            group by postId, collectionId \
+        ) t1 \
+        join ( \
+            select id as postId, \
+                 blogId, \
+                 tag \
+            from lofter.dim_post lateral view explode(tags) as tag \
+            where publishDate <= '${azkaban.flow.1.days.ago}' and contentType = '文字' \
+        ) t2 \
+        on t1.postId = t2.postId \
+    ) t \
+    where rn = 1 \
+) \
+insert overwrite table lofter_dm.ads_ecology_hot_search_result_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag, \
+       cast(to_json(transform(sort_array(collect_set(struct(type, result)), true), x -> struct(x.type, x.result))) as string) as result \
+from ( \
+    select t1.tag, \
+           type, \
+           result \
+    from tagSource t1 \
+    join ( \
+        select tag, \
+               type, \
+               transform(sort_array(collect_set(struct(rn, postId, blogId, null as collectionId, type)), true), x -> struct(x.postId, x.blogId, x.collectionId, x.type)) as result \
+        from postSource \
+        group by tag, type \
+    ) t2 \
+    on t1.tag = t2.tag \
+    union all \
+    select t1.tag, \
+           type, \
+           result \
+    from tagSource t1 \
+    join ( \
+        select tag, \
+               type, \
+               transform(sort_array(collect_set(struct(rn, null as postId, blogId, collectionId, type)), true), x -> struct(x.postId, x.blogId, x.collectionId, x.type)) as result \
+        from collectionSource \
+        group by tag, type \
+    ) t2 \
+    on t1.tag = t2.tag \
+    union all \
+    select t1.tag, \
+           type, \
+           result \
+    from tagSource t1 \
+    join ( \
+        select tag, \
+               type, \
+               transform(sort_array(collect_set(struct(rn, postId, blogId, collectionId, type)), true), x -> struct(x.postId, x.blogId, x.collectionId, x.type)) as result \
+        from audioSource \
+        group by tag, type \
+    ) t2 \
+    on t1.tag = t2.tag \
+) t3 \
+group by tag
+dependencies=ads_hot_search_list_query_name_di

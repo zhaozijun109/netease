@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(userId as string) as id, dt, userId from lofter_dm.ads_act_gift_gain_users_di where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_gain_gift_user --full --atom

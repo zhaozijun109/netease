@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.yuanqi.doris.Hive2DorisAutoSync
+conf.spark.sql.shuffle.partitions=5
+conf.spark.task.maxFailures=1
+conf.spark.blacklist.enabled=false
+conf.spark.sql.hive.convertMetastoreParquet=false
+retries=1
+params=--partition-col dt --hive-db lofter_dm --doris-db lofter --parallelism 4 --includes _report_,_ab_,_ad_,_cp_creator_,_cp_data_ --excludes _wide_table_,_easy_fetch_,_bitmap_,ads_ad_waterfull_user_group_di,ads_ab_revenue_business_di,ads_push_easy_fetch_paid_post_dd,ads_revenue_monitor_v2_dd

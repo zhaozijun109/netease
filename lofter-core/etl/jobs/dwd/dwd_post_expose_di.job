@@ -1,0 +1,109 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=200
+conf.spark.sql.adaptive.enabled=false
+conf.spark.sql.join.preferSortMergeJoin=true
+conf.spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold=0
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter`.`dwd_post_expose_di` PARTITION(dt='${azkaban.flow.1.days.ago}') \
+SELECT  a.userId, \
+        a.deviceUdid, \
+        a.deviceOs, \
+        a.postId, \
+        b.blogId                     AS post_userid, \
+        b.contentType                AS post_content_type, \
+        if(c.userId is not null,1,0) AS is_fans, \
+        a.scene, \
+        a.module, \
+        if(module IN ('feed_rec','related_item','tag_rec','search','granary_rec','videoDetail','feed_rec_domain','videoTag','videoList','Related_Blog','videoFeature','Feed_Blog','Guess_Like_Blog'),1,0) AS is_rec, \
+        a.occurTime, \
+        b.tags, \
+        case action_type WHEN 'cell_click' THEN 'click' WHEN 'negative_feedback' THEN 'dislike' end AS reaction, \
+        if(rec_up_flag > 0,1,0)      AS is_support, \
+        if(d.createDate = '${azkaban.flow.1.days.ago}',1,0) AS is_new_user, \
+        source1_scene, \
+        source2_scene, \
+        source1_module, \
+        source2_module, \
+        if(scene in('collection','floatCollection') or params_add_item_type = 'COLLECTION',1,0) AS is_collection, \
+        deviceId, \
+        appVersion, \
+        detail_scene_level_1, \
+        detail_scene_level_2, \
+        b.ips \
+FROM \
+( \
+	SELECT  deviceUdid, \
+	        userId, \
+	        deviceOs, \
+	        CASE WHEN actionType IN ('cell_exposure', 'cell_click', 'negative_feedback') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') THEN cast(nvl(itemId,params['tid']) AS bigint) \
+	             ELSE params['add_itemId'] \
+	        END AS postId, \
+	        scene, \
+	        get_json_object(source,'$[1].scene')      AS source1_scene, \
+	        get_json_object(source,'$[2].scene')      AS source2_scene, \
+	        params['module']                          AS module, \
+	        get_json_object(source,'$[1].module')     AS source1_module, \
+	        get_json_object(source,'$[2].module')     AS source2_module, \
+	        nvl(params['add_itemType'],params['ext_itemType']) AS params_add_item_type, \
+	        occurTime, \
+	        actionType                                AS action_type, \
+	        get_json_object(algInfo,"$.upFlag")       AS rec_up_flag, \
+	        appVersion, \
+            CASE WHEN actionType IN ('cell_exposure', 'cell_click', 'negative_feedback') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+                 THEN \
+                      CASE WHEN params['module'] = 'related_item' THEN 'related_article' \
+                           WHEN scene IN ('floatCollection','immerse_collection') OR scene = 'note' AND (scene = 'immerse_collection' OR (scene = 'note' AND params['module'] = 'note_collection')) THEN 'collection' \
+                           ELSE scene \
+                      END \
+                 ELSE 'talk' \
+            END AS detail_scene_level_1, \
+            CASE WHEN actionType IN ('cell_exposure', 'cell_click', 'negative_feedback') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+                 THEN \
+                      CASE WHEN scene = 'tag' AND params['tab'] = '发现' AND GET_JSON_OBJECT(params['ext'],'$.tabSubName') IS NOT NULL AND GET_JSON_OBJECT(params['ext'],'$.tabSubName') <> '全部' THEN 'tag_sub_cate_rec' \
+                           WHEN scene = 'tag' AND params['tab'] = '发现' THEN 'tag_discovery' \
+                           WHEN scene = 'tag' AND params['tab'] IN ('最新发布','最新评论') THEN 'tag_new' \
+                           WHEN scene = 'tag' AND params['tab'] IN ('最热全部','最热日榜','最热周榜','最热月榜','全部','日榜','周榜','月榜') THEN 'tag_hot' \
+                           WHEN scene = 'floatCollection' THEN 'floatCollection' \
+                           WHEN scene = 'immerse_collection' AND params['module'] = 'immerse_collection' THEN 'immerse_collection' \
+                           WHEN scene = 'note' AND params['module'] = 'note_collection' THEN 'note_collection' \
+                           WHEN scene = 'immerse_collection' AND params['module'] = 'sim_collection_article' THEN 'related_collection' \
+                           ELSE NULL \
+                      END \
+                 ELSE \
+                      CASE WHEN scene = 'tag' AND params['tab'] IN ('动态推荐','动态最新') THEN 'tag_talk' \
+                           ELSE scene \
+                      END \
+            END AS detail_scene_level_2 \
+	FROM lofter.ods_mda_app_partition_di \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+	AND ( \
+	    (actionType IN ('cell_exposure', 'cell_click', 'negative_feedback') AND itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO')) \
+	    OR \
+	    (eventId = 'f1-46' AND itemType IN ('NORMAL_COMMENT_ANSWER','LINE_COMMENT_ANSWER','PHOTO_COMMENT_ANSWER') AND params['add_itemType'] IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO')) \
+	) \
+	AND cast(nvl(itemId, params['tid']) AS bigint) > 0 \
+) a \
+JOIN lofter.dim_post_article b \
+ON a.postId = b.id \
+LEFT JOIN \
+( \
+	SELECT  deviceUdid, \
+	        deviceId \
+	FROM lofter.dwd_par_device_all_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+) e \
+ON a.deviceUdid = e.deviceUdid \
+LEFT JOIN \
+( \
+	SELECT  userId, \
+	        blogId \
+	FROM lofter_db_dump.ods_db_user_following_nd \
+	WHERE from_unixtime(cast(followTime/1000 AS bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	GROUP BY  userId, \
+	          blogId \
+) c \
+ON a.userId = c.userId AND b.blogId = c.blogId \
+LEFT JOIN lofter.dim_user d \
+ON a.userId = d.id
+dependencies=dwd_par_device_all_dd

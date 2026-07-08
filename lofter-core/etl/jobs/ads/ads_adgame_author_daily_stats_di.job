@@ -1,0 +1,99 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_adgame_author_daily_stats_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, ip, gameLink, gameId, exposeUv, exposePv, playUv, playPv, \
+       completeUv, completePv, adExposePv, adUnlockPv, adRawRevenue, adAuthorIncome \
+from ( \
+    select g.blogId as userId, \
+           g.ipName as ip, \
+           g.gameUrl as gameLink, \
+           g.gameId as gameId, \
+           nvl(ex.exposeUv, 0) as exposeUv, \
+           nvl(ex.exposePv, 0) as exposePv, \
+           nvl(pl.playUv, 0) as playUv, \
+           nvl(pl.playPv, 0) as playPv, \
+           nvl(cp.completeUv, 0) as completeUv, \
+           nvl(cp.completePv, 0) as completePv, \
+           nvl(ae.adExposePv, 0) as adExposePv, \
+           nvl(ul.adUnlockPv, 0) as adUnlockPv, \
+           nvl(rv.adRawRevenue, 0) as adRawRevenue, \
+           nvl(rv.adAuthorIncome, 0) as adAuthorIncome \
+    from ( \
+        select id as gameId, blogId, ipName, gameUrl \
+        from lofter_db_dump.ods_db_trade_ad_game_nd \
+    ) g \
+    left join ( \
+        select gameId, \
+               count(distinct deviceudid) as exposeUv, \
+               count(1) as exposePv \
+        from ( \
+            select cast(params['gameId'] as bigint) as gameId, deviceudid \
+            from lofter.ods_mda_app_di \
+            where dt = '${azkaban.flow.1.days.ago}' and eventid = 'game_puzzle_home_card_expose' \
+        ) e \
+        where gameId is not null \
+        group by gameId \
+    ) ex on g.gameId = ex.gameId \
+    left join ( \
+        select gameId, count(1) as adExposePv \
+        from ( \
+            select cast(params['gameId'] as bigint) as gameId \
+            from lofter.ods_mda_app_di \
+            where dt = '${azkaban.flow.1.days.ago}' and eventid = 'game_puzzle_ad_click' \
+        ) a \
+        where gameId is not null \
+        group by gameId \
+    ) ae on g.gameId = ae.gameId \
+    left join ( \
+        select gameId, \
+               count(distinct actorId) as playUv, \
+               count(1) as playPv \
+        from lofter_db_dump.ods_db_trade_ad_game_action_log_nd \
+        where action = 'PLAY' and actorType = 2 \
+          and from_unixtime(cast(dbCreateTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        group by gameId \
+    ) pl on g.gameId = pl.gameId \
+    left join ( \
+        select gameId, \
+               count(distinct actorId) as completeUv, \
+               count(1) as completePv \
+        from lofter_db_dump.ods_db_trade_ad_game_action_log_nd \
+        where action = 'PASS' and actorType = 2 \
+          and from_unixtime(cast(dbCreateTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        group by gameId \
+    ) cp on g.gameId = cp.gameId \
+    left join ( \
+        select gameId, count(1) as adUnlockPv \
+        from lofter_db_dump.ods_db_trade_ad_game_reward_complete_nd \
+        where from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        group by gameId \
+    ) ul on g.gameId = ul.gameId \
+    left join ( \
+        select rev.gameId as gameId, \
+               sum(rev.raw_revenue) as adRawRevenue, \
+               sum(if(rc.userId is not null, rev.author_income, 0)) as adAuthorIncome \
+        from ( \
+            select gameId, userId, \
+                   bid_amount as raw_revenue, \
+                   bid_amount * 0.5 as author_income \
+            from ( \
+                select postId as gameId, \
+                       userId, \
+                       max(bid_amount/1000) as bid_amount \
+                from lofter.dwd_ad_actions_v2_di \
+                where dt = '${azkaban.flow.1.days.ago}' and positionId = 277630 and is_bg > 0 and postId > 0 and userId > 0 \
+                group by 1, 2 \
+            ) t \
+            where gameId is not null and userId is not null \
+        ) rev \
+        left join ( \
+            select gameId, userId \
+            from lofter_db_dump.ods_db_trade_ad_game_reward_complete_nd \
+            where from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            group by gameId, userId \
+        ) rc on rev.gameId = rc.gameId and rev.userId = rc.userId \
+        group by rev.gameId \
+    ) rv on g.gameId = rv.gameId \
+) f \
+where f.exposePv > 0 or f.playPv > 0 or f.completePv > 0 or f.adExposePv > 0 or f.adUnlockPv > 0 or f.adRawRevenue > 0 \
+
+dependencies=

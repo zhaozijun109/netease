@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_userfolder_type_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.status as userfolder_type, \
+      sum(if(from_unixtime(cast(a.createTime/1000 as bigint) ,'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as new_folders, \
+      sum(b.subscribes) as subscribes, \
+      sum(subscribe_posts) as subscribe_posts, \
+      sum(visit_pv) as visit_pv, \
+      sum(visit_pv) / sum(visit_uv) as avg_visit_pv \
+from lofter_db_dump.ods_db_user_subscribe_folder_nd a left join ( \
+    select folderId, count(1) subscribes \
+    from lofter_db_dump.ods_db_sub_folder_folder_follower_nd \
+    where status=0 and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by folderId \
+) b on a.id = b.folderId \
+left join ( \
+    select folderId, count(1) as subscribe_posts \
+    from lofter_db_dump.ods_db_user_subscribe_post_nd \
+    where from_unixtime(cast(createTime/1000 as bigint) ,'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by folderId \
+) c on a.id = c.folderId \
+ left join ( \
+    select cast(itemId as bigint) as folderId, count(1) visit_pv, count(distinct deviceudid) visit_uv \
+    from lofter.ods_mda_app_partition_di \
+    where dt='${azkaban.flow.1.days.ago}' and actionType = 'page_view' and eventId='t2-1' and params['isPublic']=1 and cast(itemId as bigint) > 0 \
+    group by cast(itemId as bigint) \
+) d on a.id = d.folderId \
+where a.status >= 0 \
+group by a.status \
+distribute by 1

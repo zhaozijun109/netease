@@ -1,0 +1,73 @@
+type=sparksql
+hive.query.01= \
+with growth as ( \
+    select dt, device_type, origin_type, \
+        nvl(origin_channel, '') as channel, \
+        nvl(proxy, '') as proxy, \
+        deviceUdid, is_whiteboard \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt <= date_sub('${azkaban.flow.1.days.ago}', 1) and \
+        dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+) \
+insert overwrite table lofter_dm.ads_growth_proxy_quality_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.*, y.trade_money \
+from ( \
+    select a.device_type, a.origin_type, a.channel, a.proxy, 30 as period, \
+        count(distinct a.deviceUdid) as device_count, \
+        count(distinct if(a.is_whiteboard > 0, a.deviceUdid,null)) as whiteboard_device_count, \
+        count(distinct if( u.isanonymous = 0, a.deviceUdid, null)) as login_device_count, \
+        count(distinct if(c.is_excellent > 0, c.deviceUdid, null)) as excellent_device_count, \
+        count(distinct d.deviceUdid) as retain_device_count, \
+        count(distinct e.deviceUdid) as impounding_device_count \
+    from growth a \
+    join ( \
+        select dt, deviceUdid, element_at(userIds, 1) as userId \
+        from lofter.device_active \
+        where dt <= date_sub('${azkaban.flow.1.days.ago}', 1) and \
+                dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+    ) b on a.deviceUdid = b.deviceUdid and a.dt = b.dt \
+    left join lofter.dim_user u on b.userId = u.id \
+    left join ( \
+        select dt, deviceUdid, \
+        if( (real_browse_pv>=4 and \
+            (nvl(like_cnt,0) + nvl(recommend_cnt,0) + nvl(collect_cnt,0) + nvl(reproduce_cnt,0) + nvl(response_cnt,0) + \
+            nvl(share_cnt,0) + nvl(follow_cnt,0) + nvl(collection_follow_cnt,0) + nvl(chat_cnt,0) +nvl(post_cnt,0) + \
+            nvl(follow_cnt,0)) > 0) or chat_cnt > 30, 1, 0) as is_excellent \
+        from lofter.dws_par_device_interaction_di \
+        where dt <= date_sub('${azkaban.flow.1.days.ago}', 1) and \
+            dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+    ) c on a.deviceUdid = c.deviceUdid and a.dt = c.dt \
+    left join ( \
+        select date_sub(dt, 1) as dt, deviceUdid \
+        from lofter.device_active \
+        where dt <= date_sub('${azkaban.flow.1.days.ago}', 0) and \
+                dt >= date_sub('${azkaban.flow.1.days.ago}', 29) \
+    ) d on a.deviceUdid = d.deviceUdid and a.dt = d.dt \
+    left join ( \
+        select deviceUdid \
+        from lofter.device_active \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) e on a.deviceUdid = e.deviceUdid \
+    group by 1, 2, 3, 4 \
+) x \
+left join ( \
+    select a.device_type, a.origin_type, a.channel, a.proxy, \
+        sum(c.trade_money) as trade_money \
+    from growth a \
+    join ( \
+        select dt, deviceUdid, element_at(userIds, 1) as userId \
+        from lofter.device_active \
+        where dt <= date_sub('${azkaban.flow.1.days.ago}', 1) and \
+                dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+    ) b on a.deviceUdid = b.deviceUdid and a.dt = b.dt \
+    join ( \
+        select userId, sum(money) as trade_money \
+       from lofter.dwd_user_order_dd \
+       where dt = '${azkaban.flow.1.days.ago}' and \
+        pay_date <= date_sub('${azkaban.flow.1.days.ago}', 1) and \
+        pay_date >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+        group by 1 \
+    ) c on b.userId = c.userId \
+    group by 1,2,3,4 \
+) y on x.device_type = y.device_type and x.origin_type = y.origin_type and \
+    x.channel = y.channel and x.proxy = y.proxy \

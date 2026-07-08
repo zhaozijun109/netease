@@ -1,0 +1,7 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ClickhouseAutoSync
+conf.spark.task.maxFailures=1
+conf.spark.blacklist.enabled=false
+conf.spark.sql.hive.convertMetastoreParquet=false
+retries=0
+params=--date ${azkaban.flow.1.days.ago} --excludes ads_vc_tags_data_bitmap_dd,ads_vc_tags_data_dd

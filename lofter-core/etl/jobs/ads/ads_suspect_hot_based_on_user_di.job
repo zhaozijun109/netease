@@ -1,0 +1,35 @@
+type=sparksql
+dependencies=dwd_risk_user_level_dd
+hive.query.01=insert overwrite table lofter_dm.ads_suspect_hot_based_on_user_di partition(dt='${azkaban.flow.1.days.ago}') \
+                select \
+                	a.usertype as user_type,  b.type as hot_type, \
+                	count(distinct b.postid) as shuare_post_num, \
+                	count(distinct b.publisheruserid) as shuare_uv, \
+                	count(id) as shuare_pv \
+                from \
+                  ( \
+                    select \
+                		userid,dt,usertype \
+                    from \
+                		lofter.dwd_risk_user_level_dd \
+                    where \
+                		usertype in ('黑', '灰') \
+                		and dt='${azkaban.flow.1.days.ago}' \
+                    group by \
+                		userid,dt,usertype \
+                  ) a \
+                  join ( \
+                    select \
+                		postid,blogid,publisheruserid,type,id, \
+                		from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as day \
+                    from \
+                		lofter_db_dump.ods_db_post_hot_nd \
+                    where \
+                		type in (1, 2, 3, 4) \
+                		and from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+                  ) b on a.userid = b.publisheruserid \
+                  and a.dt = b.day \
+                group by \
+                  a.usertype,b.type \
+                distribute by 1
+

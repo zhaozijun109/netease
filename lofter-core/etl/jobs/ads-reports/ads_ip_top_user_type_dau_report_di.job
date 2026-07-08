@@ -1,0 +1,129 @@
+type=sparksql
+hive.query.01= \
+with mau_deviceudid_userid_mapping as \
+(SELECT \
+deviceudid,userid \
+FROM lofter.device_active LATERAL VIEW explode(userids) t AS userid \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY deviceudid, userid \
+), \
+top_user_type_all as \
+(select \
+userid \
+,min_by(user_type ,state_level) top_user_type \
+from \
+(SELECT \
+dt,userid, \
+user_type, \
+CASE user_type \
+WHEN '成熟期用户' THEN 1 \
+WHEN '衰退期用户' THEN 2 \
+WHEN '成长期用户' THEN 3 \
+WHEN '新用户' THEN 4 \
+WHEN '潜力用户' THEN 5 \
+WHEN '流失用户' THEN 6 \
+END AS state_level \
+FROM lofter.dws_ip_user_life_cycle_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+)t \
+group by userid \
+), \
+top_user_type_underived as \
+(select \
+userid \
+,min_by(user_type ,state_level) top_user_type \
+from \
+(SELECT \
+dt,userid, \
+user_type , \
+CASE user_type \
+WHEN '成熟期用户' THEN 1 \
+WHEN '衰退期用户' THEN 2 \
+WHEN '成长期用户' THEN 3 \
+WHEN '新用户' THEN 4 \
+WHEN '潜力用户' THEN 5 \
+WHEN '流失用户' THEN 6 \
+END AS state_level \
+FROM lofter.dws_ip_user_life_cycle_dd \
+where dt = '${azkaban.flow.1.days.ago}' and ip not in \
+(select ip \
+from lofter.dim_ip_dd \
+where dt = '${azkaban.flow.1.days.ago}' and derivedflag = 0) \
+)t \
+group by userid) \
+insert overwrite table lofter_dm.ads_ip_top_user_type_dau_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+'all' as ip_type, \
+case when d.device_type = 'new' then '近30日新增' \
+when d.device_type = 'return_30' then '近30日回流' \
+else '持续活跃' \
+end as device_type, \
+COALESCE(top_user_type, 'unknown') AS top_user_type, \
+COUNT(DISTINCT a.deviceudid) AS deviceudid_cnt, \
+sum(active_days_30d)/COUNT(DISTINCT a.deviceudid) as avg_active_days_30d, \
+SUM(COUNT(DISTINCT a.deviceudid)) OVER() AS dau \
+from mau_deviceudid_userid_mapping a \
+left join top_user_type_all b \
+on a.userid=b.userid \
+left join \
+(SELECT \
+dt,deviceudid ,active_days_30d \
+FROM lofter.dws_par_device_active_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and active_days_30d>0 \
+group by 1,2,3 \
+)c \
+on a.deviceudid = c.deviceudid \
+left join ( \
+select \
+deviceudid,device_type \
+from \
+lofter.dwd_device_growth_attribution_di \
+where \
+dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+group by \
+deviceUdid,device_type \
+) d on a.deviceudid = d.deviceudid \
+group by case \
+when d.device_type = 'new' then '近30日新增' \
+when d.device_type = 'return_30' then '近30日回流' \
+else '持续活跃' \
+end ,top_user_type \
+union \
+select \
+'underived' as ip_type, \
+case when d.device_type = 'new' then '近30日新增' \
+when d.device_type = 'return_30' then '近30日回流' \
+else '持续活跃' \
+end as device_type, \
+COALESCE(top_user_type, 'unknown') AS top_user_type, \
+COUNT(DISTINCT a.deviceudid) AS deviceudid_cnt, \
+sum(active_days_30d)/COUNT(DISTINCT a.deviceudid) as avg_active_days_30d, \
+SUM(COUNT(DISTINCT a.deviceudid)) OVER() AS dau \
+from mau_deviceudid_userid_mapping a \
+left join top_user_type_underived b \
+on a.userid=b.userid \
+left join \
+(SELECT \
+dt,deviceudid ,active_days_30d \
+FROM lofter.dws_par_device_active_dd \
+where dt= '${azkaban.flow.1.days.ago}' \
+and active_days_30d>0 \
+group by 1,2,3 \
+)c \
+on a.deviceudid = c.deviceudid \
+left join ( \
+select \
+deviceudid,device_type \
+from \
+lofter.dwd_device_growth_attribution_di \
+where \
+dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+group by \
+deviceUdid,device_type \
+) d on a.deviceudid = d.deviceudid \
+group by case \
+when d.device_type = 'new' then '近30日新增' \
+when d.device_type = 'return_30' then '近30日回流' \
+else '持续活跃' \
+end ,top_user_type \

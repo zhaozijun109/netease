@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_to_array as 'com.netease.wm.udf.bitmap.BitmapToArrayUDF';
+hive.query.02=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.03=insert overwrite table lofter_dm.ads_rec_collection_user_browse_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, collectionId, post_count \
+from ( \
+    select userId, collectionId, post_count, \
+           row_number() over (partition by userId order by total_post_count - post_count desc) rk \
+    from ( \
+        select a.userId, b.collectionId, b1.postCount as total_post_count, count(distinct a.postId) as post_count \
+        from ( \
+            select userId, postId \
+            from ( \
+                select userId, bitmap_union(browse_post_bitmap) as post_bitmap \
+                from lofter.dws_par_user_content_di \
+                where dt <='${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 30) \
+                group by 1 \
+            ) x \
+            lateral view explode(bitmap_to_array(post_bitmap)) as postId \
+        ) a \
+        join lofter.bridge_collection_post b on a.postId = b.postId \
+        join (select userId from lofter.dws_par_user_active_dd where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0) b0 on a.userId = b0.userId \
+        join ( \
+            select collectionId, postCount \
+            from lofter.dws_collection_dd \
+            where dt='${azkaban.flow.1.days.ago}' and \
+                  datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(lastPublishTime/1000 as bigint), 'yyyy-MM-dd')) < 180 and postCount >= 10 \
+        ) b1 on b.collectionId = b1.collectionId \
+        left join ( \
+                select subscribe_userid as userId, collectionId \
+                from lofter.dwd_collection_user_subscribe_dd \
+                where dt='${azkaban.flow.1.days.ago}' \
+        ) c on a.userId = c.userId and b.collectionId = c.collectionId \
+        where c.collectionId is null \
+        group by 1, 2, 3 \
+        having post_count >= 5 and total_post_count - post_count >= 3 \
+    ) t \
+) tt \
+where rk <= 5

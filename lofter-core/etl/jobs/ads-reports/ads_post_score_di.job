@@ -1,0 +1,101 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=30
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.01=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.02=create temporary function bitmap_and as 'com.netease.wm.udf.bitmap.BitmapAndUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=insert overwrite table lofter_dm.ads_post_score_di partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, postUrl, blogId, blogNickname, publishDate, contentType, fansCount, impressionUv, browseUv, playUv, praiseUv, recommendUv, subscribeUv, commentUv, reproduceUv,shareUv,browseCtr,praiseCtr,recommendCtr,subscribeCtr,commentCtr,reproduceCtr,shareCtr, \
+case contentType when '文字' then (0.41 * nvl(praiseCtrNormal,0) + 0.19 * nvl(browseCtrNormal,0) + 0.13 * nvl(commentCtrNormal,0)  \
+                                 + 0.09 * nvl(recommendCtrNormal,0) + 0.07 * nvl(shareCtrNormal,0) + 0.06 * nvl(subscribeCtrNormal,0) \
+                                 + 0.05 * nvl(reproduceCtrNormal,0)) * 100 \
+                 when '图片' then (0.4388 * nvl(praiseCtrNormal,0) + 0.13426 * nvl(browseCtrNormal,0) + 0.03499 * nvl(commentCtrNormal,0) \
+                                 + 0.27671 * nvl(recommendCtrNormal,0) + 0.05237 * nvl(shareCtrNormal,0) + 0.04448 * nvl(subscribeCtrNormal,0) \
+                                 + 0.01839 * nvl(reproduceCtrNormal,0)) * 100 \
+                 when '视频' then (0.527 * nvl(playCtrNormal,0) + 0.428 * nvl(play2PraiseCtrNormal, 0) + 0.045 * nvl(play2RecommendCtrNormal,0) + \
+                                  0.001 * nvl(play2ShareCtrNormal,0)) * 100 \
+                 end as score, isInRecPool, label, isBlogAuthenticated \
+from ( \
+  select *, \
+   (browseCtr - min(browseCtr) over (partition by contentType)) / (max(browseCtr) over (partition by contentType) - min(browseCtr) over (partition by contentType)) as browseCtrNormal, \
+   (praiseCtr - min(praiseCtr) over (partition by contentType)) / (max(praiseCtr) over (partition by contentType) - min(praiseCtr) over (partition by contentType)) as praiseCtrNormal, \
+   (reproduceCtr - min(reproduceCtr) over (partition by contentType)) / (max(reproduceCtr) over (partition by contentType) - min(reproduceCtr) over (partition by contentType)) as reproduceCtrNormal, \
+   (recommendCtr - min(recommendCtr) over (partition by contentType)) / (max(recommendCtr) over (partition by contentType) - min(recommendCtr) over (partition by contentType)) as recommendCtrNormal, \
+   (subscribeCtr - min(subscribeCtr) over (partition by contentType)) / (max(subscribeCtr) over (partition by contentType) - min(subscribeCtr) over (partition by contentType)) as subscribeCtrNormal, \
+   (commentCtr - min(commentCtr) over (partition by contentType)) / (max(commentCtr) over (partition by contentType) - min(commentCtr) over (partition by contentType)) as commentCtrNormal, \
+   (shareCtr - min(shareCtr) over (partition by contentType)) / (max(shareCtr) over (partition by contentType) - min(shareCtr) over (partition by contentType)) as shareCtrNormal, \
+   (playCtr - min(playCtr) over (partition by contentType)) / (max(playCtr) over (partition by contentType) - min(playCtr) over (partition by contentType)) as playCtrNormal, \
+   (play2PraiseCtr - min(play2PraiseCtr) over (partition by contentType)) / (max(play2PraiseCtr) over (partition by contentType) - min(play2PraiseCtr) over (partition by contentType)) as play2PraiseCtrNormal, \
+   (play2RecommendCtr - min(play2RecommendCtr) over (partition by contentType)) / (max(play2RecommendCtr) over (partition by contentType) - min(play2RecommendCtr) over (partition by contentType)) as play2RecommendCtrNormal, \
+   (play2ShareCtr - min(play2ShareCtr) over (partition by contentType)) / (max(play2ShareCtr) over (partition by contentType) - min(play2ShareCtr) over (partition by contentType)) as play2ShareCtrNormal \
+  from ( \
+  select p.contentType, p.tags as label, if(p.isBlogAuthenticated, 1, 0) as isBlogAuthenticated, f.fansCount, \
+        concat(p.blogName,'.lofter.com/post/',conv(p.blogid, 10, 16),'_',conv(id, 10, 16)) as postUrl, p.blogId, p.blogNickname, p.publishDate, s.*, \
+        if(r.postId is null, 0, 1) as isInRecPool, \
+        browseUv / impressionUv as browseCtr, \
+        browse2praiseUv / browseUv as praiseCtr, \
+        browse2reproduceUv / browseUv as reproduceCtr, \
+        browse2recommendUv / browseUv as recommendCtr, \
+        browse2subscribeUv / browseUv as subscribeCtr, \
+        browse2commentUv / browseUv as commentCtr, \
+        browse2shareUv / browseUv as shareCtr, \
+        playUv / impressionUv as playCtr, \
+        play2praiseUv / playUv as play2PraiseCtr, \
+        play2recommendUv / playUv as play2RecommendCtr, \
+        play2shareUv / playUv as play2ShareCtr \
+  from ( \
+      select t1.postId, nvl(bitmap_count(exposeDevices),0) impressionUv \
+              ,nvl(bitmap_count(browseDevices),0) browseUv \
+              ,nvl(bitmap_count(playDevices), 0) playUv \
+              ,nvl(bitmap_count(praiseDevices), 0) praiseUv \
+              ,nvl(bitmap_count(reproduceDevices), 0) reproduceUv \
+              ,nvl(bitmap_count(recommendDevices), 0) recommendUv \
+              ,nvl(bitmap_count(subscribeDevices), 0) subscribeUv \
+              ,nvl(bitmap_count(responseDevices), 0) commentUv \
+              ,nvl(bitmap_count(shareDevices), 0) as shareUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, praiseDevices)), 0) browse2praiseUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, reproduceDevices)), 0) browse2reproduceUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, recommendDevices)), 0) browse2recommendUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, subscribeDevices)), 0) browse2subscribeUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, responseDevices)), 0) browse2commentUv \
+              ,nvl(bitmap_count(bitmap_and(browseDevices, shareDevices)), 0) as browse2shareUv \
+              ,nvl(bitmap_count(bitmap_and(playDevices, praiseDevices)), 0) play2praiseUv \
+              ,nvl(bitmap_count(bitmap_and(playDevices, recommendDevices)), 0) play2recommendUv \
+              ,nvl(bitmap_count(bitmap_and(playDevices, shareDevices)), 0) as play2shareUv \
+      from ( \
+        select postId, \
+               bitmap_union(if(post_content_type = '视频', expose_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', expose_device_bitmap, null))) exposeDevices, \
+               bitmap_union(if(post_content_type <> '视频' and dt = '${azkaban.flow.1.days.ago}', real_browse_device_bitmap, null)) as browseDevices, \
+               bitmap_union(if(post_content_type = '视频', real_browse_device_bitmap, null)) as PlayDevices \
+        from lofter.dws_post_traffic_di \
+        where dt >= '${azkaban.flow.3.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by postId \
+      ) t1 \
+      left join ( \
+        select postId, \
+              bitmap_union(if(post_content_type = '视频', praise_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', praise_device_bitmap, null))) as praiseDevices, \
+              bitmap_union(if(post_content_type = '视频', reproduce_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', reproduce_device_bitmap, null))) as reproduceDevices, \
+              bitmap_union(if(post_content_type = '视频', recommend_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', recommend_device_bitmap, null))) as recommendDevices, \
+              bitmap_union(if(post_content_type = '视频', subscribe_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', subscribe_device_bitmap, null))) as subscribeDevices, \
+              bitmap_union(if(post_content_type = '视频', response_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', response_device_bitmap, null))) as responseDevices, \
+              bitmap_union(if(post_content_type = '视频', share_device_bitmap, if(dt = '${azkaban.flow.1.days.ago}', share_device_bitmap, null))) as shareDevices \
+        from lofter.dws_post_interaction_di \
+        where dt >= '${azkaban.flow.3.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+        group by postId \
+      ) t2 on t1.postId = t2.postId \
+  ) s join lofter.dim_post p on s.postId = p.id \
+      left join (select blogId, count(distinct userId) fansCount from lofter_db_dump.ods_db_user_following_nd group by blogId) f on p.blogId = f.blogId \
+      left join (select conv(substring(item_id,instr(item_id,"_")+1) ,16,10) postId \
+                 from rec.rec_ra_item_pool_v1 \
+                 where day='${azkaban.flow.1.days.ago}' and item_type in ('ARTICLE', 'VIDEO')) r on r.postId = s.postId \
+  where p.valid in (0,12,15,16) \
+      and p.isPublished=true \
+      and p.isForbidden=false \
+      and p.contentType in ('图片', '文字', '视频') \
+      and ((p.contentType = '视频' and s.impressionUv > 100 and s.playUv >0) or (p.contentType <> '视频' and s.browseUv>30)) \
+  ) t2 \
+) t3

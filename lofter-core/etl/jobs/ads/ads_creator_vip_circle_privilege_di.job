@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_vip_circle_privilege_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.* \
+from ( \
+    select nvl(a.blogId, b.blogId) as blogId, \
+           nvl(a.userId, b.userId) as userId, \
+           nvl(a.score,0) as fans_attraction, \
+           nvl(b.present_gift,0) as present_gift, \
+           nvl(gift_score,0) as gift_score, \
+           nvl(share_score,0) as share_score, \
+           nvl(comment_score,0) as comment_score, \
+           nvl(like_score,0) as like_score \
+    from ( \
+        select * \
+        from lofter.dws_par_creator_user_support_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    full outer join ( \
+        select blogId, userId, count(1) as present_gift \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        group by blogId, userId \
+    ) b on a.blogId = b.blogId and a.userId = b.userId \
+) x \
+join ( \
+  select userId \
+  from ( \
+        select cast(value as bigint) as userId from `text`.`/user/da_lofter/hzxiaonaitong/fans-private-push-0121` \
+      union all \
+        select cast(value as bigint) as userId from `text`.`/user/da_lofter/hzxiaonaitong/fans-private-push-0123` \
+      union all \
+        select cast(value as bigint) as userId from `text`.`/user/da_lofter/hzxiaonaitong/fans-private-push-0124` \
+      union all \
+        select cast(value as bigint) as userId from `text`.`/user/da_lofter/hzxiaonaitong/fans-private-push-0214` \
+      union all \
+        select cast(value as bigint) as userId from `text`.`/user/da_lofter/hzxiaonaitong/fans-private-push-0703` \
+  ) t \
+  group by 1 \
+) z on x.blogId = z.userId \

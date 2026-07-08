@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_report_app_device_appversion_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select appversion, \
+count(distinct deviceudid) as device_uv, \
+count(distinct user_id) as user_uv \
+from vc_dm.ads_appversion_device_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+group by appversion \
+
+dependencies=ads_appversion_device_dd

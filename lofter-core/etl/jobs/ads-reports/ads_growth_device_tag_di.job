@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_device_tag_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag,is_cmb_tag,ips,categories,device_type, origin_type, origin_channel, is_paid_subscribe, nvl(count(distinct deviceUdid), 0) as device_count \
+from (  \
+   select tag, device_type, origin_type, origin_channel, deviceUdid, is_paid_subscribe  \
+   from lofter.dwd_device_growth_content_di \
+   lateral view explode(split(tags,',')) t1 as tag \
+   where dt= '${azkaban.flow.1.days.ago}' \
+) a  \
+left join \
+( \
+    select tag,is_cmb_tag,ips,categories \
+    from lofter.dim_tag \
+) b \
+on a.tag=b.tag \
+group by a.tag,is_cmb_tag,ips,categories,device_type, origin_type, origin_channel, is_paid_subscribe \

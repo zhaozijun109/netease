@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_alg_data_user_query_agg_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select day, \
+       query, \
+       recId, \
+       recStartTime, \
+       userId, \
+       case when sum (clickCount) > 0 then '1' else '0' end as querySuccess, \
+       case when sum(case when pos < 4 then clickCount else 0 end) > 0 then '1' else '0' end as queryFirstSuccess \
+from lofter_dm.ads_alg_data_user_query_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by day, query, recId, recStartTime, userId
+dependencies=ads_alg_data_user_query_di

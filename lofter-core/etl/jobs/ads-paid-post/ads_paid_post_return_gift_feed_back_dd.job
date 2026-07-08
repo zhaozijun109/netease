@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_return_gift_feed_back_dd partition(dt = '${azkaban.flow.1.days.ago}')  \
+SELECT postid, blogid, return_gift_id, jiesuo_uv, zhengfankui_uv, fufankui_uv, jiesuo_uv_day, \
+       zhengfankui_uv_day,fufankui_uv_day \
+FROM lofter.dws_gift_post_return_dd \
+where dt = '${azkaban.flow.1.days.ago}'

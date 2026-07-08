@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.module, \
+       a.bid_amount, a.bg_pv, a.click_pv, b.unlock_count \
+from ( \
+    select dt, \
+        case positionId when 279600 then '激励广告' \
+                        when 278625 then '广告文' \
+                        when 278626 then '广告文' \
+                        when 277629 then '视频合集' \
+                        end as module, \
+        sum(bid_amount)/1000 as bid_amount, sum(is_bg) as bg_pv, sum(is_click) click_pv \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId in (279600, 278625, 278626, 277629) and (is_bg > 0 or is_click > 0) \
+    group by 1, 2 \
+) a \
+left join ( \
+    select module, dt, count(distinct postId, userId) as unlock_count \
+    from lofter.dwd_ad_content_unlock_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) b on a.dt = b.dt and a.module = b.module \

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id, userId, actionTime, ip, userRemotePort, clientType, appVersion, deviceUdid from lofter_dm.ads_par_user_login_hourly_info_di where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_login_user_search --postfixsep --atom

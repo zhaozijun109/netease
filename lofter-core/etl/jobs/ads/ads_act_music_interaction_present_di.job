@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=msck repair table lofter.dwb_par_lofter_music_user_label_di;
+hive.query.02=insert overwrite table lofter_dm.ads_act_music_interaction_present_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.userId \
+from ( \
+    select a.userId, count(distinct a.blogId) as interact_blogs \
+    from ( \
+        select userId, blogId \
+        from lofter.dwd_post_hot_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            opType = 'recommend' \
+        group by 1, 2 \
+    ) a \
+    join ( \
+        select blogId \
+        from lofter_dm.ads_creator_ecology_identity_dd \
+        where dt='${azkaban.flow.1.days.ago}' and creatorStatus >= 40 and creatorStatus <= 80 \
+    ) b on a.blogId = b.blogId \
+    join ( \
+        select userId \
+        from lofter.dwb_par_lofter_music_user_label_di \
+        where pt_d='${azkaban.flow.1.days.ago}' and user_type in ('音乐新客', '音乐召回') \
+    ) c on a.userId = c.userId \
+    group by 1 \
+    having interact_blogs >= 2 \
+) x \
+left join ( \
+    select userId \
+    from lofter_dm.ads_act_music_interaction_present_di \
+    where dt < '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) y on x.userId = y.userId \
+where y.userId is null \
+
+dependencies=ads_creator_ecology_identity_dd

@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_misc_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, count(distinct id) grains \
+from lofter_db_dump.ods_db_grain_info_nd \
+where status = 0 and \
+      from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by userId \
+distribute by 1

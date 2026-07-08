@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_webview_pageurl_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+'日' as period,t.* \
+from  \
+( \
+select  \
+pageurl  \
+,deviceos  \
+,ismp  \
+,case when  \
+      mpversion in (0,'')  \
+      or mpversion is null then '无' \
+      else mpversion end mpversion \
+,appversion  \
+,count(deviceudid) pv \
+,count(distinct deviceudid) uv \
+from \
+lofter.dwd_evt_webview_index_di  \
+where  \
+dt ='${azkaban.flow.1.days.ago}' \
+and pageurl like '%lofter%' \
+group by  \
+pageurl \
+,deviceos \
+,ismp  \
+,case when  \
+      mpversion in (0,'')  \
+      or mpversion is null then '无' \
+      else mpversion end  \
+,appversion \
+) t \
+where PV >= 2 \
+UNION \
+select  \
+'7日' as period,t.* \
+from  \
+( \
+select  \
+pageurl  \
+,deviceos  \
+,ismp  \
+,case when  \
+      mpversion in (0,'')  \
+      or mpversion is null then '无' \
+      else mpversion end mpversion \
+,appversion  \
+,count(deviceudid) PV \
+,count(distinct deviceudid) UV \
+from \
+lofter.dwd_evt_webview_index_di  \
+where  \
+dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+and pageurl like '%lofter%' \
+group by  \
+pageurl \
+,deviceos \
+,ismp  \
+,case when  \
+      mpversion in (0,'')  \
+      or mpversion is null then '无' \
+      else mpversion end  \
+,appversion \
+) t \
+where PV >= 2 \

@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_device_type_180d_di partition(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT \
+                  userid, \
+                  appchannel \
+              FROM \
+                  ( \
+                      SELECT \
+                          userid, \
+                          appchannel, \
+                          row_number() OVER ( \
+                              PARTITION BY \
+                                  userid \
+                              ORDER BY \
+                                  dt DESC \
+                          ) AS rn \
+                      FROM \
+                          ( \
+                              SELECT \
+                                  t.dt, \
+                                  uid AS userid, \
+                                  CASE \
+                                      WHEN lower(ch) rlike '.*小米.*' THEN '小米' \
+                                      WHEN lower(ch) rlike '.*华为.*' THEN '华为' \
+                                      WHEN lower(ch) rlike '.*荣耀.*' THEN '荣耀' \
+                                      WHEN lower(ch) rlike '.*oppo.*' THEN 'OPPO' \
+                                      WHEN lower(ch) rlike '.*vivo.*' THEN 'vivo' \
+                                      WHEN lower(ch) rlike '.*魅族.*' THEN '魅族' \
+                                      WHEN lower(ch) rlike '.*appstore.*' THEN 'ios' \
+                                  END AS appchannel \
+                              FROM \
+                                  lofter.device_active t \
+                                  LATERAL VIEW explode(userids) u AS uid \
+                                  LATERAL VIEW explode(appchannels) c AS ch \
+                              WHERE \
+                                  t.dt >= date_sub('${azkaban.flow.1.days.ago}', 180) \
+                                  and t.dt <= '${azkaban.flow.1.days.ago}' \
+                                  AND uid IS NOT NULL \
+                                  AND ch IS NOT NULL \
+                                  AND lower(ch) rlike '.*(小米|华为|荣耀|oppo|vivo|魅族|appstore).*' \
+                          ) s \
+                  ) x \
+              WHERE \
+                  rn = 1

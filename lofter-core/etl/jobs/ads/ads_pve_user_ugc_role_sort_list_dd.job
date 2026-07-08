@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE lofter_dm.ads_pve_user_ugc_role_sort_list_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT roleId, \
+       roleName, \
+       tags, \
+       ROW_NUMBER() OVER(ORDER BY 7d_amount DESC) AS rank \
+FROM ( \
+    SELECT t1.roleId, \
+           t1.7d_amount, \
+           t2.roleName, \
+           t2.tags, \
+           t2.topType \
+    FROM ( \
+        SELECT roleId, \
+               7d_amount  \
+        FROM lofter.dws_pve_roles_amount_info_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND roleType = 4 \
+    ) t1 \
+    JOIN \
+    ( \
+        SELECT id, \
+               roleName, \
+               split(backendtags, ',') as tags, \
+               CASE WHEN id IN (17725888,17727722,17714257,17725893,17718046,17718047,17725892,17726947,17721008,17714258,17725889,17726949,17725894,17720007,17714260,17718051,17730552,17718058,17721009,17727725,17715974,17715063,17730548,17730555,17715064,17715066,17727729,17714261,17721006,17715975,17726948,17715067,17727720,17725890,17730553,17720005,17718054,17730551,17727724,17714259,17727728,17721010,17718057,17721013,17714262,17727719,17720004,17730547,17718048,17730546,17727721,17715069,17730550,17725887,17721012,17718059,17718056,17730554,17718049,17718053,17715070,17727727,17715060,17721011,17718050,17715057,17730549,17720006,17718055,17715068,17727723,17715058,17730545,17715061,17727726,17718052,17725891,17727730,17715065,17715062,17730556,17715059,17726950,17718060) \
+                    THEN 1 \
+                    ELSE 0 \
+               END AS topType \
+        FROM lofter_db_dump.ods_db_pve_role_info_nd \
+        WHERE status = 1 AND publicview IN (0,1) AND type = 4 \
+    ) t2 \
+    ON t1.roleId = t2.id \
+) tmp1
+dependencies=

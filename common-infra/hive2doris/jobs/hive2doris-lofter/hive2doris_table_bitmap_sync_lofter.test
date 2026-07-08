@@ -1,0 +1,10 @@
+execution-jar=${classpath}
+class=com.netease.yuanqi.doris.synchronizer.Hive2DorisBitmapSynchronizer
+conf.spark.source.query="select dt, tag, grp, bitmap as bitmap1, bitmap as bitmap2 from lofter_dm.ads_post_tag_group_level1_bitmap_dd where dt = '${azkaban.flow.1.days.ago}' and tag is not null and grp is not null limit 1000"
+params=--doris-db lofter --doris-table user_portrait_datas_bitmap --bitmap-col bitmap1,bitmap2 --mode string --partition 2026-04-20 --parallel 10
+retries=0
+dependencies=
+
+
+
+

@@ -1,0 +1,104 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_active_user_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+base_date, \
+period, \
+COALESCE(new_flag, 2) as new_flag, \
+active_uv, \
+active_uv_1d, \
+active_uv_2d, \
+active_uv_3d, \
+active_uv_7d, \
+active_uv_15d, \
+active_uv_30d, \
+is_anonymity \
+from \
+( \
+select \
+t1.dt as base_date, \
+datediff('${azkaban.flow.1.days.ago}', t1.dt) as period, \
+CASE \
+WHEN t1.dt > t2.register_date THEN 0 \
+ELSE 1 \
+END AS new_flag, \
+t1.is_anonymity, \
+count( \
+distinct case \
+when t1.user_id > 0 then t1.user_id \
+else null \
+end \
+) as active_uv, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 0) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (0) then t3.user_id \
+end \
+) as active_uv_1d, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 1) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (1) then t3.user_id \
+end \
+) as active_uv_2d, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 2) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (2) then t3.user_id \
+end \
+) as active_uv_3d, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 6) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (6) then t3.user_id \
+end \
+) as active_uv_7d, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 14) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (14) then t3.user_id \
+end \
+) as active_uv_15d, \
+count( \
+distinct case \
+when t1.user_id > 0 \
+and t3.dt = date_add(t1.dt, 29) \
+and datediff('${azkaban.flow.1.days.ago}', t1.dt) in (29) then t3.user_id \
+end \
+) as active_uv_30d \
+from \
+( \
+select dt,user_id,nvl(is_anonymity,'N') as is_anonymity \
+from vc.dwd_vc_user_active_i_d  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+select user_id,register_date \
+from vc.dim_vc_user_info_a_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+) t2 on t1.user_id = t2.user_id \
+left join ( \
+select dt,user_id \
+from vc.dwd_vc_user_active_i_d  \
+where dt BETWEEN '${azkaban.flow.30.days.ago}' \
+AND '${azkaban.flow.1.days.ago}' \
+) t3 on t1.user_id = t3.user_id \
+AND t3.dt BETWEEN date_add(t1.dt, 0) \
+AND date_add(t1.dt, 30) \
+WHERE \
+datediff('${azkaban.flow.1.days.ago}', t1.dt) IN (0, 1, 2, 6, 14, 29) \
+group by \
+t1.dt, \
+datediff('${azkaban.flow.1.days.ago}', t1.dt), \
+CASE WHEN t1.dt > t2.register_date THEN 0 ELSE 1 END, \
+t1.is_anonymity \
+grouping sets( \
+(t1.dt,datediff('${azkaban.flow.1.days.ago}', t1.dt),CASE WHEN t1.dt > t2.register_date THEN 0 ELSE 1 END,t1.is_anonymity), \
+(t1.dt,datediff('${azkaban.flow.1.days.ago}', t1.dt),t1.is_anonymity) \
+) \
+) \

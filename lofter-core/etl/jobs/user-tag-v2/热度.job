@@ -1,0 +1,99 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 热度 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '热度'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '热度' as tag, 'DAY_7' as cat, \
+                                         case when hot < 50 then '1-50' \
+                                               when hot < 100 then '50-100' \
+                                               when hot < 200 then '100-200' \
+                                               when hot < 500 then '200-500' \
+                                               when hot < 1000 then '500-1k' \
+                                               when hot < 2000 then '1k-2k' \
+                                               when hot < 5000 then '2k-5k' \
+                                               when hot < 10000 then '5k-1w' \
+                                               when hot < 30000 then '1w-3w' \
+                                               when hot < 50000 then '3w-5w' \
+                                               when hot < 100000 then '5w-10w' \
+                                               else '10w及以上' end as grp \
+                                  from ( \
+                                      select userId, \
+                                        nvl(receive_like_cnt_7d,0)+nvl(receive_reproduce_cnt_7d,0)+nvl(receive_recommend_cnt_7d,0)+nvl(receive_collect_cnt_7d,0) as hot \
+                                      from lofter.dws_par_creator_interaction_dd \
+                                      where dt = '${azkaban.flow.1.days.ago}' \
+                                  ) t \
+                                  where hot > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '热度' as tag, 'DAY_15' as cat, \
+                                          case when hot < 50 then '1-50' \
+                                               when hot < 100 then '50-100' \
+                                               when hot < 200 then '100-200' \
+                                               when hot < 500 then '200-500' \
+                                               when hot < 1000 then '500-1k' \
+                                               when hot < 2000 then '1k-2k' \
+                                               when hot < 5000 then '2k-5k' \
+                                               when hot < 10000 then '5k-1w' \
+                                               when hot < 30000 then '1w-3w' \
+                                               when hot < 50000 then '3w-5w' \
+                                               when hot < 100000 then '5w-10w' \
+                                               else '10w及以上' end as grp \
+                                  from ( \
+                                      select userId, \
+                                        nvl(receive_like_cnt_15d,0)+nvl(receive_reproduce_cnt_15d,0)+nvl(receive_recommend_cnt_15d,0)+nvl(receive_collect_cnt_15d,0) as hot \
+                                      from lofter.dws_par_creator_interaction_dd \
+                                      where dt = '${azkaban.flow.1.days.ago}' \
+                                  ) t \
+                                  where hot > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '热度' as tag, 'DAY_30' as cat, \
+                                          case when hot < 50 then '1-50' \
+                                               when hot < 100 then '50-100' \
+                                               when hot < 200 then '100-200' \
+                                               when hot < 500 then '200-500' \
+                                               when hot < 1000 then '500-1k' \
+                                               when hot < 2000 then '1k-2k' \
+                                               when hot < 5000 then '2k-5k' \
+                                               when hot < 10000 then '5k-1w' \
+                                               when hot < 30000 then '1w-3w' \
+                                               when hot < 50000 then '3w-5w' \
+                                               when hot < 100000 then '5w-10w' \
+                                               else '10w及以上' end as grp \
+                                  from ( \
+                                      select userId, \
+                                        nvl(receive_like_cnt_30d,0)+nvl(receive_reproduce_cnt_30d,0)+nvl(receive_recommend_cnt_30d,0)+nvl(receive_collect_cnt_30d,0) as hot \
+                                      from lofter.dws_par_creator_interaction_dd \
+                                      where dt = '${azkaban.flow.1.days.ago}' \
+                                  ) t \
+                                  where hot > 0 \
+                               \
+                                  union all \
+                                  select userId, '热度' as tag, 'DAY_ALL' as cat, \
+                                          case when hot < 50 then '1-50' \
+                                               when hot < 100 then '50-100' \
+                                               when hot < 200 then '100-200' \
+                                               when hot < 500 then '200-500' \
+                                               when hot < 1000 then '500-1k' \
+                                               when hot < 2000 then '1k-2k' \
+                                               when hot < 5000 then '2k-5k' \
+                                               when hot < 10000 then '5k-1w' \
+                                               when hot < 30000 then '1w-3w' \
+                                               when hot < 50000 then '3w-5w' \
+                                               when hot < 100000 then '5w-10w' \
+                                               else '10w及以上' end as grp \
+                                  from ( \
+                                      select userId, receive_hot_std as hot \
+                                      from lofter.dws_par_creator_interaction_dd \
+                                      where dt = '${azkaban.flow.1.days.ago}' \
+                                  ) t \
+                                  where hot > 0 ) "

@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE vc.dws_vc_user_ugc_type_talk_cnt_di PARTITION(dt = '${azkaban.flow.1.days.ago}')   \
+ \
+WITH \
+character_meta_filtered AS ( \
+    SELECT \
+        a.dt, \
+        a.character_id, \
+        a.public_scope, \
+        b.category \
+    FROM \
+        vc.dim_vc_character_info_a_d a \
+    JOIN ( \
+        SELECT \
+            category, \
+            character_name \
+        FROM \
+            vc.ods_db_vc_character_nd \
+        WHERE \
+            category IN ('原创', '游戏', '小说', '影视', '偶像') \
+        GROUP BY \
+            category, character_name \
+    ) b ON a.character_name = b.character_name \
+    WHERE \
+        a.dt = (select max(dt) from vc.dim_vc_character_info_a_d where dt <= '${azkaban.flow.1.days.ago}') \
+), \
+ \
+talk_data_filtered AS ( \
+    SELECT \
+        dt, \
+        user_id, \
+        character_id, \
+        talk_cnt \
+    FROM \
+        vc.dws_vc_uc_talk_day_cnt_single_i_d \
+    WHERE \
+        dt = '${azkaban.flow.1.days.ago}' \
+), \
+ \
+expanded_talks AS ( \
+    SELECT \
+        talk.dt, \
+        talk.user_id, \
+        talk.talk_cnt, \
+        CONCAT(meta.category, '（', suffix.type_name, '）') AS chat_type \
+    FROM \
+        talk_data_filtered talk \
+    JOIN \
+        character_meta_filtered meta \
+    ON \
+        talk.character_id = meta.character_id \
+    LATERAL VIEW explode( \
+        CASE \
+            WHEN meta.public_scope = 1 THEN array('所有角色', '公开角色') \
+            ELSE array('所有角色') \
+        END \
+    ) suffix AS type_name \
+) \
+ \
+SELECT \
+    user_id AS user_id, \
+    chat_type AS chat_type, \
+    SUM(talk_cnt) AS talk_cnt \
+ \
+FROM \
+    expanded_talks \
+GROUP BY \
+    user_id, \
+    chat_type; \
+
+dependencies=dws_vc_uc_talk_day_cnt_single_i_d

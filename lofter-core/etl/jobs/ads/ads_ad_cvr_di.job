@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_cvr_di partition (dt='${azkaban.flow.1.days.ago}') \
+              select a.advertiserId, a.campaignId, a.baseDate as new_date, \
+                  a.device_type, \
+                  count(distinct a.deviceUdid) as new_device_count, \
+                  count(distinct if(b.amount > 0, b.deviceUdid, null)) as trade_user_count, \
+                  sum(b.amount) as trade_amount, \
+                  count(distinct if(b.is_login > 0, b.deviceUdid, null)) as login_device_count \
+              from ( \
+                  select dt as baseDate, advertiserId, deviceUdid, campaignId, if(device_type='return','return_30',device_type) as device_type \
+                  from lofter.dwd_ad_growth_device_di \
+                  where appid = 'lofter' and \
+                          dt <= '${azkaban.flow.1.days.ago}' and \
+                          dt >= '${azkaban.flow.30.days.ago}' and \
+                          length(advertiserId) > 0 \
+                  group by dt, advertiserId, deviceUdid, campaignId, device_type \
+                union all \
+                    select t1.dt as baseDate, t1.advertiserId, t1.deviceudid, t1.campaignId, 'active' as device_type \
+                    from ( \
+                        select dt, \
+                               case when advertiserId is null and channel='GDT' then adid \
+                                    when advertiserId is null then subchannel else advertiserId end advertiserId, \
+                               campaignId, \
+                               deviceId customUdid, \
+                               daDeviceId deviceUdid, \
+                               row_number() over (partition by daDeviceId order by time) as rnk \
+                        from lofter.ods_log_ad_new_linkup_di \
+                        where dt <= '${azkaban.flow.1.days.ago}' and \
+                              dt >= '${azkaban.flow.30.days.ago}' \
+                    ) t1 \
+                    left join ( \
+                        select deviceUdid \
+                        from lofter.dwd_ad_growth_device_di \
+                        where appid = 'lofter' and \
+                              dt <= '${azkaban.flow.1.days.ago}' and \
+                              dt >= '${azkaban.flow.30.days.ago}' \
+                    ) t2 on t1.deviceUdid = t2.deviceUdid \
+                    where t1.rnk = 1 and t2.deviceUdid is null and \
+                          length(t1.advertiserId) > 0 \
+                    group by 1, 2, 3, 4 \
+              ) a \
+              left join ( \
+                  select a.deviceUdid, \
+                         if(sum(if(c.userId is not null, 1, 0)) > 0, 1, 0)  as is_login, \
+                         sum(b.amount) as amount \
+                  from ( \
+                      select deviceUdid, userId \
+                      from lofter.device_active \
+                           lateral view explode(userIds) as userId \
+                      where dt <= '${azkaban.flow.1.days.ago}' and \
+                            dt >= '${azkaban.flow.30.days.ago}' \
+                      group by 1, 2 \
+                  ) a \
+                  left join ( \
+                      select userId, sum(money) as amount \
+                      from lofter.dwd_user_order_dd \
+                      where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+                            pay_date >= '${azkaban.flow.30.days.ago}' and \
+                            pay_date <= '${azkaban.flow.1.days.ago}' \
+                      group by 1 \
+                  ) b on a.userId = b.userId \
+                  left join (select id as userId from lofter.dim_user where isanonymous = 0) c on a.userId = c.userId \
+                  group by 1 \
+              ) b on a.deviceUdid = b.deviceUdid \
+              group by a.advertiserId, a.campaignId, a.baseDate, a.device_type

@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01=alter table lofter.ods_log_ad_client_di add if not exists partition(dt='${azkaban.flow.current.date}');

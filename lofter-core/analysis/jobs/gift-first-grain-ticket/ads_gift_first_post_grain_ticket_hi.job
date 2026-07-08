@@ -1,0 +1,69 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_first_post_grain_ticket_hi partition(dt='${azkaban.flow.current.date}', hour = ${azkaban.flow.start.hour}) \
+select blogId, postId, auditTime, hot, openFrom, if(rk % 2 == 0, 1, 0) as is_test \
+from ( \
+    select a.blogId, a.postId, a.auditTime, b.hot, a1.openFrom, \
+           row_number() over (order by auditTime) as rk \
+    from ( \
+        select blogId, postId, auditTime,plantype \
+        from ( \
+          select blogId, postId, auditTime, reviewStatus, status,plantype, \
+                row_number() over (partition by blogId order by auditTime) as rk \
+          from ( \
+            select blogId, postId, auditTime, reviewstatus, status, plantype \
+            from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+            where status in (1, -1) and \
+                  from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') < '${azkaban.flow.1.days.ago}' \
+          union all \
+              select blogId, postId, auditTime, reviewstatus, status, plantype \
+              from ( \
+                select blogId, postId, auditTime, reviewstatus, status, plantype, _bin_op, \
+                    row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) rk \
+                from lofter.ods_binlog_trade_return_gift_plan_di \
+                where dt >= '${azkaban.flow.1.days.ago}' \
+              ) t \
+              where _bin_op != 1 and rk = 1 and status in (1, -1) \
+          ) tt \
+        ) ttt \
+        where rk = 1 and reviewStatus in (0, 1, -1) and status = 1 and plantype not in (102001,101001,10003,100001) and \
+           (unix_timestamp() -  auditTime/1000) > 12 * 3600 and \
+           (unix_timestamp() -  auditTime/1000) < 24 * 3600 \
+    ) a \
+    join ( \
+        select userId, openFrom \
+        from lofter.ods_binlog_trade_gift_pay_account_di \
+        where dt >= '${azkaban.flow.2.days.ago}' and status = 2 and _bin_op <> 1 \
+        union \
+        select userId, openFrom \
+        from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+        where status = 2 \
+    ) a1 on a.blogId = a1.userId \
+    join ( \
+        select postId, count(1) as hot \
+        from ( \
+          select id, postId, _bin_op, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+          from lofter.ods_binlog_post_hot_di \
+          where dt >= '${azkaban.flow.2.days.ago}' \
+        ) t \
+        where rk = 1 and _bin_op != 1 \
+        group by 1 \
+        having hot >= 10 \
+    ) b on a.postId = b.postId \
+    left join ( \
+        select postId \
+        from lofter.ods_binlog_trade_gift_present_record_di \
+        where dt >= '${azkaban.flow.2.days.ago}' and giftId <> 3001 \
+        group by 1 \
+      union \
+        select postId \
+        from lofter.ods_binlog_trade_return_gift_exchange_record_di \
+        where dt >= '${azkaban.flow.2.days.ago}' \
+        group by 1 \
+    ) c on a.postId = c.postId \
+    left join ( \
+        select blogId \
+        from lofter_dm.ads_gift_first_post_grain_ticket_hi \
+        where dt < '${azkaban.flow.current.date}' or ( dt = '${azkaban.flow.current.date}' and hour < ${azkaban.flow.start.hour}) \
+    ) d on a.blogId = d.blogId \
+    where c.postId is null and d.blogId is null \
+) t \

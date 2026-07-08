@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select tag as id, tag, `type` from lofter_dm.ads_anti_spam_tag_classification_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --dest risk_tag_level --update --url lofter-risk-es1.gy.ntes:7000,lofter-risk-es2.gy.ntes:7000,lofter-risk-es3.gy.ntes:7000 --username lofter_risk_online --password 67pg4UmF7F

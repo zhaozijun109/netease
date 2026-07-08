@@ -1,0 +1,136 @@
+type=sparksql
+hive.query.01=\
+WITH tag_source AS ( \
+    SELECT tag AS clean_tag, type \
+    FROM lofter_db_dump.ods_db_challenge_tag_nd \
+    WHERE status = 1 AND type IN (1, 2) \
+    GROUP BY 1, 2 \
+ \
+    UNION ALL  \
+ \
+    SELECT tagname AS clean_tag, 2 AS type \
+    FROM lofter_db_dump.ods_db_tag_resource_nd \
+    WHERE tagname IN ('公嬷挑战','互相禁用绘画功能挑战','“你”的构成','小猫影子','奶龙气球','网恋奔现','限制100笔绘画挑战','剪衣挑战','流泪问卷','4杯咖啡5个领导','哭哭眼镜','互相禁用写作功能挑战','CP差异问卷','网恋奔现','我不是天才吗','我的生活组成')  \
+      AND movefrom LIKE '内部打标:Cmb%' \
+    GROUP BY 1 \
+), \
+user_role AS ( \
+    SELECT  \
+        userId,  \
+        id AS postId,  \
+        tag AS role_tag, \
+        publishdate \
+    FROM lofter.dim_post \
+    LATERAL VIEW EXPLODE(tags) t AS tag \
+    WHERE valid = 0 AND contenttype in ('图片','视频') \
+      AND tag IN (SELECT clean_tag FROM tag_source WHERE type = 1) \
+    GROUP BY userId, id, tag, publishdate \
+), \
+user_challenge AS ( \
+    SELECT  \
+        userId,  \
+        id AS postId,  \
+        tag AS challenge_tag \
+    FROM lofter.dim_post \
+    LATERAL VIEW EXPLODE(tags) t AS tag \
+    WHERE valid = 0 AND contenttype in ('图片','视频') \
+      AND tag IN (SELECT clean_tag FROM tag_source WHERE type = 2) \
+    GROUP BY userId, id, tag \
+), \
+user_tag AS ( \
+    SELECT  \
+        r.userId, \
+        r.postId, \
+        r.role_tag, \
+        c.challenge_tag, \
+        r.publishdate \
+    FROM user_role r \
+    JOIN user_challenge c  \
+        ON r.postId = c.postId  \
+        AND r.userId = c.userId \
+), \
+most_hot as( \
+    select role_tag, challenge_tag, postId, blogId \
+    from( \
+        select role_tag, challenge_tag, a.postId, a.blogId, nvl(hot_cnt,0), row_number() over(partition by role_tag, challenge_tag order by nvl(hot_cnt,0) desc ) as rn \
+        from( \
+            select role_tag, challenge_tag, postId, userId as blogId \
+            from user_tag \
+        )a \
+        left join( \
+            select postId, blogId, count(1) as hot_cnt \
+            from lofter.dwd_post_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and userid <> blogId \
+            group by postId, blogId \
+        )b \
+        on a.postId = b.postId and a.blogId = b.blogId \
+    ) \
+    where rn = 1 \
+), \
+role_ranking AS ( \
+    SELECT  \
+        role_tag, \
+        joinCount, \
+        ROW_NUMBER() OVER(ORDER BY joinCount DESC) AS rn \
+    FROM ( \
+        SELECT  \
+            role_tag, \
+            COUNT(userId) AS joinCount \
+        FROM user_tag \
+        GROUP BY role_tag \
+    ) \
+), \
+challenge_ranking AS ( \
+    SELECT  \
+        role_tag, \
+        challenge_tag, \
+        challenge_join_cnt, \
+        hotest_postId, \
+        hotest_blogId, \
+        ROW_NUMBER() OVER( \
+            PARTITION BY role_tag \
+            ORDER BY challenge_join_cnt_24h DESC \
+        ) AS challenge_rank \
+    FROM ( \
+        select a.role_tag, a.challenge_tag, challenge_join_cnt, challenge_join_cnt_24h, postId as hotest_postId, blogId as hotest_blogId \
+        from( \
+            SELECT  \
+                role_tag, \
+                challenge_tag, \
+                COUNT(DISTINCT postId) AS challenge_join_cnt, \
+                COUNT(DISTINCT IF(publishdate = '${azkaban.flow.1.days.ago}', postId, NULL)) AS challenge_join_cnt_24h \
+            FROM user_tag \
+            GROUP BY role_tag, challenge_tag \
+        )a \
+        left join most_hot b on a.role_tag = b.role_tag and a.challenge_tag = b.challenge_tag \
+    ) \
+    order by role_tag, challenge_rank \
+), \
+top_challenges AS ( \
+    SELECT  \
+        role_tag, \
+        CAST(TO_JSON( \
+            COLLECT_LIST( \
+                NAMED_STRUCT( \
+                    'challengeTag', challenge_tag, \
+                    'joinCount', challenge_join_cnt, \
+                    'hotPostId', hotest_postId, \
+                    'hotBlogId', hotest_blogId \
+                ) \
+            ) \
+        ) AS STRING) AS challenge_info \
+    FROM challenge_ranking \
+    WHERE challenge_rank <= 3 \
+    GROUP BY role_tag \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_summer_act_role_challenge_list_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    r.role_tag, \
+    r.joinCount, \
+    r.rn AS listRank, \
+    t.challenge_info AS challengeTags, \
+    12 AS listName, \
+    '角色挑战榜' AS source \
+FROM role_ranking r \
+JOIN top_challenges t ON r.role_tag = t.role_tag \
+WHERE r.rn <= 50

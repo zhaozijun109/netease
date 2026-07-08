@@ -1,0 +1,15 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "LiveEvent",
+  "fields": [
+    {"name": "behavior", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "liveId", "type": "long"},
+    {"name": "opTime", "type": "long"},
+    {"name": "followBlogId", "type": "long"},
+    {"name": "opType", "type": "string"},
+    {"name": "duration", "type": "long"},
+    {"name": "Ip", "type": "string"}
+  ]
+}

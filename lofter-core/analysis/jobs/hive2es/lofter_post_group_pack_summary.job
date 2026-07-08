@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query=" \
+    select packId as id, packId,hot,growth_level_max,explosive_level_max,post_count,new_users,new_users_30d,new_users_7d,new_users_1d,pay_users, \
+           pay_users_gift,pay_users_fans,pay_users_vip,pay_amount,pay_amount_gift,pay_amount_fans,pay_amount_vip,pay_users_cvr, \
+           pay_users_cvr_gift,pay_users_cvr_fans,pay_users_cvr_vip,expose,paid_post_expose,paid_post_click,real_browse,dt \
+    from lofter_dm.ads_post_group_summary_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+union all \
+    select concat(packId, '_', base_date) as id, packId,hot,growth_level_max,explosive_level_max,post_count,new_users,new_users_30d,new_users_7d,new_users_1d,pay_users, \
+           pay_users_gift,pay_users_fans,pay_users_vip,pay_amount,pay_amount_gift,pay_amount_fans,pay_amount_vip,pay_users_cvr, \
+           pay_users_cvr_gift,pay_users_cvr_fans,pay_users_cvr_vip,expose,paid_post_expose,paid_post_click,real_browse, base_date as dt \
+    from lofter_dm.ads_post_group_summary_backfill_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_post_group_pack_summary --atom

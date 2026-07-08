@@ -1,0 +1,1027 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=100
+hive.query.01=insert overwrite table lofter_dm.ads_post_tag_group_level2_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, tag, cat, grp \
+from ( \
+    select id as postId, 'ALL' as tag, 'ALL' as cat, '1' as grp \
+    from lofter.dim_post \
+    where isPublished=true and isCitedPost = false \
+  union all \
+    select postId, '互动量' as tag, 'DAY_1' as cat, \
+           case when hd_pv < 50 then '1-50' \
+                when hd_pv < 100 then '50-100' \
+                when hd_pv < 200 then '100-200' \
+                when hd_pv < 500 then '200-500' \
+                when hd_pv < 1000 then '500-1k' \
+                when hd_pv < 2000 then '1k-2k' \
+                when hd_pv < 5000 then '2k-5k' \
+                when hd_pv < 10000 then '5k-1w' \
+                when hd_pv < 30000 then '1w-3w' \
+                when hd_pv < 50000 then '3w-5w' \
+                when hd_pv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from ( \
+        select postId, nvl(hot_pv,0) + nvl(response_pv,0) + nvl(share_pv,0) as hd_pv \
+        from lofter.dws_post_interaction_di \
+        where dt = '${azkaban.flow.1.days.ago}' and (nvl(hot_pv,0) + nvl(response_pv,0) + nvl(share_pv,0)) > 0 \
+    ) t \
+    where hd_pv > 0 \
+  union all \
+    select postId, '互动量' as tag, 'DAY_7' as cat, \
+           case when hd_pv < 50 then '1-50' \
+                when hd_pv < 100 then '50-100' \
+                when hd_pv < 200 then '100-200' \
+                when hd_pv < 500 then '200-500' \
+                when hd_pv < 1000 then '500-1k' \
+                when hd_pv < 2000 then '1k-2k' \
+                when hd_pv < 5000 then '2k-5k' \
+                when hd_pv < 10000 then '5k-1w' \
+                when hd_pv < 30000 then '1w-3w' \
+                when hd_pv < 50000 then '3w-5w' \
+                when hd_pv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from ( \
+        select postId, nvl(hot_7d,0) + nvl(comment_cnt_7d,0) + nvl(share_cnt_7d,0) as hd_pv \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (nvl(hot_7d,0) + nvl(comment_cnt_7d,0) + nvl(share_cnt_7d,0)) > 0 \
+    ) t \
+    where hd_pv > 0 \
+  union all \
+    select postId, '互动量' as tag, 'DAY_15' as cat, \
+           case when hd_pv < 50 then '1-50' \
+                when hd_pv < 100 then '50-100' \
+                when hd_pv < 200 then '100-200' \
+                when hd_pv < 500 then '200-500' \
+                when hd_pv < 1000 then '500-1k' \
+                when hd_pv < 2000 then '1k-2k' \
+                when hd_pv < 5000 then '2k-5k' \
+                when hd_pv < 10000 then '5k-1w' \
+                when hd_pv < 30000 then '1w-3w' \
+                when hd_pv < 50000 then '3w-5w' \
+                when hd_pv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from ( \
+        select postId, nvl(hot_15d,0) + nvl(comment_cnt_15d,0) + nvl(share_cnt_15d,0) as hd_pv \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (nvl(hot_15d,0) + nvl(comment_cnt_15d,0) + nvl(share_cnt_15d,0)) > 0 \
+    ) t \
+    where hd_pv > 0 \
+  union all \
+    select postId, '互动量' as tag, 'DAY_30' as cat, \
+           case when hd_pv < 50 then '1-50' \
+                when hd_pv < 100 then '50-100' \
+                when hd_pv < 200 then '100-200' \
+                when hd_pv < 500 then '200-500' \
+                when hd_pv < 1000 then '500-1k' \
+                when hd_pv < 2000 then '1k-2k' \
+                when hd_pv < 5000 then '2k-5k' \
+                when hd_pv < 10000 then '5k-1w' \
+                when hd_pv < 30000 then '1w-3w' \
+                when hd_pv < 50000 then '3w-5w' \
+                when hd_pv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from ( \
+        select postId, nvl(hot_30d,0) + nvl(comment_cnt_30d,0) + nvl(share_cnt_30d,0) as hd_pv \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (nvl(hot_30d,0) + nvl(comment_cnt_30d,0) + nvl(share_cnt_30d,0)) > 0 \
+    ) t \
+    where hd_pv > 0 \
+  union all \
+    select postId, '收藏量' as tag, 'DAY_1' as cat, \
+           case when collect_cnt_1d < 50 then '1-50' \
+                when collect_cnt_1d < 100 then '50-100' \
+                when collect_cnt_1d < 200 then '100-200' \
+                when collect_cnt_1d < 500 then '200-500' \
+                when collect_cnt_1d < 1000 then '500-1k' \
+                when collect_cnt_1d < 2000 then '1k-2k' \
+                when collect_cnt_1d < 5000 then '2k-5k' \
+                when collect_cnt_1d < 10000 then '5k-1w' \
+                when collect_cnt_1d < 30000 then '1w-3w' \
+                when collect_cnt_1d < 50000 then '3w-5w' \
+                when collect_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and collect_cnt_1d > 0 \
+  union all \
+    select postId, '收藏量' as tag, 'DAY_7' as cat, \
+           case when collect_cnt_7d < 50 then '1-50' \
+                when collect_cnt_7d < 100 then '50-100' \
+                when collect_cnt_7d < 200 then '100-200' \
+                when collect_cnt_7d < 500 then '200-500' \
+                when collect_cnt_7d < 1000 then '500-1k' \
+                when collect_cnt_7d < 2000 then '1k-2k' \
+                when collect_cnt_7d < 5000 then '2k-5k' \
+                when collect_cnt_7d < 10000 then '5k-1w' \
+                when collect_cnt_7d < 30000 then '1w-3w' \
+                when collect_cnt_7d < 50000 then '3w-5w' \
+                when collect_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and collect_cnt_7d > 0 \
+  union all \
+    select postId, '收藏量' as tag, 'DAY_15' as cat, \
+           case when collect_cnt_15d < 50 then '1-50' \
+                when collect_cnt_15d < 100 then '50-100' \
+                when collect_cnt_15d < 200 then '100-200' \
+                when collect_cnt_15d < 500 then '200-500' \
+                when collect_cnt_15d < 1000 then '500-1k' \
+                when collect_cnt_15d < 2000 then '1k-2k' \
+                when collect_cnt_15d < 5000 then '2k-5k' \
+                when collect_cnt_15d < 10000 then '5k-1w' \
+                when collect_cnt_15d < 30000 then '1w-3w' \
+                when collect_cnt_15d < 50000 then '3w-5w' \
+                when collect_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and collect_cnt_15d > 0 \
+  union all \
+    select postId, '收藏量' as tag, 'DAY_30' as cat, \
+           case when collect_cnt_30d < 50 then '1-50' \
+                when collect_cnt_30d < 100 then '50-100' \
+                when collect_cnt_30d < 200 then '100-200' \
+                when collect_cnt_30d < 500 then '200-500' \
+                when collect_cnt_30d < 1000 then '500-1k' \
+                when collect_cnt_30d < 2000 then '1k-2k' \
+                when collect_cnt_30d < 5000 then '2k-5k' \
+                when collect_cnt_30d < 10000 then '5k-1w' \
+                when collect_cnt_30d < 30000 then '1w-3w' \
+                when collect_cnt_30d < 50000 then '3w-5w' \
+                when collect_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and collect_cnt_30d > 0 \
+  union all \
+    select postId, '收藏量' as tag, 'DAY_ALL' as cat, \
+           case when collect_cnt < 50 then '1-50' \
+                when collect_cnt < 100 then '50-100' \
+                when collect_cnt < 200 then '100-200' \
+                when collect_cnt < 500 then '200-500' \
+                when collect_cnt < 1000 then '500-1k' \
+                when collect_cnt < 2000 then '1k-2k' \
+                when collect_cnt < 5000 then '2k-5k' \
+                when collect_cnt < 10000 then '5k-1w' \
+                when collect_cnt < 30000 then '1w-3w' \
+                when collect_cnt < 50000 then '3w-5w' \
+                when collect_cnt < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and collect_cnt > 0 \
+  union all \
+    select postId, '分享量' as tag, 'DAY_1' as cat, \
+           case when share_cnt_1d < 50 then '1-50' \
+                when share_cnt_1d < 100 then '50-100' \
+                when share_cnt_1d < 200 then '100-200' \
+                when share_cnt_1d < 500 then '200-500' \
+                when share_cnt_1d < 1000 then '500-1k' \
+                when share_cnt_1d < 2000 then '1k-2k' \
+                when share_cnt_1d < 5000 then '2k-5k' \
+                when share_cnt_1d < 10000 then '5k-1w' \
+                when share_cnt_1d < 30000 then '1w-3w' \
+                when share_cnt_1d < 50000 then '3w-5w' \
+                when share_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and share_cnt_1d > 0 \
+  union all \
+    select postId, '分享量' as tag, 'DAY_7' as cat, \
+           case when share_cnt_7d < 50 then '1-50' \
+                when share_cnt_7d < 100 then '50-100' \
+                when share_cnt_7d < 200 then '100-200' \
+                when share_cnt_7d < 500 then '200-500' \
+                when share_cnt_7d < 1000 then '500-1k' \
+                when share_cnt_7d < 2000 then '1k-2k' \
+                when share_cnt_7d < 5000 then '2k-5k' \
+                when share_cnt_7d < 10000 then '5k-1w' \
+                when share_cnt_7d < 30000 then '1w-3w' \
+                when share_cnt_7d < 50000 then '3w-5w' \
+                when share_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and share_cnt_7d > 0 \
+  union all \
+    select postId, '分享量' as tag, 'DAY_15' as cat, \
+           case when share_cnt_15d < 50 then '1-50' \
+                when share_cnt_15d < 100 then '50-100' \
+                when share_cnt_15d < 200 then '100-200' \
+                when share_cnt_15d < 500 then '200-500' \
+                when share_cnt_15d < 1000 then '500-1k' \
+                when share_cnt_15d < 2000 then '1k-2k' \
+                when share_cnt_15d < 5000 then '2k-5k' \
+                when share_cnt_15d < 10000 then '5k-1w' \
+                when share_cnt_15d < 30000 then '1w-3w' \
+                when share_cnt_15d < 50000 then '3w-5w' \
+                when share_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and share_cnt_15d > 0 \
+  union all \
+    select postId, '分享量' as tag, 'DAY_30' as cat, \
+           case when share_cnt_30d < 50 then '1-50' \
+                when share_cnt_30d < 100 then '50-100' \
+                when share_cnt_30d < 200 then '100-200' \
+                when share_cnt_30d < 500 then '200-500' \
+                when share_cnt_30d < 1000 then '500-1k' \
+                when share_cnt_30d < 2000 then '1k-2k' \
+                when share_cnt_30d < 5000 then '2k-5k' \
+                when share_cnt_30d < 10000 then '5k-1w' \
+                when share_cnt_30d < 30000 then '1w-3w' \
+                when share_cnt_30d < 50000 then '3w-5w' \
+                when share_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and share_cnt_30d > 0 \
+  union all \
+    select postId, '分享量' as tag, 'DAY_ALL' as cat, \
+           case when sharePv < 50 then '1-50' \
+                when sharePv < 100 then '50-100' \
+                when sharePv < 200 then '100-200' \
+                when sharePv < 500 then '200-500' \
+                when sharePv < 1000 then '500-1k' \
+                when sharePv < 2000 then '1k-2k' \
+                when sharePv < 5000 then '2k-5k' \
+                when sharePv < 10000 then '5k-1w' \
+                when sharePv < 30000 then '1w-3w' \
+                when sharePv < 50000 then '3w-5w' \
+                when sharePv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and sharePv > 0 \
+  union all \
+    select postId, '点赞量' as tag, 'DAY_1' as cat, \
+           case when like_cnt_1d < 50 then '1-50' \
+                when like_cnt_1d < 100 then '50-100' \
+                when like_cnt_1d < 200 then '100-200' \
+                when like_cnt_1d < 500 then '200-500' \
+                when like_cnt_1d < 1000 then '500-1k' \
+                when like_cnt_1d < 2000 then '1k-2k' \
+                when like_cnt_1d < 5000 then '2k-5k' \
+                when like_cnt_1d < 10000 then '5k-1w' \
+                when like_cnt_1d < 30000 then '1w-3w' \
+                when like_cnt_1d < 50000 then '3w-5w' \
+                when like_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and like_cnt_1d > 0 \
+  union all \
+    select postId, '点赞量' as tag, 'DAY_7' as cat, \
+           case when like_cnt_7d < 50 then '1-50' \
+                when like_cnt_7d < 100 then '50-100' \
+                when like_cnt_7d < 200 then '100-200' \
+                when like_cnt_7d < 500 then '200-500' \
+                when like_cnt_7d < 1000 then '500-1k' \
+                when like_cnt_7d < 2000 then '1k-2k' \
+                when like_cnt_7d < 5000 then '2k-5k' \
+                when like_cnt_7d < 10000 then '5k-1w' \
+                when like_cnt_7d < 30000 then '1w-3w' \
+                when like_cnt_7d < 50000 then '3w-5w' \
+                when like_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and like_cnt_7d > 0 \
+  union all \
+    select postId, '点赞量' as tag, 'DAY_15' as cat, \
+           case when like_cnt_15d < 50 then '1-50' \
+                when like_cnt_15d < 100 then '50-100' \
+                when like_cnt_15d < 200 then '100-200' \
+                when like_cnt_15d < 500 then '200-500' \
+                when like_cnt_15d < 1000 then '500-1k' \
+                when like_cnt_15d < 2000 then '1k-2k' \
+                when like_cnt_15d < 5000 then '2k-5k' \
+                when like_cnt_15d < 10000 then '5k-1w' \
+                when like_cnt_15d < 30000 then '1w-3w' \
+                when like_cnt_15d < 50000 then '3w-5w' \
+                when like_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and like_cnt_15d > 0 \
+  union all \
+    select postId, '点赞量' as tag, 'DAY_30' as cat, \
+           case when like_cnt_30d < 50 then '1-50' \
+                when like_cnt_30d < 100 then '50-100' \
+                when like_cnt_30d < 200 then '100-200' \
+                when like_cnt_30d < 500 then '200-500' \
+                when like_cnt_30d < 1000 then '500-1k' \
+                when like_cnt_30d < 2000 then '1k-2k' \
+                when like_cnt_30d < 5000 then '2k-5k' \
+                when like_cnt_30d < 10000 then '5k-1w' \
+                when like_cnt_30d < 30000 then '1w-3w' \
+                when like_cnt_30d < 50000 then '3w-5w' \
+                when like_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and like_cnt_30d > 0 \
+  union all \
+    select postId, '点赞量' as tag, 'DAY_ALL' as cat, \
+           case when like_cnt < 50 then '1-50' \
+                when like_cnt < 100 then '50-100' \
+                when like_cnt < 200 then '100-200' \
+                when like_cnt < 500 then '200-500' \
+                when like_cnt < 1000 then '500-1k' \
+                when like_cnt < 2000 then '1k-2k' \
+                when like_cnt < 5000 then '2k-5k' \
+                when like_cnt < 10000 then '5k-1w' \
+                when like_cnt < 30000 then '1w-3w' \
+                when like_cnt < 50000 then '3w-5w' \
+                when like_cnt < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and like_cnt > 0 \
+  union all \
+    select postId, '推荐量' as tag, 'DAY_1' as cat, \
+           case when recommend_cnt_1d < 50 then '1-50' \
+                when recommend_cnt_1d < 100 then '50-100' \
+                when recommend_cnt_1d < 200 then '100-200' \
+                when recommend_cnt_1d < 500 then '200-500' \
+                when recommend_cnt_1d < 1000 then '500-1k' \
+                when recommend_cnt_1d < 2000 then '1k-2k' \
+                when recommend_cnt_1d < 5000 then '2k-5k' \
+                when recommend_cnt_1d < 10000 then '5k-1w' \
+                when recommend_cnt_1d < 30000 then '1w-3w' \
+                when recommend_cnt_1d < 50000 then '3w-5w' \
+                when recommend_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and recommend_cnt_1d > 0 \
+  union all \
+    select postId, '推荐量' as tag, 'DAY_7' as cat, \
+           case when recommend_cnt_7d < 50 then '1-50' \
+                when recommend_cnt_7d < 100 then '50-100' \
+                when recommend_cnt_7d < 200 then '100-200' \
+                when recommend_cnt_7d < 500 then '200-500' \
+                when recommend_cnt_7d < 1000 then '500-1k' \
+                when recommend_cnt_7d < 2000 then '1k-2k' \
+                when recommend_cnt_7d < 5000 then '2k-5k' \
+                when recommend_cnt_7d < 10000 then '5k-1w' \
+                when recommend_cnt_7d < 30000 then '1w-3w' \
+                when recommend_cnt_7d < 50000 then '3w-5w' \
+                when recommend_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and recommend_cnt_7d > 0 \
+  union all \
+    select postId, '推荐量' as tag, 'DAY_15' as cat, \
+           case when recommend_cnt_15d < 50 then '1-50' \
+                when recommend_cnt_15d < 100 then '50-100' \
+                when recommend_cnt_15d < 200 then '100-200' \
+                when recommend_cnt_15d < 500 then '200-500' \
+                when recommend_cnt_15d < 1000 then '500-1k' \
+                when recommend_cnt_15d < 2000 then '1k-2k' \
+                when recommend_cnt_15d < 5000 then '2k-5k' \
+                when recommend_cnt_15d < 10000 then '5k-1w' \
+                when recommend_cnt_15d < 30000 then '1w-3w' \
+                when recommend_cnt_15d < 50000 then '3w-5w' \
+                when recommend_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and recommend_cnt_15d > 0 \
+  union all \
+    select postId, '推荐量' as tag, 'DAY_30' as cat, \
+           case when recommend_cnt_30d < 50 then '1-50' \
+                when recommend_cnt_30d < 100 then '50-100' \
+                when recommend_cnt_30d < 200 then '100-200' \
+                when recommend_cnt_30d < 500 then '200-500' \
+                when recommend_cnt_30d < 1000 then '500-1k' \
+                when recommend_cnt_30d < 2000 then '1k-2k' \
+                when recommend_cnt_30d < 5000 then '2k-5k' \
+                when recommend_cnt_30d < 10000 then '5k-1w' \
+                when recommend_cnt_30d < 30000 then '1w-3w' \
+                when recommend_cnt_30d < 50000 then '3w-5w' \
+                when recommend_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and recommend_cnt_30d > 0 \
+  union all \
+    select postId, '推荐量' as tag, 'DAY_ALL' as cat, \
+           case when recommend_cnt < 50 then '1-50' \
+                when recommend_cnt < 100 then '50-100' \
+                when recommend_cnt < 200 then '100-200' \
+                when recommend_cnt < 500 then '200-500' \
+                when recommend_cnt < 1000 then '500-1k' \
+                when recommend_cnt < 2000 then '1k-2k' \
+                when recommend_cnt < 5000 then '2k-5k' \
+                when recommend_cnt < 10000 then '5k-1w' \
+                when recommend_cnt < 30000 then '1w-3w' \
+                when recommend_cnt < 50000 then '3w-5w' \
+                when recommend_cnt < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and recommend_cnt > 0 \
+  union all \
+    select postId, '有效pv' as tag, 'DAY_1' as cat, \
+           case when browse_pv_1d < 50 then '1-50' \
+                when browse_pv_1d < 100 then '50-100' \
+                when browse_pv_1d < 200 then '100-200' \
+                when browse_pv_1d < 500 then '200-500' \
+                when browse_pv_1d < 1000 then '500-1k' \
+                when browse_pv_1d < 2000 then '1k-2k' \
+                when browse_pv_1d < 5000 then '2k-5k' \
+                when browse_pv_1d < 10000 then '5k-1w' \
+                when browse_pv_1d < 30000 then '1w-3w' \
+                when browse_pv_1d < 50000 then '3w-5w' \
+                when browse_pv_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_pv_1d > 0 \
+  union all \
+    select postId, '有效pv' as tag, 'DAY_7' as cat, \
+           case when browse_pv_7d < 50 then '1-50' \
+                when browse_pv_7d < 100 then '50-100' \
+                when browse_pv_7d < 200 then '100-200' \
+                when browse_pv_7d < 500 then '200-500' \
+                when browse_pv_7d < 1000 then '500-1k' \
+                when browse_pv_7d < 2000 then '1k-2k' \
+                when browse_pv_7d < 5000 then '2k-5k' \
+                when browse_pv_7d < 10000 then '5k-1w' \
+                when browse_pv_7d < 30000 then '1w-3w' \
+                when browse_pv_7d < 50000 then '3w-5w' \
+                when browse_pv_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_pv_7d > 0 \
+  union all \
+    select postId, '有效pv' as tag, 'DAY_15' as cat, \
+           case when browse_pv_15d < 50 then '1-50' \
+                when browse_pv_15d < 100 then '50-100' \
+                when browse_pv_15d < 200 then '100-200' \
+                when browse_pv_15d < 500 then '200-500' \
+                when browse_pv_15d < 1000 then '500-1k' \
+                when browse_pv_15d < 2000 then '1k-2k' \
+                when browse_pv_15d < 5000 then '2k-5k' \
+                when browse_pv_15d < 10000 then '5k-1w' \
+                when browse_pv_15d < 30000 then '1w-3w' \
+                when browse_pv_15d < 50000 then '3w-5w' \
+                when browse_pv_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_pv_15d > 0 \
+  union all \
+    select postId, '有效pv' as tag, 'DAY_30' as cat, \
+           case when browse_pv_30d < 50 then '1-50' \
+                when browse_pv_30d < 100 then '50-100' \
+                when browse_pv_30d < 200 then '100-200' \
+                when browse_pv_30d < 500 then '200-500' \
+                when browse_pv_30d < 1000 then '500-1k' \
+                when browse_pv_30d < 2000 then '1k-2k' \
+                when browse_pv_30d < 5000 then '2k-5k' \
+                when browse_pv_30d < 10000 then '5k-1w' \
+                when browse_pv_30d < 30000 then '1w-3w' \
+                when browse_pv_30d < 50000 then '3w-5w' \
+                when browse_pv_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_pv_30d > 0 \
+  union all \
+    select postId, '有效pv' as tag, 'DAY_ALL' as cat, \
+           case when realBrowsePv < 50 then '1-50' \
+                when realBrowsePv < 100 then '50-100' \
+                when realBrowsePv < 200 then '100-200' \
+                when realBrowsePv < 500 then '200-500' \
+                when realBrowsePv < 1000 then '500-1k' \
+                when realBrowsePv < 2000 then '1k-2k' \
+                when realBrowsePv < 5000 then '2k-5k' \
+                when realBrowsePv < 10000 then '5k-1w' \
+                when realBrowsePv < 30000 then '1w-3w' \
+                when realBrowsePv < 50000 then '3w-5w' \
+                when realBrowsePv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and realBrowsePv > 0 \
+  union all \
+    select postId, '有效评论量' as tag, 'DAY_1' as cat, \
+           case when valid_comment_cnt_1d < 50 then '1-50' \
+                when valid_comment_cnt_1d < 100 then '50-100' \
+                when valid_comment_cnt_1d < 200 then '100-200' \
+                when valid_comment_cnt_1d < 500 then '200-500' \
+                when valid_comment_cnt_1d < 1000 then '500-1k' \
+                when valid_comment_cnt_1d < 2000 then '1k-2k' \
+                when valid_comment_cnt_1d < 5000 then '2k-5k' \
+                when valid_comment_cnt_1d < 10000 then '5k-1w' \
+                when valid_comment_cnt_1d < 30000 then '1w-3w' \
+                when valid_comment_cnt_1d < 50000 then '3w-5w' \
+                when valid_comment_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and valid_comment_cnt_1d > 0 \
+  union all \
+    select postId, '有效评论量' as tag, 'DAY_7' as cat, \
+           case when valid_comment_cnt_7d < 50 then '1-50' \
+                when valid_comment_cnt_7d < 100 then '50-100' \
+                when valid_comment_cnt_7d < 200 then '100-200' \
+                when valid_comment_cnt_7d < 500 then '200-500' \
+                when valid_comment_cnt_7d < 1000 then '500-1k' \
+                when valid_comment_cnt_7d < 2000 then '1k-2k' \
+                when valid_comment_cnt_7d < 5000 then '2k-5k' \
+                when valid_comment_cnt_7d < 10000 then '5k-1w' \
+                when valid_comment_cnt_7d < 30000 then '1w-3w' \
+                when valid_comment_cnt_7d < 50000 then '3w-5w' \
+                when valid_comment_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and valid_comment_cnt_7d > 0 \
+  union all \
+    select postId, '有效评论量' as tag, 'DAY_15' as cat, \
+           case when valid_comment_cnt_15d < 50 then '1-50' \
+                when valid_comment_cnt_15d < 100 then '50-100' \
+                when valid_comment_cnt_15d < 200 then '100-200' \
+                when valid_comment_cnt_15d < 500 then '200-500' \
+                when valid_comment_cnt_15d < 1000 then '500-1k' \
+                when valid_comment_cnt_15d < 2000 then '1k-2k' \
+                when valid_comment_cnt_15d < 5000 then '2k-5k' \
+                when valid_comment_cnt_15d < 10000 then '5k-1w' \
+                when valid_comment_cnt_15d < 30000 then '1w-3w' \
+                when valid_comment_cnt_15d < 50000 then '3w-5w' \
+                when valid_comment_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and valid_comment_cnt_15d > 0 \
+  union all \
+    select postId, '有效评论量' as tag, 'DAY_30' as cat, \
+           case when valid_comment_cnt_30d < 50 then '1-50' \
+                when valid_comment_cnt_30d < 100 then '50-100' \
+                when valid_comment_cnt_30d < 200 then '100-200' \
+                when valid_comment_cnt_30d < 500 then '200-500' \
+                when valid_comment_cnt_30d < 1000 then '500-1k' \
+                when valid_comment_cnt_30d < 2000 then '1k-2k' \
+                when valid_comment_cnt_30d < 5000 then '2k-5k' \
+                when valid_comment_cnt_30d < 10000 then '5k-1w' \
+                when valid_comment_cnt_30d < 30000 then '1w-3w' \
+                when valid_comment_cnt_30d < 50000 then '3w-5w' \
+                when valid_comment_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and valid_comment_cnt_30d > 0 \
+  union all \
+    select postId, '有效评论量' as tag, 'DAY_ALL' as cat, \
+           case when valid_comment_cnt < 50 then '1-50' \
+                when valid_comment_cnt < 100 then '50-100' \
+                when valid_comment_cnt < 200 then '100-200' \
+                when valid_comment_cnt < 500 then '200-500' \
+                when valid_comment_cnt < 1000 then '500-1k' \
+                when valid_comment_cnt < 2000 then '1k-2k' \
+                when valid_comment_cnt < 5000 then '2k-5k' \
+                when valid_comment_cnt < 10000 then '5k-1w' \
+                when valid_comment_cnt < 30000 then '1w-3w' \
+                when valid_comment_cnt < 50000 then '3w-5w' \
+                when valid_comment_cnt < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and valid_comment_cnt > 0 \
+  union all \
+    select postId, '评论量' as tag, 'DAY_1' as cat, \
+           case when comment_cnt_1d < 50 then '1-50' \
+                when comment_cnt_1d < 100 then '50-100' \
+                when comment_cnt_1d < 200 then '100-200' \
+                when comment_cnt_1d < 500 then '200-500' \
+                when comment_cnt_1d < 1000 then '500-1k' \
+                when comment_cnt_1d < 2000 then '1k-2k' \
+                when comment_cnt_1d < 5000 then '2k-5k' \
+                when comment_cnt_1d < 10000 then '5k-1w' \
+                when comment_cnt_1d < 30000 then '1w-3w' \
+                when comment_cnt_1d < 50000 then '3w-5w' \
+                when comment_cnt_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and comment_cnt_1d > 0 \
+  union all \
+    select postId, '评论量' as tag, 'DAY_7' as cat, \
+           case when comment_cnt_7d < 50 then '1-50' \
+                when comment_cnt_7d < 100 then '50-100' \
+                when comment_cnt_7d < 200 then '100-200' \
+                when comment_cnt_7d < 500 then '200-500' \
+                when comment_cnt_7d < 1000 then '500-1k' \
+                when comment_cnt_7d < 2000 then '1k-2k' \
+                when comment_cnt_7d < 5000 then '2k-5k' \
+                when comment_cnt_7d < 10000 then '5k-1w' \
+                when comment_cnt_7d < 30000 then '1w-3w' \
+                when comment_cnt_7d < 50000 then '3w-5w' \
+                when comment_cnt_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and comment_cnt_7d > 0 \
+  union all \
+    select postId, '评论量' as tag, 'DAY_15' as cat, \
+           case when comment_cnt_15d < 50 then '1-50' \
+                when comment_cnt_15d < 100 then '50-100' \
+                when comment_cnt_15d < 200 then '100-200' \
+                when comment_cnt_15d < 500 then '200-500' \
+                when comment_cnt_15d < 1000 then '500-1k' \
+                when comment_cnt_15d < 2000 then '1k-2k' \
+                when comment_cnt_15d < 5000 then '2k-5k' \
+                when comment_cnt_15d < 10000 then '5k-1w' \
+                when comment_cnt_15d < 30000 then '1w-3w' \
+                when comment_cnt_15d < 50000 then '3w-5w' \
+                when comment_cnt_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and comment_cnt_15d > 0 \
+  union all \
+    select postId, '评论量' as tag, 'DAY_30' as cat, \
+           case when comment_cnt_30d < 50 then '1-50' \
+                when comment_cnt_30d < 100 then '50-100' \
+                when comment_cnt_30d < 200 then '100-200' \
+                when comment_cnt_30d < 500 then '200-500' \
+                when comment_cnt_30d < 1000 then '500-1k' \
+                when comment_cnt_30d < 2000 then '1k-2k' \
+                when comment_cnt_30d < 5000 then '2k-5k' \
+                when comment_cnt_30d < 10000 then '5k-1w' \
+                when comment_cnt_30d < 30000 then '1w-3w' \
+                when comment_cnt_30d < 50000 then '3w-5w' \
+                when comment_cnt_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and comment_cnt_30d > 0 \
+  union all \
+    select postId, '评论量' as tag, 'DAY_ALL' as cat, \
+           case when comment_cnt < 50 then '1-50' \
+                when comment_cnt < 100 then '50-100' \
+                when comment_cnt < 200 then '100-200' \
+                when comment_cnt < 500 then '200-500' \
+                when comment_cnt < 1000 then '500-1k' \
+                when comment_cnt < 2000 then '1k-2k' \
+                when comment_cnt < 5000 then '2k-5k' \
+                when comment_cnt < 10000 then '5k-1w' \
+                when comment_cnt < 30000 then '1w-3w' \
+                when comment_cnt < 50000 then '3w-5w' \
+                when comment_cnt < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and comment_cnt > 0 \
+  union all \
+    select postId, '热度' as tag, 'DAY_1' as cat, \
+           case when hot_pv < 50 then '1-50' \
+                when hot_pv < 100 then '50-100' \
+                when hot_pv < 200 then '100-200' \
+                when hot_pv < 500 then '200-500' \
+                when hot_pv < 1000 then '500-1k' \
+                when hot_pv < 2000 then '1k-2k' \
+                when hot_pv < 5000 then '2k-5k' \
+                when hot_pv < 10000 then '5k-1w' \
+                when hot_pv < 30000 then '1w-3w' \
+                when hot_pv < 50000 then '3w-5w' \
+                when hot_pv < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' and hot_pv > 0 \
+  union all \
+    select postId, '热度' as tag, 'DAY_7' as cat, \
+           case when hot_7d < 50 then '1-50' \
+                when hot_7d < 100 then '50-100' \
+                when hot_7d < 200 then '100-200' \
+                when hot_7d < 500 then '200-500' \
+                when hot_7d < 1000 then '500-1k' \
+                when hot_7d < 2000 then '1k-2k' \
+                when hot_7d < 5000 then '2k-5k' \
+                when hot_7d < 10000 then '5k-1w' \
+                when hot_7d < 30000 then '1w-3w' \
+                when hot_7d < 50000 then '3w-5w' \
+                when hot_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and hot_7d > 0 \
+  union all \
+    select postId, '热度' as tag, 'DAY_15' as cat, \
+           case when hot_15d < 50 then '1-50' \
+                when hot_15d < 100 then '50-100' \
+                when hot_15d < 200 then '100-200' \
+                when hot_15d < 500 then '200-500' \
+                when hot_15d < 1000 then '500-1k' \
+                when hot_15d < 2000 then '1k-2k' \
+                when hot_15d < 5000 then '2k-5k' \
+                when hot_15d < 10000 then '5k-1w' \
+                when hot_15d < 30000 then '1w-3w' \
+                when hot_15d < 50000 then '3w-5w' \
+                when hot_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and hot_15d > 0 \
+  union all \
+    select postId, '热度' as tag, 'DAY_30' as cat, \
+           case when hot_30d < 50 then '1-50' \
+                when hot_30d < 100 then '50-100' \
+                when hot_30d < 200 then '100-200' \
+                when hot_30d < 500 then '200-500' \
+                when hot_30d < 1000 then '500-1k' \
+                when hot_30d < 2000 then '1k-2k' \
+                when hot_30d < 5000 then '2k-5k' \
+                when hot_30d < 10000 then '5k-1w' \
+                when hot_30d < 30000 then '1w-3w' \
+                when hot_30d < 50000 then '3w-5w' \
+                when hot_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and hot_30d > 0 \
+  union all \
+    select postId, '热度' as tag, 'DAY_ALL' as cat, \
+           case when hot < 50 then '1-50' \
+                when hot < 100 then '50-100' \
+                when hot < 200 then '100-200' \
+                when hot < 500 then '200-500' \
+                when hot < 1000 then '500-1k' \
+                when hot < 2000 then '1k-2k' \
+                when hot < 5000 then '2k-5k' \
+                when hot < 10000 then '5k-1w' \
+                when hot < 30000 then '1w-3w' \
+                when hot < 50000 then '3w-5w' \
+                when hot < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and hot > 0 \
+  union all \
+    select postId, '曝光量' as tag, 'DAY_1' as cat, \
+           case when expose_pv_1d < 50 then '1-50' \
+                when expose_pv_1d < 100 then '50-100' \
+                when expose_pv_1d < 200 then '100-200' \
+                when expose_pv_1d < 500 then '200-500' \
+                when expose_pv_1d < 1000 then '500-1k' \
+                when expose_pv_1d < 2000 then '1k-2k' \
+                when expose_pv_1d < 5000 then '2k-5k' \
+                when expose_pv_1d < 10000 then '5k-1w' \
+                when expose_pv_1d < 30000 then '1w-3w' \
+                when expose_pv_1d < 50000 then '3w-5w' \
+                when expose_pv_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and expose_pv_1d > 0 \
+  union all \
+    select postId, '曝光量' as tag, 'DAY_7' as cat, \
+           case when expose_pv_7d < 50 then '1-50' \
+                when expose_pv_7d < 100 then '50-100' \
+                when expose_pv_7d < 200 then '100-200' \
+                when expose_pv_7d < 500 then '200-500' \
+                when expose_pv_7d < 1000 then '500-1k' \
+                when expose_pv_7d < 2000 then '1k-2k' \
+                when expose_pv_7d < 5000 then '2k-5k' \
+                when expose_pv_7d < 10000 then '5k-1w' \
+                when expose_pv_7d < 30000 then '1w-3w' \
+                when expose_pv_7d < 50000 then '3w-5w' \
+                when expose_pv_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and expose_pv_7d > 0 \
+  union all \
+    select postId, '曝光量' as tag, 'DAY_15' as cat, \
+           case when expose_pv_15d < 50 then '1-50' \
+                when expose_pv_15d < 100 then '50-100' \
+                when expose_pv_15d < 200 then '100-200' \
+                when expose_pv_15d < 500 then '200-500' \
+                when expose_pv_15d < 1000 then '500-1k' \
+                when expose_pv_15d < 2000 then '1k-2k' \
+                when expose_pv_15d < 5000 then '2k-5k' \
+                when expose_pv_15d < 10000 then '5k-1w' \
+                when expose_pv_15d < 30000 then '1w-3w' \
+                when expose_pv_15d < 50000 then '3w-5w' \
+                when expose_pv_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and expose_pv_15d > 0 \
+  union all \
+    select postId, '曝光量' as tag, 'DAY_30' as cat, \
+           case when expose_pv_30d < 50 then '1-50' \
+                when expose_pv_30d < 100 then '50-100' \
+                when expose_pv_30d < 200 then '100-200' \
+                when expose_pv_30d < 500 then '200-500' \
+                when expose_pv_30d < 1000 then '500-1k' \
+                when expose_pv_30d < 2000 then '1k-2k' \
+                when expose_pv_30d < 5000 then '2k-5k' \
+                when expose_pv_30d < 10000 then '5k-1w' \
+                when expose_pv_30d < 30000 then '1w-3w' \
+                when expose_pv_30d < 50000 then '3w-5w' \
+                when expose_pv_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and expose_pv_30d > 0 \
+  union all \
+    select postId, '曝光量' as tag, 'DAY_ALL' as cat, \
+               case when exposurePv < 50 then '1-50' \
+                    when exposurePv < 100 then '50-100' \
+                    when exposurePv < 200 then '100-200' \
+                    when exposurePv < 500 then '200-500' \
+                    when exposurePv < 1000 then '501-1k' \
+                    when exposurePv < 2000 then '1k-2k' \
+                    when exposurePv < 5000 then '2k-5k' \
+                    when exposurePv < 10000 then '5k-1w' \
+                    when exposurePv < 30000 then '1w-3w' \
+                    when exposurePv < 50000 then '3w-5w' \
+                    when exposurePv < 100000 then '5w-10w' \
+                    else '10w及以上' end as grp \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and exposurePv > 0 \
+  union all \
+    select postId, '浏览uv' as tag, 'DAY_1' as cat, \
+           case when browse_uv_1d < 50 then '1-50' \
+                when browse_uv_1d < 100 then '50-100' \
+                when browse_uv_1d < 200 then '100-200' \
+                when browse_uv_1d < 500 then '200-500' \
+                when browse_uv_1d < 1000 then '500-1k' \
+                when browse_uv_1d < 2000 then '1k-2k' \
+                when browse_uv_1d < 5000 then '2k-5k' \
+                when browse_uv_1d < 10000 then '5k-1w' \
+                when browse_uv_1d < 30000 then '1w-3w' \
+                when browse_uv_1d < 50000 then '3w-5w' \
+                when browse_uv_1d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_uv_1d > 0 \
+  union all \
+    select postId, '浏览uv' as tag, 'DAY_7' as cat, \
+           case when browse_uv_7d < 50 then '1-50' \
+                when browse_uv_7d < 100 then '50-100' \
+                when browse_uv_7d < 200 then '100-200' \
+                when browse_uv_7d < 500 then '200-500' \
+                when browse_uv_7d < 1000 then '500-1k' \
+                when browse_uv_7d < 2000 then '1k-2k' \
+                when browse_uv_7d < 5000 then '2k-5k' \
+                when browse_uv_7d < 10000 then '5k-1w' \
+                when browse_uv_7d < 30000 then '1w-3w' \
+                when browse_uv_7d < 50000 then '3w-5w' \
+                when browse_uv_7d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_uv_7d > 0 \
+  union all \
+    select postId, '浏览uv' as tag, 'DAY_15' as cat, \
+           case when browse_uv_15d < 50 then '1-50' \
+                when browse_uv_15d < 100 then '50-100' \
+                when browse_uv_15d < 200 then '100-200' \
+                when browse_uv_15d < 500 then '200-500' \
+                when browse_uv_15d < 1000 then '500-1k' \
+                when browse_uv_15d < 2000 then '1k-2k' \
+                when browse_uv_15d < 5000 then '2k-5k' \
+                when browse_uv_15d < 10000 then '5k-1w' \
+                when browse_uv_15d < 30000 then '1w-3w' \
+                when browse_uv_15d < 50000 then '3w-5w' \
+                when browse_uv_15d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_uv_15d > 0 \
+  union all \
+    select postId, '浏览uv' as tag, 'DAY_30' as cat, \
+           case when browse_uv_30d < 50 then '1-50' \
+                when browse_uv_30d < 100 then '50-100' \
+                when browse_uv_30d < 200 then '101-200' \
+                when browse_uv_30d < 500 then '201-500' \
+                when browse_uv_30d < 1000 then '501-1k' \
+                when browse_uv_30d < 2000 then '1k-2k' \
+                when browse_uv_30d < 5000 then '2k-5k' \
+                when browse_uv_30d < 10000 then '5k-1w' \
+                when browse_uv_30d < 30000 then '1w-3w' \
+                when browse_uv_30d < 50000 then '3w-5w' \
+                when browse_uv_30d < 100000 then '5w-10w' \
+                else '10w及以上' end as grp \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_uv_30d > 0 \
+  union all \
+    select postId, '浏览uv' as tag, 'DAY_ALL' as cat, \
+               case when realBrowseUv < 50 then '1-50' \
+                    when realBrowseUv < 100 then '50-100' \
+                    when realBrowseUv < 200 then '100-200' \
+                    when realBrowseUv < 500 then '200-500' \
+                    when realBrowseUv < 1000 then '501-1k' \
+                    when realBrowseUv < 2000 then '1k-2k' \
+                    when realBrowseUv < 5000 then '2k-5k' \
+                    when realBrowseUv < 10000 then '5k-1w' \
+                    when realBrowseUv < 30000 then '1w-3w' \
+                    when realBrowseUv < 50000 then '3w-5w' \
+                    when realBrowseUv < 100000 then '5w-10w' \
+                    else '10w及以上' end as grp \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and realBrowseUv > 0 \
+  union all \
+    select postId, '长评数量' as tag, 'DAY_1' as cat, \
+           case when long_comment_cnt_1d < 5 then '1-5' \
+                when long_comment_cnt_1d < 10 then '5-10' \
+                when long_comment_cnt_1d < 20 then '10-20' \
+                when long_comment_cnt_1d < 50 then '20-50' \
+                when long_comment_cnt_1d < 100 then '50-100' \
+                when long_comment_cnt_1d < 200 then '100-200' \
+                else '200及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and long_comment_cnt_1d > 0 \
+  union all \
+    select postId, '长评数量' as tag, 'DAY_7' as cat, \
+           case when long_comment_cnt_7d < 5 then '1-5' \
+                when long_comment_cnt_7d < 10 then '5-10' \
+                when long_comment_cnt_7d < 20 then '10-20' \
+                when long_comment_cnt_7d < 50 then '20-50' \
+                when long_comment_cnt_7d < 100 then '50-100' \
+                when long_comment_cnt_7d < 200 then '100-200' \
+                else '200及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and long_comment_cnt_7d > 0 \
+  union all \
+    select postId, '长评数量' as tag, 'DAY_15' as cat, \
+           case when long_comment_cnt_15d < 5 then '1-5' \
+                when long_comment_cnt_15d < 10 then '5-10' \
+                when long_comment_cnt_15d < 20 then '10-20' \
+                when long_comment_cnt_15d < 50 then '20-50' \
+                when long_comment_cnt_15d < 100 then '50-100' \
+                when long_comment_cnt_15d < 200 then '100-200' \
+                else '200及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and long_comment_cnt_15d > 0 \
+  union all \
+    select postId, '长评数量' as tag, 'DAY_30' as cat, \
+           case when long_comment_cnt_30d < 5 then '1-5' \
+                when long_comment_cnt_30d < 10 then '5-10' \
+                when long_comment_cnt_30d < 20 then '10-20' \
+                when long_comment_cnt_30d < 50 then '20-50' \
+                when long_comment_cnt_30d < 100 then '50-100' \
+                when long_comment_cnt_30d < 200 then '100-200' \
+                else '200及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and long_comment_cnt_30d > 0 \
+  union all \
+    select postId, '长评数量' as tag, 'DAY_ALL' as cat, \
+           case when long_comment_cnt_std < 5 then '1-5' \
+                when long_comment_cnt_std < 10 then '5-10' \
+                when long_comment_cnt_std < 20 then '10-20' \
+                when long_comment_cnt_std < 50 then '20-50' \
+                when long_comment_cnt_std < 100 then '50-100' \
+                when long_comment_cnt_std < 200 then '100-200' \
+                else '200及以上' end as grp \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and long_comment_cnt_std > 0 \
+  union all \
+    select content_id as postId, '拉新量' as tag, 'DAY_1' as cat, \
+           case when new_devices < 10 then '1-10' \
+                when new_devices < 50 then '10-50' \
+                when new_devices < 100 then '50-100' \
+                when new_devices < 200 then '100-200' \
+                when new_devices < 500 then '200-500' \
+                when new_devices < 1000 then '500-1k' \
+                when new_devices < 2000 then '1k-2k' \
+                when new_devices < 5000 then '2k-5k' \
+                when new_devices < 10000 then '5k-1w' \
+                when new_devices < 30000 then '1w-3w' \
+                else '3w以上' end as grp \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and new_devices > 0 and \
+          content_type in ('图片', '文字', '视频') \
+  union all \
+    select content_id as postId, '拉新量' as tag, 'DAY_7' as cat, \
+           case when new_devices_7d < 10 then '1-10' \
+                when new_devices_7d < 50 then '10-50' \
+                when new_devices_7d < 100 then '50-100' \
+                when new_devices_7d < 200 then '100-200' \
+                when new_devices_7d < 500 then '200-500' \
+                when new_devices_7d < 1000 then '500-1k' \
+                when new_devices_7d < 2000 then '1k-2k' \
+                when new_devices_7d < 5000 then '2k-5k' \
+                when new_devices_7d < 10000 then '5k-1w' \
+                when new_devices_7d < 30000 then '1w-3w' \
+                else '3w以上' end as grp \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and new_devices_7d > 0 and \
+          content_type in ('图片', '文字', '视频') \
+  union all \
+    select content_id as postId, '拉新量' as tag, 'DAY_30' as cat, \
+           case when new_devices_30d < 10 then '1-10' \
+                when new_devices_30d < 50 then '10-50' \
+                when new_devices_30d < 100 then '50-100' \
+                when new_devices_30d < 200 then '100-200' \
+                when new_devices_30d <= 500 then '200-500' \
+                when new_devices_30d < 1000 then '500-1k' \
+                when new_devices_30d < 2000 then '1k-2k' \
+                when new_devices_30d < 5000 then '2k-5k' \
+                when new_devices_30d < 10000 then '5k-1w' \
+                when new_devices_30d < 30000 then '1w-3w' \
+                else '3w以上' end as grp \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and new_devices_30d > 0 and \
+          content_type in ('图片', '文字', '视频') \
+  union all \
+    select content_id as postId, '拉新量' as tag, 'DAY_15' as cat, \
+           case when new_devices_30d < 10 then '1-10' \
+                when new_devices_30d < 50 then '10-50' \
+                when new_devices_30d < 100 then '50-100' \
+                when new_devices_30d < 200 then '100-200' \
+                when new_devices_30d <= 500 then '200-500' \
+                when new_devices_30d < 1000 then '500-1k' \
+                when new_devices_30d < 2000 then '1k-2k' \
+                when new_devices_30d < 5000 then '2k-5k' \
+                when new_devices_30d < 10000 then '5k-1w' \
+                when new_devices_30d < 30000 then '1w-3w' \
+                else '3w以上' end as grp \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and new_devices_15d > 0 and \
+          content_type in ('图片', '文字', '视频') \
+  union all \
+    select content_id as postId, '拉新量' as tag, 'DAY_ALL' as cat, \
+           case when new_devices_std < 10 then '1-10' \
+                when new_devices_std < 50 then '10-50' \
+                when new_devices_std < 100 then '50-100' \
+                when new_devices_std < 200 then '100-200' \
+                when new_devices_std < 500 then '200-500' \
+                when new_devices_std < 1000 then '500-1k' \
+                when new_devices_std < 2000 then '1k-2k' \
+                when new_devices_std < 5000 then '2k-5k' \
+                when new_devices_std < 10000 then '5k-1w' \
+                when new_devices_std < 30000 then '1w-3w' \
+                else '3w以上' end as grp \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and new_devices_std > 0 and \
+          content_type in ('图片', '文字', '视频') \
+) t \
+distribute by (postId / 1000000) % 100 \
+sort by tag, cat, grp, postId

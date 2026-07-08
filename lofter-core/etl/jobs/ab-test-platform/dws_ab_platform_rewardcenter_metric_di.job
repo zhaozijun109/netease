@@ -1,0 +1,136 @@
+type=sparksql
+hive.query.01= \
+WITH source_data AS ( \
+    SELECT user_id AS userId, dt AS exp_date, appId, sceneId, exp_id, bucket_id \
+    FROM lofter.dwd_ab_platform_exp_user_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY user_id, dt, appId, sceneId, exp_id, bucket_id \
+), \
+rc_users_today AS ( \
+    SELECT userid, nvl(is_new_user,0) + nvl(is_return_user,0) as is_new_user \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+source_data_t AS ( \
+    SELECT user_id AS userId, dt AS exp_date, appId, sceneId, exp_id, bucket_id \
+    FROM lofter.dwd_ab_platform_exp_user_di \
+    WHERE dt = '${azkaban.flow.2.days.ago}' \
+    GROUP BY user_id, dt, appId, sceneId, exp_id, bucket_id \
+), \
+rc_users_t AS ( \
+    SELECT userid, nvl(is_new_user,0) + nvl(is_return_user,0) as is_new_user \
+    FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.2.days.ago}' \
+), \
+rc_users_t1 AS ( \
+    SELECT userid FROM lofter.dwd_rewardcenter_user_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+app_users_t1 AS ( \
+    SELECT userid FROM lofter.dws_par_user_active_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+rc_score as ( \
+    select userId, \
+           sum(if(action_pv > 0 and action_type = '发放', 1, 0)) as get_score_uv, \
+           sum(if(action_pv > 0 and action_type = '发放', action_score, 0)) as get_score_abs, \
+           sum(if(action_pv > 0 and action_type = '兑换', 1, 0)) as consume_score_uv, \
+           sum(if(action_pv > 0 and action_type = '兑换', action_score, 0)) as consume_score_abs, \
+           sum(if(action_pv > 0 and action_type = '过期', 1, 0)) as expire_score_uv, \
+           sum(if(action_pv > 0 and action_type = '兑换', action_score, 0)) as expire_score_abs \
+    from ( \
+        select userId, action_type, count(1) as action_pv, abs(sum(score)) as action_score \
+        from lofter.dwd_ad_reward_score_log_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) a \
+    group by 1 \
+), \
+rc_sign as ( \
+    select a.userId \
+    from lofter_db_dump.ods_db_reward_particular_score_task_nd a \
+    where a.`date` = cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) and a.`type` = 2 \
+    group by 1 \
+), \
+rc_ad as ( \
+     select userId, \
+            sum(if(position_name like '%权益中心%', 1, 0)) as rc_ad_pv, \
+            sum(if(position_name like '%权益中心%', money, 0)) as rc_ad_revenue, \
+            sum(money) as rc_indirect_ad_revenue \
+     from lofter.dwd_user_ad_revenue_di \
+     where dt = '${azkaban.flow.1.days.ago}' \
+     group by 1 \
+), \
+user_rc_today AS ( \
+    SELECT a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        CASE WHEN b.userid IS NOT NULL THEN 1 ELSE 0 END AS is_rc_user, \
+        CASE WHEN b.userid IS NOT NULL AND b.is_new_user = 1 THEN 1 ELSE 0 END AS is_rc_new_user, \
+        nvl(e.get_score_uv, 0) as get_score_uv, \
+        nvl(e.get_score_abs, 0) as get_score_abs, \
+        nvl(consume_score_uv, 0) as consume_score_uv, \
+        nvl(consume_score_abs, 0) as consume_score_abs, \
+        nvl(expire_score_uv,0) as expire_score_uv, \
+        nvl(expire_score_abs,0) as expire_score_abs, \
+        if(f.userId is not null, 1, 0) as sign_uv, \
+        nvl(rc_ad_pv,0) as rc_ad_pv, \
+        nvl(rc_ad_revenue,0) as rc_ad_revenue, \
+        nvl(rc_indirect_ad_revenue,0) as rc_indirect_ad_revenue \
+    FROM source_data a \
+    LEFT JOIN rc_users_today b ON a.userId = b.userid \
+    left join rc_score e on a.userId = e.userId \
+    left join rc_sign f on a.userId = f.userId \
+    left join rc_ad g on a.userId = g.userId \
+), \
+user_rc_retain AS ( \
+    SELECT a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        CASE WHEN b.userid IS NOT NULL THEN 1 ELSE 0 END AS is_rc_user, \
+        CASE WHEN b.userid IS NOT NULL AND b.is_new_user = 1 THEN 1 ELSE 0 END AS is_rc_new_user, \
+        CASE WHEN b.userid IS NOT NULL AND c.userid IS NOT NULL THEN 1 ELSE 0 END AS is_rc_retain, \
+        CASE WHEN b.userid IS NOT NULL AND b.is_new_user = 1 AND c.userid IS NOT NULL THEN 1 ELSE 0 END AS is_rc_new_retain, \
+        CASE WHEN b.userid IS NOT NULL AND d.userid IS NOT NULL THEN 1 ELSE 0 END AS is_app_retain, \
+        CASE WHEN b.userid IS NOT NULL AND b.is_new_user = 1 AND d.userid IS NOT NULL THEN 1 ELSE 0 END AS is_new_app_retain, \
+        if(f.userId is not null, 1, 0) as is_sign_retain \
+    FROM source_data_t a \
+    LEFT JOIN rc_users_t b ON a.userId = b.userid \
+    LEFT JOIN rc_users_t1 c ON a.userId = c.userid \
+    LEFT JOIN app_users_t1 d ON a.userId = d.userid \
+    LEFT JOIN rc_sign f on a.userId = f.userId \
+) \
+INSERT OVERWRITE TABLE lofter.dws_ab_platform_rewardcenter_metric_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT exp_id, bucket_id, exp_date AS basedate, \
+    '全部' AS dimension, userId, \
+    metric_info.metric, metric_info.metric_value, \
+    'ALL' AS dimension_value \
+FROM user_rc_today \
+LATERAL VIEW EXPLODE( ARRAY( \
+    STRUCT('rewardcenter_uv' AS metric, CAST(is_rc_user AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_new_uv' AS metric, CAST(is_rc_new_user AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_get_score_uv' as metric, cast(get_score_uv as double) as metric_value), \
+    STRUCT('rewardcenter_get_score_abs' as metric, cast(get_score_abs as double) as metric_value), \
+    STRUCT('rewardcenter_consume_score_uv' as metric, cast(consume_score_uv as double) as metric_value), \
+    STRUCT('rewardcenter_consume_score_abs' as metric, cast(consume_score_abs as double) as metric_value), \
+    STRUCT('rewardcenter_expire_score_uv' as metric, cast(expire_score_uv as double) as metric_value), \
+    STRUCT('rewardcenter_expire_score_abs' as metric, cast(expire_score_abs as double) as metric_value), \
+    STRUCT('rewardcenter_sign_uv' as metric, cast(sign_uv as double) as metric_value), \
+    STRUCT('rewardcenter_rc_ad_pv' as metric, cast(rc_ad_pv as double) as metric_value), \
+    STRUCT('rewardcenter_rc_ad_revenue' as metric, cast(rc_ad_revenue as double) as metric_value), \
+    STRUCT('rewardcenter_rc_indirect_ad_revenue' as metric, cast(rc_indirect_ad_revenue as double) as metric_value) \
+)) metrics AS metric_info \
+UNION ALL \
+SELECT exp_id, bucket_id, exp_date AS basedate, \
+    '全部' AS dimension, userId, \
+    metric_info.metric, metric_info.metric_value, \
+    'ALL' AS dimension_value \
+FROM user_rc_retain \
+LATERAL VIEW EXPLODE( ARRAY( \
+    STRUCT('rewardcenter_uv' AS metric, CAST(is_rc_user AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_new_uv' AS metric, CAST(is_rc_new_user AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_active_retain_1d' AS metric, CAST(is_rc_retain AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_new_retain_1d' AS metric, CAST(is_rc_new_retain AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_active_app_retain_1d' AS metric, CAST(is_app_retain AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_new_app_retain_1d' AS metric, CAST(is_new_app_retain AS DOUBLE) AS metric_value), \
+    STRUCT('rewardcenter_sign_retain_1d' AS metric, CAST(is_sign_retain AS DOUBLE) AS metric_value) \
+)) metrics AS metric_info \
+
+dependencies=dwd_ab_platform_exp_user_di

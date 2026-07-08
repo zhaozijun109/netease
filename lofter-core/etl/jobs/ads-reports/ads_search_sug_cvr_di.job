@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare'
+hive.query.02=insert overwrite table lofter_dm.ads_search_sug_cvr_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceOs, \
+    count(distinct deviceudid) active_uv, \
+    count(distinct case when eventid='b1-1' then deviceudid else null end) search_uv, \
+    sum(case when eventid='b1-1' then 1 else 0 end) search_pv, \
+    count(distinct case when eventid='b1-1' then deviceudid else null end)/count(distinct deviceudid) search_rate, \
+    sum(case when eventid='k1-3' then 1 else 0 end) hotword_bg_pv, \
+    count(distinct case when eventid='k1-3' then deviceudid else null end) hotword_bg_uv, \
+    sum(case when eventid='k1-4' then 1 else 0 end) hotword_click_pv, \
+    count(distinct case when eventid='k1-4' then deviceudid else null end) hotword_click_uv, \
+    sum(case when eventid='k1-4' then 1 else 0 end)/sum(case when eventid='k1-3' then 1 else 0 end) hotword_bg_click_rate, \
+    sum(case when eventid='k1-5' then 1 else 0 end) tag_bg_pv, \
+    count(distinct case when eventid='k1-5' then deviceudid else null end) tag_bg_uv, \
+    sum(case when eventid='k1-6' then 1 else 0 end) tag_click_pv, \
+    count(distinct case when eventid='k1-6' then deviceudid else null end) tag_click_uv, \
+    sum(case when eventid='k1-6' then 1 else 0 end)/sum(case when eventid='k1-5' then 1 else 0 end) tag_bg_click_rate \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' and version_compare(appVersion, '6.2.5') >= 0 \
+group by deviceOs

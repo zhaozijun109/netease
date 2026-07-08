@@ -1,0 +1,162 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_paper_man_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId as userId, if(b.userId is null, '激活', '复访') as activate_type \
+from ( \
+    select userId \
+    from lofter.dwd_act_paper_man_action_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_paper_man_user_dialogue_new_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+union all \
+select x.userId as userId, '挽留' as activate_type \
+from ( \
+    select a.userId \
+    from lofter_db_dump.ods_db_paper_man_user_unlock_plot_nd a \
+         join lofter_db_dump.ods_db_paper_man_main_plot_nd b on a.scriptId = b.scriptid and a.plotid = b.id \
+    where a.status = 0 and b.chapterNo = 3 \
+    group by 1 \
+) x \
+join ( \
+    select userId, min(dt) first_dt, max(dt) last_dt \
+    from lofter.dwd_act_paper_man_action_di \
+    where dt >= date_sub('${azkaban.flow.1.days.ago}', 7) and dt <= '${azkaban.flow.1.days.ago}' and \
+          userId > 0 \
+    group by 1 \
+    having last_dt = date_sub('${azkaban.flow.1.days.ago}', 7) \
+) y on x.userId = y.userId \
+left join ( \
+    select userId \
+    from lofter_dm.ads_act_paper_man_user_group_di \
+    where activate_type = '挽留' and dt < '${azkaban.flow.1.days.ago}' \
+) z on x.userId = z.userId \
+where z.userId is null \
+union all \
+select a.userId as userId, '付费挽留' as activate_type \
+from ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_paper_man_stamina_order_nd \
+    where status = 1 and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select userId \
+    from lofter.dwd_act_paper_man_action_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) b on a.userId = b.userId \
+where b.userId is null \
+union all \
+select a.userId as userId, '触达' as activate_type \
+from ( \
+    select userId \
+    from lofter.dws_par_user_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and active_days_7d > 0 \
+) a \
+left join ( \
+    select userId \
+    from lofter.dwd_act_paper_man_action_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+where b.userId is null \
+union all \
+select a.userId as userId, '预约触达' as activate_type \
+from ( \
+    select userId \
+    from lofter.dwd_paper_man_reserve_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select userId \
+    from lofter.dwd_act_paper_man_action_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+where b.userId is null \
+union all \
+select a.userId as userId, '回流' as activate_type \
+from ( \
+    select userId, newStamina, \
+        row_number() over (partition by userId order by createTime desc) as rk \
+    from lofter_db_dump.ods_db_paper_man_user_stamina_log_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' \
+) a \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_paper_man_user_dialogue_new_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+where a.rk = 1 and a.newStamina = 0 and b.userId is null \
+union all \
+select a.userId as userId, '付费回流' as activate_type \
+from ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_paper_man_stamina_order_nd \
+    where status = 1 and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_paper_man_user_dialogue_new_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+where b.userId is null \
+union all \
+select a.userId as userId, '成团' as activate_type \
+from ( \
+    select userId, newStamina, \
+        row_number() over (partition by userId order by createTime desc) as rk \
+    from lofter_db_dump.ods_db_paper_man_user_stamina_log_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_paper_man_user_stamina_group_nd \
+    group by 1 \
+) b on a.userId = b.userId \
+where a.rk = 1 and a.newStamina = 0 and b.userId is null \
+union all \
+select a.userId as userId, '对话激活' as activate_type \
+from ( \
+    select userId, sum(delta) as stamina \
+    from lofter_db_dump.ods_db_paper_man_user_stamina_log_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+where stamina > 0 and stamina < 80 \
+union all \
+select a.userId as userId, '预约付费回流' as activate_type \
+from ( \
+    select userId \
+    from lofter.dwd_paper_man_reserve_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+join ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_paper_man_stamina_order_nd \
+    where status = 1 and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_paper_man_user_dialogue_new_nd \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) c on a.userId = c.userId \
+where c.userId is null \
+union all \
+select userId, '消费' as activate_type \
+from lofter_db_dump.ods_db_trade_paper_man_stamina_order_nd \
+where status = 1 and \
+      from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+      from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+group by 1 \

@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,userid,couponid,tradeid,delivertime,delivercount,peramount,balance,expiretime,gettype,ext,bdupdatetime,scene from lofter_dm.ads_coupon_easy_fetch_deliver_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_coupon_easy_fetch_deliver_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_coupon_easy_fetch_deliver_di

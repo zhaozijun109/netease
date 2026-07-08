@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_content_monitor_fans_di partition(dt='${azkaban.flow.1.days.ago}') \
+                select fansSection, count(distinct blogId) blogCount \
+                from ( \
+                    select case when fans_total <= 1000 then "below 1k" \
+                            when fans_total <= 5000 then "1kto5k" \
+                            when fans_total <= 10000 then "5kto1w" \
+                            when fans_total <= 30000 then "1wto3w" \
+                            when fans_total <= 50000 then "3wto5w" \
+                            when fans_total <= 100000 then "5wto10w" \
+                            when fans_total > 10000 then "大于10w" end as fansSection, \
+                        userId as blogId \
+                    from lofter.dws_par_user_fans_dd \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                ) tt \
+                group by fansSection

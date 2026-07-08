@@ -1,0 +1,102 @@
+type=sparksql
+hive.query.01= \
+WITH tag_dict AS ( \
+SELECT \
+tag, \
+MAX(CAST(roleflag AS INT)) AS is_role_tag, \
+MAX(CAST(cpflag AS INT)) AS is_cp_tag \
+FROM rec.ip_tag_classify_output_tmp \
+GROUP BY tag \
+), \
+device_to_user_mapping AS ( \
+SELECT \
+deviceudid, \
+userids[0] AS userid \
+FROM lofter.device_active \
+WHERE dt >= DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+AND dt <= '${azkaban.flow.1.days.ago}' \
+AND userids IS NOT NULL \
+AND size(userids) > 0 \
+AND userids[0] IS NOT NULL \
+GROUP BY deviceudid, userids[0] \
+), \
+consumer_detail AS ( \
+SELECT \
+base.userid, \
+base.postid, \
+MAX(NVL(b.is_role_tag, 0)) AS post_has_role, \
+MAX(NVL(b.is_cp_tag, 0)) AS post_has_cp \
+FROM ( \
+SELECT \
+m.userid, \
+a.postid, \
+tag \
+FROM lofter.dwd_post_browse_di a \
+JOIN device_to_user_mapping m ON a.deviceudid = m.deviceudid \
+LATERAL VIEW explode(a.post_tags) tmp AS tag \
+WHERE a.dt >= DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+AND a.dt <= '${azkaban.flow.1.days.ago}' \
+AND a.is_real > 0 \
+) base \
+LEFT JOIN tag_dict b ON base.tag = b.tag \
+GROUP BY base.userid, base.postid \
+), \
+creator_detail AS ( \
+SELECT \
+base.userid, \
+base.postid, \
+MAX(NVL(b.is_role_tag, 0)) AS post_has_role, \
+MAX(NVL(b.is_cp_tag, 0)) AS post_has_cp \
+FROM ( \
+SELECT \
+userid, \
+postid, \
+tag \
+FROM lofter.dwd_post_publish_di \
+LATERAL VIEW explode(post_tags) tmp AS tag \
+WHERE dt >= DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+AND dt <= '${azkaban.flow.1.days.ago}' \
+AND userid IS NOT NULL \
+) base \
+LEFT JOIN tag_dict b ON base.tag = b.tag \
+GROUP BY base.userid, base.postid \
+), \
+user_purity AS ( \
+SELECT \
+'consumer' AS user_type, \
+userid, \
+total_action_cnt, \
+solo_action_cnt \
+FROM ( \
+SELECT \
+userid, \
+SUM(IF(post_has_role = 1 OR post_has_cp = 1, 1, 0)) AS total_action_cnt, \
+SUM(IF(post_has_role = 1 AND post_has_cp = 0, 1, 0)) AS solo_action_cnt \
+FROM consumer_detail \
+GROUP BY userid \
+) c_tmp \
+WHERE total_action_cnt > 10 \
+UNION ALL \
+SELECT \
+'creator' AS user_type, \
+userid, \
+total_action_cnt, \
+solo_action_cnt \
+FROM ( \
+SELECT \
+userid, \
+SUM(IF(post_has_role = 1 OR post_has_cp = 1, 1, 0)) AS total_action_cnt, \
+SUM(IF(post_has_role = 1 AND post_has_cp = 0, 1, 0)) AS solo_action_cnt \
+FROM creator_detail \
+GROUP BY userid \
+) p_tmp \
+WHERE total_action_cnt > 0 \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_user_solo_preference_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+userid, \
+user_type, \
+total_action_cnt, \
+solo_action_cnt, \
+CAST(solo_action_cnt AS DOUBLE) / total_action_cnt AS solo_purity_ratio \
+FROM user_purity

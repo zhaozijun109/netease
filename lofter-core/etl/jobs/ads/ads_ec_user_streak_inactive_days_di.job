@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_user_streak_inactive_days_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, datediff('${azkaban.flow.1.days.ago}', b.last_active_date) as streak_inactive_days \
+from lofter_db_dump.ods_db_growth_user_score_nd a \
+join ( \
+    select userId, last_active_date \
+    from lofter.dws_par_user_ec_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \
+where datediff('${azkaban.flow.1.days.ago}', b.last_active_date) >= 7 and a.score > 0 \

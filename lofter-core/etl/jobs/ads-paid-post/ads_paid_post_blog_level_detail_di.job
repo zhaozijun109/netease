@@ -1,0 +1,432 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_blog_level_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.*, \
+  case \
+    when b.blogid is null then 0 \
+    else 1 \
+  end as is_pgc, \
+  case \
+    when low_postnum > 6 then 1 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 900 \
+    and low_postnum <= 0 then 5 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 700 \
+    and low_postnum <= 2 then 4 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 500 \
+    and low_postnum <=4 then 3 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 0 \
+    and low_postnum <= 6 then 2 \
+  end as new_grade, \
+  case \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 900 then 5 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 700 then 4 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 500 then 3 \
+    when post_num_score + post_top_quality_percent_avg_10_score + post_all_quality_percent_avg_score + post_top_money_avg_all_score + post_top_money_avg_10_score + post_gift_30_day_trade_money_score >= 0 then 2 \
+  end as new_grade_nolow_post \
+from \
+  ( \
+    select \
+      a.creatortype, \
+      a.grade, \
+      a.protectedtype, \
+      a.userid, \
+      a.trend, \
+      a.trendcount, \
+      a.paid_postnum, \
+      a.gift_30_day_trade_money, \
+      a.gift_allday_trade_money, \
+      NVL(d.low_postnum, 0) as low_postnum, \
+      num as quality_postnum, \
+      NVL(top_quality_percent_avg_10, 0) as top_quality_percent_avg_10, \
+      NVL(all_quality_percent_avg, 0) as all_quality_percent_avg, \
+      NVL(top_money_avg_all, 0) as top_money_avg_all, \
+      NVL(top_money_avg_10, 0) as top_money_avg_10, \
+      case \
+        when num >= 10 then 200 \
+        when num >= 5 then 160 \
+        when num >= 3 then 100 \
+        when num >= 1 then 40 \
+        else 0 \
+      end post_num_score, \
+      case \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [7] then 200 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [6] then 180 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [5] then 160 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [4] then 140 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [3] then 120 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [2] then 80 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [1] then 40 \
+        when top_quality_percent_avg_10 >= top_quality_percent_avg_10_array [0] then 20 \
+        else 0 \
+      end post_top_quality_percent_avg_10_score, \
+      case \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [7] then 200 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [6] then 180 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [5] then 160 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [4] then 140 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [3] then 120 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [2] then 80 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [1] then 40 \
+        when all_quality_percent_avg >= all_quality_percent_avg_array [0] then 20 \
+        else 0 \
+      end post_all_quality_percent_avg_score, \
+      case \
+        when top_money_avg_all >= 1000 then 150 \
+        when top_money_avg_all >= 500 then 135 \
+        when top_money_avg_all >= 200 then 120 \
+        when top_money_avg_all >= 100 then 90 \
+        when top_money_avg_all >= 50 then 70 \
+        when top_money_avg_all >= 20 then 50 \
+        when top_money_avg_all >= 10 then 35 \
+        when top_money_avg_all >= 5 then 20 \
+        when top_money_avg_all > 0 then 5 \
+        else 0 \
+      end post_top_money_avg_all_score, \
+      case \
+        when top_money_avg_10 >= 1000 then 100 \
+        when top_money_avg_10 >= 500 then 90 \
+        when top_money_avg_10 >= 200 then 80 \
+        when top_money_avg_10 >= 100 then 65 \
+        when top_money_avg_10 >= 50 then 50 \
+        when top_money_avg_10 >= 20 then 30 \
+        when top_money_avg_10 >= 10 then 20 \
+        when top_money_avg_10 >= 5 then 10 \
+        when top_money_avg_10 > 0 then 5 \
+        else 0 \
+      end post_top_money_avg_10_score, \
+      case \
+        when gift_30_day_trade_money >= 50000 then 150 \
+        when gift_30_day_trade_money >= 20000 then 140 \
+        when gift_30_day_trade_money >= 10000 then 130 \
+        when gift_30_day_trade_money >= 5000 then 120 \
+        when gift_30_day_trade_money >= 2000 then 100 \
+        when gift_30_day_trade_money >= 1000 then 80 \
+        when gift_30_day_trade_money >= 500 then 60 \
+        when gift_30_day_trade_money >= 100 then 40 \
+        when gift_30_day_trade_money >= 20 then 20 \
+        when gift_30_day_trade_money >= 0 then 5 \
+        else 0 \
+      end post_gift_30_day_trade_money_score \
+    from \
+      ( \
+        select \
+          creatortype, \
+          grade, \
+          protectedtype, \
+          userid, \
+          trend, \
+          trendcount, \
+          NVL(paid_postnum, 0) as paid_postnum, \
+          NVL(gift_30_day_trade_money, 0) as gift_30_day_trade_money, \
+          NVL(gift_allday_trade_money, 0) as gift_allday_trade_money \
+        from \
+          ( \
+            select \
+              creatortype, \
+              grade, \
+              protectedtype, \
+              userid, \
+              trend, \
+              trendcount \
+            from \
+              lofter_db_dump.ods_db_trade_pay_grade_nd \
+            group by \
+              creatortype, \
+              grade, \
+              protectedtype, \
+              userid, \
+              trend, \
+              trendcount \
+          ) a \
+          left JOIN ( \
+            select \
+              blogid, \
+              count(distinct postid) as paid_postnum \
+            from \
+              lofter.dim_gift_post_return \
+            where \
+              publishdate between date_sub('${azkaban.flow.1.days.ago}', 29) \
+              and '${azkaban.flow.1.days.ago}' \
+              and ispay_returngift in (0, 1) \
+              and contenttype in ('文字', '图片') \
+              and return_gift_plantype not in ('原图', '表情包', '装扮', '图图有证') \
+            group by \
+              blogid \
+          ) b on a.userid = b.blogid \
+          left join ( \
+		   \
+		  select blogid,sum(gift_30_day_trade_money) as gift_30_day_trade_money,sum(gift_allday_trade_money) as gift_allday_trade_money \
+		  from  \
+            (select \
+              blogid, \
+              sum( \
+                case \
+                  when period = '30' then trade_money \
+                  else 0 \
+                end \
+              ) as gift_30_day_trade_money, \
+              sum( \
+                case \
+                  when period = 'history' then trade_money \
+                  else 0 \
+                end \
+              ) as gift_allday_trade_money \
+            from \
+              lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+            where \
+              pay_type = '礼物解锁' \
+              and dt = '${azkaban.flow.1.days.ago}' \
+            group by \
+              blogid \
+			   \
+			  union  \
+			   \
+			  select blogid , \
+			  sum (case when from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between  \
+			  date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+			  then grain_tickets*0.3 else  0 end ) as gift_30_day_trade_money, \
+			  sum ( grain_tickets*0.3  ) as gift_allday_trade_money \
+			  from  \
+			 lofter.dwd_gift_post_unlock_dd \
+			 where dt = '${azkaban.flow.1.days.ago}' \
+			 and unlock_method='粮票' \
+			  group by blogid \
+			   \
+			  union  \
+			   \
+			  select blogid , \
+			  sum (case when from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between  \
+			  date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+			  then 0.2 else  0 end ) as gift_30_day_trade_money,      \
+			  sum ( 0.20  ) as gift_allday_trade_money    \
+			  from  \
+			 lofter.dwd_gift_post_unlock_dd \
+			 where dt = '${azkaban.flow.1.days.ago}' \
+			 and unlock_method in ('广告') \
+			  group by blogid \
+			   \
+			   \
+			  ) a \
+			  group by blogid \
+			   \
+          ) c on a.userid = c.blogid \
+      ) a \
+      left join ( \
+        select \
+          userid, \
+          count(distinct postid) as num, \
+          avg( \
+            case \
+              when top_quality_percent_rk <= 10 then quality_percent \
+            end \
+          ) top_quality_percent_avg_10, \
+          avg(quality_percent) all_quality_percent_avg, \
+          avg( \
+            case \
+              when top_money_rk <= 5 then money \
+            end \
+          ) top_money_avg_5, \
+          avg( \
+            case \
+              when top_money_rk <= 10 then money \
+            end \
+          ) top_money_avg_10, \
+          avg(money) top_money_avg_all \
+        from \
+          ( \
+            select \
+              a.blogid as userid, \
+              b.postid, \
+              poshotpv, \
+              money, \
+              quality_percent, \
+              row_number() over( \
+                partition by a.blogid \
+                order by \
+                  poshotpv desc \
+              ) as top_hot_rk, \
+              row_number() over( \
+                partition by a.blogid \
+                order by \
+                  money desc \
+              ) as top_money_rk, \
+              row_number() over( \
+                partition by a.blogid \
+                order by \
+                  quality_percent desc \
+              ) as top_quality_percent_rk \
+            from \
+              ( \
+                select \
+                  blogid, \
+                  postid \
+                from \
+                  lofter_dm.ads_paid_post_premium_scoring_all_round_di \
+                where \
+                  dt = '${azkaban.flow.1.days.ago}' \
+                group by \
+                  blogid, \
+                  postid \
+              ) a \
+              JOIN ( \
+                select \
+					a.postid, \
+					a.poshotpv, \
+					( \
+						nvl(chargegiftamount, 0) * 0.1 + nvl(freegiftamount, 0) * 0.3 + nvl(ad_money, 0) \
+					) as money \
+				from \
+					lofter.dws_post_base_stats_dd a \
+						left join ( \
+							select \
+								postid, \
+								sum (0.20) as ad_money \
+								from \
+								lofter.dwd_gift_post_unlock_dd \
+								where \
+								dt = '${azkaban.flow.1.days.ago}' \
+								and unlock_method in ('广告') \
+							group by \
+							postid \
+						) b on a.postid = b.postid \
+					where \
+						a.dt = '${azkaban.flow.1.days.ago}' \
+              ) b on a.postid = b.postid \
+              JOIN ( \
+                select \
+                  postid, \
+                  max(quality_percent) as quality_percent \
+                from \
+                  lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+                where \
+                  dt = '${azkaban.flow.1.days.ago}' \
+                group by \
+                  postid \
+              ) c on b.postid = c.postid \
+          ) a \
+        group by \
+          userid \
+      ) b on a.userid = b.userid \
+      cross join ( \
+        select \
+          percentile_approx( \
+            top_quality_percent_avg_10, \
+            array(0.01, 0.05, 0.2, 0.4, 0.65, 0.85, 0.95, 0.99), \
+            9999 \
+          ) as top_quality_percent_avg_10_array, \
+          percentile_approx( \
+            all_quality_percent_avg, \
+            array(0.01, 0.05, 0.2, 0.4, 0.65, 0.85, 0.95, 0.99), \
+            9999 \
+          ) as all_quality_percent_avg_array \
+        from \
+          ( \
+            select \
+              userid, \
+              avg( \
+                case \
+                  when top_quality_percent_rk <= 10 then quality_percent \
+                end \
+              ) top_quality_percent_avg_10, \
+              avg(quality_percent) all_quality_percent_avg \
+            from \
+              ( \
+                select \
+                  a.blogid as userid, \
+                  b.postid, \
+                  poshotpv, \
+                  money, \
+                  quality_percent, \
+                  row_number() over( \
+                    partition by a.blogid \
+                    order by \
+                      poshotpv desc \
+                  ) as top_hot_rk, \
+                  row_number() over( \
+                    partition by a.blogid \
+                    order by \
+                      money desc \
+                  ) as top_money_rk, \
+                  row_number() over( \
+                    partition by a.blogid \
+                    order by \
+                      quality_percent desc \
+                  ) as top_quality_percent_rk \
+                from \
+                  ( \
+                    select \
+                      blogid, \
+                      postid \
+                    from \
+                      lofter_dm.ads_paid_post_premium_scoring_all_round_di \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                    group by \
+                      blogid, \
+                      postid \
+                  ) a \
+                  JOIN ( \
+                    select \
+					a.postid, \
+					a.poshotpv, \
+					( \
+						nvl(chargegiftamount, 0) * 0.1 + nvl(freegiftamount, 0) * 0.3 + nvl(ad_money, 0) \
+					) as money \
+				from \
+					lofter.dws_post_base_stats_dd a \
+						left join ( \
+							select \
+								postid, \
+								sum (0.20) as ad_money \
+								from \
+								lofter.dwd_gift_post_unlock_dd \
+								where \
+								dt = '${azkaban.flow.1.days.ago}' \
+								and unlock_method in ('广告') \
+							group by \
+							postid \
+						) b on a.postid = b.postid \
+					where \
+						a.dt = '${azkaban.flow.1.days.ago}' \
+                  ) b on a.postid = b.postid \
+                  JOIN ( \
+                    select \
+                      postid, \
+                      max(quality_percent) as quality_percent \
+                    from \
+                      lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+                    where \
+                      dt = '${azkaban.flow.1.days.ago}' \
+                    group by \
+                      postid \
+                  ) c on b.postid = c.postid \
+              ) a \
+            group by \
+              userid \
+          ) a \
+      ) c \
+      left join ( \
+        Select \
+          blogid as userid, \
+          count(distinct postid) as low_postnum \
+        from \
+          lofter_dm.ads_ad_paid_post_warning_low_post_di \
+        where \
+          is_warning in (0,1,2,3,4) \
+          and dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          blogid \
+      ) d on a.userid = d.userid \
+  ) a \
+  left join ( \
+    select \
+      blogid \
+    from \
+      lofter.dim_gift_post_return \
+    where \
+      blog_channel = 1 \
+    group by \
+      blogid \
+  ) b on a.userid = b.blogid \
+
+dependencies=ads_paid_post_premium_scoring_all_round_di,ads_paid_post_premium_scoring_group_normalization_di,ads_ad_paid_post_warning_low_post_di,ads_post_paid_creator_revenue_detail_v2_di

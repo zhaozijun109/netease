@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select nvl(a.tag, b.tag) as tag, nvl(a.ip, '') as ip, if(b.tag is not null, 1, 0) as is_big_tag from (select tag, ip from lofter.dwd_tag_ip_mapping_nd where ip_rank = 1 ) a full outer join ( select tagName as tag from `lofter_db_dump`.`ods_db_tag_joined_nd` where joinedNum >= 5000 group by tagName ) b on a.tag = b.tag"
+params= --partition ${azkaban.flow.1.days.ago} --id tag --dest lofter_tag_ip_mapping --full --atom

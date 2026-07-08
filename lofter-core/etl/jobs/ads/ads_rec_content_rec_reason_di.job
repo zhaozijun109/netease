@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_content_rec_reason_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, recReason, priority \
+from ( \
+    select postId, \
+           recReason, \
+           priority, \
+           row_number() over(partition by postId order by priority) as priority_rk \
+    from lofter_dm.ads_rec_content_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is not null \
+) t1 \
+where priority_rk = 1
+dependencies=ads_rec_content_rec_reason_detail_di

@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_device_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceOs, device_type, origin_type, origin_channel, is_paid_subscribe_origin,  \
+       nvl(is_paid_device,0) as is_paid_device, \
+       if((device_type='new' and isanonymous = 0 and u.createdate >= a.dt) or (device_type='return_30' and isanonymous = 0 and b0.userId is not null ) ,1 ,0) is_ture_new_return, \
+       count(distinct a.deviceUdid) device_count,  \
+       count(distinct if(is_whiteboard > 0, a.deviceUdid, null)) whiteboard_device_count, \
+       count(distinct if(u.createDate = '${azkaban.flow.1.days.ago}' and u.isanonymous = 0, a.deviceUdid, null)) new_register_device_count, \
+       count(distinct if( u.isanonymous = 0, a.deviceUdid, null)) login_device_count, \
+       sum(c.real_browse_pv) real_browse_pv, \
+       count(distinct if(c.hd_pv > 0, a.deviceUdid, null)) hd_device_count, \
+       sum(session_total_in_minutes) as session_total_in_minutes \
+from ( \
+    select deviceOs, device_type, origin_type, origin_channel, deviceUdid, \
+           is_paid_subscribe as is_paid_subscribe_origin, is_whiteboard, dt \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a join ( \
+    select deviceUdid, element_at(userIds, 1) as userId \
+    from lofter.device_active \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+left join lofter.dim_user u on b.userId = u.id \
+left join \
+    (select userid from lofter.dwd_user_return_di WHERE dt='${azkaban.flow.1.days.ago}' group by 1) b0  \
+on b.userId =b0.userId \
+left join ( \
+    select deviceUdid, real_browse_pv,  \
+           nvl(like_cnt,0) + nvl(recommend_cnt,0) + nvl(collect_cnt,0) + nvl(reproduce_cnt,0) + nvl(response_cnt,0) as hd_pv, \
+           if(device_pay_amount > 0, 1, 0) as is_paid_device \
+    from lofter.dws_par_device_interaction_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) c on a.deviceUdid = c.deviceUdid \
+left join ( \
+    select deviceUdid, sum(sessionTime) / 60000 as session_total_in_minutes \
+    from lofter.dws_par_device_session_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by deviceUdid \
+) d on a.deviceUdid = d.deviceUdid \
+group by deviceOs, device_type, origin_type, origin_channel, is_paid_subscribe_origin, nvl(is_paid_device,0) \
+,if((device_type='new' and isanonymous = 0 and u.createdate >= a.dt) or (device_type='return_30' and isanonymous = 0 and b0.userId is not null ) ,1 ,0) \
+distribute by 1

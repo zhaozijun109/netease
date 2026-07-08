@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select * from lofter_dm.ads_tag_fetch_post_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.tag_fetch_post_dd --batch 102400 --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_tag_fetch_post_dd

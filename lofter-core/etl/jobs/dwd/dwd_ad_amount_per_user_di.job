@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ad_amount_per_user_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select userid,a.positionid,b.category,bgpv,clickpv,amount, is_canreward \
+from( \
+    select userid \
+        ,positionid \
+        ,is_canreward \
+        ,nvl(sum(bgpv),0) as bgpv \
+        ,nvl(sum(clickpv),0) as clickpv \
+        ,nvl(sum(bid_amount/1000),0) as amount \
+    from ( \
+        select userid,positionid,bgpv,clickpv,bid_amount, \
+            if(t2.req_uid is not null,'1','0') as is_canreward \
+        from( \
+            select userid,positionid,uuid,bgpv,clickpv,bid_amount \
+            from lofter.dwd_ad_actions_di \
+            where dt = '${azkaban.flow.1.days.ago}' and appid = '6ED29071' and userid > 0 \
+                and bgpv > 0 and dspid <> 1 and bid_amount > 0 \
+        )t1 \
+        left join( \
+                select \
+                    params["req_uid"] as req_uid \
+                from lofter.ods_mda_app_partition_di \
+                where dt = '${azkaban.flow.1.days.ago}' and eventId = 'ad-110' \
+                group by params["req_uid"] \
+            ) t2 on t1.uuid = t2.req_uid \
+        ) \
+    group by userid,positionid,is_canreward \
+)a \
+left join( \
+    select positionid,category \
+    from lofter_db_dump.ods_db_act_adspace_snapshot_nd \
+    group by positionid,category \
+)b on a.positionid = b.positionid

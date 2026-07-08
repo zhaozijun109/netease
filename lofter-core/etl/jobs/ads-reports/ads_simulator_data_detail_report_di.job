@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_simulator_data_detail_report_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select \
+  COALESCE(source, 3) as source, \
+  simulator_id, \
+  name, \
+  category_label, \
+  count(distinct user_id) as simulator_chat_uv, \
+  count(message_id) as simulator_message_cnt, \
+  sum(total_consume) as simulator_total_consume \
+from lofter_dm.ads_pve_simulator_talk_info_i_report_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+  and scene = 'SIMULATOR_CHAT' \
+group by source, simulator_id, name, category_label \
+grouping sets( \
+  (source, simulator_id, name, category_label), \
+  (simulator_id, name, category_label) \
+)
+
+dependencies=ads_pve_simulator_talk_info_i_report_di

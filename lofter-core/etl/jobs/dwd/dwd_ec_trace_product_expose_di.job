@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ec_trace_product_expose_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, deviceUdid, url, adTrace, activityCode, productId, occurTime \
+from ( \
+        select a.userId as userId, deviceUdid, \
+            get_json_object(c.content, '$.url') as url, \
+            parse_url(get_json_object(c.content, '$.url'), "QUERY", "adTrace") as adTrace, \
+            parse_url(get_json_object(c.content, '$.url'), "QUERY", "activityCode") activityCode, \
+            parse_url(get_json_object(c.content, '$.url'), "QUERY", "productId") as productId, \
+            a.occurTime as occurTime \
+        from ( \
+            select userId, deviceUdid, cast(itemId as bigint) as messageId, occurTime \
+            from lofter.ods_mda_app_partition_di \
+            where dt = '${azkaban.flow.1.days.ago}' and actionType = 'message' and eventId = 'e11-5' and itemType = 'MESSAGE' \
+        ) a \
+        join lofter_db_dump.ods_db_message_nd b on a.messageId = b.id \
+        join lofter_db_dump.ods_db_notify_message_content_nd c on c.id = cast(b.content as bigint) \
+        where cast(b.content as bigint) > 0 \
+    union all \
+        select userId, deviceUdid, \
+            nvl(params['URL'], params['url']) as url, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "adTrace") as adTrace, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "activityCode") as activityCode, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "productId") as productId, \
+            occurTime \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            actionType = 'advertisement' and \
+            eventId in ('ad-1', 'ad-21', 'ad-53', 'ad-65') \
+    union all \
+        select userId, deviceUdid, \
+            nvl(params['URL'], params['url']) as url, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "adTrace") as adTrace, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "activityCode") as activityCode, \
+            parse_url(nvl(params['URL'], params['url']), "QUERY", "productId") as productId, \
+            occurTime \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            actionType = 'benefit_market' and \
+            eventId = 'w1-53' \
+) a \
+where length(adTrace) > 0 and (url like '%lofter.com/cms/%' or url like '%lofter.com/market/%') \
+

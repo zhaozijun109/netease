@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=\
+with commentSource as ( \
+    select postId, \
+           blogId, \
+           pid, \
+           content, \
+           concat_ws(',', collect_list(commentId)) as commentIds, \
+           count(1) as followedCount \
+    from ( \
+        select id as commentId, \
+               postId, \
+               blogId, \
+               case when content like '%首刷%' then concat(regexp_replace('${azkaban.flow.current.date}', '-', ''), '首刷') \
+                    else regexp_replace(content, '[！!？?，,。.；;：:“”"‘’\\\']', '') \
+               end as content, \
+               commentHot, \
+               pid \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where length(pid) > 0 \
+    ) t \
+    where length(content) >= 5 and length(content) <= 20 \
+    group by postId, blogId, pid, content \
+    having count(1) >= 5 \
+) \
+insert overwrite table lofter_dm.ads_post_comment_duplication_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+      blogId, \
+      pid, \
+      content, \
+      commentIds, \
+      followedCount \
+from ( \
+    select postId, \
+           blogId, \
+           pid, \
+           content, \
+           commentIds, \
+           followedCount, \
+           row_number() over(partition by postId, blogId order by followedCount desc) as rn \
+    from commentSource \
+) t \
+where rn <= 3

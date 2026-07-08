@@ -1,0 +1,216 @@
+type=sparksql
+hive.query.01=\
+WITH  \
+base_data_1d AS ( \
+    SELECT   \
+        a.deviceid \
+        ,CASE WHEN a.status IN (1,2) THEN '已完成'  \
+              WHEN a.status = 0 THEN '未完成' ELSE CAST(a.status AS STRING) END AS status \
+        ,a.createTime  \
+        ,a.completetime \
+        ,b.deviceudid \
+        ,a.userid \
+        ,sourceplatform  \
+        ,targetplatform  \
+    FROM  \
+        (SELECT  \
+            deviceid \
+            ,sourceplatform \
+            ,targetplatform \
+            ,max(userid) as userid \
+            ,max(status) as status \
+            ,min(FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd')) AS createTime \
+            ,max(FROM_UNIXTIME(CAST(completetime  AS BIGINT), 'yyyy-MM-dd')) AS completetime \
+        FROM lofter_db_dump.ods_db_exchange_task_nd \
+        WHERE FROM_UNIXTIME(CAST(createTime  AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        GROUP BY  \
+            deviceid \
+            ,sourceplatform \
+            ,targetplatform \
+        ) a  \
+    LEFT JOIN ( \
+        SELECT  \
+            sid \
+            ,tid AS deviceudid \
+        FROM lofter.dwd_device_mapping \
+        WHERE tid_tp = 'deviceudid'  \
+        AND lastno = 1  \
+        AND sid_tp = 'customudid' \
+        GROUP BY sid, tid \
+    ) b  \
+    ON a.deviceid = b.sid \
+    GROUP BY  \
+        a.deviceid \
+        ,CASE WHEN a.status IN (1,2) THEN '已完成'  \
+              WHEN a.status = 0 THEN '未完成' ELSE CAST(a.status AS STRING) END  \
+        ,a.createTime  \
+        ,a.completetime \
+        ,b.deviceudid \
+        ,a.userid \
+        ,sourceplatform  \
+        ,targetplatform  \
+), \
+active_data_1d AS ( \
+    SELECT  \
+        deviceudid \
+        ,device_type \
+        ,dt \
+    FROM lofter.dwd_device_growth_attribution_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY  \
+        deviceudid \
+        ,device_type \
+        ,dt \
+), \
+page_view_data as ( \
+    select  \
+        a.userid \
+        ,a.dt \
+        ,count(distinct a.postid) as cnt_postid \
+        ,count(distinct case when is_real=1 then a.postid else null end) as cnt_valid \
+        ,count(distinct case when is_real=1 and post_content_type = '文字' then a.postid else null end ) as cnt_valid_wenzi \
+        ,count(distinct case when is_real=1 and post_content_type = '图片' then a.postid else null end ) as cnt_valid_tupian \
+        ,count(distinct case when is_real=1 and b.postid is not null then a.postid else null end) as cnt_valid_fufei \
+        ,count(distinct case when is_real=1 and b.postid is not null and post_content_type = '文字' then a.postid else null end) as cnt_valid_fufei_wenzi \
+        ,count(distinct case when is_real=1 and b.postid is not null and post_content_type = '图片' then a.postid else null end) as cnt_valid_fufei_tupian \
+        ,count(a.postid) as cnt_postid_pv \
+        ,count(case when is_real=1 then a.postid else null end) as cnt_valid_pv \
+        ,count(case when is_real=1 and post_content_type = '文字' then a.postid else null end ) as cnt_valid_wenzi_pv \
+        ,count(case when is_real=1 and post_content_type = '图片' then a.postid else null end ) as cnt_valid_tupian_pv \
+        ,count(case when is_real=1 and b.postid is not null then a.postid else null end) as cnt_valid_fufei_pv \
+        ,count(case when is_real=1 and b.postid is not null and post_content_type = '文字' then a.postid else null end) as cnt_valid_fufei_wenzi_pv \
+        ,count(case when is_real=1 and b.postid is not null and post_content_type = '图片' then a.postid else null end) as cnt_valid_fufei_tupian_pv \
+        ,sum(duration / (1000*60)) AS duration_mins \
+        ,sum(case when post_content_type = '文字' then duration / (1000*60) else null end ) as duration_mins_wenzi \
+        ,sum(case when post_content_type = '图片' then duration / (1000*60) else null end ) as duration_mins_tupian \
+    from ( \
+        select  \
+            userid,  \
+            dt,  \
+            postid,  \
+            is_real,  \
+            post_content_type,  \
+            duration,  \
+            action_type \
+        from lofter.dwd_post_browse_di  \
+        where dt = '${azkaban.flow.1.days.ago}'  \
+          and action_type = 'page_duration'      \
+    ) a \
+    left join ( \
+        select postid, dt \
+        from lofter.dim_gift_post_return_dd  \
+        where dt = '${azkaban.flow.1.days.ago}' \
+          and ispay_returngift in (0,1)  \
+        group by postid, dt \
+    ) b on a.postid = b.postid and a.dt = b.dt \
+    group by a.userid, a.dt \
+), \
+fufei_data as ( \
+        select userid \
+            ,pay_date \
+            ,sum(money) as money \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and pay_date = '${azkaban.flow.1.days.ago}' \
+    group by userid,pay_date \
+), \
+hot_data as ( \
+    select userid,dt \
+        ,count(distinct postid) as cnt_hot \
+        ,count(distinct case when post_content_type ='文字' then postid else null end) as cnt_hot_wenzi \
+        ,count(distinct case when post_content_type ='图片' then postid else null end) as cnt_hot_tupian \
+        ,count(postid) as cnt_hot_pv \
+        ,count(case when post_content_type ='文字' then postid else null end) as cnt_hot_wenzi_pv \
+        ,count(case when post_content_type ='图片' then postid else null end) as cnt_hot_tupian_pv \
+    from lofter.dwd_post_hot_di \
+    where dt =  '${azkaban.flow.1.days.ago}' \
+    group by userid,dt \
+), \
+shichang_data as ( \
+    select userid \
+        ,dt \
+        ,avg(active_days_7d) as active_days_7d \
+        ,avg(active_days_30d) as active_days_30d \
+    from lofter.dws_par_user_active_dd \
+    where dt =  '${azkaban.flow.1.days.ago}' \
+    group by userid,dt \
+) \
+insert overwrite table lofter_dm.ads_growth_shengtai_fufei_maoer_exchange_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    max(createTime) as createTime \
+    ,CASE WHEN GROUPING(b.device_type) = 1 THEN 'ALL' ELSE COALESCE(b.device_type, '其他') END AS device_type \
+    ,CASE WHEN GROUPING(a.status) = 1 THEN 'ALL' ELSE COALESCE(a.status, '其他') END AS status \
+    ,CASE WHEN GROUPING(a.sourceplatform) = 1 THEN 'ALL' ELSE a.sourceplatform END AS sourceplatform \
+    ,CASE WHEN GROUPING(a.targetplatform) = 1 THEN 'ALL' ELSE a.targetplatform END AS targetplatform \
+    ,count(distinct a.deviceudid) as cnt_deviceudid \
+    ,count(distinct a.userid) as cnt_userid \
+    ,sum(cnt_postid) as cnt_postid \
+    ,sum(cnt_valid) as cnt_valid \
+    ,sum(cnt_valid_wenzi) as cnt_valid_wenzi  \
+    ,sum(cnt_valid_tupian) as cnt_valid_tupian \
+    ,sum(cnt_valid_fufei) as cnt_valid_fufei \
+    ,sum(cnt_valid_fufei_wenzi) as cnt_valid_fufei_wenzi \
+    ,sum(cnt_valid_fufei_tupian) as cnt_valid_fufei_tupian \
+    ,sum(cnt_postid_pv) as cnt_postid_pv \
+    ,sum(cnt_valid_pv) as cnt_valid_pv \
+    ,sum(cnt_valid_wenzi_pv) as cnt_valid_wenzi_pv \
+    ,sum(cnt_valid_tupian_pv) as cnt_valid_tupian_pv \
+    ,sum(cnt_valid_fufei_pv) as cnt_valid_fufei_pv \
+    ,sum(cnt_valid_fufei_wenzi_pv) as cnt_valid_fufei_wenzi_pv \
+    ,sum(cnt_valid_fufei_tupian_pv) as cnt_valid_fufei_tupian_pv \
+    ,sum(cnt_hot) as cnt_hot \
+    ,sum(cnt_hot_wenzi) as cnt_hot_wenzi \
+    ,sum(cnt_hot_tupian) as cnt_hot_tupian \
+    ,sum(cnt_hot_pv) as cnt_hot_pv \
+    ,sum(cnt_hot_wenzi_pv) as cnt_hot_wenzi_pv \
+    ,sum(cnt_hot_tupian_pv) as cnt_hot_tupian_pv \
+    ,sum(duration_mins) as duration_mins \
+    ,sum(duration_mins_wenzi) as duration_mins_wenzi \
+    ,sum(duration_mins_tupian) as duration_mins_tupian \
+    ,sum(cnt_postid)/count(distinct a.userid) as avg_cnt_postid \
+    ,sum(cnt_valid)/count(distinct a.userid)  as avg_cnt_valid \
+    ,sum(cnt_valid_wenzi)/count(distinct a.userid) as avg_cnt_valid_wenzi  \
+    ,sum(cnt_valid_tupian)/count(distinct a.userid) as avg_cnt_valid_tupian \
+    ,sum(cnt_valid_fufei)/count(distinct a.userid)  as avg_valid_fufei \
+    ,sum(cnt_valid_fufei_wenzi)/count(distinct a.userid) as avg_cnt_valid_fufei_wenzi \
+    ,sum(cnt_valid_fufei_tupian)/count(distinct a.userid) as  avg_cnt_valid_fufei_tupian \
+    ,sum(cnt_postid_pv)/count(distinct a.userid) as  avg_cnt_postid_pv \
+    ,sum(cnt_valid_pv)/count(distinct a.userid) as  avg_cnt_valid_pv \
+    ,sum(cnt_valid_wenzi_pv)/count(distinct a.userid) as avg_valid_wenzi_pv \
+    ,sum(cnt_valid_tupian_pv)/count(distinct a.userid) as avg_valid_tupian_pv \
+    ,sum(cnt_valid_fufei_pv)/count(distinct a.userid) as  avg_cnt_valid_fufei_pv \
+    ,sum(cnt_valid_fufei_wenzi_pv)/count(distinct a.userid) as  avg_cnt_valid_fufei_wenzi_pv \
+    ,sum(cnt_valid_fufei_tupian_pv)/count(distinct a.userid) as  avg_cnt_valid_fufei_tupian_pv \
+    ,sum(cnt_hot) /count(distinct a.userid) as  avg_cnt_hot \
+    ,sum(cnt_hot_wenzi) /count(distinct a.userid) as  avg_cnt_hot_wenzi \
+    ,sum(cnt_hot_tupian) /count(distinct a.userid) as  avg_cnt_hot_tupian \
+    ,sum(cnt_hot_pv) /count(distinct a.userid) as  avg_cnt_hot_pv \
+    ,sum(cnt_hot_wenzi_pv) /count(distinct a.userid) as  avg_cnt_hot_wenzi_pv \
+    ,sum(cnt_hot_tupian_pv) /count(distinct a.userid) as  avg_cnt_hot_tupian_pv \
+    ,sum(duration_mins)/count(distinct a.userid) as  avg_duration_mins \
+    ,sum(duration_mins_wenzi)/count(distinct a.userid) as  avg_duration_mins_wenzi \
+    ,sum(duration_mins_tupian)/count(distinct a.userid) as  avg_duration_mins_tupian \
+    ,avg(active_days_7d) as active_days_7d \
+    ,avg(active_days_30d) as active_days_30d \
+    ,count(distinct case when f.userid is not null then a.userid else null end) as cnt_fufei_userid \
+    ,sum(money) as money \
+    ,sum(money)/count(distinct a.userid) as arpu \
+    ,sum(money)/count(distinct case when f.userid is not null then a.userid else null end) as arppu \
+FROM base_data_1d a  \
+LEFT JOIN active_data_1d b ON a.deviceudid=b.deviceudid AND a.createTime=b.dt \
+LEFT JOIN page_view_data c ON a.userid=c.userid AND a.createTime=c.dt \
+LEFT JOIN hot_data d ON a.userid=d.userid AND a.createTime=d.dt \
+LEFT JOIN shichang_data e ON a.userid=e.userid AND a.createTime=e.dt \
+LEFT JOIN fufei_data f ON a.userid=f.userid AND a.createTime = f.pay_date \
+GROUP BY GROUPING SETS ( \
+    (b.device_type, a.status, a.sourceplatform, a.targetplatform), \
+    (b.device_type, a.status, a.sourceplatform), \
+    (b.device_type, a.status, a.targetplatform), \
+    (a.status, b.device_type), \
+    (a.status), \
+    (b.device_type), \
+    (a.sourceplatform), \
+    (a.targetplatform), \
+    (a.sourceplatform, a.targetplatform),  \
+    () \
+)

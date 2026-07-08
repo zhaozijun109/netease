@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_dis_category_percentile_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select category, \
+    percentile_approx(pvclickrate, array(0.5,0.75),9999) as pvClickPercentile, \
+    percentile_approx(uvclickrate, array(0.5,0.75),9999) as uvClickPercentile, \
+    percentile_approx(hdrate, array(0.5,0.75),9999) as hdPercentile, \
+    percentile_approx(qbhot, array(0.5,0.75),9999) as qbHotPercentile \
+from \
+(select postid,userId,clickpv/exposurepv as pvclickrate,clickuv/exposureuv as uvclickrate, \
+hduv/browseuv as hdrate, \
+poshotpv*1000/exposurepv as qbhot \
+from lofter.dws_post_base_stats_di \
+where dt='${azkaban.flow.1.days.ago}' and exposurepv>=200 and clickpv>0 and clickuv>0 and exposureuv>0 and hduv>0 \
+      and browseuv>0 and poshotpv>0 \
+) a \
+join \
+(select postid,blogId,category \
+from  lofter.dim_post_category_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+) b \
+on a.postid=b.postid and a.userId=b.blogid \
+group by category
+

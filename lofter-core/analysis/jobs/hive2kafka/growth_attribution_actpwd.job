@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select a.userid as userid, a.deviceudid as deviceudid, a.origin_actpwd as origin_actpwd, a.occurtime as occurtime \
+from ( \
+    select land_nonrec_userid as userid, deviceudid, origin_actpwd, occurtime \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt ='${azkaban.flow.1.days.ago}' and length(origin_actpwd) > 0 and device_type = 'new' \
+) a \
+left join ( \
+    select deviceUdid, actpwd \
+    from lofter.dwd_paid_subscribe_device_cpa_deduplicate_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.origin_actpwd = b.actpwd and a.deviceudid = b.deviceUdid \
+where b.deviceUdid is null \
+"
+params= --topic LOFTER.KOL.attribution.user --withCount --meta _payload_type=paid_subscribe_order,_payload_date=${azkaban.flow.1.days.ago} --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

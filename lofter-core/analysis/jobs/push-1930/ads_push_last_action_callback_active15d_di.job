@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_last_action_callback_active15d_di partition(dt = '${azkaban.flow.current.date}') \
+select a.userId, c.actionType, c.itemId, c.itemData \
+from ( \
+    select userId \
+    from lofter.dws_par_user_active_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_anonymous = 0 and active_days_7d = 0 and active_days_15d > 0 \
+) a \
+join ( \
+    select userId, max(dt) as last_active_dt \
+    from lofter.dwd_user_active_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) and userId > 0 \
+    group by 1 \
+) a1 on a.userId = a1.userId \
+left join ( \
+    select userId \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.current.date}' and userId > 0 \
+    group by 1 \
+) b on a.userId = b.userId \
+join ( \
+    select * \
+    from ( \
+        select *, row_number() over (partition by userId order by actionType) as action_rk \
+        from ( \
+            select a.userId as userId, 1 as actionType, a.tag as itemId, a.dt as dt, null as itemData \
+            from ( \
+                select *, row_number() over (partition by userId order by time desc) as last_rk \
+                from lofter.dwd_tag_subscribe_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+            ) a \
+            join ( \
+                select tagName as tag, lastupdatetime as tag_update_time from lofter_db_dump.ods_db_tag_joined_nd \
+            ) b on a.tag = b.tag and b.tag_update_time > a.time \
+            left join lofter_db_dump.ods_db_user_forbid_tag_nd c on a.userId = c.userId and a.tag = c.tagName \
+            where a.last_rk = 1 and c.tagName is null \
+        union all \
+            select a.userId as userId, 2 as actionType, cast(a.blogId as string) as itemId, a.dt as dt, null as itemData \
+            from ( \
+                select *, row_number() over (partition by userId order by follow_time desc) as last_rk \
+                from lofter.dwd_blog_follow_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+            ) a \
+            join ( \
+                select blogId, max(publishTime) as last_publish_time \
+                from lofter.dim_post \
+                group by 1 \
+            ) b on a.blogId = b.blogId and b.last_publish_time > a.follow_time \
+            where a.last_rk = 1 \
+        union all \
+            select a.subscribe_userId as userId, 3 as actionType, cast(a.collectionId as string) as itemId, a.subscribe_dt as dt, c.browse_pv_3d as itemData \
+            from ( \
+                select *, from_unixtime(cast(subscribetime/1000 as bigint), 'yyyy-MM-dd') as subscribe_dt, \
+                    row_number() over (partition by subscribe_userId order by subscribeTime desc) as last_rk \
+                from lofter.dwd_collection_user_subscribe_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and \
+                    from_unixtime(cast(subscribetime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                    from_unixtime(cast(subscribetime/1000 as bigint), 'yyyy-MM-dd') >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+            ) a \
+            join lofter_db_dump.ods_db_post_collection_nd b on a.collectionId = b.id and b.lastPublishTime > a.subscribeTime \
+            left join ( \
+                select collectionId, count(1) as browse_pv_3d \
+                from lofter.dwd_post_collection_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.3.days.ago}' and action_type = 'browse' and is_real > 0 \
+                group by 1 \
+            ) c on a.collectionId = c.collectionId \
+            where a.last_rk = 1 \
+        union all \
+            select a.userId as userId, 4 as actionType, cast(a.grainId as string) as itemId, a.follow_dt as dt, null as itemData \
+            from ( \
+                select *, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') as follow_dt, \
+                    row_number() over (partition by userId order by createTime desc) as last_rk \
+                from lofter_db_dump.ods_db_grain_follower_nd \
+                where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and  from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+            ) a \
+            join lofter_db_dump.ods_db_grain_info_nd b on a.grainId = b.id and b.addPostTime > a.createTime \
+            where a.last_rk = 1 \
+        union all \
+            select a.userId as userId, 5 as actionType, cast(a.postId as string) as itemId, a.dt as dt, null as itemData \
+            from ( \
+                select *, row_number() over (partition by userId order by opTime desc) as last_rk \
+                from lofter.dwd_post_hot_di \
+                where opType in ('praise','recommend') and \
+                    dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+            ) a \
+            where last_rk = 1 \
+        ) t \
+    ) tt \
+    where action_rk = 1 \
+) c on a.userId = c.userId and a1.last_active_dt = c.dt \
+left join ( \
+    select * \
+    from lofter_dm.ads_push_last_action_callback_active15d_di \
+    where dt < '${azkaban.flow.current.date}' \
+) d on c.userId = d.userId and c.actionType = d.actionType and c.itemId = d.itemId \
+where b.userId is null and d.itemId is null \

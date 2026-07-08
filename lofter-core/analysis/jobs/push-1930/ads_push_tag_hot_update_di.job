@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_push_tag_hot_update_di partition(dt = '${azkaban.flow.current.date}') \
+select t1.userId, \
+       t1.tag \
+from ( \
+    select userId, tag \
+    from lofter.dwd_post_browse_di lateral view explode(post_tags) as tag \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 2) and '${azkaban.flow.1.days.ago}' and detail_source1_scene_level_2 = 'tag_hot' \
+    group by userId, tag \
+    having count(distinct postId) >= 3 \
+) t1 \
+join ( \
+    select userId, tagName as tag from lofter_db_dump.ods_db_favorite_tag_nd \
+) t2 \
+on t1.userId = t2.userId and t1.tag = t2.tag \
+join ( \
+    select tag \
+    from ( \
+        select tag, \
+               postId, \
+               publishTime, \
+               postHot \
+        from ( \
+            select tagName as tag, \
+                   postId, \
+                   publishTime, \
+                   postHot, \
+                   row_number() over (partition by postId order by _bin_op_seqno desc, _bin_op_time desc) as rn \
+            from lofter.ods_binlog_tag_resource_di where dt between '${azkaban.flow.1.days.ago}' and '${azkaban.flow.current.date}' and \
+                 from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH:mm:SS') between \
+                 '${azkaban.flow.1.days.ago} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+                 and '${azkaban.flow.current.date} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' and status = 0 and isPublic = 1 \
+        ) t \
+        where rn = 1 \
+    ) tt \
+    group by tag \
+    having count(distinct postId) >= 10 \
+) t3 \
+on t1.tag = t3.tag

@@ -1,0 +1,123 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_group_observe_base_di partition(dt='${azkaban.flow.1.days.ago}') \
+select b.id as postId, c.level as blog_level, b.contentType as content_type, d.category, concat_ws(',', b.ips) as ip, \
+       e.growth_level, f.growth_level_max, f.growth_level_max as explosive_level_max, \
+       e.new_users, e.new_users_30d, e.new_users_7d, e.new_users_1d, \
+       if(e2.new_users_1d > 0, nvl(e.new_users_1d, 0) / nvl(e2.new_users_1d, 1), null) as new_users_ratio, \
+       g.share, g.hot, \
+       pay_users_gift as pay_users, \
+       pay_users_gift as pay_users_gift, \
+       0 as pay_users_fans, \
+       0 as pay_users_vip, \
+       pay_amount_gift as pay_amount, \
+       pay_amount_gift as pay_amount_gift, \
+       0 as pay_amount_fans, \
+       0 as pay_amount_vip, \
+       pay_users_cvr, \
+       pay_users_cvr_gift, \
+       0 as pay_users_fans, \
+       0 as pay_users_vip, \
+       if(j.postId is not null, g.expose, 0) as paid_post_expose, \
+       if(j.postId is not null, g.click, 0) as paid_post_click, \
+       g.real_browse, g.real_browse_uv, \
+       if(nvl(g.expose,0) = 0, 0, pay_amount_gift * 1000 / g.expose) avg_revenue_1k_expose, \
+       k.hot_7d, k.hot_30d, \
+       g.like, g.recommend, g.comment, \
+       g.support_traffic_ratio, \
+       0 as hot_uptick_max_7d, 0 as hot_uptick_max_30d, \
+       g.hdRatio, if(l.postId is not null, 1, 0) as is_premium_post, \
+       if(m.userId is not null, 1, 0) as is_premium_creator, \
+       nvl(g.expose,0) as expose, \
+       long_comment_cnt_std as long_comment \
+from lofter.dim_post b \
+left join ( \
+    select userId as blogId, level \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and length(level) > 0 \
+) c on b.blogId = c.blogId \
+left join ( \
+    select postId, concat_ws('-', category, category2, category3) as category \
+    from lofter.dim_post_category_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on b.id = d.postId \
+left join ( \
+    select content_id as postId, grade as growth_level, \
+           new_devices_std as new_users, new_devices as new_users_1d, \
+           new_devices_7d as new_users_7d, new_devices_30d as new_users_30d \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          content_type in ('图片', '文字', '视频') \
+) e on b.id = e.postId \
+left join ( \
+    select content_id as postId, new_devices as new_users_1d \
+    from lofter_dm.ads_growth_content_di \
+    where dt = '${azkaban.flow.7.days.ago}' and new_devices > 0 and \
+          content_type in ('图片', '文字', '视频') \
+) e2 on b.id = e2.postId \
+left join ( \
+    select postId, \
+           if(translate(grade, 'ABCDE', 'SABCD') = 'D', 'C', translate(grade, 'ABCDE', 'SABCD')) as growth_level_max \
+    from ( \
+        select content_id as postId, max(translate(if(grade = 'C', 'D', grade), 'SABCD', 'ABCDE')) as grade \
+        from lofter_dm.ads_growth_content_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and \
+              content_type in ('图片', '文字', '视频') \
+        group by 1 \
+    ) t \
+) f on b.id = f.postId \
+left join ( \
+    select postId, \
+           greatest(posHotPv - negHotPv, 0) as hot, \
+           greatest(posPraisePv - negPraisePv, 0) as like, \
+           greatest(posRecPv - negRecPv, 0) as recommend, \
+           greatest(posCommentPv - negCommentPv, 0) as comment, \
+           exposurePv as expose, \
+           clickPv as click, \
+           realBrowsePv as real_browse, \
+           realBrowseUv as real_browse_uv, \
+           sharePv as share, \
+           if(nvl(realBrowseUv,0) = 0, 0, hdUv / realBrowseUv) as hdRatio, \
+           if(nvl(exposurePv,0) = 0, 0, support_exposure_pv / exposurePv) as support_traffic_ratio \
+    from lofter.dws_post_base_stats_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) g on b.id = g.postId \
+left join ( \
+    select postId, \
+           count(distinct sender) as pay_users_gift, \
+           sum(coin) * 0.1 as pay_amount_gift, \
+           0 as pay_users_cvr, \
+           0 as pay_users_cvr_gift \
+    from lofter.dwd_paid_post_detail_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) h on b.id = h.postId \
+left join ( \
+    select postId \
+    from ( \
+        select postId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and status > 0 \
+      union all \
+        select id as postId \
+        from lofter.dim_post \
+        where is_book_store > 0 \
+    ) t \
+    group by postId \
+) j on b.id = j.postId \
+left join ( \
+    select postId, hot_7d, hot_30d, long_comment_cnt_std \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) k on b.id = k.postId \
+left join ( \
+    select postId \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) l on b.id = l.postId \
+left join ( \
+    select userId \
+    from lofter.dws_par_creator_premium_staging_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+) m on b.blogId = m.userId
+

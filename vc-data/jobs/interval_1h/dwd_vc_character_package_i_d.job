@@ -1,0 +1,90 @@
+type=sparksql
+hive.query.01 = with config as (select id                                                                    as package_id, \
+                                       split(ugc_categories, ',')                                            as ugc_categories_list, \
+                                       if(ARRAY_CONTAINS(split(ugc_categories, ','), '全部'), true, false)   as ugc_categories_isall, \
+                                       if(ARRAY_CONTAINS(split(ugc_categories, ','), ''), true, false)       as ugc_categories_isnull, \
+                                       split(ugc_front_tags, ',')                                            as ugc_front_tags_list, \
+                                       if(ARRAY_CONTAINS(split(ugc_front_tags, ','), '全部'), true, false)   as ugc_front_tags_isall, \
+                                       if(ARRAY_CONTAINS(split(ugc_front_tags, ','), ''), true, false)       as ugc_front_tags_isnull, \
+                                       split(ugc_backend_tags, ',')                                          as ugc_backend_tags_list, \
+                                       if(ARRAY_CONTAINS(split(ugc_backend_tags, ','), '全部'), true, false) as ugc_backend_tags_isall, \
+                                       if(ARRAY_CONTAINS(split(ugc_backend_tags, ','), ''), true, false)     as ugc_backend_tags_isnull, \
+                                       split(ogc_categories, ',')                                            as ogc_categories_list, \
+                                       if(ARRAY_CONTAINS(split(ogc_categories, ','), '全部'), true, false)   as ogc_categories_isall, \
+                                       if(ARRAY_CONTAINS(split(ogc_categories, ','), ''), true, false)       as ogc_categories_isnull, \
+                                       split(ogc_front_tags, ',')                                            as ogc_front_tags_list, \
+                                       if(ARRAY_CONTAINS(split(ogc_front_tags, ','), '全部'), true, false)   as ogc_front_tags_isall, \
+                                       if(ARRAY_CONTAINS(split(ogc_front_tags, ','), ''), true, false)       as ogc_front_tags_isnull, \
+                                       split(ogc_backend_tags, ',')                                          as ogc_backend_tags_list, \
+                                       if(ARRAY_CONTAINS(split(ogc_backend_tags, ','), '全部'), true, false) as ogc_backend_tags_isall, \
+                                       if(ARRAY_CONTAINS(split(ogc_backend_tags, ','), ''), true, false)     as ogc_backend_tags_isnull, \
+                                       ogc_tag_type, \
+                                       ugc_tag_type, \
+                                       version + 1                                                           as version \
+                                from vc.ods_db_rt1h_vc_character_package_config_nd \
+                                where status > 0 ), \
+                     tag_characters as (select x2.package_id, \
+                                               x1.character_type, \
+                                               x2.version, \
+                                               x1.character_id, \
+                                               x1.total_talk_cnt, \
+                                               x1.total_peoples \
+                                        from config x2 \
+                                                 inner join \
+                                             (select character_id,front_tags_list,backend_tags_list,category_list,character_type, \
+                                             character_name,total_talk_cnt,total_peoples,pack_id,split(l2_name_set_str,',') as tags_v2_array \
+                                              from vc.dwd_vc_character_tags_1h_a_d \
+                                              where dt = '${azkaban.flow.current.date}' \
+                                                and h = '${azkaban.flow.start.hour}') x1 \
+                                             on \
+                                                 case \
+                                                     when x1.character_type = 'ogc' \
+                                                         then if(ogc_categories_isnull, false, if(ogc_categories_isall, true, \
+                                                                                                  size(array_intersect(x1.category_list, x2.ogc_categories_list)) > \
+                                                                                                  0)) \
+                                                         and if(ogc_backend_tags_isnull, false, if(ogc_backend_tags_isall, true, \
+                                                                                                   size(array_intersect(if(x2.ogc_tag_type = 1,x1.backend_tags_list,x1.tags_v2_array), x2.ogc_backend_tags_list)) > \
+                                                                                                   0)) \
+                                                         and if(ogc_front_tags_isnull, false, if(ogc_front_tags_isall, true, \
+                                                                                                 size(array_intersect(x1.front_tags_list, x2.ogc_front_tags_list)) > \
+                                                                                                 0)) \
+                                                     when x1.character_type = 'ugc' \
+                                                         then if(ugc_categories_isnull, false, if(ugc_categories_isall, true, \
+                                                                                                  size(array_intersect(x1.category_list, x2.ugc_categories_list)) > \
+                                                                                                  0)) \
+                                                         and if(ugc_backend_tags_isnull, false, if(ugc_backend_tags_isall, true, \
+                                                                                                   size(array_intersect(if(x2.ugc_tag_type = 1,x1.backend_tags_list,x1.tags_v2_array), x2.ugc_backend_tags_list)) > \
+                                                                                                   0)) \
+                                                         and if(ugc_front_tags_isnull, false, if(ugc_front_tags_isall, true, \
+                                                                                                 size(array_intersect(x1.front_tags_list, x2.ugc_front_tags_list)) > \
+                                                                                                 0)) end), \
+                     db_characters as (select x2.package_id, \
+                                              x1.character_type, \
+                                              x2.version, \
+                                              x1.character_id, \
+                                              nvl(x1.total_talk_cnt, 0) as total_talk_cnt, \
+                                              nvl(x1.total_peoples, 0)  as total_peoples \
+                                       from config x2 \
+                                                inner join \
+                                            (select * \
+                                             from vc.dwd_vc_character_tags_1h_a_d \
+                                             where dt = '${azkaban.flow.current.date}' \
+                                               and h = '${azkaban.flow.start.hour}' \
+                                               and pack_id != 0 \
+                                               and pack_id is not null) x1 on x2.package_id = x1.pack_id) \
+                insert OVERWRITE table vc.dwd_vc_character_package_i_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select package_id, \
+                       character_type, \
+                       COLLECT_SET(character_id)       as characters, \
+                       size(COLLECT_SET(character_id)) as character_nums, \
+                       version, \
+                       sum(total_talk_cnt)             as total_talk_cnt, \
+                       sum(total_peoples)              as total_peoples \
+                from (select package_id, character_type, version, character_id, total_talk_cnt, total_peoples, 1 as source \
+                      from tag_characters \
+                      union all \
+                      select package_id, character_type, version, character_id, total_talk_cnt, total_peoples, 2 as source \
+                      from db_characters) \
+                group by package_id, character_type, version
+
+dependencies=dwd_vc_character_tags_1h_a_d,ods_db_rt1h_vc_character_package_config_nd

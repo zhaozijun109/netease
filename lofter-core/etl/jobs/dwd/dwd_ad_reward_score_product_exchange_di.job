@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ad_reward_score_product_exchange_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    a.*, \
+    product_name, \
+    cast(productId as bigint) as productId, \
+    category, \
+    subCategory, \
+    cast(`count` as bigint) as product_count \
+from \
+    ( \
+        select cast(refid as bigint) as exchange_recordid, \
+            userid, \
+            -delta as score, \
+            createTime as exchange_time \
+        from \
+            lofter_db_dump.ods_db_reward_user_score_log_nd \
+        where \
+            action = -1 \
+    ) a \
+    join ( \
+        select \
+            id, \
+            get_json_object(ref, '$.name') as product_name, \
+            get_json_object(ref, '$.id') as productId, \
+            get_json_object(ref, '$.category') as category, \
+            get_json_object(ref, '$.subCategory') as subCategory, \
+            get_json_object(ref, '$.count') as count \
+        from \
+            lofter_db_dump.ods_db_reward_exchange_record_nd \
+    ) b on a.exchange_recordid = b.id \
+    where from_unixtime(cast(a.exchange_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \

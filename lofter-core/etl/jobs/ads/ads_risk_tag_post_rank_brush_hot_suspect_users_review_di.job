@@ -1,0 +1,34 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=insert overwrite table lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_review_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, a.reg_ip, \
+    bitmap_count(bitmap_union(ip_users_bitmap)) as same_hot_op_ip_suspect_users, \
+    bitmap_count(bitmap_union(reg_ip_users_bitmap)) as same_reg_ip_suspect_users, \
+    count(distinct a.postId) as suspect_post_count, \
+    max(ip_switch_count_30d) as ip_switch_count_30d, \
+    concat_ws(',', collect_set(c.ip)) as brush_hot_ips \
+from ( \
+    select * \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) a \
+left join ( \
+    select reg_ip, to_bitmap(userId) as reg_ip_users_bitmap \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) b on a.reg_ip = b.reg_ip \
+left join ( \
+    select ip, to_bitmap(userId) as ip_users_bitmap \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) c on a.ip = c.ip \
+group by 1, 2 \
+having same_hot_op_ip_suspect_users >=100 or \
+       (same_hot_op_ip_suspect_users >=30 or suspect_post_count >=30) or \
+       (ip_switch_count_30d>=100 and suspect_post_count >=10) \
+

@@ -1,0 +1,109 @@
+type=sparksql
+hive.query.01=\
+with browse_source as( \
+    select userid,action_type,is_real,detail_source1_scene_level_1,detail_source1_scene_level_2,scene,duration \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and (detail_source1_scene_level_1 = 'tag' or detail_source1_scene_level_2 in('tag_new','tag_hot')) \
+), \
+order_scene as( \
+    select userid,postid,money,scene,detail_source1_scene_level_1,detail_source1_scene_level_2 \
+    from( \
+        select a.orderid,a.userid,a.postid,a.money,scene,detail_source1_scene_level_1,detail_source1_scene_level_2, \
+            row_number() over(partition by a.userid,a.postid,a.orderid order by (order_time - nvl(occurtime,0)) desc) as rNo \
+        from( \
+            select orderid,userid,money,postid,order_time \
+            from lofter.dwd_user_order_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and order_date = '${azkaban.flow.1.days.ago}' \
+        )a \
+        left join( \
+            select userid,postid,scene,detail_source1_scene_level_1,detail_source1_scene_level_2,occurtime \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' and (detail_source1_scene_level_1 = 'tag' or detail_source1_scene_level_2 in('tag_new','tag_hot')) \
+        )b on a.userid = b.userid and a.postid = b.postid and a.order_time >= b.occurtime \
+    ) \
+    where rNo = 1 \
+), \
+dimension_metric as( \
+    select a.userid,exp_date,appid,sceneid,exp_Id,bucket_id,'全部' as dimension,'ALL' as dimension_value, \
+        nvl(gmv,0) as gmv, \
+        nvl(pay_uv,0) as pay_uv, \
+        nvl(tag_gmv,0) as tag_gmv, \
+        nvl(tag_pay_uv,0) as tag_pay_uv, \
+        nvl(tag_hot_gmv,0) as tag_hot_gmv, \
+        nvl(tag_hot_pay_uv,0) as tag_hot_pay_uv, \
+        nvl(tag_new_gmv,0) as tag_new_gmv, \
+        nvl(tag_new_pay_uv,0) as tag_new_pay_uv \
+    from ( \
+        select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+        from lofter.dwd_ab_platform_exp_user_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 , 2, 3, 4, 5, 6 \
+    )a \
+    left join( \
+        select userid, \
+            sum(money) as gmv, \
+            max(if(money>0,1,0)) as pay_uv, \
+            sum(if(detail_source1_scene_level_1 = 'tag',money,0)) as tag_gmv, \
+            max(if(detail_source1_scene_level_1 = 'tag' and money > 0,1,0)) as tag_pay_uv, \
+            sum(if(detail_source1_scene_level_2 = 'tag_hot',money,0)) as tag_hot_gmv, \
+            max(if(detail_source1_scene_level_2 = 'tag_hot' and money > 0,1,0)) as tag_hot_pay_uv, \
+            sum(if(detail_source1_scene_level_2 = 'tag_new',money,0)) as tag_new_gmv, \
+            max(if(detail_source1_scene_level_2 = 'tag_new' and money > 0,1,0)) as tag_new_pay_uv \
+        from order_scene a \
+        group by userid \
+    )d on a.userid = d.userid \
+union all \
+    select a.userid,exp_date,appid,sceneid,exp_Id,bucket_id,'笔记和大图' as dimension,'note_largepicture' as dimension_value, \
+        nvl(gmv,0) as gmv, \
+        nvl(pay_uv,0) as pay_uv, \
+        nvl(tag_gmv,0) as tag_gmv, \
+        nvl(tag_pay_uv,0) as tag_pay_uv, \
+        nvl(tag_hot_gmv,0) as tag_hot_gmv, \
+        nvl(tag_hot_pay_uv,0) as tag_hot_pay_uv, \
+        nvl(tag_new_gmv,0) as tag_new_gmv, \
+        nvl(tag_new_pay_uv,0) as tag_new_pay_uv \
+    from ( \
+        select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+        from lofter.dwd_ab_platform_exp_user_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 , 2, 3, 4, 5, 6 \
+    )a \
+    left join( \
+        select userid, \
+            sum(money) as gmv, \
+            max(if(money>0,1,0)) as pay_uv, \
+            sum(if(detail_source1_scene_level_1 = 'tag',money,0)) as tag_gmv, \
+            max(if(detail_source1_scene_level_1 = 'tag' and money > 0,1,0)) as tag_pay_uv, \
+            sum(if(detail_source1_scene_level_2 = 'tag_hot',money,0)) as tag_hot_gmv, \
+            max(if(detail_source1_scene_level_2 = 'tag_hot' and money > 0,1,0)) as tag_hot_pay_uv, \
+            sum(if(detail_source1_scene_level_2 = 'tag_new',money,0)) as tag_new_gmv, \
+            max(if(detail_source1_scene_level_2 = 'tag_new' and money > 0,1,0)) as tag_new_pay_uv \
+        from order_scene a \
+        where scene in('note','large_picture') \
+        group by userid \
+    )d on a.userid = d.userid \
+) \
+insert overwrite table lofter.dws_ab_platform_exp10_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+  exp_id, \
+  bucket_id, \
+  exp_date AS basedate, \
+  dimension, \
+  userid, \
+  metric_info.metric, \
+  metric_info.metric_value, \
+  dimension_value \
+FROM dimension_metric \
+LATERAL VIEW EXPLODE( \
+  ARRAY( \
+    STRUCT('gmv' AS metric, CAST(gmv AS DOUBLE) AS metric_value), \
+    STRUCT('pay_uv' AS metric, CAST(pay_uv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_gmv' AS metric, CAST(tag_gmv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_pay_uv' AS metric, CAST(tag_pay_uv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_hot_gmv' AS metric, CAST(tag_hot_gmv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_hot_pay_uv' AS metric, CAST(tag_hot_pay_uv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_new_gmv' AS metric, CAST(tag_new_gmv AS DOUBLE) AS metric_value), \
+    STRUCT('tag_new_pay_uv' AS metric, CAST(tag_new_pay_uv AS DOUBLE) AS metric_value) \
+  ) \
+) metrics AS metric_info
+dependencies=dwd_ab_platform_exp_user_di

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select row_number() over (order by hot desc) as id, tag, hot from lofter_dm.ads_tag_general_7d where dt = '${azkaban.flow.1.days.ago}' order by hot desc limit 3000"
+params= --dest lofter_hot_tag_top3000

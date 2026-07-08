@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_level_sab_postid_increase_report_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select \
+    content_type \
+    ,is_paid \
+    ,count(distinct postid) sab_level_postid_cnt \
+    ,count(distinct if(level='S' ,postid ,null)) s_level_postid_cnt \
+    ,count(distinct if(level='A' ,postid ,null)) a_level_postid_cnt \
+    ,count(distinct if(level='B' ,postid ,null)) b_level_postid_cnt \
+from   \
+    (select \
+        t1.postid ,content_type ,level  \
+        ,case when t2.postid is not null then 1 else 0 end is_paid \
+        ,new_devices_std \
+        ,post_hot \
+    from   \
+        (select \
+            dt  \
+            ,postid \
+            ,content_type \
+            ,level \
+            ,level_rank \
+            ,new_devices_std \
+            ,post_hot \
+            ,lag(level) over(partition by postid order by dt)      pre_level \
+            ,lag(level_rank) over(partition by postid order by dt) pre_level_rank \
+        from   \
+            (select \
+                * \
+                ,CASE  \
+                        WHEN level = 'S' THEN 5 \
+                        WHEN level = 'A' THEN 4 \
+                        WHEN level = 'B' THEN 3 \
+                        WHEN level = 'C' THEN 2 \
+                        WHEN level = 'D' THEN 1 \
+                END AS level_rank \
+            from   \
+                ( \
+                    SELECT \
+                        dt, \
+                        content_type, \
+                        content_id as postid, \
+                        new_devices_std, \
+                        post_hot, \
+                        CASE \
+                            WHEN new_devices_std >= 5000 AND post_hot >= 5000 THEN 'S' \
+                            WHEN (new_devices_std >= 500 AND post_hot >= 5000) OR (new_devices_std >= 5000 AND post_hot < 5000) THEN 'A' \
+                            WHEN (new_devices_std >= 300 AND post_hot >= 5000) OR (new_devices_std >= 500 AND post_hot < 5000) THEN 'B' \
+                            WHEN new_devices_std >= 100 OR (new_devices_std >= 500 AND post_hot < 5000) THEN 'C' \
+                            ELSE 'D' \
+                        END AS level \
+                    FROM lofter_dm.ads_growth_content_di  \
+                    where dt between '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                    and content_type in ('图片','文字','视频') \
+                )t  \
+            )t  \
+        )t1  \
+    left join  \
+        (select  \
+            postid \
+        from lofter.dim_gift_post_return_dd \
+        where dt='${azkaban.flow.1.days.ago}' \
+        and ispay_returngift in (0,1) \
+        group by  \
+            postid \
+        )t2   \
+    on t1.postid = t2.postid \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and (pre_level_rank<level_rank or pre_level_rank is null) \
+    and level in ('S','A','B') \
+    )t  \
+group by content_type ,is_paid \

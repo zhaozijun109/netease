@@ -1,0 +1,283 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_pve_user_stamina_log_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select logId, \
+	   userid, \
+	   newStamina, \
+	   oldStamina, \
+	   dialogueId, \
+	   delta, \
+	   type, \
+	   status, \
+	   createTime, \
+	   dbUpdateTime, \
+	   endTime, \
+       roleId, \
+       pveUserId, \
+       roleName, \
+       roleType, \
+       roleStatus, \
+       rolePublicView, \
+       roleCreatorUid \
+from ( \
+	select id as logId, \
+		   userId, \
+		   newStamina, \
+		   oldStamina, \
+		   dialogueId, \
+		   delta, \
+		   type, \
+		   status, \
+		   createTime, \
+		   dbUpdateTime, \
+		   endTime, \
+		   null as roleId, \
+		   null as pveUserId, \
+		   null as roleName, \
+		   null as roleType, \
+		   null as roleStatus, \
+		   null as rolePublicView, \
+		   null as roleCreatorUid \
+	from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+	where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type in (1,2,3,4,13,14) \
+	union all \
+	select t1.id as logId, \
+	       t1.userId, \
+		   t1.newStamina, \
+		   t1.oldStamina, \
+		   t1.dialogueId, \
+		   t1.delta, \
+		   t1.type, \
+		   t1.status, \
+		   t1.createTime, \
+		   t1.dbUpdateTime, \
+		   t1.endTime, \
+		   t2.roleId, \
+		   t2.pveUserId, \
+		   t2.roleName, \
+		   t2.roleType, \
+		   t2.roleStatus, \
+		   t2.rolePublicView, \
+		   t2.roleCreatorUid \
+	from ( \
+		select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+		from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+		where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type in (0,11,12,5) \
+	) t1 \
+	left join ( \
+		select dialogueId,roleId,pveUserId,roleName,roleType,roleStatus,rolePublicView,roleCreatorUid \
+		from lofter.dwd_pve_user_chats_info_di \
+		where dt = '${azkaban.flow.1.days.ago}' \
+	) t2 \
+	on t1.dialogueId = t2.dialogueId \
+	union all \
+	select t1.id as logId, \
+	       t1.userid, \
+		   t1.newStamina, \
+		   t1.oldStamina, \
+		   t1.dialogueId, \
+		   t1.delta, \
+		   t1.type, \
+		   t1.status, \
+		   t1.createTime, \
+		   t1.dbUpdateTime, \
+		   t1.endTime, \
+		   t3.roleId, \
+		   t3.pveUserId, \
+		   t3.roleName, \
+		   t3.roleType, \
+		   t3.roleStatus, \
+		   t3.rolePublicView, \
+		   t3.roleCreatorUid \
+	from ( \
+		select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+		from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+		where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type in (6,7) \
+	) t1 \
+	left join ( \
+		select id,roleId from lofter_db_dump.ods_db_pve_ugc_role_record_nd \
+	) t2 \
+	on t1.dialogueId = t2.id \
+	left join ( \
+		select id as roleId, \
+		       userId as pveUserId, \
+		       roleName, \
+		       type as roleType, \
+		       status as roleStatus, \
+		       publicView as rolePublicView, \
+		       creatorUid as roleCreatorUid \
+		from lofter_db_dump.ods_db_pve_role_info_nd \
+	) t3 \
+	on t2.roleId = t3.roleId \
+	union all \
+	select t1.id as logId, \
+		   t1.userid, \
+		   t1.newStamina, \
+		   t1.oldStamina, \
+		   t1.dialogueId, \
+		   t1.delta, \
+		   t1.type, \
+		   t1.status, \
+		   t1.createTime, \
+		   t1.dbUpdateTime, \
+		   t1.endTime, \
+		   nvl(t3.roleId,t4.roleId) as roleId, \
+		   nvl(t3.pveUserId,t4.pveUserId) as pveUserId, \
+		   nvl(t3.roleName,t4.roleName) as roleName, \
+		   nvl(t3.roleType,t4.roleType) as roleType, \
+		   nvl(t3.roleStatus,t4.roleStatus) as roleStatus, \
+		   nvl(t3.rolePublicView,t4.rolePublicView) as rolePublicView, \
+		   nvl(t3.roleCreatorUid,t4.roleCreatorUid) as roleCreatorUid \
+	from ( \
+		select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+		from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+		where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type in (8,9) \
+	) t1 \
+	left join ( \
+		select id,roleId from lofter_db_dump.ods_db_pve_user_duplicate_dialogue_nd \
+	) t2 \
+	on t1.dialogueId = t2.id \
+	left join ( \
+		select id as roleId, \
+		       userId as pveUserId, \
+		       roleName, \
+		       type as roleType, \
+		       status as roleStatus, \
+		       publicView as rolePublicView, \
+		       creatorUid as roleCreatorUid \
+		from lofter_db_dump.ods_db_pve_role_info_nd \
+	) t3 \
+	on t2.roleId = t3.roleId \
+	left join ( \
+		select dialogueId,roleId,pveUserId,roleName,roleType,roleStatus,rolePublicView,roleCreatorUid \
+		from lofter.dwd_pve_user_chats_info_di \
+		where dt = '${azkaban.flow.1.days.ago}' \
+	) t4 \
+	on t1.dialogueId = t4.dialogueId \
+	union all \
+	select t1.id as logId, \
+		   t1.userId, \
+		   t1.newStamina, \
+		   t1.oldStamina, \
+		   t1.dialogueId, \
+		   t1.delta, \
+		   t1.type, \
+		   t1.status, \
+		   t1.createTime, \
+		   t1.dbUpdateTime, \
+		   t1.endTime, \
+		   null as roleId, \
+		   null as pveUserId, \
+		   null as roleName, \
+		   null as roleType, \
+		   null as roleStatus, \
+		   null as rolePublicView, \
+		   null as roleCreatorUid \
+	from ( \
+		select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+		from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+		where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type = 20 \
+	) t1 \
+	union all \
+	select t1.id as logId, \
+		   t1.userid, \
+		   t1.newStamina, \
+		   t1.oldStamina, \
+		   t1.dialogueId, \
+		   t1.delta, \
+		   t1.type, \
+		   t1.status, \
+		   t1.createTime, \
+		   t1.dbUpdateTime, \
+		   t1.endTime, \
+		   t2.roleId, \
+		   t2.pveUserId, \
+		   t2.roleName, \
+		   t2.roleType, \
+		   t2.roleStatus, \
+		   t2.rolePublicView, \
+		   t2.roleCreatorUid \
+	from ( \
+		select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+		from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+		where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type = 25 \
+	) t1 \
+	left join ( \
+		select id as roleId, \
+		       userId as pveUserId, \
+		       roleName, \
+		       type as roleType, \
+		       status as roleStatus, \
+		       publicView as rolePublicView, \
+		       creatorUid as roleCreatorUid \
+		from lofter_db_dump.ods_db_pve_role_info_nd \
+	) t2 \
+	on t1.dialogueId = t2.roleId \
+	union all \
+    select id as logId, \
+           userid, \
+           null as newStamina, \
+           null as oldStamina, \
+           null as dialogueId, \
+           giftCount as delta, \
+           1000 as type, \
+           null as status, \
+           createTime, \
+           dbUpdateTime, \
+           null as endTime, \
+           null as roleId, \
+           null as pveUserId, \
+           null as roleName, \
+           null as roleType, \
+           null as roleStatus, \
+           null as rolePublicView, \
+           null as roleCreatorUid \
+    from lofter_db_dump.ods_db_pve_user_daily_gift_nd \
+    where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type = 0 \
+	union all \
+	select id as logId, \
+		   userid, \
+		   null as newStamina, \
+		   null as oldStamina, \
+		   null as dialogueId, \
+		   cast(rewardName as bigint) as delta, \
+		   rewardType as type, \
+		   null as status, \
+		   createTime, \
+		   dbUpdateTime, \
+		   null as endTime, \
+		   null as roleId, \
+		   null as pveUserId, \
+		   null as roleName, \
+		   null as roleType, \
+		   null as roleStatus, \
+		   null as rolePublicView, \
+		   null as roleCreatorUid \
+	from lofter_db_dump.ods_db_paper_man_backend_reward_nd \
+	where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and rewardType = 10 \
+	union all \
+    select t1.id as logId, \
+    	   t1.userid, \
+    	   t1.newStamina, \
+    	   t1.oldStamina, \
+    	   t1.dialogueId, \
+    	   t1.delta, \
+    	   t1.type, \
+    	   t1.status, \
+    	   t1.createTime, \
+    	   t1.dbUpdateTime, \
+    	   t1.endTime, \
+    	   null as roleId, \
+    	   null as pveUserId, \
+    	   null as roleName, \
+    	   null as roleType, \
+    	   null as roleStatus, \
+    	   null as rolePublicView, \
+    	   null as roleCreatorUid \
+    from ( \
+    	select id,userId,newStamina,oldStamina,dialogueId,delta,type,status,createTime,dbUpdateTime,endTime \
+    	from lofter_db_dump.ods_db_pve_user_stamina_log_nd \
+    	where from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and type in (21,30,31,32,41,42,43,23,44) \
+    ) t1 \
+) r1
+dependencies=dwd_pve_user_chats_info_di

@@ -1,0 +1,92 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_creator_ecology_identity_rank_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+	   creatorStatus, \
+	   post_count_30d_exceed_ratio, \
+	   fans_hd_uv_30d_exceed_ratio, \
+	   post_hot_30d_exceed_ratio, \
+	   case when post_count_30d_exceed_ratio >= 0.95 then 'SSS' \
+			when post_count_30d_exceed_ratio >= 0.90 and post_count_30d_exceed_ratio < 0.95 then 'SS' \
+			when post_count_30d_exceed_ratio >= 0.80 and post_count_30d_exceed_ratio < 0.90 then 'S' \
+			else null \
+	   end as post_count_30d_exceed_ratio_level, \
+	   case when fans_hd_uv_30d_exceed_ratio >= 0.95 then 'SSS' \
+			when fans_hd_uv_30d_exceed_ratio >= 0.90 and fans_hd_uv_30d_exceed_ratio < 0.95 then 'SS' \
+			when fans_hd_uv_30d_exceed_ratio >= 0.80 and fans_hd_uv_30d_exceed_ratio < 0.90 then 'S' \
+			else null \
+	   end as fans_hd_uv_30d_exceed_ratio_level, \
+	   case when post_hot_30d_exceed_ratio >= 0.95 then 'SSS' \
+			when post_hot_30d_exceed_ratio >= 0.90 and post_hot_30d_exceed_ratio < 0.95 then 'SS' \
+			when post_hot_30d_exceed_ratio >= 0.80 and post_hot_30d_exceed_ratio < 0.90 then 'S' \
+			else null \
+	   end as post_hot_30d_exceed_ratio_level, \
+	   post_count_30d as createPostNums, \
+       fans_hd_uv_30d as followInteractNums, \
+       avg_post_hot_30d as totalHotNums, \
+	   nextLevelFollowNums, \
+       hotChallengeTarget \
+from ( \
+	select blogId, \
+		   creatorStatus, \
+		   post_count_30d, \
+		   fans_hd_uv_30d, \
+           avg_post_hot_30d, \
+           nextLevelFollowNums, \
+           hotChallengeTarget, \
+		   round((case when creatorStatus in (40,50) and post_count_30d_exceed_ratio<=0.97 then 0.8*post_count_30d_exceed_ratio/0.97 \
+					   when creatorStatus in (40,50) and post_count_30d_exceed_ratio>0.97 then (100-80)/(100-97)*(post_count_30d_exceed_ratio-0.97)+0.8 \
+					   else post_count_30d_exceed_ratio end),2) as post_count_30d_exceed_ratio, \
+		   round((case when creatorStatus = 40 and fans_hd_uv_30d_exceed_ratio<=0.995 then 0.9*fans_hd_uv_30d_exceed_ratio/0.995 \
+					   when creatorStatus = 40 and fans_hd_uv_30d_exceed_ratio>0.995 then (100-90)/(100-99.5)*(fans_hd_uv_30d_exceed_ratio-0.995)+0.9 \
+					   when creatorStatus = 50 and fans_hd_uv_30d_exceed_ratio<=0.9995 then 0.9*fans_hd_uv_30d_exceed_ratio/0.9995 \
+					   when creatorStatus = 50 and fans_hd_uv_30d_exceed_ratio>0.9995 then (100-90)/(100-99.95)*(fans_hd_uv_30d_exceed_ratio-0.9995)+0.9 \
+					   when creatorStatus = 70 and fans_hd_uv_30d_exceed_ratio<=0.9997 then 0.9*fans_hd_uv_30d_exceed_ratio/0.9997 \
+					   when creatorStatus = 70 and fans_hd_uv_30d_exceed_ratio>0.9997 then (100-90)/(100-99.97)*(fans_hd_uv_30d_exceed_ratio-0.9997)+0.9 \
+					   when creatorStatus = 90 and fans_hd_uv_30d_exceed_ratio<=0.9995 then 0.9*fans_hd_uv_30d_exceed_ratio/0.9995 \
+					   when creatorStatus = 90 and fans_hd_uv_30d_exceed_ratio>0.9995 then (100-90)/(100-99.95)*(fans_hd_uv_30d_exceed_ratio-0.9995)+0.9 \
+					   when creatorStatus = 100 and fans_hd_uv_30d_exceed_ratio<=0.997 then 0.9*fans_hd_uv_30d_exceed_ratio/0.997 \
+					   when creatorStatus = 100 and fans_hd_uv_30d_exceed_ratio>0.997 then (100-90)/(100-99.7)*(fans_hd_uv_30d_exceed_ratio-0.997)+0.9 \
+					   else fans_hd_uv_30d_exceed_ratio end),2) as fans_hd_uv_30d_exceed_ratio, \
+		   round(post_hot_30d_exceed_ratio,2) as post_hot_30d_exceed_ratio \
+	from ( \
+		select blogId, \
+			   creatorStatus, \
+			   post_count_30d, \
+			   fans_hd_uv_30d, \
+			   avg_post_hot_30d, \
+			   nextLevelFollowNums, \
+               hotChallengeTarget, \
+			   (post_count_30d_rk-1)/user_cnt   as post_count_30d_exceed_ratio, \
+			   (fans_hd_uv_30d_rk-1)/user_cnt   as fans_hd_uv_30d_exceed_ratio, \
+			   (avg_post_hot_30d_rk-1)/user_cnt as post_hot_30d_exceed_ratio \
+		from ( \
+			select blogId, \
+				   creatorStatus, \
+				   post_count_30d, \
+				   fans_hd_uv_30d, \
+				   avg_post_hot_30d , \
+				   nextLevelFollowNums, \
+                   hotChallengeTarget, \
+				   post_count_30d_rk, \
+				   fans_hd_uv_30d_rk, \
+				   avg_post_hot_30d_rk, \
+				   count(1) over(partition by creatorStatus) as user_cnt \
+			from ( \
+				select blogId, \
+					   creatorStatus, \
+					   nvl(post_count_30d,0) as post_count_30d, \
+					   nvl(fans_hd_uv_30d,0) as fans_hd_uv_30d, \
+					   nvl(avg_hot_cnt_30d,0) as avg_post_hot_30d, \
+					   nextLevelFollowNums, \
+					   hotChallengeTarget, \
+					   rank() over(partition by creatorStatus order by nvl(post_count_30d,0)) as post_count_30d_rk, \
+					   rank() over(partition by creatorStatus order by nvl(fans_hd_uv_30d,0)) as fans_hd_uv_30d_rk, \
+					   rank() over(partition by creatorStatus order by nvl(avg_hot_cnt_30d,0)) as avg_post_hot_30d_rk \
+				from lofter_dm.ads_creator_ecology_identity_dd \
+				where dt = '${azkaban.flow.1.days.ago}' and creatorStatus not in (10,20,30) \
+			) t1 \
+		) t2 \
+	) t3 \
+) t4
+dependencies=ads_creator_ecology_identity_dd

@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 嗑CP品类 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '嗑CP品类' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (     select blogId as userId, '嗑CP品类' as tag, special_category as grp \
+                                   from lofter_dm.ads_creator_double_perspective_user_di \
+                                        lateral view explode(split(double_perspective_type, '\\\\|')) as special_category \
+                                   where dt = '${azkaban.flow.1.days.ago}' and length(special_category) > 0    ) "

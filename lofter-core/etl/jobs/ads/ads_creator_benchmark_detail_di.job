@@ -1,0 +1,92 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_benchmark_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userid,case when explode_post_count>0 then 1 else 0 end is_explode_creator, \
+case when pass_post_count_30d>0 and level in ('S','A') then 1 else 0 end as is_SA_post_creator, \
+level,blog_url,blog_nickname,post_main_content_type,post_top_categories,post_top_ips,post_last_date,active_last_date,  \
+explode_post_count,pass_post_count_30d,post_count_365d,post_count_30d,fans_std,active_days_30d,gift_income_std,rec_post_count_30d,rec_post_count_365d \
+from \
+( \
+select userid \
+from \
+( \
+    select blogid userid \
+    from lofter_dm.ads_post_trend_grade_di \
+    where dt= '${azkaban.flow.1.days.ago}' \
+    and grade in ('S') \
+    and contenttype in ('图片','文字') \
+    group by blogid \
+    union all \
+    select a.userid \
+    from \
+    ( \
+    select userid \
+    from \
+        ( \
+        select postid \
+        from  lofter_dm.ads_risk_rec_audit_publish_monitor_di \
+        where datediff('${azkaban.flow.1.days.ago}', publish_date)<30 and publish_date<='${azkaban.flow.1.days.ago}' \
+        and datediff('${azkaban.flow.1.days.ago}', dt)<30  and dt<='${azkaban.flow.1.days.ago}' \
+        and pass_rules=1 and pass_low_quality_model=1 and is_trial_complete=1 \
+     \
+        group by postid \
+        ) t1 \
+        join \
+        ( \
+        select id,userid \
+        from lofter.dim_post \
+        where datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and publishdate<='${azkaban.flow.1.days.ago}'  \
+        ) t2 \
+        on t1.postid=t2.id \
+    group by userid \
+    ) a \
+    join \
+    ( \
+        select userid \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt='${azkaban.flow.1.days.ago}' \
+        and level in ('S','A') \
+    ) b \
+    on a.userid=b.userid \
+) \
+group by userid \
+) a \
+left join \
+( \
+    select blogid userid,count(postid) explode_post_count \
+    from lofter_dm.ads_post_trend_grade_di \
+    where dt= '${azkaban.flow.1.days.ago}' \
+    and grade in ('S') \
+    and contenttype in ('图片','文字') \
+    group by blogid \
+) b \
+on a.userid=b.userid \
+left join \
+( \
+    select userid,count(postid) pass_post_count_30d \
+    from \
+        ( \
+        select postid \
+        from  lofter_dm.ads_risk_rec_audit_publish_monitor_di \
+        where datediff('${azkaban.flow.1.days.ago}', publish_date)<30 and publish_date<='${azkaban.flow.1.days.ago}'  \
+        and datediff('${azkaban.flow.1.days.ago}', dt)<30 and dt<='${azkaban.flow.1.days.ago}'  \
+        and pass_rules=1 and pass_low_quality_model=1 and is_trial_complete=1 \
+        group by postid \
+        ) t1 \
+        join \
+        ( \
+        select id,userid \
+        from lofter.dim_post \
+        where datediff('${azkaban.flow.1.days.ago}', publishdate)<30 and publishdate<='${azkaban.flow.1.days.ago}' \
+        ) t2 \
+        on t1.postid=t2.id \
+    group by userid \
+) c \
+on a.userid=c.userid \
+left join \
+( \
+    select userid,level,blog_url,blog_nickname,post_count_365d,post_count_30d,post_last_date,concat_ws('|',post_top_categories) post_top_categories,concat_ws('|',post_top_ips) post_top_ips,fans_std,active_days_30d,active_last_date,post_main_content_type,gift_income_std,rec_post_count_30d,rec_post_count_365d  \
+    from lofter.dws_par_creator_dd \
+    where dt= '${azkaban.flow.1.days.ago}'  \
+) d \
+on a.userid=d.userid
+dependencies=ads_post_trend_grade_di,ads_risk_rec_audit_publish_monitor_di

@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_ycy_ad_user_device_actions_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select appid,category,deviceudid,userid,a.positionid,os,adid,req_id,version,bgpv,clickpv,uuid,bid_amount,fillcount,winpv, \
+    positionname, location \
+from( \
+    select appid, deviceudid,userid,positionid,os,adid,req_id,version,bgpv,clickpv,uuid,bid_amount,fillcount,winpv \
+    from lofter.dwd_ad_actions_di \
+    where dt = '${azkaban.flow.1.days.ago}' and appid in ('1L9KQGDL','Y8KJDFYR') \
+)a \
+left join( \
+    select distinct positionid, category, positionname, location \
+    from lofter_db_dump.ods_db_act_adspace_snapshot_nd \
+)b on a.positionid = b.positionid

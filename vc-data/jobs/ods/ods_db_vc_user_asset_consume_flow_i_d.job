@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.ods_db_vc_user_asset_consume_flow_i_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select id,user_id,asset_type,amount,scene,scene_uniq_id,consume_status,detail,create_time,update_time,ext_amount,partition_date,ext \
+                from vc.ods_db_vc_user_asset_consume_flow_nd \
+                where create_time >= UNIX_TIMESTAMP(CONCAT('${azkaban.flow.1.days.ago}', ' 00:00:00')) \
+                and create_time < UNIX_TIMESTAMP(CONCAT(DATE_ADD('${azkaban.flow.1.days.ago}', 1), ' 00:00:00'))

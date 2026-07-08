@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_collection_pool_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select collectionId, name, postCollectionHot as hot \
+from lofter.dws_collection_dd \
+where dt = '${azkaban.flow.1.days.ago}' and postCount > 3 and postCollectionHot >= 5000 and \
+      subscribe_uv_acc > 100  and collection_post_type <> '视频' \

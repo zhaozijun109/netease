@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_account_checking_iap_pay_completion_by_order_type_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select type, sum(if(status = 21, 1, 0)) /  count(1) as iap_pay_completion_rate \
+from lofter_db_dump.ods_db_trade_order_nd \
+where payType=4  and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by type \

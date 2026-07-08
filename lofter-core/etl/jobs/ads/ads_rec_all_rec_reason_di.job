@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_all_rec_reason_di partition(dt, itemType) \
+select itemId, recReason,'${azkaban.flow.1.days.ago}' as dt, itemType \
+from( \
+    select blogId as itemId,reason as recReason, 'creator' as itemType \
+    from lofter_dm.ads_creator_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by blogId,reason \
+  union all \
+    select keyword as itemId, reason as recReason, 'keyword' as itemType \
+    from lofter_dm.ads_search_keyword_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by keyword,reason \
+  union all \
+    select tag as itemId, recReason, 'tag' as itemType \
+    from lofter_dm.ads_rec_tag_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by tag,recReason \
+  union all \
+    select collectionId as itemId, recReason, 'collection' as itemType \
+    from lofter_dm.ads_rec_collection_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by collectionId,recReason \
+  union all \
+    select postId as itemId, recReason, 'content' as itemType \
+    from lofter_dm.ads_rec_content_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by postId, recReason \
+  union all \
+    select questionId as itemId, recReason, 'question' as itemType \
+    from lofter_dm.ads_rec_question_rec_reason_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority is null \
+    group by questionId,recReason \
+) t
+dependencies=ads_creator_rec_reason_detail_di,ads_search_keyword_rec_reason_detail_di,ads_rec_tag_rec_reason_detail_di,ads_rec_collection_rec_reason_detail_di,ads_rec_content_rec_reason_detail_di,ads_rec_question_rec_reason_di

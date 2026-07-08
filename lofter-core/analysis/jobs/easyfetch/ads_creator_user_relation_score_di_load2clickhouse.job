@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,blogid,blog_url,fans_vip_status,private_invite_status,private_status,private_condition_level,private_post_count,private_discuss_count,above_condition_level_users,private_fans_count,userid,user_url,is_above_condition_level,is_private_fans,gift_score,share_score,comment_score,like_score,score from lofter_dm.ads_creator_user_relation_score_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_creator_user_relation_score_di --partition '${azkaban.flow.1.days.ago}'  --batch 102400
+retries=0
+dependencies=ads_creator_user_relation_score_di

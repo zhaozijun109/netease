@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select blogId,postNum,wordNum,photoNum,videoNum,favoriteTag,favoriteTagPostNum,favoriteTagUv,hotNum,responseNum,responseNum,favoriteNum,reblogNum,shareNum,subscribeNum,giftMoney,rewardMoney,dunUv,qualityPostNum,qualityPostPv,grainNum,supportBlogInfos,dt from lofter_dm.ads_user_data_center_wd  where dt='${azkaban.flow.1.days.ago}'"
+params= --topic lofter.creator.weekReport

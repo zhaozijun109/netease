@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_interest_dau_retain_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.base_date,b.period,a.tag,is_cmb_tag,ips,categories,dau_stratify_type,count(distinct b.deviceudid) as active_retain_uv,count(distinct c.deviceudid) as interest_retain_uv,sum(tag_realpv) as sum_interest_retain_realpv \
+from \
+( \
+    select dt as base_date,deviceudid,tag,is_cmb_tag,ips,categories, \
+    case when device_type='近30日新增' then device_type  \
+    when device_type='近30日回流' then device_type  \
+    when device_type='持续活跃' and active_days_30d between 1 and 7 then '月活1-7日持续活跃'  \
+    when device_type='持续活跃' and active_days_30d between 8 and 14 then '月活8-14日持续活跃'  \
+    when device_type='持续活跃' and active_days_30d between 15 and 28 then '月活15-28日持续活跃'  \
+    when device_type='持续活跃' and active_days_30d between 29 and 30 then '月活29-30日持续活跃' end as dau_stratify_type \
+    from  lofter.dws_device_tag_interest_di \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.2.days.ago}' \
+) a \
+join \
+( \
+    select deviceUdid, base_date, period  \
+   from lofter.device_retain \
+   where dt = '${azkaban.flow.1.days.ago}' and is_retain > 0  \
+) b \
+on a.deviceudid=b.deviceudid and a.base_date = b.base_date \
+left join \
+( \
+    select dt,deviceudid,tag,tag_realpv \
+    from  lofter.dws_device_tag_interest_di \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+) c \
+on a.deviceudid=c.deviceudid and a.tag=c.tag \
+where datediff('${azkaban.flow.1.days.ago}', a.base_date) in (1, 6, 14,29)  \
+group by a.base_date,b.period,a.tag,is_cmb_tag,ips,categories,dau_stratify_type \

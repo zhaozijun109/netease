@@ -1,0 +1,37 @@
+type = sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_unlock_data_report_di partition(dt ='${azkaban.flow.1.days.ago}')   \
+select case when c.userid is not null then '近30天新用户' \
+        else '老用户' end flag, \
+   count(distinct a.userid) unlock_user_cnt, \
+   sum(bgpv) bgpv, \
+   sum(unlock_count) unlock_count, \
+   sum(bid_amount)bid_amount \
+from( \
+select  from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd')dt ,  \
+userid , \
+count(distinct postId, userId) as unlock_count  \
+from lofter_db_dump.ods_db_trade_ad_reward_complete_nd  \
+where (from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' )  \
+group by 1,2 \
+) a  \
+left join  \
+( \
+select dt,userid , \
+sum(bgpv)bgpv,   \
+sum(bid_amount)/1000 bid_amount   \
+from lofter.dwd_ad_actions_di  \
+where dt ='${azkaban.flow.1.days.ago}'   \
+and positionId = 279600  \
+and bgPv > 0  \
+group by 1 ,2 \
+) b on a.dt=b.dt and a.userid=b.userid  \
+left join  \
+( \
+select userid  \
+from lofter.dwd_user_new_di  \
+where dt between '${azkaban.flow.30.days.ago}'  and '${azkaban.flow.1.days.ago}'  \
+group by userid  \
+) c on a.userid=c.userid  \
+ \
+group by 1  \

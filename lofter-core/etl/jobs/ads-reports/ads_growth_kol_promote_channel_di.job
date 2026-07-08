@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_kol_promote_channel_di partition(dt='${azkaban.flow.1.days.ago}') \
+select is_paid_subscribe, promote_channel, sum(new_devices) as new_devices, sum(return_devices) as return_devices \
+from ( \
+    select origin_actpwd as actpwd, \
+           count(distinct if(device_type = 'new', deviceUdid, null)) as new_devices, \
+           count(distinct if(device_type = 'return_30', deviceUdid, null)) as return_devices \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' and origin_actpwd is not null \
+    group by 1 \
+) a \
+join ( \
+    select * from lofter.dim_actpwd_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.actpwd = b.actpwd \
+lateral view explode (b.promote_channels) as promote_channel \
+group by is_paid_subscribe, promote_channel \

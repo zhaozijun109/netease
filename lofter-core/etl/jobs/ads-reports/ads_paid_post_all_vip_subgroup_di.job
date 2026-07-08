@@ -1,0 +1,58 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_all_vip_subgroup_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select revenue_module,source, \
+case when b.userid is not null and c.userid is null then 1 else  0 end as new_flg , \
+case when c.userid is not null and b.userid is null   then 1 else  0 end as return_flg , \
+count(distinct a.userid) as uv , \
+count(1) as pv , \
+sum(amount) as amount \
+from  \
+(select userid, paytype  \
+	,platform  \
+	,vipdays  \
+	,amount  \
+    ,source \
+    ,'书城会员' as revenue_module \
+from  \
+lofter_db_dump.ods_db_trade_store_vip_order_nd \
+where status=1 \
+and  from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+union  \
+select  userid,  paytype  \
+	,platform  \
+	,vipdays  \
+	,amount  \
+    ,source \
+     ,'大会员' as revenue_module \
+from  \
+lofter_db_dump.ods_db_trade_member_ship_order_nd \
+where status=1 \
+and  from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) a \
+left join  \
+(select userid \
+from  \
+lofter.dwd_user_new_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by userid \
+) b  \
+on a.userid =b.userid  \
+left join  \
+(select userid \
+from  \
+lofter.dwd_user_return_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by userid \
+) c \
+on a.userid =c.userid  \
+group by revenue_module,source, \
+case when b.userid is not null and c.userid is null then 1 else  0 end , \
+case when c.userid is not null and b.userid is null   then 1 else  0 end \
+grouping sets( \
+(revenue_module,source, \
+case when b.userid is not null and c.userid is null then 1 else  0 end , \
+case when c.userid is not null and b.userid is null   then 1 else  0 end), \
+(source, \
+case when b.userid is not null and c.userid is null then 1 else  0 end , \
+case when c.userid is not null and b.userid is null   then 1 else  0 end) \
+) \

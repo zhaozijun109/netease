@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_backend_post_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select postUserCount, postCount, registerUserCount \
+from ( \
+    select dt, count(distinct userId) as postUserCount, count(distinct postId) as postCount \
+    from lofter.dwd_post_publish_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) a \
+left join ( \
+    select dt, count(distinct accountId) as registerUserCount \
+    from lofter.ods_log_register_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) b on a.dt = b.dt
+dependencies=

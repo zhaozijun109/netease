@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 暑期券包档位 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '暑期券包档位' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '暑期券包档位' as tag, concat(platform, '-', user_type) as grp \
+                                  from lofter_dm.ads_act_coupon_summer_holiday_user_group_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}'  ) "

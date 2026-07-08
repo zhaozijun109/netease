@@ -1,0 +1,9 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "DevicePushStatus",
+  "fields": [
+    {"name": "deviceId", "type": "string"},
+    {"name": "isPushEnabled", "type": "int"}
+  ]
+}

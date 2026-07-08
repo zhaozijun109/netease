@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_specialty_creator_publish_di partition (dt='${azkaban.flow.1.days.ago}') \
+select b.blogId, a.label, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.publishDate) < 7, postId, null)) as post_count_7d, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.publishDate) < 15, postId, null)) as post_count_15d, \
+       count(distinct if(datediff('${azkaban.flow.1.days.ago}', b.publishDate) < 30, postId, null)) as post_count_30d \
+from ( \
+    select cast(conv(split(item_id,'_')[1], 16, 10) as bigint) as postId, label \
+    from rec.rec_data_content_learn_res_to_backend \
+    group by 1, 2 \
+) a \
+join ( \
+    select id, blogId, publishDate \
+    from lofter.dim_post \
+    where isPublished = true and isCitedPost = false and isForbidden = false and \
+          allowview=0 and contentType in ("图片","文字","视频") and \
+          isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 and \
+          publishDate <= '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.id \
+group by 1, 2 \

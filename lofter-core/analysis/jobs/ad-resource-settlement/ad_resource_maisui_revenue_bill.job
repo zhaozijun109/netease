@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select blogId, \
+       cast(replace('${azkaban.flow.7.days.ago}', '-', '') as bigint) as beginCutday, \
+       cast(replace('${azkaban.flow.1.days.ago}', '-', '') as bigint) as endCutday, \
+       settlement_revenue_7d as revenue, \
+       count(1) over () as totalCount, \
+       row_number() over (order by blogId desc) as no \
+from ( \
+    select blogId, cast(sum(settlement_revenue) as decimal(10, 2)) as settlement_revenue_7d \
+    from lofter_dm.ads_ad_resource_blog_revenue_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+    group by 1 \
+) t \
+where settlement_revenue_7d > 0 \
+"
+params= --topic AD.RESOURCE_MAISUI.REVENUEBILL --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=

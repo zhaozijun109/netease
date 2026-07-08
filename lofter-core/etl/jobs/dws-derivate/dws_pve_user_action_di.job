@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_pve_user_action_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId \
+from lofter.dwd_act_pve_action_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by userId

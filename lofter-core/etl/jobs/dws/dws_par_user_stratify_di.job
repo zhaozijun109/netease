@@ -1,0 +1,71 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_stratify_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select userid, \
+           if(valid_pv<=0,0,valid_pv) valid_pv, \
+           if(send_hot<=0,0,send_hot) send_hot, \
+           if(send_comment_cnt<=0,0, send_comment_cnt) send_comment_cnt, \
+           if(follow<=0,0,follow) follow, \
+           if(share_cnt<=0,0,share_cnt) share_cnt, \
+           if(discuss<=0,0,discuss) discuss, if(posts<=0,0,posts) post_cnt, \
+           if(trade_money<=0,0,trade_money) trade_money \
+    from ( \
+        select a.userid,nvl(valid_pv,0) valid_pv,nvl(send_hot,0) send_hot,nvl(send_comment_cnt,0) send_comment_cnt,nvl(follow,0) follow, \
+               nvl(share_cnt,0) share_cnt,nvl(discuss,0) discuss,nvl(posts,0) posts , nvl(trade_money,0) trade_money \
+        from ( \
+            select userid \
+            from lofter.device_active \
+            lateral view explode(userIds) t1 as userid \
+            where dt = '${azkaban.flow.1.days.ago}' \
+            group by userid \
+        ) a \
+        left join ( \
+            select userid, browse_pv valid_pv \
+            from lofter.dws_par_user_content_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) b on a.userid=b.userid \
+        left join ( \
+            select dt,userid,send_hot,send_comment_cnt \
+            from lofter.dws_par_user_interaction_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) c on a.userid=c.userid \
+        left join ( \
+            select userId, count(blogId) follow \
+            from  lofter_db_dump.ods_db_user_following_nd \
+            where from_unixtime(cast(followTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            group by userid \
+        ) d on a.userid=d.userid \
+        left join ( \
+        	select userid, count(1) as share_cnt \
+        	from lofter.ods_mda_app_partition_di \
+        	where dt = '${azkaban.flow.1.days.ago}' and \
+        	      actionType = 'share' and \
+                  (eventId in ('h1-25', 't2-10', 'f1-64', 'a2-82', 'z4-27', 'z4-26', 't2-7', 'f1-22', 'e2-14', 'z4-25', 'z4-24') or \
+                   params['actionType'] = 'share') \
+        	group by userid \
+        ) e on a.userid=e.userid \
+        left join ( \
+            select userid,count(id) as discuss \
+            from lofter.dim_post \
+            where isPublished=true and isForbidden=false and isCitedPost=false \
+            and allowView=0 \
+            and ((movefrom not in("blog","lofternetease","blog163like","loftmove","BLOGPOST","bbs","photo-pp","163_news","instagram_mirror","weibo_sync","news","pp","netease_photo" ) \
+            and  movefrom not like "%blog%" and  movefrom not like "%move%") or movefrom is null) \
+            and contenttype in ("问答") \
+            and publishdate = '${azkaban.flow.1.days.ago}' \
+            group by userid \
+        ) e1 on a.userid=e1.userid \
+        left join ( \
+            select userid,post_count as posts \
+            from lofter.dws_par_creator_di \
+            where dt = '${azkaban.flow.1.days.ago}' \
+        ) f on a.userid=f.userid \
+        left join ( \
+            select userid, sum(money) as trade_money \
+            from lofter.dwd_user_order_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and pay_date = '${azkaban.flow.1.days.ago}' and \
+                  money > 0 \
+            group by userId \
+        ) g on a.userid=g.userid \
+    ) t \
+    distribute by 1
+dependencies=dws_par_user_content_di,dws_par_user_interaction_di,dws_par_creator_di

@@ -1,0 +1,67 @@
+type=sparksql
+hive.query.01= \
+with browse_gift as( \
+    select t1.userid,t1.postid,t1.scene,t1.occurtime,t2.unlock_time,ABS(cast(t2.unlock_time as bigint) - t1.occurtime) as time_diff,t2.final_feed,t2.unlock_method,t2.money \
+    from( \
+        ( \
+            select userid,source_module as scene,postid,occurtime \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' and userid is not null \
+        )t1 \
+        join( \
+            select t1.userid,t1.postid,t1.unlock_time,t2.final_feed,t1.unlock_method,t1.money \
+            from( \
+                select userid,postid,unlock_time,return_gift_id,unlock_method,money \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and is_settle = 1 and unlock_method in ('券包','礼物') and userid is not null \
+            )t1 \
+            left join( \
+                select userid,returngiftid,type as final_feed \
+                from ( \
+                    select userid,returngiftid,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,type,createtime, \
+                        row_number() over(partition by userid,returngiftid order by createtime desc) time_order \
+                    from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+                    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                ) \
+                where time_order = 1 \
+            )t2 on t1.userid = t2.userid and t1.return_gift_id = t2.returngiftid \
+        )t2 on t1.userid = t2.userid and t1.postid = t2.postid \
+    ) \
+), \
+browse_paid as( \
+    select a.userid,a.postid,a.scene,a.occurtime,a.final_feed,a.unlock_method,a.money \
+    from browse_gift a \
+    join( \
+        select userid,postid,unlock_time,min(time_diff) as min_time_diff \
+        from browse_gift \
+        group by userid,postid,unlock_time \
+    )b on a.userid = b.userid and a.postid = b.postid and a.unlock_time = b.unlock_time and a.time_diff = b.min_time_diff \
+), \
+browse_paid_feed as( \
+    select t1.userid,t1.scene,t1.postid,if(t3.userid is not null,1,0) as is_fans_vip,if(t2.userid is not null,1,0) as is_paid_next,t2.final_feed,t2.unlock_method,t2.money \
+    from( \
+        ( \
+            select userid,source_module as scene,postid,occurtime \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' and userid is not null \
+        )t1 \
+        left join browse_paid t2 on t1.userid = t2.userid and t1.scene = t2.scene and t1.postid = t2.postid and t1.occurtime = t2.occurtime \
+        left join( \
+            select userid \
+            from lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+        )t3 on t1.userid = t3.userid \
+    ) \
+) \
+insert overwrite table lofter.dws_ab_platform_paycontent_scene_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userid,scene,is_fans_vip,unlock_method,grouping__id as groupsetid, \
+    nvl(sum(money),0.0) as pay_amount, \
+    count(1) as browse_pv,if(count(1)>0,1,0) as browse_uv, \
+    count(if(is_paid_next = 1,1,null)) as pay_pv, \
+    max(if(is_paid_next = 1,1,0)) as pay_uv, \
+    count(if(final_feed = 0,1,null)) as pos_comment_pv, \
+    max(if(final_feed = 0,1,0)) as pos_comment_uv, \
+    count(if(final_feed = 1,1,null)) as neg_comment_pv, \
+    max(if(final_feed = 1,1,0)) as neg_comment_uv \
+from browse_paid_feed \
+group by userid,scene,is_fans_vip,unlock_method \
+grouping sets((userid),(userid,scene),(userid,is_fans_vip),(userid,unlock_method),(userid,scene,is_fans_vip),(userid,scene,unlock_method))

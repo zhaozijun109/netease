@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2Kafka
+conf.spark.source.query="select replace(dt,'-','') as version, 60 as msgType, COLLECT_SET(data) as data \
+                         from (select named_struct('characterType', character_type, 'data', COLLECT_SET(data)) as data, dt \
+                               from (select named_struct('characterId', character_id, 'characterName', character_name, 'nums', talk_cnt, \
+                                                         'rk', t_rk) as data, \
+                                            character_type, \
+                                            dt \
+                                     from vc.ads_vc_character_period_top100_n_d \
+                                     where dt = '${azkaban.flow.1.days.ago}' \
+                                       and period = 'd1' \
+                                       and t_rk <= 5) \
+                               group by dt, character_type) \
+                         group by dt "
+params= --topic vc_data_push_msg --servers vcharacter-kafka-prod3.gy.ntes:9092,vcharacter-kafka-prod1.gy.ntes:9092,vcharacter-kafka-prod2.gy.ntes:9092 --withCount
+
+

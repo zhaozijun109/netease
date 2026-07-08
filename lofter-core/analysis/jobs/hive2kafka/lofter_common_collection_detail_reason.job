@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select a.collectionId as collectionId, a.recomReason as recomReason, nvl(b.detail_browse_uv_3d, 0) as readCount \
+from ( \
+    select collectionId, concat_ws(',', collect_set(recReason)) as recomReason \
+    from lofter_dm.ads_rec_collection_rec_reason_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and priority != 4 \
+    group by 1 \
+) a \
+left join ( \
+    select collectionId, detail_browse_uv_3d \
+    from lofter.dws_collection_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.collectionId = b.collectionId \
+"
+params= --topic LOFTER.COMMON.COLLECTION.DETAIL.REASON  --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

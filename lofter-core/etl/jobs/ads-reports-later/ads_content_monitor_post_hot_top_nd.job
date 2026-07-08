@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_content_monitor_post_hot_top_nd \
+                select b.postId,a.contentType,publishDate,blogNickName,postUrl,tags,  \
+                       b.hot, b.dt1whot, a.isBlogAuthenticated, a.blogPostCount, \
+                       c.category, c.category2, c.category3, c.domain, a.platformType as contentChannel \
+                from \
+                ( \
+                    select id postid,contentType,blogNickName,from_unixtime(cast(publishtime/1000 as bigint),'yyyy-MM-dd') publishDate, \
+                           concat(blogName,'.lofter.com/post/',conv(blogid, 10, 16),'_',conv(id, 10, 16)) postUrl,tags, \
+                           if(isBlogAuthenticated,1,0) as isBlogAuthenticated, \
+                           importPlatformType as platformType, \
+                           count( if(isPublished=true and isForbidden=false and allowView=0 and contentType<>'问答',id,null)) over (partition by blogId) as blogPostCount \
+                    from  lofter.dim_post \
+                    where from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd')>='2021-01-01' and valid=0 and allowview=0  \
+                ) a join \
+                ( \
+                    select postId, sum(hot) over (partition by postId) as hot, dt as dt1whot, \
+                           sum(hot) over (partition by postId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as currentDtHot, \
+                           nvl(sum(hot) over (partition by postId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) as prevDtHot \
+                            \
+                    from \
+                    ( \
+                      select from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd') as dt, postid,count(1) hot \
+                      from lofter_db_dump.ods_db_post_hot_nd \
+                      where from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd')>='2021-01-01'   \
+                      group by from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd'), postid \
+                    ) t \
+                 \
+                ) b on a.postid=b.postid \
+                join (select * from lofter.dim_post_category_dd where dt='${azkaban.flow.1.days.ago}') c on a.postid=c.postid \
+                where b.hot > 10000 and b.currentDtHot >= 10000 and b.prevDtHot < 10000

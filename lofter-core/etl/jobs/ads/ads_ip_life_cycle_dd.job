@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_life_cycle_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select ip, \
+	case when post_cnt_90d >= 1000 and ((realuv_rate_90d > 0.1 and post_rate_90d > -0.2) or (post_rate_90d >= 0.2 and realuv_rate_90d > 0)) \
+	     then '成长期'	 		\
+         when ((abs(post_rate_90d) <= 0.2 and abs(realuv_rate_90d ) <= 0.1) or (post_rate_90d >= 0.2 and realuv_rate_90d between -0.1 and 0)) and post_cnt_90d >= 3000 \
+         then '成熟期'	 		\
+         when (post_rate_90d < -0.2 or premium_post_rate_90d <= -1 or realuv_rate_90d < -0.1) and post_cnt_90d >= 1000 \
+         then '衰退期'	 		\
+         when post_cnt_90d < 1000 then  '冷圈' \
+         end as life_cycle_90d,	 		\
+    case when post_cnt_30d >= 500 and ((realuv_rate_30d > 0.1 and post_rate_30d > -0.2) or (post_rate_30d >= 0.2 and realuv_rate_30d > 0)) \
+         then '成长期'	 		\
+         when ((abs(post_rate_30d) <= 0.2 and abs(realuv_rate_30d ) <= 0.1) or (post_rate_30d >= 0.2 and realuv_rate_30d between -0.1 and 0)) and post_cnt_30d >= 1000 \
+         then '成熟期'	 		\
+         when (post_rate_30d < -0.2 or premium_post_rate_30d <= -1 or realuv_rate_30d < -0.1) and post_cnt_30d >= 500 \
+         then '衰退期'	 		\
+         when post_cnt_30d < 500 then  '冷圈' \
+         end as life_cycle_30d	 		\
+from  \
+	(select ip, \
+			post_cnt_90d, \
+			nvl((post_cnt_90d-post_cnt_180_90d)/post_cnt_180_90d,post_cnt_90d) post_rate_90d, \
+			premium_post_cnt_90d, \
+			nvl((premium_post_cnt_90d-premium_post_cnt_180_90d)/premium_post_cnt_180_90d,premium_post_cnt_90d) premium_post_rate_90d, \
+			realuv_cnt_90d, \
+			nvl((realuv_cnt_90d-realuv_cnt_180_90d)/realuv_cnt_180_90d,realuv_cnt_90d) realuv_rate_90d, \
+			realpv_cnt_90d, \
+			nvl((realpv_cnt_90d-realpv_cnt_180_90d)/realpv_cnt_180_90d,realpv_cnt_90d) realpv_rate_90d, \
+			post_cnt_30d, \
+			nvl((post_cnt_30d-post_cnt_60_30d)/post_cnt_60_30d,post_cnt_30d) post_rate_30d, \
+			premium_post_cnt_30d, \
+			nvl((premium_post_cnt_30d-premium_post_cnt_60_30d)/premium_post_cnt_60_30d,premium_post_cnt_30d) premium_post_rate_30d, \
+			realuv_cnt_30d, \
+			nvl((realuv_cnt_30d-realuv_cnt_60_30d)/realuv_cnt_60_30d,realuv_cnt_30d) realuv_rate_30d, \
+			realpv_cnt_30d, \
+			nvl((realpv_cnt_30d-realpv_cnt_60_30d)/realpv_cnt_60_30d,realpv_cnt_30d) realpv_rate_30d \
+	from lofter.dws_ip_life_cycle_dd \
+	where dt = '${azkaban.flow.1.days.ago}' \
+	) t \	

@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_post_quality_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogId, positive_feedback_rate, interaction_rate, follow_subscribe_uv, quality_type, quality_score, \
+       quality_desc, type \
+from ( \
+    select a.postId, a.blogId, a.positive_feedback_rate, a.interaction_rate, a.follow_subscribe_uv, \
+           b.quality_type, b.quality_score, b.quality_desc, nvl(b.type, 1) as type, \
+           row_number() over (partition by a.blogId order by c.quality_percent desc) as blog_rk, \
+           row_number() over (partition by a.postId order by nvl(b.quality_desc, 1000)) as post_rk \
+    from ( \
+       select postId, blogId, \
+              zhenrate as positive_feedback_rate, \
+              nvl(subscribecollectionuv,0) + nvl(followuv,0) as follow_subscribe_uv, \
+              dianzan_rate as interaction_rate \
+       from lofter_dm.ads_paid_post_premium_scoring_all_round_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select postId, blogId, \
+               case when is_warning in (0,1,8) then '预警' \
+                    when is_warning in (2,3,4) then '严重预警' \
+                    when is_warning in (5) then '优秀' \
+                    when is_warning in (7) then '精品' \
+                    end as quality_type, \
+               max_quality_percent as quality_score, \
+               case when is_warning = 8 then 1 \
+                    when is_warning < 8 then is_warning \
+                    end as quality_desc, \
+               case when is_warning in (0,1,2,3,4,8) then 2 \
+                    when is_warning in (5,7) then 1 \
+                    end as type \
+        from lofter_dm.ads_ad_paid_post_warning_low_post_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postId = b.postId \
+    left join ( \
+        select postId, max(quality_percent) as quality_percent from lofter_dm.ads_paid_post_premium_scoring_group_normalization_di where dt <= '${azkaban.flow.1.days.ago}' group by 1 \
+    ) c on a.postId = c.postId \
+    where (b.type = 2 or c.quality_percent >= 33) \
+) t \
+where (type = 2 or blog_rk <= 10) and post_rk = 1 \
+
+dependencies=ads_ad_paid_post_warning_low_post_di,ads_paid_post_premium_scoring_all_round_di,ads_paid_post_premium_scoring_group_normalization_di

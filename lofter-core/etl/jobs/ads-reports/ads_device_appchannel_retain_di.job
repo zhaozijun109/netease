@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_device_appchannel_retain_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.dt as base_date, a.deviceOs, a.appVersion, a.appChannel, \
+       nvl(count(distinct if(c.period = 1, c.deviceUdid, null)), 0) as active_retain, \
+       nvl(count(distinct if(c.period = 6, c.deviceUdid, null)), 0) as active_retain_7d, \
+       nvl(count(distinct if(c.period = 14, c.deviceUdid, null)), 0) as active_retain_15d, \
+       nvl(count(distinct if(c.period = 29, c.deviceUdid, null)), 0) as active_retain_30d, \
+       nvl(count(distinct if(b.device_type = 'new' and c.period = 1, b.deviceUdid, null)), 0) as new_retain, \
+       nvl(count(distinct if(b.device_type = 'new' and c.period = 6, b.deviceUdid, null)), 0) as new_retain_7d, \
+       nvl(count(distinct if(b.device_type = 'new' and c.period = 14, b.deviceUdid, null)), 0) as new_retain_15d, \
+       nvl(count(distinct if(b.device_type = 'new' and c.period = 29, b.deviceUdid, null)), 0) as new_retain_30d, \
+       nvl(count(distinct if(b.device_type = 'return_30' and c.period = 1, b.deviceUdid, null)), 0) as return_retain, \
+       nvl(count(distinct if(b.device_type = 'return_30' and c.period = 6, b.deviceUdid, null)), 0) as return_retain_7d, \
+       nvl(count(distinct if(b.device_type = 'return_30' and c.period = 14, b.deviceUdid, null)), 0) as return_retain_15d, \
+       nvl(count(distinct if(b.device_type = 'return_30' and c.period = 29, b.deviceUdid, null)), 0) as return_retain_30d \
+from ( \
+   select dt, deviceOs, deviceUdid, kv.key as appVersion, kv.value as appChannel \
+   from lofter.device_active \
+        lateral view explode(map_entries(appVersionChannel)) as kv \
+   where dt <='${azkaban.flow.2.days.ago}' and \
+         dt >= '${azkaban.flow.30.days.ago}' \
+) a \
+left join ( \
+   select device_type, deviceUdid, dt \
+   from lofter.dwd_device_growth_attribution_di \
+   where dt <='${azkaban.flow.2.days.ago}' and \
+         dt >= '${azkaban.flow.30.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid and a.dt = b.dt \
+left join ( \
+   select deviceUdid, base_date, period \
+   from lofter.device_retain \
+   where dt = '${azkaban.flow.1.days.ago}' and is_retain > 0 \
+) c on a.deviceUdid = c.deviceUdid and a.dt = c.base_date \
+where datediff('${azkaban.flow.1.days.ago}', a.dt) in (1,6,14,29) \
+group by a.dt, a.deviceOs, a.appVersion, a.appChannel \
+distribute by 1

@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Clickhouse8NodeLoad
+conf.spark.source.query="select dt, user_id, blog_url, blog_nickname, bill_month, pay_gift_coin_cnt, cast(pay_gift_income as string) as pay_gift_income, cast(free_gift_subsidy as string) as free_gift_subsidy, cast(fans_vip_share as string) as fans_vip_share, cast(fans_vip_revenue as string) as fans_vip_revenue, cast(coupon_income as string) as coupon_income, cast(image_shop_income as string) as image_shop_income, cast(inspire_income as string) as inspire_income, cast(member_income as string) as member_income, cast(begin_balance as string) as begin_balance, cast(total_share as string) as total_share, cast(user_received as string) as user_received, cast(withhold_tax as string) as withhold_tax, cast(withhold_iit as string) as withhold_iit, cast(withhold_vat as string) as withhold_vat, cast(withhold_urt as string) as withhold_urt, cast(withhold_est as string) as withhold_est, cast(withhold_lest as string) as withhold_lest, cast(end_balance as string) as end_balance, account_type from lofter_dm.ads_creator_month_bill_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_creator_month_bill_dd --partition '${azkaban.flow.1.days.ago}' --batch 40960
+retries=0
+dependencies=ads_creator_month_bill_dd

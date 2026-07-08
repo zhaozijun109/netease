@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ods.MdaPartitionEtlJob
+conf.spark.dynamicAllocation.maxExecutors=200
+conf.spark.sql.shuffle.partitions=800
+conf.spark.locality.wait=0s
+conf.spark.sql.files.maxPartitionBytes=1073741824
+conf.spark.speculation=true
+conf.spark.speculation.quantile=0.9
+executor-memory=8g
+conf.spark.executor.memoryOverhead=8g
+params=--date ${azkaban.flow.1.days.ago}

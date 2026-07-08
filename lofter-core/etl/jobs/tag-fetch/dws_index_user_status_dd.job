@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_index_user_status_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select to_bitmap(if(b.isAuthenticated, b.id, null)) as daren_bitmap, \
+       to_bitmap(d.userId) as premium_bitmap, \
+       to_bitmap(if(c.level = 'S', c.userId, null)) as level_s_bitmap, \
+       to_bitmap(if(c.level = 'A', c.userId, null)) as level_a_bitmap, \
+       to_bitmap(if(c.level = 'B', c.userId, null)) as level_b_bitmap, \
+       to_bitmap(if(c.level = 'C', c.userId, null)) as level_c_bitmap, \
+       to_bitmap(if(c.level = 'D', c.userId, null)) as level_d_bitmap, \
+       to_bitmap(if(c.level = 'D*', c.userId, null)) as level_d_star_bitmap \
+from lofter.dim_blog b \
+left join ( \
+  select userId, level \
+  from lofter.dws_par_creator_dd \
+  where dt='${azkaban.flow.1.days.ago}' and level is not null \
+) c on b.id = c.userId \
+left join ( \
+  select userId, is_premium \
+  from lofter.dws_par_creator_premium_staging_dd \
+  where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+) d on b.id = d.userId

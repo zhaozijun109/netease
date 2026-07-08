@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_mbo_revenue_user_di partition (dt = '${azkaban.flow.1.days.ago}') \
+              select pay_uv, pay_money, pay_arpu, first_pay_uv, first_pay_money, first_pay_arpu, \
+                     high_level_pay_uv, high_level_pay_money, high_level_pay_arpu, \
+                     silent_potential_uv, reservoir_browse_uv, reservoir_hd_uv \
+              from ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                         count(distinct if(a.money_1d > 0, a.userid, null)) as pay_uv, \
+                         sum(a.money_1d) as pay_money, \
+                         sum(a.money_30d) / count(distinct a.userId) as pay_arpu, \
+                         count(distinct if(b.first_pay_day = '${azkaban.flow.1.days.ago}' and a.money_1d > 0, a.userId, null)) as first_pay_uv, \
+                         sum(if(b.first_pay_day = '${azkaban.flow.1.days.ago}', a.money_1d, 0)) as first_pay_money, \
+                         sum(if(b.first_pay_day >= '${azkaban.flow.30.days.ago}', a.money_30d, 0)) / count(distinct if(b.first_pay_day >= '${azkaban.flow.30.days.ago}', b.userId, null)) as first_pay_arpu, \
+                         count(distinct if(b.first_pay_day != '${azkaban.flow.1.days.ago}' and a.money_30d >= 25 and a.money_1d > 0, a.userId, null)) as high_level_pay_uv, \
+                         sum(if(b.first_pay_day != '${azkaban.flow.1.days.ago}' and a.money_30d >= 25, a.money_1d, 0)) as high_level_pay_money, \
+                         sum(if(b.first_pay_day < '${azkaban.flow.30.days.ago}' and a.money_30d >= 25, a.money_30d, 0)) / count(distinct if(b.first_pay_day < '${azkaban.flow.30.days.ago}' and a.money_30d >= 25, b.userId, null)) as high_level_pay_arpu \
+                  from ( \
+                      select userid, \
+                             sum(if(from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', money, 0)) as money_1d, \
+                             sum(money) as money_30d \
+                      from lofter.dwd_evt_post_paid_detail_dd \
+                      where dt = '${azkaban.flow.1.days.ago}' and pay_type in ('付费礼物','粉丝会员') and \
+                            from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                      group by userid \
+                  ) a \
+                  left join ( \
+                      select userid, min(from_unixtime(cast(first_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as first_pay_day \
+                      from lofter.dws_user_pay_type_info_dd \
+                      where dt = '${azkaban.flow.1.days.ago}' and pay_type in ('礼物付费', '粉丝会员') \
+                      group by userid \
+                      having first_pay_day <= '${azkaban.flow.1.days.ago}' \
+                  ) b on a.userid=b.userid \
+              ) x \
+              left join ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                         count(distinct a.userid) as silent_potential_uv \
+                  from ( \
+                      select userid \
+                      from lofter_db_dump.ods_db_trade_coin_balance_nd \
+                      where balance > 0 \
+                      group by userid \
+                  ) a \
+                  join ( \
+                      select userid from lofter.dws_par_user_base_dd \
+                      where dt = '${azkaban.flow.1.days.ago}' and login_days_30d > 0 \
+                  ) c on a.userid=c.userid \
+                  left join ( \
+                      select userid,max(from_unixtime(cast(last_pay_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as last_pay_day \
+                      from lofter.dws_user_pay_type_info_dd \
+                      where dt = '${azkaban.flow.1.days.ago}' and  pay_type in ('礼物付费', '粉丝会员') \
+                      group by userid \
+                  ) b on a.userid=b.userid and b.last_pay_day >= '${azkaban.flow.30.days.ago}' \
+                  where b.userid is null \
+              ) y on x.dt = y.dt \
+              left join ( \
+                  select '${azkaban.flow.1.days.ago}' as dt, \
+                         count(distinct if(actionType = 'browse', userid, null)) as reservoir_browse_uv, \
+                         count(distinct if(actionType != 'browse', userid, null)) as reservoir_hd_uv \
+                  from lofter_dm.ads_evt_paid_post_reservoir_user_di \
+                  where blog_channel_flg >= 0 and dt = '${azkaban.flow.1.days.ago}' \
+              ) z on x.dt = z.dt
+dependencies=

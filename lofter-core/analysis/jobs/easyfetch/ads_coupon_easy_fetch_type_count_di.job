@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_coupon_easy_fetch_type_count_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select t1.userid,t1.productid as couponid,t1.tradeid,t1.type, \
+    nvl(nvl(grantCount,totalCount),t3.delivercount*30) as couponcount, \
+    buytime,amount,t1.platform,t1.paytype \
+from \
+    (select userid,tradeid,id,'券卡' as type,amount,bankordertime as buytime,productid,paytype, \
+        (case platform when 1 then '安卓' when 2 then '苹果' else null end) as platform, \
+        case productId \
+            when 16003 then  9 \
+            when 5003 then  9 \
+            when 14003  then 12 \
+            when 21001  then 15 \
+            when 21002  then 18 \
+            when 22001  then 21 \
+            when 5004  then 24 \
+            when 25001 then  9 \
+            when 6003 then  9 \
+            when 6004  then 12 \
+            when 6005  then 15 \
+            when 23001  then 18 \
+            when 12007  then 21 \
+            when 23002  then 24 \
+        end as totalCount \
+    from lofter_db_dump.ods_db_trade_coupon_card_order_nd where status = 1 \
+    and from_unixtime(cast(bankordertime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' ) t1 \
+left join ( \
+    select id, cast(get_json_object(subProducts, '$[0].grantCount') as bigint) as grantCount \
+    from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+    where type = 1) t2 on t1.productid = t2.id \
+left join ( \
+    select tradeid,count as delivercount, createtime as delivertime \
+    from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+) t3 on t1.id = t3.tradeid \
+union all \
+select t3.userid,t3.productid as couponid,t3.tradeid,t3.type , \
+    nvl(t3.grantCount,t4.delivercount) as couponcount,t3.buytime, \
+    t3.amount,t3.platform,t3.paytype \
+from ( \
+        select t1.userid,t1.tradeid,t1.id,t1.amount,t1.buytime,t1.productid,t2.grantCount,t1.paytype,t1.platform, \
+        (case \
+            when t2.scene = 1 then '活动券包' \
+            when t1.scene = 0 then '常态券包' \
+            when t1.scene = 1 then '新人券包' \
+            else '活动券包' end \
+        )as type \
+    from ( \
+        (select userid,tradeid,id,amount,bankordertime as buytime,productid,scene,paytype, \
+            (case platform when 1 then '安卓' when 2 then '苹果' else null end) as platform \
+        from lofter_db_dump.ods_db_trade_coupon_order_nd where status = 1 \
+            and from_unixtime(cast(bankordertime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' ) t1 \
+        left join (select id, cast(get_json_object(subProducts, '$[0].grantCount') as bigint) as grantCount,scene \
+            from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+            where type = 1) t2 on t1.productid = t2.id \
+        ) \
+)t3 \
+left join ( \
+    select tradeid,count as delivercount, createtime as delivertime  \
+    from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+) t4 on t3.id = t4.tradeid \

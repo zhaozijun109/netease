@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,postid,blogid,blogname,contenttype,publishdate,tags,url,hispraise,publisheruserid,ip,praiseday,praisetime,praiseblogname,createip,ipuv,hotuv,hottimes,1minipuv,10minipuv,appuserid,appdeviceudid,pcuserid,pcdeviceid,devicenum,ipnum,citynum,loginipuv,loginipdeviceuv,fans,followusers,postnum,praisepv,praisepostpv,praisepostuv,reproducepv,reproducepostpv,reproducepostuv,recpv,recpostpv,recpostuv,subscribepv,subscribepostpv,subscribepostuv,commentpv,commentpostpv,commentpostuv,messagepv,messageuv,userlevel,userhot,isblackphoneflag,phone,createdate,createtime,isanonymous,istest,usertype,createfrom,email,white_flg,userstatus,normalpostidnum,nonormalpostidnum from lofter_dm.ads_post_parise_easy_fetch_user_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_post_parise_easy_fetch_user_di --partition '${azkaban.flow.1.days.ago}' --batch 102400
+retries=0
+dependencies=ads_post_parise_easy_fetch_user_di

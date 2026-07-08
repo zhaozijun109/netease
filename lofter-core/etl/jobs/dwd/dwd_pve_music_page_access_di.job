@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_pve_music_page_access_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, a.deviceOs, a.scene, a.url, a.occurTime, a.roleId, b.role_name, \
+       a1.uid as music_uid \
+from ( \
+    select userId, roleId, occurTime, deviceOs, scene, url \
+    from lofter.dwd_act_pve_action_di \
+    where dt = '${azkaban.flow.1.days.ago}' and attributes['platform'] = 'music' \
+) a \
+join ( \
+    select userId, uid from lofter_db_dump.ods_db_corp_out_user_nd where appKey = 'musicpve' \
+) a1 on a.userId = a1.userId \
+left join ( \
+    select id as roleId, roleName as role_name \
+    from lofter_db_dump.ods_db_pve_role_info_nd \
+) b on a.roleId = b.roleId \
+distribute by 1 \
+
+dependencies=dwd_act_pve_action_di

@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('-',translate('${azkaban.flow.1.days.ago}', '-', ''),creator,nvl(contentType,'all')) as id, dt,creator,nvl(contentType,'all') as contentType, count(distinct postId) as postNum,sum(exposurePv) as exposurePv,sum(clickPv) as clickPv,count(distinct userId) as postUv,sum(posHotPv) as posHotPv,round(sum(clickPv)/sum(exposurePv),4) as clickPvRatio,round(sum(posHotPv)*1000/sum(exposurePv),2) as hotFor1kPv,round(sum(hdUv)/sum(browseUv),4) as hdRatio from lofter_dm.ads_rec_dis_post_di where flowTaskType = 0 and dt = '${azkaban.flow.1.days.ago}' and dt between from_unixtime(cast(startTime/1000 as bigint),'yyyy-MM-dd') and from_unixtime(cast(endTime/1000 as bigint),'yyyy-MM-dd') group by dt, creator,contentType grouping sets((dt, creator,contentType),(dt, creator))"
+params= --dest lofter_rec_dis_daily_of_creator_v2 --update
+dependencies=flow_control_effect_by_post

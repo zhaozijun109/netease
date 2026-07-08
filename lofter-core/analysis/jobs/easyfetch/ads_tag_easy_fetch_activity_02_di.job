@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_tag_easy_fetch_activity_02_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select tag, userId, browse_pv, user_active_type, real_browse_pv, expose_pv \
+from( \
+    select a.tag, a.userId, browse_pv, nvl(b.active_type, 0) as user_active_type, 0 as real_browse_pv, 0 as expose_pv \
+    from( \
+        select tag, userId, count(1) as browse_pv \
+        from lofter.dwd_tag_browse_di \
+        where dt = '${azkaban.flow.1.days.ago}' and userId > 0 \
+        group by userId, tag \
+    )a  \
+    left join( \
+        select id as userId, 1 as active_type \
+        from lofter.dim_user \
+        where createDate = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select accountId as userId, 2 as active_type \
+        from lofter.dws_evt_login_user_last_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and accountId > 0 and \
+            from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+            datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd')) >= 30 \
+    )b  \
+    on a.userId = b.userId \
+    union all \
+    select t1.tag, null as userId, 0 as browse_pv, -1 as user_active_type, real_browse_pv, expose_pv \
+    from( \
+        select tag, count(1) as real_browse_pv \
+        from lofter.dwd_post_browse_di \
+        lateral view explode(post_tags) tg as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+        group by tag \
+    )t1 \
+    left join( \
+        select tag, count(1) as expose_pv \
+        from lofter.dwd_post_expose_di \
+            lateral view explode(post_tags) tg as tag \
+        where dt = '${azkaban.flow.1.days.ago}' and length(tag) > 0 and reaction is null \
+        group by tag \
+    )t2 \
+    on t1.tag = t2.tag \
+)

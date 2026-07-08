@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01= \
+with pve_source as( \
+    select * from lofter.dws_ab_platform_pve_metric_di where dt = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter.dws_ab_platform_pve_metric_expand_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId,type,metric,metric_value \
+from( \
+    select userId,'pve' as type,'chats_pv' as metric,cast(chats_pv as double) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'chats_uv' as metric,cast(chats_uv as double) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'roles_uv' as metric,cast(roles_uv as double) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'pay_money' as metric,pay_money as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'pay_uv' as metric,cast(pay_uv as double) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'visit_uv' as metric,cast(visit_uv as double) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'visit2chat_rate_uv' as metric,nvl(chats_uv/visit_uv,0.0) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'chat2pay_rate_uv' as metric,nvl(pay_uv/chats_uv,0.0) as metric_value \
+    from pve_source \
+union all \
+    select userId,'pve' as type,'visit2pay_rate_uv' as metric,nvl(pay_uv/visit_uv,0.0) as metric_value \
+    from pve_source \
+)
+dependencies=dws_ab_platform_pve_metric_di

@@ -1,0 +1,55 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.netease.yuanqi</groupId>
+        <artifactId>yuanqi</artifactId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>yuanqi-unified-layer</artifactId>
+    <name>YuanQi : Unified Layer</name>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.yuanqi</groupId>
+            <artifactId>yuanqi-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- ES6 connector：unified-layer 复用 ES6 sink 写入老版 ES 集群 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-elasticsearch6</artifactId>
+            <version>${flink.connector.es.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              将 ES6 high-level rest client 的所有类 relocate 到 com.netease.yuanqi.shaded.es6
+              命名空间，与 lofter-layer 保持一致。
+
+              不 relocate org.apache.flink.connector.elasticsearch.*：yuanqi-common 中
+              EsBaseSink 同时引用 ES6 / ES8 connector 的类，若整体 relocate，单个 layer
+              fat-jar 内只含其中一边的实现，会触发对方类的 ClassNotFoundException。
+
+              父 pom 的 relocations 已声明 combine.children="append"，此处仅追加 ES 客户端项。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.elasticsearch</pattern>
+                            <shadedPattern>com.netease.yuanqi.shaded.es6.org.elasticsearch</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

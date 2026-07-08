@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_growth_device_ip_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.deviceUdid, b.device_type, b.is_paid_subscribe, post_ip, \
+       to_bitmap(a.postId) as browse_post_bitmap \
+from ( \
+    select deviceUdid, postId, post_ip \
+    from lofter.dwd_post_browse_di \
+         lateral view explode(post_ips) as post_ip \
+    where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 and action_type = 'page_duration' \
+) a \
+join ( \
+    select deviceUdid, device_type, is_paid_subscribe \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.deviceUdid = b.deviceUdid \
+group by 1, 2, 3, 4

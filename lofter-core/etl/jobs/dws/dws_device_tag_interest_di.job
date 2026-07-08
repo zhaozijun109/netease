@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_device_tag_interest_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.deviceudid,a.tag,is_cmb_tag,ips,categories,device_type,origin_type,is_paid_subscribe,active_days_30d,tag_realpv \
+from \
+( \
+    select deviceudid,tag, count(postid) tag_realpv \
+    from lofter.dwd_post_browse_di  \
+    lateral view explode(post_tags) t1 as tag  \
+    where dt ='${azkaban.flow.1.days.ago}' and is_real > 0  \
+    group by deviceudid,tag  \
+    having count(postid)>2 \
+) a \
+join \
+( \
+    select deviceudid,device_type,origin_type,is_paid_subscribe,active_days_30d \
+    from lofter.dws_device_growth_dau_stratify_di \
+    where dt ='${azkaban.flow.1.days.ago}'  \
+) b \
+on a.deviceudid=b.deviceudid \
+left join \
+( \
+    select tag,is_cmb_tag,ips,categories \
+    from lofter.dim_tag \
+) c \
+on a.tag=c.tag \
+group by a.deviceudid,a.tag,is_cmb_tag,ips,categories,device_type,origin_type,is_paid_subscribe,active_days_30d,tag_realpv
+dependencies=dws_device_growth_dau_stratify_di

@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01= \
+WITH rc_today AS ( \
+    SELECT userid, COUNT(1) AS visit_cnt \
+    FROM lofter.dwd_rewardcenter_visit_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY userid \
+), \
+rc_hist_30d AS ( \
+    SELECT userid, \
+           count(distinct dt) as visit_days_std, \
+           count(distinct if(dt >= date_sub('${azkaban.flow.1.days.ago}', 30), dt, null)) as visit_days_30d \
+    FROM lofter.dwd_rewardcenter_visit_di \
+    WHERE dt <  '${azkaban.flow.1.days.ago}' \
+    GROUP BY userid \
+) \
+INSERT OVERWRITE TABLE lofter.dwd_rewardcenter_user_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+select a.userId, visit_cnt, \
+       if(is_return_user > 0, 0, is_new_user) as is_new_user, is_return_user, \
+       if(b.userId is not null, 1, 0) as is_platform_new, \
+       if(c.userId is not null, 1, 0) as is_platform_return \
+from ( \
+    SELECT t.userid, t.visit_cnt, \
+        CASE WHEN nvl(h.visit_days_std,0) = 0 THEN 1 ELSE 0 END AS is_new_user, \
+        if(nvl(h.visit_days_30d,0) = 0 and h.visit_days_std > 0, 1, 0) as is_return_user \
+    FROM rc_today t \
+    LEFT JOIN rc_hist_30d h ON t.userid = h.userid \
+) a \
+left join (select userId from lofter.dwd_user_new_di where dt = '${azkaban.flow.1.days.ago}') b on a.userId = b.userId \
+left join (select userId from lofter.dwd_user_return_di where dt = '${azkaban.flow.1.days.ago}') c on a.userId = c.userId \
+
+dependencies=dwd_rewardcenter_visit_di,dwd_user_new_di,dwd_user_return_di

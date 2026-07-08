@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_ip_user_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+select ip, userId, sum(a.pv) as pv, count(distinct a.postId) as post_count, \
+       to_bitmap(a.postId) as post_bitmap, \
+       sum(if(b.postId is not null, a.pv, 0)) as pay_post_pv, \
+       count(distinct b.postId) as pay_post_count \
+from ( \
+    select ip, userId, postId, count(1) as pv \
+    from lofter.dwd_post_browse_di \
+          lateral view explode(post_ips) tg as ip \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          userId > 0 and postId > 0 and length(ip) > 0 and is_real > 0 \
+    group by 1, 2, 3 \
+) a \
+left join ( \
+    select postid \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          ispay_returngift in (0, 1) \
+    group by 1 \
+) b on a.postId = b.postId \
+group by ip, userId

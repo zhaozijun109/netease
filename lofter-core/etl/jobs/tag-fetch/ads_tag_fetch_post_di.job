@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_tag_fetch_post_di partition(dt='${azkaban.flow.1.days.ago}') \
+select p.id as postId, \
+       p.blogId as userId, \
+       nvl(commend_count,0), nvl(hot,0), nvl(praise_count,0), nvl(reproduce_count,0), nvl(recommend_count,0), nvl(subscribe_count,0), \
+       free_gift_sender_bitmap, nvl(free_gift_pv,0), pay_gift_sender_bitmap, nvl(pay_gift_money_amount,0), \
+       nvl(shua_hot,0), \
+       nvl(if(p.contentType = '视频', e.expose_pv, d.exposed_count),0), \
+       nvl(if(p.contentType = '视频', e.click_pv, d.click_count),0), \
+       nvl(rec_exposed_count,0), nvl(feed_rec_exposed_count,0), nvl(tag_rec_exposed_count,0), \
+       if(datediff('${azkaban.flow.1.days.ago}', p.publishDate) between 0 and 2, nvl(rec_exposed_count,0), 0) as cold_start_rec_exposed_count \
+from lofter.dim_post p \
+left join ( \
+    select postId, sum(commendCount) commend_count, sum(hot) as hot, \
+           sum(praiseCount) as praise_count, sum(reproduceCount) as reproduce_count, \
+           sum(recommendCount) as recommend_count, sum(subscribeCount) as subscribe_count \
+    from lofter_dm.ads_post_general_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) a on p.id = a.postId \
+left join ( \
+    select postId, \
+           to_bitmap(if(giftType = 0, sender, null)) free_gift_sender_bitmap, \
+           sum(if(giftType = 0, 1, 0)) free_gift_pv, \
+           to_bitmap(if(giftType = 1, sender, null)) pay_gift_sender_bitmap, \
+           sum(if(giftType = 1, coin/10, 0)) pay_gift_money_amount \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) b on p.id = b.postId \
+left join ( \
+   select postId, sum(dailyShuaHot) as shua_hot \
+   from lofter_dm.ads_risk_shuare_model_stat_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by postId \
+) c on p.id = c.postId \
+left join ( \
+    select conv(split(item_id, '_')[1], 16, 10) as postid, \
+           sum(if(major_scene = 'ALL', exposed_count,0)) as exposed_count, \
+           sum(if(major_scene = 'ALL', click_count,0)) as click_count, \
+           sum(if(major_scene = 'REC', exposed_count,0)) as rec_exposed_count, \
+           sum(if(scene = 'feed_rec', exposed_count,0)) as feed_rec_exposed_count, \
+           sum(if(scene = 'tag_rec', exposed_count,0)) as tag_rec_exposed_count \
+    from rec.rec_item_article_stat_daily \
+    where day = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on p.id = d.postId \
+left join (select postId, expose_pv, click_pv from lofter.dws_post_traffic_di where dt = '${azkaban.flow.1.days.ago}') e on p.id = e.postId \
+where (hot > 0 or commend_count > 0 or shua_hot > 0 or free_gift_pv > 0 or pay_gift_money_amount > 0 or rec_exposed_count > 0 or (p.contentType = '视频' and e.expose_pv > 0))

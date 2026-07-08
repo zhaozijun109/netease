@@ -1,0 +1,20 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select a.collectionId as collectionId, a.subNumb, a.subNumb7d as subNumb7d, \
+       a.recent7hot \
+from ( \
+    select collectionId, subscribe_uv_acc as subNumb, subscribe_uv_7d as subNumb7d, \
+           hot_7d as recent7hot \
+    from lofter.dws_collection_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select collectionId, subscribe_uv_acc as subNumb, subscribe_uv_7d as subNumb7d, \
+           hot_7d as recent7hot \
+    from lofter.dws_collection_dd \
+    where dt='${azkaban.flow.2.days.ago}' \
+) b on a.collectionId = b.collectionId \
+where a.subNumb != nvl(b.subNumb,0) or a.subNumb7d != nvl(b.subNumb7d,0) or a.recent7hot != nvl(b.recent7hot,0) \
+"
+params= --dest lofter_collection_v2 --update --id collectionId --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 2

@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dws_vc_daily_hot_tags_dd partition(dt='${azkaban.flow.1.days.ago}') \
+                select tag, nums, rk \
+                from (select tag, nums, dense_rank() over (order by nums desc) as rk \
+                      from (select params['tag_name'] as tag, \
+                                   count(*)           as nums \
+                            from vc.ods_mda_app_di \
+                            where dt between '${azkaban.flow.3.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                              and eventid = 'discovery_related_tag_click' \
+                              and params['tag_name'] is not null \
+                              and params['tag_name'] != '' \
+                            group by params['tag_name']))
+

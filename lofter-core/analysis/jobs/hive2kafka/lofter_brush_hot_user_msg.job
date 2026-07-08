@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select userId, \
+       suspect_post_count as brushPostCount, \
+       same_reg_ip_suspect_users as regIpUserCount, \
+       same_hot_op_ip_suspect_users as brushIpUserCount, \
+       ip_switch_count_30d as switchIpCount, \
+       reg_ip as regIp, \
+       brush_hot_ips as brushIp \
+from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_review_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic lofter.brush.hot.user.msg --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+

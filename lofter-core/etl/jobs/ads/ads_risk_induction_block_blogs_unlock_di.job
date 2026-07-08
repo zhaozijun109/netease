@@ -1,0 +1,52 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_induction_block_blogs_unlock_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.publish_post_count_30d,  b.last_block_dt \
+from ( \
+    select userId as blogId, count(distinct postId) as publish_post_count_30d \
+    from lofter.dwd_post_publish_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+    having publish_post_count_30d >= 5 \
+) a \
+join ( \
+    select blogId, max(dt) as last_block_dt \
+    from lofter_dm.ads_risk_induction_block_blogs_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.blogId = b.blogId \
+left join ( \
+    select blogId, sum(post_count) as induction_post_count \
+    from ( \
+        select blogId, 'actpwd' as induction_type, count(distinct postId) post_count \
+        from ( \
+            select blogId, postId, dt from lofter_dm.ads_risk_actpwd_similar_posts_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, dt from lofter_dm.ads_risk_actpwd_comment_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, dt from lofter_dm.ads_risk_actpwd_post_footer_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+          union all \
+            select blogId, postId, dt from lofter_dm.ads_risk_actpwd_post_header_induction_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        ) t group by blogId \
+      union all \
+        select blogId, 'shortlink' as induction_type, count(distinct postId) as post_count \
+        from lofter_dm.ads_risk_shortlink_induction_posts_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+      union all \
+        select blogId, 'collection' as induction_type, \
+               count(distinct collectionId) as post_count \
+        from lofter_dm.ads_risk_offsite_induction_zhihu_collection_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by 1 \
+    ) t \
+    group by 1 \
+) c on a.blogId = c.blogId \
+left join ( \
+    select blogId, max(dt) as unlock_dt \
+    from lofter_dm.ads_risk_induction_block_blogs_unlock_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.blogId = d.blogId \
+where nvl(c.induction_post_count,0) <= 0 and (d.unlock_dt is null or d.unlock_dt < b.last_block_dt) \
+
+dependencies=ads_risk_induction_block_blogs_di

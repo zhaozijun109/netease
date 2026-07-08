@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_monitor_domain_mi \
+select a.domain, a.all_writers, a.new_writers, a.activewrite_writers, b.firstwrite_writers, c.returnwrite_writers, \
+       date_sub('${azkaban.flow.1.days.ago}', dayofmonth('${azkaban.flow.1.days.ago}') - 1) as dt \
+from ( \
+    select domain, \
+           count(distinct userId) as all_writers, \
+           count(distinct if(is_new_user > 0, userId, null)) as new_writers, \
+           count(distinct if(is_new_user = 0 and is_first_publish = 0 and is_active_creator > 0, userId, null)) as activewrite_writers \
+    from lofter.dws_par_creator_di lateral view explode(post_domains) pd as domain \
+    where dt <='${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', dayofmonth('${azkaban.flow.1.days.ago}')) \
+    group by domain \
+) a \
+    left join ( \
+        select domain, count(distinct userId) as firstwrite_writers \
+        from lofter.dws_par_creator_di lateral view explode(new_post_domains) pd as domain \
+        where dt <='${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', dayofmonth('${azkaban.flow.1.days.ago}')) \
+        group by domain \
+    ) b on a.domain = b.domain \
+    left join ( \
+        select domain, count(distinct userId) as returnwrite_writers \
+        from lofter.dws_par_creator_di lateral view explode(return_post_domains) pd as domain \
+        where dt <='${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', dayofmonth('${azkaban.flow.1.days.ago}')) \
+        group by domain \
+    ) c on a.domain = c.domain \
+    distribute by 1

@@ -1,0 +1,8 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "PgcUserGroup",
+  "fields": [
+    {"name": "userId", "type": "long"}
+  ]
+}

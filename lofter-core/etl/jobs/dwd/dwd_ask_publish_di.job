@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ask_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.postId, userId, blogName as blog_name, title as post_title, \
+       tags as post_tags, ips as post_ips, domains as post_domains, \
+       contentType as post_content_type, \
+       publishDate as post_publish_date, publishTime as post_publish_time, \
+       blogNickName as blog_nickname, \
+       if(rk = 1, 1, 0) as is_user_first_post, \
+       b.clientType as platform \
+from ( \
+    select id as postId, userId, blogName, blogNickName, title, contentType, valid, \
+           isForbidden, publishDate, publishTime, userCreateDate, url, tags, ips, domains, \
+           row_number() over (partition by userId order by publishTime ) rk \
+    from lofter.dim_post \
+    where isPublished = true and isCitedPost = false and isForbidden = false and \
+          allowview=0 and contentType in ("问答") and \
+          isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 \
+) a \
+left join ( \
+   select postId, clientType \
+   from ( \
+       select postId, clientType, row_number() over (partition by postId order by time desc) as rk \
+       from lofter.ods_log_publishpost_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+   ) t \
+   where rk = 1 \
+) b on a.postId = b.postId \
+where a.publishDate = '${azkaban.flow.1.days.ago}'

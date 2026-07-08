@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_device_interaction_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.deviceUdid, a.real_browse_pv, a.search_cnt, a.post_cnt, a.like_cnt, a.recommend_cnt, a.collect_cnt, a.reproduce_cnt, \
+       a.response_cnt, b.device_pay_amount, a.share_cnt, a.follow_cnt, a.collection_follow_cnt, c.chat_cnt \
+from ( \
+    select deviceUdid, \
+         sum(if(actionType = 'page_duration' and \
+                ((itemType = 'VIDEO' and costTime > 5000) or \
+                 (itemType != 'VIDEO' and costTime > 3000)), 1, 0)) as real_browse_pv, \
+         sum(if(actionType = 'search', 1, 0)) as search_cnt, \
+         sum(if(actionType = 'post', 1, 0)) as post_cnt, \
+         sum(if(actionType = 'like', 1, 0)) as like_cnt, \
+         sum(if(actionType = 'recommend', 1, 0)) as recommend_cnt, \
+         sum(if(actionType = 'subscribe', 1, 0)) as collect_cnt, \
+         sum(if(actionType = 'reproduce', 1, 0)) as reproduce_cnt, \
+         sum(if(actionType = 'comment', 1, 0)) as response_cnt, \
+         sum(if(actionType = 'share', 1, 0)) as share_cnt, \
+         sum(if(actionType = 'follow', 1, 0)) as follow_cnt, \
+         sum(if(eventId in ('a3-49', 'a3-39', 'h1-8', 'h1-32', 'b8-36'), 1, 0)) as collection_follow_cnt \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          (actionType in ('post','like','reproduce','recommend','subscribe','share','comment','page_duration','search', 'follow') or \
+           eventId in ('a3-49', 'a3-39', 'h1-8', 'h1-32', 'b8-36')) \
+    group by deviceUdid \
+) a \
+left join ( \
+    select x.deviceUdid, if(y.money > 0, y.money, 0) as device_pay_amount \
+    from ( \
+        select deviceUdid, element_at(userIds, 1) as userId \
+        from lofter.device_active \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    left join ( \
+        select userId, sum(money) money \
+        from lofter.dwd_user_order_dd \
+        where dt='${azkaban.flow.1.days.ago}' and \
+              pay_date = '${azkaban.flow.1.days.ago}' \
+        group by userid \
+        having money > 0 \
+    ) y on x.userId = y.userId \
+) b on a.deviceUdid = b.deviceUdid \
+left join ( \
+    select deviceUdid, count(1) as chat_cnt \
+    from lofter.dwd_act_pve_action_di \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId = 'pve-2' \
+    group by 1 \
+) c on a.deviceUdid = c.deviceUdid \
+distribute by 1

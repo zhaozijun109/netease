@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_game_page_visit_users_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select userId  \
+    from lofter.ods_mda_app_partition_di  \
+    where dt='${azkaban.flow.1.days.ago}' and actionType='sdk' and \
+          userId is not null and \
+         ((eventId='e1-45' and params['URL'] like '%avg.163%')  or  eventId='o1-2')  \
+    group by userId  \
+    distribute by 1

@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_follow_notice_950_di partition(dt = '${azkaban.flow.current.date}') \
+select a.blogId, \
+       count(distinct a.userId) as new_fans, \
+       count(distinct b.blogId) as follow_back_fans, \
+       filter(transform(sort_array(collect_list(struct(-a.followTime as followTime, b.blogId as blogId)), true), x -> x.blogId), x -> x > 0) as follow_back_fans_list, \
+       filter(transform(sort_array(collect_list(struct(-a.followTime as followTime, a.userId as userId)), true), x -> x.userId), x -> x > 0) as follow_fans_list \
+from ( \
+    select userId, blogId, followTime \
+    from ( \
+        select *, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_user_following_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+              dt >= '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH:mm') >= '${azkaban.flow.1.days.ago} 09:50' and \
+              from_unixtime(cast(_bin_op_time/1000 as bigint), 'yyyy-MM-dd HH:mm') < '${azkaban.flow.current.date} 09:50' \
+    ) t \
+    where rk = 1 and _bin_op = 0 \
+) a \
+left join ( \
+    select userId, blogId, followTime \
+    from ( \
+        select *, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_user_following_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+              dt >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    where rk = 1 and _bin_op = 0 \
+) b on a.userId = b.blogId and a.blogId = b.userId and b.followTime < a.followTime \
+group by a.blogId \
+

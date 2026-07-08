@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_act_tag_ship_score_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag, userId, 1 as cnt \
+from lofter.dws_tag_user_consume_di \
+where dt = '${azkaban.flow.1.days.ago}' and tag in (select tag from lofter.dim_act_accompany_tag) and userId > 0 \
+group by tag, userId
+dependencies=dws_tag_user_consume_di

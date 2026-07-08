@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE `lofter`.`dws_grain_post_creator_follower_dd` PARTITION(`dt`='${azkaban.flow.1.days.ago}') \
+              SELECT \
+              	tmp1.`grainid` AS `grainid`, \
+              	NVL(tmp2.`postcount`,0) AS `postcount`, \
+              	NVL(tmp2.`update_post_1d`,0) AS `update_post_1d`, \
+              	NVL(tmp2.`update_post_7d`,0) AS `update_post_7d`, \
+              	NVL(tmp2.`update_post_30d`,0) AS `update_post_30d`, \
+              	NVL(tmp2.`creator_cnt`,0) AS `creator_cnt`, \
+              	NVL(tmp2.`update_creator_1d`,0) AS `update_creator_1d`, \
+              	NVL(tmp2.`update_creator_7d`,0) AS `update_creator_7d`, \
+              	NVL(tmp2.`update_creator_30d`,0) AS `update_creator_30d`, \
+              	NVL(tmp3.`follower_cnt`,0) AS `follower_cnt`, \
+              	NVL(tmp3.`update_follower_1d`,0) AS `update_follower_1d`, \
+              	NVL(tmp3.`update_follower_7d`,0) AS `update_follower_7d`, \
+              	NVL(tmp3.`update_follower_30d`,0) AS `update_follower_30d` \
+              FROM ( \
+              	SELECT \
+              		`id` AS `grainid` \
+              	FROM \
+              		`lofter_db_dump`.`ods_db_grain_info_nd` \
+              ) tmp1 \
+              LEFT JOIN ( \
+              	SELECT \
+              		a.`grainid`, \
+              		COUNT(DISTINCT a.`postid`) AS `postcount`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` = 0 THEN a.`postid` END) AS `update_post_1d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 7 THEN a.`postid` END) AS `update_post_7d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 30 THEN a.`postid` END) AS `update_post_30d`, \
+              		COUNT(DISTINCT a.`blogid`) AS `creator_cnt`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` = 0 THEN a.`blogid` END) AS `update_creator_1d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 7 THEN a.`blogid` END) AS `update_creator_7d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 30 THEN a.`blogid` END) AS `update_creator_30d` \
+              	FROM ( \
+              		SELECT \
+              			DATEDIFF('${azkaban.flow.1.days.ago}', FROM_UNIXTIME(CAST(`createtime`/1000 AS BIGINT) ,'yyyy-MM-dd')) AS `date_diff`, \
+              			`grainid`, \
+              			`postid`, \
+              			`blogid` \
+              		FROM \
+              			`lofter_db_dump`.`ods_db_grain_post_nd` \
+              		WHERE FROM_UNIXTIME(CAST(`createtime`/1000 AS BIGINT) ,'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+              	) AS a \
+              	GROUP BY a.`grainid` \
+              ) tmp2 \
+              ON tmp1.`grainid` = tmp2.`grainid` \
+              LEFT JOIN ( \
+              	SELECT \
+              		b.`grainid`, \
+              		COUNT(DISTINCT b.`userid`) AS `follower_cnt`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` = 0 THEN b.`userid` END) AS `update_follower_1d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 7 THEN b.`userid` END) AS `update_follower_7d`, \
+              		COUNT(DISTINCT CASE WHEN `date_diff` < 30 THEN b.`userid` END) AS `update_follower_30d` \
+              	FROM ( \
+              		SELECT \
+              			DATEDIFF('${azkaban.flow.1.days.ago}', FROM_UNIXTIME(CAST(`createtime`/1000 AS BIGINT) ,'yyyy-MM-dd')) AS `date_diff`, \
+              	        `grainid`, \
+              	        `userid` \
+              	    FROM \
+              	        `lofter_db_dump`.`ods_db_grain_follower_nd` \
+              	    WHERE  FROM_UNIXTIME(CAST(`createtime`/1000 AS BIGINT) ,'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+              	) AS b \
+              	GROUP BY b.`grainid` \
+              ) tmp3 \
+              ON tmp1.`grainid` = tmp3.`grainid`

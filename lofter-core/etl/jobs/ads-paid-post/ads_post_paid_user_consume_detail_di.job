@@ -1,0 +1,261 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter_dm.ads_post_paid_user_consume_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'1' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'7' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'30' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'history' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'month' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'MM') \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'MM') \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'quarter' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'quarter') \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'quarter') \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'year' AS period \
+	,userid \
+	,sum(MONEY) AS trade_money \
+	,sum(num) as trade_num \
+FROM ( \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'粉丝会员' AS pay_type \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and userid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+	GROUP BY userid \
+	 \
+	UNION ALL \
+	 \
+	SELECT userid \
+		,sum(MONEY) AS MONEY \
+		,count(1) as num \
+		,'礼物解锁' AS pay_type \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and userid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+	GROUP BY userid \
+	) a \
+GROUP BY userid \
+	,pay_type grouping sets(( \
+			userid \
+			,pay_type \
+			), (userid)) \

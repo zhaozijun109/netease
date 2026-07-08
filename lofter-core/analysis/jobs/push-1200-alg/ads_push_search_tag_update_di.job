@@ -1,0 +1,114 @@
+type=sparksql
+hive.query.01=\
+with postSource as ( \
+    select postId, \
+           blogId, \
+           tag, \
+           postHot \
+    from ( \
+        select t1.id as postId, \
+               t1.blogId, \
+               t1.tag, \
+               nvl(t2.postHot,0) as postHot, \
+               row_number() over(partition by t1.tag order by nvl(t2.postHot,0) desc) as rn \
+        from ( \
+            select id, blogId, tag \
+            from ( \
+                select id, blogId, publishTime, \
+                    case when length(trim(tag))>0 then split(lower(trim(tag)),',') else null end as tags, \
+                    case when isPublished is not null and isPublished <> 0 then true else false end as isPublished, \
+                    case when valid is not null and valid = 25 then true else false end as isForbidden, \
+                    case when type =1 then '文字' \
+                         when type =2 then '图片' \
+                         when type =3 then '音乐' \
+                         when type =4 then '视频' \
+                         when type =5 then '问答' \
+                         when type =6 then '长文章' \
+                         else '未知' end  as contentType, \
+                     case when CiteParentPostId is not null and CiteParentPostId > 0 then true else false end as isCitedPost, \
+                     if(moveFrom in ('blog','lofternetease','blog163like','loftmove','BLOGPOST','bbs','photo-pp','163_news','instagram_mirror','weibo_sync','news','pp','netease_photo' ) or moveFrom like '%blog%' or moveFrom like '%move%', 1, 0) as isMoved, \
+                     allowView, \
+                     valid, \
+                     row_number() over (partition by id order by publishTime desc) as rn \
+                from lofter.ods_binlog_post_di \
+                where dt between '${azkaban.flow.1.days.ago}' and '${azkaban.flow.current.date}' and _bin_op in (0, 2) and \
+                      from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH:mm:SS') between \
+                      '${azkaban.flow.1.days.ago} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+                      and '${azkaban.flow.current.date} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+            ) t lateral view explode(tags) as tag \
+            where rn = 1 and isPublished = true and isCitedPost = false and isForbidden = false and isMoved = 0 and allowView = 0 and valid = 0 and contentType in ('文字', '图片') \
+        ) t1 \
+        left join ( \
+            select tag, postId, postHot \
+            from ( \
+                select tagName as tag, \
+                       postId, \
+                       postHot, \
+                       row_number() over (partition by postId order by _bin_op_seqno desc, _bin_op_time desc) as rn \
+                from lofter.ods_binlog_tag_resource_di where dt between '${azkaban.flow.1.days.ago}' and '${azkaban.flow.current.date}' and \
+                     from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH:mm:SS') between \
+                     '${azkaban.flow.1.days.ago} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+                     and '${azkaban.flow.current.date} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' and status = 0 and isPublic = 1 \
+            ) t \
+            where rn = 1 and postHot >= 50 \
+        ) t2 \
+        on t1.id = t2.postId and t1.tag = t2.tag \
+        left join ( \
+            select postId \
+            from ( \
+                select postId, \
+                       row_number() over (partition by postId order by _bin_op_seqno desc, _bin_op_time desc) as rn \
+                from lofter.ods_binlog_trade_return_gift_plan_di where dt between '${azkaban.flow.1.days.ago}' and '${azkaban.flow.current.date}' and \
+                from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd HH:mm:SS') between '${azkaban.flow.1.days.ago} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+                and '${azkaban.flow.current.date} ${azkaban.flow.start.hour}:${azkaban.flow.start.minute}:00' \
+            ) t \
+            where rn = 1 \
+        ) t3 \
+        on t1.id = t3.postId \
+        where t3.postId is null \
+    ) t4 \
+    where rn = 1 \
+) \
+insert overwrite table lofter_dm.ads_push_search_tag_update_di partition(dt = '${azkaban.flow.current.date}') \
+select t1.userId, \
+       t1.query_norm as tag, \
+       t3.postId, \
+       t3.blogId \
+from ( \
+    select userId, query_norm \
+    from ( \
+        select a.userId, \
+               a.query_norm, \
+               row_number() over (partition by a.userId order by if(b.search_query > 0, 0, 1), a.last_time desc) as rk \
+        from ( \
+            select cast(user_id as bigint) as userId, * \
+            from rec.rec_data_search_user_query \
+            where day between date_sub('${azkaban.flow.1.days.ago}', 2) and '${azkaban.flow.1.days.ago}' \
+        ) a \
+        left join ( \
+            select userId, search_query \
+            from lofter.dwd_search_action_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}', 2) and '${azkaban.flow.1.days.ago}' and eventId = 'b5-10' \
+            group by 1, 2 \
+        ) b on a.userId = b.userId and a.query_norm = b.search_query \
+    ) t \
+    where rk = 1 \
+) t1 \
+join postSource t3 \
+on t1.query_norm = t3.tag \
+left join ( \
+    select userId, postId \
+    from lofter.dwd_post_browse_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+    group by userId, postId \
+) t4 \
+on t1.userId = t4.userId and t3.postId = t4.postId \
+left join lofter_db_dump.ods_db_user_forbid_tag_nd t5 \
+on t1.userId = t5.userId and t1.query_norm = t5.tagName \
+left join lofter_db_dump.ods_db_blacklist_user_nd t6 \
+on t1.userId = t6.userId and t3.blogId = t6.blacklistBlogId \
+left join ( \
+   select userId, postId from lofter_dm.ads_push_search_tag_update_di where dt < '${azkaban.flow.current.date}' group by userId, postId \
+) t7 \
+on t1.userId = t7.userId \
+where t4.postId is null and t5.tagName is null and t6.blacklistBlogId is null and t7.userId is null

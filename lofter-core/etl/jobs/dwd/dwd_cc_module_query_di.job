@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_cc_module_query_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, deviceUdid, eventId, name, \
+ case eventId when 'ka1-1' then '帮助与反馈页面访问' \
+              when 'ka1-2' then '推荐自助工具' \
+              when 'ka1-3' then '热门问题' \
+              when 'ka1-4' then '问题分类' \
+              when 'ka1-5' then 'qa页面pv' \
+              when 'ka1-6' then 'qa页面点击有用' \
+              when 'ka1-7' then 'qa页面点击文案+链接配置' \
+              when 'ka1-8' then '异步反馈页面pv' \
+              when 'ka1-9' then '异步反馈提交' \
+              when 'ka1-10' then '客服-搜索' \
+              when 'ka1-11' then '客服-搜索' end as moduleName, \
+              occurTime, \
+              search_keyword, search_result_url \
+from ( \
+    select cast(userId as bigint) as userId, deviceUdid, eventId, nvl(attributes['name'],'') as name, occurTime, \
+           if(eventId in ('ka1-10', 'ka1-11'), trim(attributes['text']), null) as search_keyword, \
+           if(eventId = 'ka1-11', trim(attributes['url']), null) as search_result_url \
+    from lofter.ods_mda_wap_di a \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId in ('ka1-1','ka1-2','ka1-3','ka1-4','ka1-5','ka1-6','ka1-7','ka1-8','ka1-9','ka1-10', 'ka1-11') \
+    union all \
+    select userId, deviceUdid, eventId, nvl(attributes['name'],'') as name, occurTime, \
+           if(eventId in ('ka1-10', 'ka1-11'), trim(attributes['text']), null) as search_keyword, \
+           if(eventId = 'ka1-11', trim(attributes['url']), null) as search_result_url \
+    from lofter.ods_mda_web_di a \
+    where dt = '${azkaban.flow.1.days.ago}' and eventId in ('ka1-1','ka1-2','ka1-3','ka1-4','ka1-5','ka1-6','ka1-7','ka1-8','ka1-9','ka1-10', 'ka1-11') \
+) t \
+distribute by 1

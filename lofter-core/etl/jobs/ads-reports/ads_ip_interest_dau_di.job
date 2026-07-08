@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_interest_dau_di partition(dt='${azkaban.flow.1.days.ago}') \
+select ip,categories, \
+case when device_type='近30日新增' then device_type when device_type='近30日回流' then device_type  \
+when device_type='持续活跃' and active_days_30d between 1 and 7 then '月活1-7日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 8 and 14 then '月活8-14日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 15 and 28 then '月活15-28日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 29 and 30 then '月活29-30日持续活跃' end as dau_stratify_type, \
+ifnull(sum(ip_realpv),0) sum_realpv, \
+count(distinct deviceudid) sum_interest_uv \
+from lofter.dws_device_ip_interest_di \
+where dt='${azkaban.flow.1.days.ago}'  \
+group by ip,categories, \
+case when device_type='近30日新增' then device_type when device_type='近30日回流' then device_type  \
+when device_type='持续活跃' and active_days_30d between 1 and 7 then '月活1-7日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 8 and 14 then '月活8-14日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 15 and 28 then '月活15-28日持续活跃'  \
+when device_type='持续活跃' and active_days_30d between 29 and 30 then '月活29-30日持续活跃' end \

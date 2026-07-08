@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dwd.UserRetentionEtlJob
+params= --date ${azkaban.flow.1.days.ago}
+dependencies=dwd_evt_user_login_di

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select if(strategyid is null, replace(dt, '-'), strategyid) as id, dt, strategyid, hotpv_std as total_hotpv, hotpv_1d as day_hotpv, realplaypv_std as total_realplaypv, realplaypv_1d as day_realplaypv from lofter_dm.ads_video_grab_strategy_dd where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_video_grab --postfixsep

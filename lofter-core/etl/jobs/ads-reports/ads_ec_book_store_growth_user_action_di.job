@@ -1,0 +1,149 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_book_store_growth_user_action_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.dt as day \
+	,device_type \
+	,origin_channel \
+	,dayfufeiflg \
+	,count(DISTINCT a.userid) AS uv \
+	,count(DISTINCT CASE  \
+			WHEN b.dt = date_add(a.dt, 0) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) \
+				THEN b.userid \
+			ELSE NULL \
+			END) AS trade_uv_1d \
+	,count(DISTINCT CASE  \
+			WHEN b.dt = date_add(a.dt, 1) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) \
+				THEN b.userid \
+			ELSE NULL \
+			END) AS trade_uv_2d \
+	,count(DISTINCT CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 6) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) \
+				THEN b.userid \
+			ELSE NULL \
+			END) AS trade_uv_7d \
+	,count(DISTINCT CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 29) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) \
+				THEN b.userid \
+			ELSE NULL \
+			END) AS trade_uv_30d \
+	,count(DISTINCT CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 59) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (59) \
+				THEN b.userid \
+			ELSE NULL \
+			END) AS trade_uv_60d \
+	,sum(CASE  \
+			WHEN b.dt = date_add(a.dt, 0) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) \
+				THEN trade_money \
+			ELSE 0 \
+			END) AS trade_money_1d \
+	,sum(CASE  \
+			WHEN b.dt = date_add(a.dt, 1) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) \
+				THEN trade_money \
+			ELSE 0 \
+			END) AS trade_money_2d \
+	,sum(CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 6) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) \
+				THEN trade_money \
+			ELSE 0 \
+			END) AS trade_money_7d \
+	,sum(CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 29) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) \
+				THEN trade_money \
+			ELSE 0 \
+			END) AS trade_money_30d \
+	,sum(CASE  \
+			WHEN b.dt BETWEEN date_add(a.dt, 1) \
+					AND date_add(a.dt, 59) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (59) \
+				THEN trade_money \
+			ELSE 0 \
+			END) AS trade_money_60d \
+	,count(DISTINCT CASE  \
+			WHEN c.dt = date_add(a.dt, 0) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) \
+				THEN c.userid \
+			ELSE NULL \
+			END) AS active_uv_1d \
+	,count(DISTINCT CASE  \
+			WHEN c.dt = date_add(a.dt, 1) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (1) \
+				THEN c.userid \
+			ELSE NULL \
+			END) AS active_uv_2d \
+	,count(DISTINCT CASE  \
+			WHEN c.dt = date_add(a.dt, 6) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) \
+				THEN c.userid \
+			ELSE NULL \
+			END) AS active_uv_7d \
+	,count(DISTINCT CASE  \
+			WHEN c.dt = date_add(a.dt, 29) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) \
+				THEN c.userid \
+			ELSE NULL \
+			END) AS active_uv_30d \
+	,count(DISTINCT CASE  \
+			WHEN c.dt = date_add(a.dt, 59) \
+				AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (59) \
+				THEN c.userid \
+			ELSE NULL \
+			END) AS active_uv_60d \
+FROM ( \
+	SELECT dt \
+		,device_type \
+		,origin_channel \
+		,dayfufeiflg \
+		,userid \
+	FROM lofter_dm.ads_ec_book_store_growth_user_di \
+	WHERE dt BETWEEN date_sub('${azkaban.flow.current.date}', 60) \
+			AND '${azkaban.flow.1.days.ago}' \
+	GROUP BY dt \
+		,device_type \
+		,origin_channel \
+		,dayfufeiflg \
+		,userid \
+	) a \
+LEFT JOIN ( \
+	SELECT pay_date as dt, userid, sum(money) AS trade_money \
+	FROM lofter.dwd_user_order_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' and \
+	      pay_date BETWEEN date_sub('${azkaban.flow.current.date}', 60) AND '${azkaban.flow.1.days.ago}' \
+	GROUP BY 1, 2 \
+) b ON a.userid = b.userid \
+	AND b.dt BETWEEN date_add(a.dt, 0) AND date_add(a.dt, 60) \
+LEFT JOIN ( \
+	SELECT dt \
+		,userid \
+	FROM lofter.dwd_user_active_di \
+	WHERE dt BETWEEN date_sub('${azkaban.flow.current.date}', 60) \
+			AND '${azkaban.flow.1.days.ago}' \
+	GROUP BY dt \
+		,userid \
+	) c ON a.userid = c.userid \
+	AND c.dt BETWEEN date_add(a.dt, 0) \
+		AND date_add(a.dt, 60) \
+WHERE datediff('${azkaban.flow.1.days.ago}', a.dt) IN ( \
+		0 \
+		,1 \
+		,6 \
+		,29 \
+		,59 \
+		) \
+GROUP BY a.dt \
+	,device_type \
+	,origin_channel \
+	,dayfufeiflg
+dependencies=ads_ec_book_store_growth_user_di

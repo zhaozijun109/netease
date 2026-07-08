@@ -1,0 +1,67 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dws_par_creator_paid_post_income_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, \
+       gift_income_std, gift_income_1d, gift_income_7d, gift_income_30d, \
+       ad_unlock_income_std, ad_unlock_income_1d, ad_unlock_income_7d, ad_unlock_income_30d, \
+       grain_tickets_std, grain_tickets_1d, grain_tickets_7d, grain_tickets_30d, \
+       coupon_income_std,coupon_income_1d,coupon_income_7d,coupon_income_30d, \
+       fans_vip_income_std, fans_vip_income_1d, fans_vip_income_7d, fans_vip_income_30d \
+from ( \
+    select userId as blogId \
+    from lofter.dim_gift_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select blogId, \
+           sum(money) as gift_income_std, \
+           sum(if(pay_date = '${azkaban.flow.1.days.ago}', money, 0)) as gift_income_1d, \
+           sum(if(pay_date >= '${azkaban.flow.7.days.ago}', money, 0)) as gift_income_7d, \
+           sum(if(pay_date >= '${azkaban.flow.30.days.ago}', money, 0)) as gift_income_30d \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and order_type = 'gift_present' and \
+          pay_date <= '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) b on a.blogId = b.blogId \
+left join ( \
+    select blogId, \
+           sum(money) as ad_unlock_income_std, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', money, 0)) as ad_unlock_income_1d, \
+           sum(if(dt >= '${azkaban.flow.7.days.ago}', money, 0)) as ad_unlock_income_7d, \
+           sum(if(dt >= '${azkaban.flow.30.days.ago}', money, 0)) as ad_unlock_income_30d \
+    from lofter.dwd_user_ad_revenue_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and revenue_module = '激励广告解锁' and blogId > 0 \
+    group by 1 \
+) c on a.blogId = c.blogId \
+left join ( \
+    select blogId, \
+           sum(grain_tickets) as grain_tickets_std, \
+           sum(if(unlock_date = '${azkaban.flow.1.days.ago}', grain_tickets, 0)) as grain_tickets_1d, \
+           sum(if(unlock_date >= '${azkaban.flow.7.days.ago}', grain_tickets, 0)) as grain_tickets_7d, \
+           sum(if(unlock_date >= '${azkaban.flow.30.days.ago}', grain_tickets, 0)) as grain_tickets_30d, \
+           sum(if(unlock_method = '券包', money, 0)) as coupon_income_std, \
+           sum(if(unlock_method = '券包' and unlock_date = '${azkaban.flow.1.days.ago}', money, 0)) as coupon_income_1d, \
+           sum(if(unlock_method = '券包' and unlock_date >= '${azkaban.flow.7.days.ago}', money, 0)) as coupon_income_7d, \
+           sum(if(unlock_method = '券包' and unlock_date >= '${azkaban.flow.30.days.ago}', money, 0)) as coupon_income_30d \
+    from ( \
+        select *, from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as unlock_date \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by 1 \
+) d on a.blogId = d.blogId \
+left join ( \
+    select vipBlogId as blogId, \
+           sum(amount) as fans_vip_income_std, \
+           sum(if(dt = '${azkaban.flow.1.days.ago}', amount, 0)) as fans_vip_income_1d, \
+           sum(if(dt >= '${azkaban.flow.7.days.ago}', amount, 0)) as fans_vip_income_7d, \
+           sum(if(dt >= '${azkaban.flow.30.days.ago}', amount, 0)) as fans_vip_income_30d \
+    from ( \
+        select *, from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') as dt \
+        from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+        where status = 1 and from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by 1 \
+) e on a.blogId = e.blogId \

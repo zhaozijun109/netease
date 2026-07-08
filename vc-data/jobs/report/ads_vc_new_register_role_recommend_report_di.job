@@ -1,0 +1,68 @@
+type = sparksql
+hive.query.01 =       \
+with kpi_new_user_findpage(    \
+select  t1.user_id,t1.origin_type,t1.device_os,t1.origin,    \
+t2.role_id expose_role_id,t2.pos expose_pos,t2.user_id expose_user_id,    \
+t3.role_id click_role_id,t3.pos click_pos,t3.user_id click_user_id,    \
+t4.talk_cnt ,t4.user_id talk_user_id    \
+from     \
+ (    \
+ select dt, user_id,origin_type,device_os,    \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'    \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'    \
+     else '非LOFTER' end origin    \
+ from  vc.dws_vc_user_behavior_info_a_d t3     \
+ where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )   \
+ and register_date='${azkaban.flow.1.days.ago}'     \
+ and is_anonymity='N'    \
+ AND is_test_user='N'    \
+ group by 1,2,3,4,5    \
+ ) t1     \
+join     \
+ (    \
+ SELECT  user_id, case when dt>='2025-09-29' and params['type']='character' then   params['itemid']     \
+                     when dt<'2025-09-29' then  params['itemid']  end  role_id,    \
+                case when dt>='2025-09-29' and params['type']='character' then   params['pos']     \
+                     when dt<'2025-09-29' then  params['pos']   end  pos    \
+FROM vc.ods_mda_app_di    \
+WHERE dt='${azkaban.flow.1.days.ago}'    \
+AND eventid = 'b1-2'    \
+and params['module'] ='roleCard'    \
+    \
+ ) t2 on t1.user_id=t2.user_id     \
+left JOIN     \
+(    \
+SELECT  user_id,case when dt>='2025-09-29' and params['type']='character' then   params['itemid']     \
+                     when dt<'2025-09-29' then  params['itemid']  end  role_id,    \
+                case when dt>='2025-09-29' and params['type']='character' then   params['pos']     \
+                     when dt<'2025-09-29' then  params['pos']   end  pos    \
+FROM vc.ods_mda_app_di    \
+WHERE dt='${azkaban.flow.1.days.ago}'    \
+AND eventid = 'c1-2'    \
+and params['module'] ='roleCard'    \
+    \
+) t3 on t2.user_id=t3.user_id and t2.role_id=t3.role_id and t2.pos=t3.pos    \
+    \
+left join     \
+(    \
+select user_id ,character_id,    \
+count(distinct message_id)    as talk_cnt    \
+from vc.dwd_vc_uc_talk_info_i_d     \
+where dt='${azkaban.flow.1.days.ago}'    \
+and sender in (2, 4)     \
+and type = 1     \
+group by 1,2    \
+) t4 on t3.role_id=t4.character_id and t3.user_id=t4.user_id     \
+)     \
+    \
+insert overwrite table vc_dm.ads_vc_new_register_role_recommend_report_di partition(dt ='${azkaban.flow.1.days.ago}')      \
+select    \
+origin_type,device_os,origin,    \
+expose_role_id,character_name,expose_pos,    \
+ expose_user_id,    \
+click_user_id,    \
+talk_user_id,    \
+sum(talk_cnt) talk_cnt     \
+from kpi_new_user_findpage  a     \
+left join vc.ods_db_vc_character_nd b on a.expose_role_id=b.id     \
+group by 1,2,3,4,5,6,7,8,9

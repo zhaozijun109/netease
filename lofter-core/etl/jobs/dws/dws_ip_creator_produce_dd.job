@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_ip_creator_produce_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select blogId as userId, interest_name, derivedflag, postNum as interest_post_count, \
+       row_number() over (partition by blogId order by postNum desc ) as rk \
+from ( \
+  select ip as interest_name ,derivedflag, blogId, count(distinct id) postNum \
+  from ( \
+    select id, blogId, publishDate, a.tag, nvl(ip,'无ip归属') ip, derivedflag \
+    from ( \
+      select id,blogId,tag,publishDate \
+      from lofter.dim_post \
+      lateral view explode(tags) t2 as tag \
+      where publishDate <= '${azkaban.flow.1.days.ago}' and publishDate >= '${azkaban.flow.30.days.ago}' and \
+            isPublished=true and isForbidden=false and allowView in (0,100) and isCitedPost = false and \
+            contentType <> '问答' \
+    ) a left join ( \
+        select a.tag,a.ip,b.derivedflag \
+        from ( \
+           select tag,ip \
+           from lofter.dwd_tag_ip_mapping_nd \
+        ) a join ( \
+           select id,name,derivedflag \
+           from lofter_db_dump.ods_db_cmb_ip_nd \
+        ) b on a.ip = b.name \
+        group by a.tag, a.ip, b.derivedflag \
+    ) b on a.tag = b.tag \
+  ) t \
+  group by ip, derivedflag, blogId \
+) tt \
+order by interest_name

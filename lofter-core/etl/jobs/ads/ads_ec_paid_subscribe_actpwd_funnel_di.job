@@ -1,0 +1,54 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_paid_subscribe_actpwd_funnel_di partition(dt='${azkaban.flow.1.days.ago}') \
+select m.*, n.order_cnt, n.order_trade_devices, n.order_trade_devices_money, x.new_devices, \
+       y.post_url, y.post_title, x.return_devices, x.new_whiteboard_user_count, \
+       z.id as actpwd_channel_id, z2.activate_silent_user_count, \
+       if(m.actpwd like 'kol_channel_%', 1, 0) as is_mini \
+from ( \
+    select a.actpwd, a.channel as actpwd_channel, a.postid, a.blogId, c.blogNickName, \
+            count(distinct a.deviceUdid) as all_devices, \
+            count(distinct b.deviceUdid) as actpwd_trade_devices, \
+            sum(b.actpwd_trade_amount) as actpwd_trade_amount \
+    from ( \
+        select actpwd, channel, deviceUdid, itemId as postid, item_userId as blogId \
+        from lofter.dwd_growth_actpwd_access_di \
+        where dt = '${azkaban.flow.1.days.ago}' and (channel like '%订阅' or channel like '%会员]' or channel like '米良%') \
+    ) a \
+    left join ( \
+        select actpwd_search as actpwd, deviceUdid, \
+               sum(amount) as actpwd_trade_amount \
+        from lofter.dwd_paid_subscribe_order_di lateral view explode(actpwd_search_list) t as actpwd_search \
+        where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        group by actpwd_search, deviceUdid \
+    ) b on a.deviceUdid = b.deviceUdid and a.actpwd = b.actpwd \
+    join lofter.dim_blog c on a.blogId = c.id \
+    group by a.actpwd, a.channel, a.postid, a.blogId, c.blogNickName \
+) m \
+left join ( \
+    select actpwd,count(order_id) as order_cnt,count(distinct deviceUdid) as order_trade_devices,sum(amount) order_trade_devices_money \
+    from lofter.dwd_paid_subscribe_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by actpwd \
+) n on m.actpwd = n.actpwd \
+left join ( \
+    select origin_actpwd, \
+           count(distinct if(device_type = 'new', deviceUdid, null)) as new_devices, \
+           count(distinct if(device_type = 'return_30', deviceUdid, null)) as return_devices, \
+           count(distinct if(device_type = 'new' and is_whiteboard > 0, deviceUdid, null)) as new_whiteboard_user_count \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by origin_actpwd \
+) x on m.actpwd = x.origin_actpwd \
+left join ( \
+   select id as postId, title as post_title, concat(blogName,'.lofter.com/post/',conv(blogId, 10, 16),'_',conv(id, 10, 16)) as post_url \
+   from lofter.dim_post \
+) y on m.postId = y.postId \
+left join ( \
+    select * from lofter.dim_kol_channel_dd where dt = '${azkaban.flow.1.days.ago}' \
+) z on m.actpwd_channel = z.channel \
+left join ( \
+    select actpwd, count(distinct userId) as activate_silent_user_count \
+    from lofter.dwd_paid_subscribe_silent_user_activate_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by actpwd \
+) z2 on m.actpwd = z2.actpwd \

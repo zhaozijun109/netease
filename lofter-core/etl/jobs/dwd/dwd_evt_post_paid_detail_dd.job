@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_evt_post_paid_detail_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+        select postId,blogId,(coin/10) as money,sender as userId, createTime, '付费礼物' as  pay_type     \
+        from lofter.dwd_paid_post_detail_dd    \
+        where dt= '${azkaban.flow.1.days.ago}'    \
+        union all    \
+        select postId,vipblogId as blogId,amount as money, userId, createTime, '博客订阅'  as  pay_type     \
+        from lofter_db_dump.ods_db_trade_blog_vip_order_nd     \
+        where  status=1     \
+        union all    \
+        select postId,vipblogId as blogId,amount as money, a.userId, createTime, if(b.userId is not null, '官方账号', '粉丝会员') as pay_type     \
+        from  \
+        (select * from lofter_db_dump.ods_db_trade_fans_vip_order_nd     \
+        where status=1) a    \
+        left join  \
+        (select cast(userId as bigint) as userId     \
+        from lofter_db_dump.ods_db_admin_pub_data_nd LATERAL VIEW explode(split(content, ',')) t2 AS userId    \
+        where name='book_store_blogIds'     \
+        group by cast(userId as bigint)    \
+        ) b    \
+        on a.vipBlogId = b.userId  \
+        union all    \
+        select postId,0 as blogId,amount as money, userId, finishTime as createTime,  '书城会员' as pay_type     \
+        from lofter_db_dump.ods_db_trade_store_vip_order_nd    \
+        where status=1    \
+        distribute by postId % 10
+dependencies= dwd_paid_post_detail_dd

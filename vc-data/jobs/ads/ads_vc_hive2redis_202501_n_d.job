@@ -1,0 +1,68 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_hive2redis_202501_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+select CONCAT_WS('_',case  \
+                  when sign = 'last_7_days' then 'user_send_count_7d'  \
+                  when sign = 'last_30_days' then 'user_send_count_30d'  \
+                  when sign = 'last_all_days' then 'user_send_count_all' end, '${azkaban.flow.1.days.ago}',user_id, character_id) as key,  \
+       talk_cnt as value  \
+from vc.ads_vc_uct_persons_n_d  \
+where dt = '${azkaban.flow.1.days.ago}'  \
+union all  \
+select CONCAT('home_page_',user_id) as key,concat_ws(',',collect_set(sign)) as value   \
+from    \
+(select user_id,character_id,concat(1,'-',character_id) as sign   \
+from   \
+(select ucc.user_id,ucc.character_id,talk_cnt,   \
+row_number() over(partition by ucc.user_id order by talk_cnt desc) as rk    \
+from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc where talk_cnt >= 50 and dt='${azkaban.flow.1.days.ago}') a   \
+where a.rk=1   \
+union all   \
+select user_id, character_id,concat(2,'-',character_id) as sign   \
+from (select user_id,   \
+             character_id,   \
+             talk_cnt,   \
+             row_number() over (partition by user_id order by talk_cnt desc) as rk   \
+      from (select user_id, character_id, sum(talk_cnt) as talk_cnt   \
+            from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc   \
+            where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}'   \
+            group by user_id, character_id)   \
+      where talk_cnt >= 150) a   \
+where a.rk = 1   \
+union all   \
+select ucc.user_id,   \
+       '' as character_id,   \
+       4 as sign   \
+from (select user_id, character_id, sum(talk_cnt) as talk_cnt   \
+      from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc   \
+      where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}'   \
+      group by user_id, character_id) ucc   \
+where talk_cnt >= 100   \
+  and ucc.user_id in (select ucc.user_id   \
+                      from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc   \
+                      where fetter_nums >= 300   \
+                      group by ucc.user_id   \
+                      having count(*) >= 2)   \
+union all   \
+select user_id,   \
+       '' as character_id,   \
+       5  as sign   \
+from (select ucc.user_id,   \
+             ucc.character_id   \
+      from (select user_id, character_id, sum(talk_cnt) as talk_cnt   \
+            from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc   \
+            where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}'   \
+            group by user_id, character_id) ucc   \
+      where talk_cnt >= 30   \
+        and ucc.user_id in (select ucc.user_id   \
+                            from vc.dws_vc_uc_talk_day_cnt_single_i_d ucc   \
+                            where fetter_nums >= 60   \
+                            group by ucc.user_id   \
+                            having count(*) >= 5)   \
+      group by ucc.user_id, ucc.character_id   \
+      having count(*) >= 2)   \
+group by user_id) group by user_id  \
+union all \
+select CONCAT('user_no_user_app_30d_',user_id) as key,if(active_intervals > 30,1,0) as value \
+from vc.dws_vc_user_behavior_info_a_d where dt='${azkaban.flow.1.days.ago}' \
+
+dependencies=ads_vc_uct_persons_n_d

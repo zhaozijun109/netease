@@ -1,0 +1,208 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_membership_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 'premium') \
+select a.targetWord, a.postId, a.blogId, a.indexValue, a.listRank, a.listUuid, '神作榜' as listTitle, \
+       nvl(b.hot,0) as hot, nvl(c.hot, 0) as ip_hot, element_at(d.ips, 1) as post_ip \
+from ( \
+    select ip as targetWord, postId, blogId, \
+        gift_post_score as indexValue, \
+        row_number() over (partition by ip order by gift_post_score desc) as listRank, \
+        md5(concat(ip, '圈层神作榜')) as listUuid, \
+        count(1) over (partition by ip) as total_post_count \
+    from ( \
+        select a.* \
+        from ( \
+            select postId, blogId, ip, gift_post_score \
+            from lofter.dws_membership_post_score_dd \
+                lateral view explode(ips) as ip \
+            where dt = '${azkaban.flow.1.days.ago}' and is_ip_premium > 0 \
+        ) a \
+        join ( \
+            select postId, ip \
+            from lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+            where dt='${azkaban.flow.2.days.ago}' and quality_grade in ('S级', 'A级') \
+        ) b on a.ip = b.ip and a.postId = b.postId \
+    ) t \
+  union all \
+    select '全部' as targetWord, postId, blogId, \
+        gift_post_score as indexValue, \
+        row_number() over (order by gift_post_score desc) as listRank, \
+        md5('全部神作榜') as listUuid, \
+        count(1) over () as total_post_count \
+    from lofter.dws_membership_post_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_premium > 0 \
+  union all \
+    select '畅读卡免费' as targetWord, postId, blogId, \
+        gift_post_score as indexValue, \
+        row_number() over (order by gift_post_score desc) as listRank, \
+        md5('畅读卡免费神作榜') as listUuid, \
+        count(1) over () as total_post_count \
+    from lofter.dws_membership_post_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_vip_premium > 0 and is_vip > 0 \
+) a \
+left join ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select ip, hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' \
+    union all \
+    select '畅读卡免费' as ip, hot - 1 as hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' and ip = '全部' \
+) c on a.targetWord = c.ip \
+left join lofter.dim_post d on a.postId = d.id \
+where a.total_post_count >= 20 and a.listRank <= if(a.targetWord = '全部', 100, 50) \
+
+hive.query.02= \
+insert overwrite table lofter_dm.ads_membership_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 'hot') \
+select a.targetWord, a.postId, a.blogId, a.indexValue, a.listRank, a.listUuid, '热销榜' as listTitle, \
+       nvl(b.hot,0) as hot, nvl(c.hot, 0) as ip_hot, element_at(d.ips, 1) as post_ip \
+from ( \
+    select ip as targetWord, postId, blogId, \
+        settlement_post_score as indexValue, \
+        row_number() over (partition by ip order by settlement_post_score desc) as listRank, \
+        md5(concat(ip, '圈层热销榜')) as listUuid, \
+        count(1) over (partition by ip) as total_post_count \
+    from ( \
+        select *, \
+              row_number() over (partition by ip order by hot_30d desc) ip_hot_rk, \
+              count(1) over (partition by ip) ip_total \
+        from lofter.dws_membership_post_score_dd \
+             lateral view explode(ips) as ip \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where unlock_pv_30d > 200 and gift_rank_percentile < 0.7 and ip_hot_rk < ip_total * 0.1 \
+  union all \
+    select '全部' as targetWord, postId, blogId, \
+        settlement_post_score as indexValue, \
+        row_number() over (order by settlement_post_score desc) as listRank, \
+        md5('全部热销榜') as listUuid, \
+        count(1) over () as total_post_count \
+    from lofter.dws_membership_post_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and unlock_pv_30d > 200 and gift_rank_percentile < 0.7 \
+  union all \
+    select '畅读卡免费' as targetWord, postId, blogId, \
+        settlement_post_score as indexValue, \
+        row_number() over (order by settlement_post_score desc) as listRank, \
+        md5('畅读卡免费热销榜') as listUuid, \
+        count(1) over () as total_post_count \
+    from lofter.dws_membership_post_score_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_vip > 0 and unlock_pv_30d > 200 and gift_rank_percentile < 0.7 \
+) a \
+left join ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select ip, hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' \
+    union all \
+    select '畅读卡免费' as ip, hot - 1 as hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' and ip = '全部' \
+) c on a.targetWord = c.ip \
+left join lofter.dim_post d on a.postId = d.id \
+where a.total_post_count * 0.3 >= 50 and a.listRank <= if(a.targetWord = '全部', 100, 50) \
+
+hive.query.03= \
+insert overwrite table lofter_dm.ads_membership_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 'new') \
+select a.targetWord, a.postId, a.blogId, a.indexValue, a.listRank, a.listUuid, '新作榜' as listTitle, \
+       nvl(b.hot,0) as hot, nvl(c.hot, 0) as ip_hot, element_at(d.ips, 1) as post_ip \
+from ( \
+    select ip as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (partition by ip order by score desc) as listRank, \
+        md5(concat(ip, '圈层新作榜')) as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(partition by ip order by settlement_post_score)) * 0.7 + (row_number() over (partition by ip order by gift_post_score)) * 0.3) * 0.5 as score, \
+              count(1) over (partition by ip) as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+            lateral view explode(ips) as ip \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            unlock_pv_30d > 10 and gift_rank_percentile < 0.7 and join_date >= '${azkaban.flow.7.days.ago}' \
+    ) t \
+  union all \
+    select '全部' as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (order by score desc) as listRank, \
+        md5('全部新作榜') as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(order by settlement_post_score)) * 0.7 + (row_number() over (order by gift_post_score)) * 0.3) * 0.5 as score, \
+               count(1) over () as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            unlock_pv_30d > 10 and gift_rank_percentile < 0.7 and join_date >= '${azkaban.flow.7.days.ago}' \
+    ) t \
+  union all \
+    select '畅读卡免费' as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (order by score desc) as listRank, \
+        md5('畅读卡免费新作榜') as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(order by settlement_post_score)) * 0.7 + (row_number() over (order by gift_post_score)) * 0.3) * 0.5 as score, \
+               count(1) over () as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            is_vip > 0 and unlock_pv_30d > 10 and gift_rank_percentile < 0.7 and join_date >= '${azkaban.flow.7.days.ago}' \
+    ) t \
+) a \
+left join ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select ip, hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' \
+    union all \
+    select '畅读卡免费' as ip, hot - 1 as hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' and ip = '全部' \
+) c on a.targetWord = c.ip \
+left join lofter.dim_post d on a.postId = d.id \
+where a.total_post_count * 0.3 >= 50 and a.listRank <= if(a.targetWord = '全部', 100, 50) \
+
+hive.query.04= \
+insert overwrite table lofter_dm.ads_membership_hot_list_di partition(dt = '${azkaban.flow.1.days.ago}', listName = 'classic') \
+select a.targetWord, a.postId, a.blogId, a.indexValue, a.listRank, a.listUuid, '经典榜' as listTitle, \
+       nvl(b.hot,0) as hot, nvl(c.hot, 0) as ip_hot, element_at(d.ips, 1) as post_ip \
+from ( \
+    select ip as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (partition by ip order by score desc) as listRank, \
+        md5(concat(ip, '圈层经典榜')) as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(partition by ip order by settlement_post_score)) * 0.7 + (row_number() over (partition by ip order by gift_post_score)) * 0.3) * 0.5 as score, \
+              count(1) over (partition by ip) as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+            lateral view explode(ips) as ip \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+  union all \
+    select '全部' as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (order by score desc) as listRank, \
+        md5('全部经典榜') as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(order by settlement_post_score)) * 0.7 + (row_number() over (order by gift_post_score)) * 0.3) * 0.5 as score, \
+               count(1) over () as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+  union all \
+    select '畅读卡免费' as targetWord, postId, blogId, \
+        score / total_post_count as indexValue, \
+        row_number() over (order by score desc) as listRank, \
+        md5('畅读卡免费经典榜') as listUuid, \
+        total_post_count \
+    from ( \
+        select *, ((row_number() over(order by settlement_post_score)) * 0.7 + (row_number() over (order by gift_post_score)) * 0.3) * 0.5 as score, \
+               count(1) over () as total_post_count \
+        from lofter.dws_membership_post_score_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and is_vip > 0 \
+    ) t \
+) a \
+left join ( \
+    select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select ip, hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' \
+    union all \
+    select '畅读卡免费' as ip, hot - 1 as hot from lofter.dws_membership_ip_dd where dt = '${azkaban.flow.1.days.ago}' and zone = 'pay' and ip = '全部' \
+) c on a.targetWord = c.ip \
+left join lofter.dim_post d on a.postId = d.id \
+where a.total_post_count * 0.3 >= 50 and a.listRank <= if(a.targetWord = '全部', 100, 50) \

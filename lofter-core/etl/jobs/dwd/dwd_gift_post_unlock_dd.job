@@ -1,0 +1,180 @@
+type=sparksql
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=insert overwrite table lofter.dwd_gift_post_unlock_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select x.userId, x.postId, x.giftId, x.return_gift_id, x.coin, x.money, x.unlock_time, x.unlock_unit_id, x.unlock_unit, \
+      x.blogId, x.unlock_method, y.contentType as content_type, z.return_gift_plantype, grain_tickets, is_settle \
+from ( \
+    select a.sender as userId, a.postId as postId, a.giftId as giftId, a.returnGiftId as return_gift_id, \
+           nvl(a.coin, b.coin) as coin, nvl(a.coin * 0.1, b.money) as money, a.createTime as unlock_time, \
+           nvl(b.unlock_unit_id, postId) as unlock_unit_id, nvl(b.unlock_unit, '文章') as unlock_unit, \
+           a.blogId, \
+           case when giftId == 3001 then '粮票' \
+                when giftId in (120003,120001, 120000) then '广告' \
+                else '礼物' end as unlock_method, \
+           if(giftId == 3001, count, 0) as grain_tickets, if(giftId == 3001, 0, 1) as is_settle \
+    from ( \
+        select * \
+        from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+        where status = 0 and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select gift_present_record_id, unlock_unit_id, unlock_unit, coin / total_records as coin, \
+            coin * 0.1 / total_records  as money \
+        from ( \
+            select collectionId as unlock_unit_id, '合集' as unlock_unit, \
+                   size(array_union(array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))), parse_array(get_json_object(ext, '$.exchangeRecordIds')))) as total_records, \
+                   array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))) as gift_present_record_ids, coin \
+            from lofter_db_dump.ods_db_trade_collection_gift_order_nd \
+            where ext is not null and status = 1 \
+          union all \
+            select grainId as unlock_unit_id, '粮单' as unlock_unit, \
+                   size(array_union(array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))), parse_array(get_json_object(ext, '$.exchangeRecordIds')))) as total_records, \
+                   array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))) as gift_present_record_ids, coin \
+            from lofter_db_dump.ods_db_trade_grain_gift_order_nd \
+            where ext is not null and status = 1 \
+        ) t \
+        lateral view explode(gift_present_record_ids) as gift_present_record_id \
+    ) b on a.id = b.gift_present_record_id \
+  union all \
+    select a.userId as userId, a.postId as postId, couponId as giftId, a.planId as return_gift_id, \
+           c.price_coin as coin, c.price_money as money, a.createTime as unlock_time, \
+           nvl(unlock_unit_id, a.postId) as unlock_unit_id, nvl(unlock_unit, '文章') as unlock_unit, \
+           a.blogId, a.unlock_method, 0 as grain_tickets, a.is_settle \
+    from ( \
+        select *, if(needSettle = -1, 0, 1) as is_settle, if(scene = 29 and couponId = 1, '广告', '券包') as unlock_method \
+        from lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+        where status = 1 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select exchange_record_id, unlock_unit_id, unlock_unit \
+        from ( \
+            select collectionId as unlock_unit_id, '合集' as unlock_unit, \
+                   size(array_union(array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))), parse_array(get_json_object(ext, '$.exchangeRecordIds')))) as total_exchanges, \
+                   parse_array(get_json_object(ext, '$.exchangeRecordIds')) as coupon_gift_exchange_record_ids, coin \
+            from lofter_db_dump.ods_db_trade_collection_gift_order_nd \
+            where ext is not null and status = 1 \
+          union all \
+            select grainId as unlock_unit_id, '粮单' as unlock_unit, \
+                   size(array_union(array_union(parse_array(get_json_object(ext, '$.payGiftPresentRecordIds')), parse_array(get_json_object(ext, '$.freeGiftPresentRecordIds'))), parse_array(get_json_object(ext, '$.exchangeRecordIds')))) as total_exchanges, \
+                   parse_array(get_json_object(ext, '$.exchangeRecordIds')) as coupon_gift_exchange_record_ids, coin \
+            from lofter_db_dump.ods_db_trade_grain_gift_order_nd \
+            where ext is not null and status = 1 \
+        ) t \
+        lateral view explode(coupon_gift_exchange_record_ids) as exchange_record_id \
+    ) b on a.id = b.exchange_record_id \
+    left join ( \
+        SELECT a.id, coin / count AS price_coin, coin / 10 / count AS price_money \
+        FROM ( \
+            SELECT id, planid AS planid, relatedid \
+            FROM lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+            WHERE type = 1 \
+                AND from_unixtime(cast(exchangetime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        ) a \
+        JOIN ( \
+            SELECT id,tradeid, \
+                   sum(count) over (partition by tradeId) as count \
+            FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+            WHERE scene IN (2) \
+                AND type = 3 \
+            ) b ON a.relatedid = b.id \
+        JOIN ( \
+            SELECT id,coin \
+            FROM lofter_db_dump.ods_db_trade_coupon_coin_order_nd \
+            WHERE STATUS = 1 \
+        ) c ON b.tradeid = c.id \
+      UNION ALL \
+        SELECT a.id, MONEY * 10 / count AS price_coin, MONEY / count AS price_money \
+        FROM ( \
+            SELECT id,planid AS planid, relatedid \
+            FROM lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+            WHERE type = 1 \
+                AND from_unixtime(cast(exchangetime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        ) a \
+        JOIN ( \
+            SELECT b.*, c.amount AS MONEY \
+            FROM ( \
+                SELECT id,tradeid, \
+                       sum(count) over (partition by tradeid) as count \
+                FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+                WHERE tradeid > 0 AND scene NOT IN (2) AND type = 3 \
+            ) b \
+            JOIN ( \
+                SELECT id, (amount - channeldivision) AS amount \
+                FROM lofter_db_dump.ods_db_trade_coupon_order_nd \
+                WHERE STATUS = 1 \
+            ) c ON b.tradeid = c.id \
+          UNION ALL \
+            SELECT id,count,tradeid,MONEY \
+            FROM ( \
+                SELECT b.* \
+                    ,c.amount AS MONEY \
+                    ,row_number() OVER ( \
+                        PARTITION BY b.id \
+                        ,b.userid \
+                        ,b.createtime ORDER BY (b.createtime - c.finishtime) ASC \
+                        ) AS rk \
+                FROM ( \
+                    SELECT id,userid,amount,tradeid,scene,createtime,expiretime, \
+                           sum(count) over (partition by tradeid) as count \
+                    FROM lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+                    WHERE tradeid = 0 \
+                        AND scene NOT IN (2) \
+                        AND type = 3 \
+                ) b \
+                LEFT JOIN ( \
+                    SELECT id,userid,postid,(amount - channeldivision) AS amount,finishtime \
+                    FROM lofter_db_dump.ods_db_trade_coupon_order_nd \
+                    WHERE STATUS = 1 \
+                ) c ON b.userid = c.userid AND b.createtime >= c.finishtime \
+            ) a \
+            WHERE a.rk = 1 \
+        ) b ON a.relatedid = b.id \
+      UNION ALL \
+        select a.id, \
+               c.amount * 10 / nvl(nvl(d.grantCount, c.total_count), b.count * 30) AS price_coin, \
+               c.amount / nvl(nvl(d.grantCount, c.total_count), b.count * 30) AS price_money \
+        from ( \
+            SELECT id, relatedId, userId, postId \
+            FROM lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+            WHERE type = 1 \
+                AND from_unixtime(cast(exchangeTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        ) a \
+        join ( \
+            select id, userId, tradeId, \
+                   sum(count) over (partition by tradeId) as count \
+            from lofter_db_dump.ods_db_trade_user_exchange_coupon_nd \
+            where type in (7, 12) and scene in (9, 13, 15) \
+        ) b on a.relatedId = b.id \
+        join ( \
+            select id, userId, amount, \
+                productId, \
+                case productId \
+                   when 16003 then  9 \
+                   when 5003 then  9 \
+                   when 14003  then 12 \
+                   when 21001  then 15 \
+                   when 21002  then 18 \
+                   when 22001  then 21 \
+                   when 5004  then 24 \
+                   when 25001 then  9 \
+                   when 6003 then  9 \
+                   when 6004  then 12 \
+                   when 6005  then 15 \
+                   when 23001  then 18 \
+                   when 12007  then 21 \
+                   when 23002  then 24 \
+                end as total_count \
+            from lofter_db_dump.ods_db_trade_coupon_card_order_nd \
+        ) c on b.tradeId = c.id \
+        left join ( \
+            select id, cast(get_json_object(subProducts, '$[0].grantCount') as bigint) as grantCount \
+            from lofter_db_dump.ods_db_trade_exchange_coupon_sku_nd \
+            where type = 1 \
+        ) d on c.productId = d.id \
+    ) c on a.id = c.id \
+) x \
+left join lofter.dim_gift_post y on x.postId = y.postId \
+left join lofter.dim_gift_post_return z on x.return_gift_id = z.id \
+
+distribute by userId % 10

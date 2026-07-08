@@ -1,0 +1,13 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "UserSessionTick",
+  "fields": [
+    {"name": "userId","type": "long"},
+    {"name": "deviceOs", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "sessionUuid", "type": "string"},
+    {"name": "durationDelta", "type": "int"},
+    {"name": "isNewSession", "type": ["null", "int"]}
+  ]
+}

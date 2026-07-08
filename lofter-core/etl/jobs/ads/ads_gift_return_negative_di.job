@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_return_negative_di partition(dt='${azkaban.flow.1.days.ago}')  \
+       select * \
+       from ( \
+              select userid as relatedId, 0 as dataType  \
+              from lofter.dwd_user_order_dd  \
+              where dt = '${azkaban.flow.1.days.ago}' and order_type in ('gift_present','fans_vip') and money > 0 and \
+                    pay_date <= '${azkaban.flow.1.days.ago}' and pay_date >= '${azkaban.flow.30.days.ago}' \
+              group by userid  \
+            union \
+              select a.postid as relatedId, 1 as dataType    \
+              from ( \
+                  select postid,blogid,count(distinct sender) as uv,return_gift_id  \
+                  from lofter.dwd_paid_post_detail_dd  \
+                  where dt='${azkaban.flow.1.days.ago}'  \
+                  group by postid,blogid,return_gift_id \
+              ) a  \
+              where a.uv between 3 and 20 \
+              group by a.postid  \
+            union \
+              select b.postid as relatedId, 1 as dataType   \
+              from ( \
+                  select blogid  \
+                  from lofter_db_dump.ods_db_blog_settings_nd   \
+                  where commentrank =0  \
+                  group by blogid \
+              ) a  \
+              join ( \
+                  select blogid,postid \
+                  from lofter.dim_gift_post_return_dd   \
+                  where dt='${azkaban.flow.1.days.ago}' and  plantype!=100001   \
+                  group by blogid,postid \
+              ) b on a.blogid=b.blogid  \
+              group by b.postid  \
+            union \
+              select a.postid as relatedId, 1 as dataType   \
+              from ( \
+                  select a.postid,a.blogid,a.return_gift_id,uv,case when uv2 is null then 0 else uv2 end as uv2  \
+                  from ( \
+                      select postid,blogid,count(distinct sender) as uv,return_gift_id  \
+                      from lofter.dwd_paid_post_detail_dd  \
+                      where dt='${azkaban.flow.1.days.ago}'  \
+                      group by postid,blogid,return_gift_id  \
+                  ) a   \
+                  left join ( \
+                      select returngiftid,count(distinct userid) as uv2  \
+                      from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd   \
+                      where type=0   \
+                      group by returngiftid \
+                  ) b on a.return_gift_id=b.returngiftid   \
+                  left join ( \
+                      select id \
+                      from lofter.dim_gift_post_return_dd where dt='${azkaban.flow.1.days.ago}' and  plantype=100001 \
+                  ) c on a.return_gift_id=c.id  \
+                  where c.id is null   \
+                  group by a.postid,a.blogid,a.return_gift_id,uv,case when uv2 is null then 0 else uv2 end \
+              ) a  \
+              where a.uv>10 and a.uv2/a.uv<=0.1  \
+              group by a.postid  \
+       ) t \

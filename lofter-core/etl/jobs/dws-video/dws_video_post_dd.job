@@ -1,0 +1,121 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_video_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+with browse_agg as ( \
+    select \
+        postId, \
+        sum(case when action_type = 'page_view'     then 1 else 0 end) as expose_pv, \
+        count(distinct case when action_type = 'page_view'     then deviceUdid end) as expose_uv, \
+        sum(case when action_type = 'page_duration' then 1 else 0 end) as play_pv, \
+        count(distinct case when action_type = 'page_duration' then deviceUdid end) as play_uv, \
+        sum(case when is_real = 1 then 1 else 0 end)                   as real_play_pv, \
+        count(distinct case when is_real = 1 then deviceUdid end)      as real_play_uv, \
+        sum(case when is_video_finish = 1 then 1 else 0 end)           as finish_play_pv, \
+        count(distinct case when is_video_finish = 1 then deviceUdid end) as finish_play_uv, \
+        sum(if(is_real > 0, duration, 0))                              as real_play_time_ms, \
+        sum(duration)                                                  as play_time_ms \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and post_content_type = '视频' \
+    group by postId \
+), \
+play_agg as ( \
+    select \
+        postId, \
+        count(1)                                                       as play_session_count, \
+        count(distinct deviceUdid)                                     as play_session_uv, \
+        sum(case when is_real = 1 then 1 else 0 end)                   as play_session_real_count, \
+        sum(case when is_finished = 1 then 1 else 0 end)               as play_session_finish_count, \
+        sum(case when is_play_started = 1 then 1 else 0 end)           as play_session_started_count, \
+        sum(case when is_play_failed = 1 then 1 else 0 end)            as play_fail_count, \
+        sum(buffer_session_count)                                      as total_buffer_session_count, \
+        sum(buffer_time_ms)                                            as total_buffer_time_ms, \
+        sum(played_time_ms)                                            as total_played_time_ms, \
+        sum(case when ttfp_ms > 0 and ttfp_ms < 30000 then ttfp_ms end) as ttfp_ms_sum, \
+        count(case when ttfp_ms > 0 and ttfp_ms < 30000 then 1 end)    as ttfp_ms_count, \
+        sum(case when ttfr_ms > 0 and ttfr_ms < 30000 then ttfr_ms end) as ttfr_ms_sum, \
+        count(case when ttfr_ms > 0 and ttfr_ms < 30000 then 1 end)    as ttfr_ms_count, \
+        sum(case when is_speedrate_used = 1 then 1 else 0 end)         as speedrate_session_count, \
+        count(distinct case when is_speedrate_used = 1 then deviceUdid end) as speedrate_uv \
+    from lofter.dwd_video_play_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+), \
+hot_agg as ( \
+    select postId, \
+        sum(case when opType = 'praise'    then 1 else 0 end) as praise_pv, \
+        sum(case when opType = 'reproduce' then 1 else 0 end) as reproduce_pv, \
+        sum(case when opType = 'recommend' then 1 else 0 end) as recommend_pv, \
+        sum(case when opType = 'subscribe' then 1 else 0 end) as subscribe_pv, \
+        count(1)                                              as hot_pv \
+    from lofter.dwd_post_hot_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+), \
+response_agg as ( \
+    select postId, count(1) as response_pv \
+    from lofter.dwd_post_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+), \
+share_agg as ( \
+    select postId, count(1) as share_pv \
+    from lofter.dwd_post_share_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postId \
+) \
+select \
+    v.postId, \
+    v.userId, \
+    v.blogId, \
+    v.publish_date, \
+    v.video_type, \
+    v.duration_sec, \
+    v.size_bytes, \
+    v.aspect_ratio, \
+    v.is_imported, \
+    v.import_platform_type, \
+    v.movefrom, \
+    v.post_tags, \
+    v.post_ips, \
+    v.post_domains, \
+    nvl(b.expose_pv, 0)                                            as expose_pv, \
+    nvl(b.expose_uv, 0)                                            as expose_uv, \
+    nvl(b.play_pv, 0)                                              as play_pv, \
+    nvl(b.play_uv, 0)                                              as play_uv, \
+    nvl(b.real_play_pv, 0)                                         as real_play_pv, \
+    nvl(b.real_play_uv, 0)                                         as real_play_uv, \
+    nvl(b.finish_play_pv, 0)                                       as finish_play_pv, \
+    nvl(b.finish_play_uv, 0)                                       as finish_play_uv, \
+    nvl(b.real_play_time_ms, 0)                                    as real_play_time_ms, \
+    nvl(b.play_time_ms, 0)                                         as play_time_ms, \
+    nvl(p.play_session_count, 0)                                   as play_session_count, \
+    nvl(p.play_session_uv, 0)                                      as play_session_uv, \
+    nvl(p.play_session_real_count, 0)                              as play_session_real_count, \
+    nvl(p.play_session_finish_count, 0)                            as play_session_finish_count, \
+    nvl(p.play_session_started_count, 0)                           as play_session_started_count, \
+    nvl(p.total_buffer_session_count, 0)                           as buffer_session_count, \
+    nvl(p.total_buffer_time_ms, 0)                                 as buffer_time_ms, \
+    nvl(p.total_played_time_ms, 0)                                 as session_played_time_ms, \
+    nvl(p.ttfp_ms_sum, 0)                                          as ttfp_ms_sum, \
+    nvl(p.ttfp_ms_count, 0)                                        as ttfp_ms_count, \
+    nvl(p.ttfr_ms_sum, 0)                                          as ttfr_ms_sum, \
+    nvl(p.ttfr_ms_count, 0)                                        as ttfr_ms_count, \
+    nvl(p.play_fail_count, 0)                                      as play_fail_count, \
+    nvl(p.speedrate_session_count, 0)                              as speedrate_session_count, \
+    nvl(p.speedrate_uv, 0)                                         as speedrate_uv, \
+    nvl(h.praise_pv, 0)                                            as praise_pv, \
+    nvl(h.reproduce_pv, 0)                                         as reproduce_pv, \
+    nvl(h.recommend_pv, 0)                                         as recommend_pv, \
+    nvl(h.subscribe_pv, 0)                                         as subscribe_pv, \
+    nvl(h.hot_pv, 0)                                               as hot_pv, \
+    nvl(r.response_pv, 0)                                          as response_pv, \
+    nvl(s.share_pv, 0)                                             as share_pv \
+from lofter.dim_video_dd v \
+left join browse_agg   b on v.postId = b.postId \
+left join play_agg     p on v.postId = p.postId \
+left join hot_agg      h on v.postId = h.postId \
+left join response_agg r on v.postId = r.postId \
+left join share_agg    s on v.postId = s.postId \
+where v.dt = '${azkaban.flow.1.days.ago}' \
+distribute by v.postId % 20
+dependencies=

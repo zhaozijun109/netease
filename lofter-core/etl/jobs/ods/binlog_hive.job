@@ -1,0 +1,11 @@
+type=hivejdbc
+azk.hive.action=execute.query
+hive.query.01=use lofter;
+hive.query.02=alter table lofter.ods_binlog_post_hot_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/PostHot/${azkaban.flow.1.days.ago}';
+hive.query.03=alter table lofter.ods_binlog_post_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/Post/${azkaban.flow.1.days.ago}';
+hive.query.04=alter table lofter.ods_binlog_user_following_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/UserFollowing/${azkaban.flow.1.days.ago}';
+hive.query.05=alter table lofter.ods_binlog_photo_post_di add if not exists partition(dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/PhotoPost/${azkaban.flow.1.days.ago}';
+hive.query.06=alter table lofter.ods_binlog_text_post_di add if not exists partition(dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/TextPost/${azkaban.flow.1.days.ago}';
+hive.query.07=alter table lofter.ods_binlog_post_response_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/PostResponse/${azkaban.flow.1.days.ago}';
+hive.query.08=alter table lofter.ods_binlog_profile_di add if not exists partition (dt='${azkaban.flow.1.days.ago}') location '/user/da_lofter/binlog/Profile/${azkaban.flow.1.days.ago}';
+dependencies=

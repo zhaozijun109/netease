@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.youdata.AntispamTagSuspectStats
+params=--date ${azkaban.flow.1.days.ago}

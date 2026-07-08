@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table `lofter_dm`.`ads_antispam_copy_no_callback_di` partition(dt='${azkaban.flow.1.days.ago}')	 \
+              select a.copy_date,a.copy_time,a.post_type,a.blogid,a.postid,a.version,b.valid,b.allowview,b.publishdate,b.ispublished,b.isforbidden,iscitedpost	 \
+              from 	 \
+              (select a.*	 \
+              from 	 \
+              	(select distinct a.post_type,a.blogid,a.postid,a.version,a.createtime,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as copy_date,from_unixtime(cast(createtime / 1000 AS BIGINT), 'HH:mm') as copy_time	 \
+              	from 	 \
+              		(select bussinessType as post_type,blogid,bussinessid as postid,version,createtime,	 \
+              			rank() over(partition by  bussinessType,blogid,bussinessid order by createtime desc ) as rk	 \
+              		from lofter.ods_log_anti_spam_copy_di 	 \
+              		where bizInfo='genPostLog' and priority!=4 and dt between date_sub('${azkaban.flow.1.days.ago}',2) and '${azkaban.flow.1.days.ago}'	 \
+              			and from_unixtime(cast(createtime/1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',2)  and '${azkaban.flow.1.days.ago}'	 \
+              		) a	 \
+              	where a.rk=1 	 \
+              	) a	 \
+              left join	 \
+              	(select postid,blogid,version from lofter_db_dump.ods_db_risk_antispam_callback_record_nd where type=0 and   version>0   and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',2) and '${azkaban.flow.1.days.ago}'	 \
+              	group by postid,blogid,version ) b 	 \
+              	on a.blogid=b.blogid and a.postid=b.postid and a.version=b.version	 \
+              where b.postid is null) a	 \
+              left join	 \
+              (select id,valid,allowview,publishdate,ispublished,isforbidden,iscitedpost  from lofter.dim_post) b	 \
+              on a.postid=b.id	 \
+              distribute by 1
+

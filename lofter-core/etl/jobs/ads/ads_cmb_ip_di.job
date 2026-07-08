@@ -1,0 +1,27 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_cmb_ip_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.id as cmb_ip_id, a.name as ip, b.postNum, b.hot7d \
+    from ( \
+      select id, name from lofter_db_dump.ods_db_cmb_ip_nd where status = 0 \
+    ) a left join ( \
+        select ip, count(distinct a.postid) postNum, sum(hot) hot7d \
+        from ( \
+            select distinct postid, ip \
+            from ( \
+                select id postid, tag \
+                from lofter.dim_post \
+                     lateral view explode (tags) as tag \
+            ) a1 join ( \
+                select tag, ip \
+                from lofter.dwd_tag_ip_mapping_nd \
+            ) a2 on a1.tag=a2.tag \
+        ) a left join ( \
+           select postid, count(1) hot \
+           from lofter_db_dump.ods_db_post_hot_nd \
+           where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+           group by postid \
+        ) b on a.postid = b.postid \
+        group by ip \
+    ) b on a.name = b.ip \
+    distribute by 1

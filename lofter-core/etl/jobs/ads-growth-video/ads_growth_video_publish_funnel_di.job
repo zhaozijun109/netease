@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_video_publish_funnel_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    deviceOs, \
+    appVersion, \
+    nvl(post_type, 'unknown')                                      as post_type, \
+    count(1)                                                       as task_count, \
+    count(distinct userId)                                         as task_uv, \
+    sum(has_start)                                                 as step1_init_count, \
+    sum(has_upload_start)                                          as step2_upload_start_count, \
+    sum(has_progress)                                              as step3_progress_count, \
+    sum(is_success)                                                as step4_success_count, \
+    sum(has_intercepted)                                           as fail_intercepted_count, \
+    sum(has_material_fail)                                         as fail_material_count, \
+    sum(has_api_fail)                                              as fail_api_count, \
+    sum(case when fail_stage = 'StuckAtInit'         then 1 else 0 end) as stuck_at_init, \
+    sum(case when fail_stage = 'StuckAtUploading'    then 1 else 0 end) as stuck_at_uploading, \
+    sum(case when fail_stage = 'StuckAtFinalCommit'  then 1 else 0 end) as stuck_at_final_commit, \
+    sum(case when fail_stage = 'ParamIntercepted'    then 1 else 0 end) as failed_at_intercept, \
+    sum(case when fail_stage = 'MaterialFail'        then 1 else 0 end) as failed_at_material, \
+    sum(case when fail_stage = 'ApiFail'             then 1 else 0 end) as failed_at_api, \
+    sum(case when fail_category = 'ServerError'                 then 1 else 0 end) as fail_server_error, \
+    sum(case when fail_category = 'ClientError'                 then 1 else 0 end) as fail_client_error, \
+    sum(case when fail_category = 'UserInteraction_or_Network'  then 1 else 0 end) as fail_user_or_network \
+from lofter.dwd_video_publish_funnel_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by deviceOs, appVersion, nvl(post_type, 'unknown')
+dependencies=

@@ -1,0 +1,99 @@
+type=sparksql
+hive.query.01=\
+with t6_1_source as( \
+    select \
+        dt, \
+        deviceudid, \
+        params['reqId'] as reqId, \
+        appversion, \
+        deviceos, \
+        eventid, \
+        params['sdkVersion'] as sdkVersion, \
+        get_json_object(params['ext'], '$.productScene') as productScene \
+    from \
+        lofter.ods_mda_app_partition_di \
+    where \
+        dt = '${azkaban.flow.1.days.ago}' \
+        and ( cast(split(appversion,'\\\\.')[0] as int) > 8 \
+            or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 1) \
+            or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 1 and cast(split(appversion,'\\\\.')[2] as int) >= 22 )) \
+        and deviceos in ('iOS','Android') \
+        and eventid = 't6-1' \
+        and params['sdkVersion'] in(1,2) \
+        and get_json_object(params['ext'], '$.productScene') not in ('pveMan','autoRenew') \
+        and deviceudid is not null and params['reqId'] is not null \
+    group by 1,2,3,4,5,6,7,8 \
+), \
+result_a as( \
+    select appversion,deviceos,sdkVersion,eventid,productScene,cnt \
+    from( \
+        select a.dt, a.appversion, a.deviceos, a.sdkVersion, b.eventid,a.productScene, count(distinct b.deviceudid,b.reqid) as cnt \
+        from t6_1_source a \
+        left join( \
+            select \
+                dt, deviceudid, params['reqId'] as reqId, appversion, deviceos, eventid, params['sdkVersion'] as sdkVersion,get_json_object(params['ext'], '$.productScene') as productScene \
+            from \
+                lofter.ods_mda_app_partition_di \
+            where \
+                dt = '${azkaban.flow.1.days.ago}' \
+                and ( cast(split(appversion,'\\\\.')[0] as int) > 8 \
+                    or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 1) \
+                    or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 1 and cast(split(appversion,'\\\\.')[2] as int) >= 22 )) \
+                and deviceos in ('iOS','Android') \
+                and eventid in ('t6-1','t6-2','t6-4','t6-6','t6-8','t6-10','t6-12') \
+                and params['sdkVersion'] in (1,2) \
+                and get_json_object(params['ext'], '$.productScene') not in ('pveMan','autoRenew') \
+            group by 1,2,3,4,5,6,7,8 \
+        )b on a.dt = b.dt  \
+            and a.deviceudid = b.deviceudid and a.reqId = b.reqId and a.appversion = b.appversion  \
+            and a.deviceos = b.deviceos and a.sdkVersion = b.sdkVersion and a.productScene = b.productScene \
+        where b.deviceudid is not null and b.reqid is not null \
+        group by a.dt, a.appversion, a.deviceos, b.eventid, a.sdkVersion,a.productScene \
+    union all \
+        select dt,appversion,deviceos,params['sdkVersion'] as sdkVersion,'t6-9' as eventid, \
+            get_json_object(params['ext'], '$.productScene') as productScene, \
+            count(distinct deviceudid,params['reqId']) as cnt \
+        from lofter.ods_mda_app_partition_di \
+        where  \
+            dt = '${azkaban.flow.1.days.ago}' \
+            and ( cast(split(appversion,'\\\\.')[0] as int) > 8 \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 1) \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 1 and cast(split(appversion,'\\\\.')[2] as int) >= 22 )) \
+            and deviceos in ('iOS','Android') \
+            and eventid = 't6-9' \
+            and params['sdkVersion'] = 1 \
+            and get_json_object(params['ext'], '$.errorInfo.errorCode') = '2' \
+            and get_json_object(params['ext'], '$.productScene') not in ('pveMan','autoRenew') \
+            and deviceudid is not null and params['reqId'] is not null \
+        group by dt,appversion,deviceos,params['sdkVersion'],get_json_object(params['ext'], '$.productScene') \
+    union all \
+        select dt,appversion,deviceos,params['sdkVersion'] as sdkVersion,'t6-9' as eventid, \
+            get_json_object(params['ext'], '$.productScene') as productScene, \
+            count(distinct deviceudid,params['reqId']) as cnt \
+        from lofter.ods_mda_app_partition_di \
+        where  \
+            dt = '${azkaban.flow.1.days.ago}' \
+            and ( cast(split(appversion,'\\\\.')[0] as int) > 8 \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 1) \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 1 and cast(split(appversion,'\\\\.')[2] as int) >= 22 )) \
+            and deviceos in ('iOS','Android') \
+            and eventid = 't6-9' \
+            and params['sdkVersion'] = 2 \
+            and get_json_object(params['ext'], '$.errorInfo.errorCode') = '6' \
+            and get_json_object(params['ext'], '$.productScene') not in ('pveMan','autoRenew') \
+            and deviceudid is not null and params['reqId'] is not null \
+        group by dt,appversion,deviceos,params['sdkVersion'],get_json_object(params['ext'], '$.productScene') \
+    ) \
+) \
+insert overwrite table lofter_dm.ads_iap_pay_funnel_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select appversion,deviceos,sdkVersion,productScene, \
+    nvl(max(case when eventid = 't6-1' then cnt end),0) as t6_1, \
+    nvl(max(case when eventid = 't6-2' then cnt end),0) as t6_2, \
+    nvl(max(case when eventid = 't6-4' then cnt end),0) as t6_4, \
+    nvl(max(case when eventid = 't6-6' then cnt end),0) as t6_6, \
+    nvl(max(case when eventid = 't6-8' then cnt end),0) as t6_8, \
+    nvl(max(case when eventid = 't6-9' then cnt end),0) as t6_9, \
+    nvl(max(case when eventid = 't6-10' then cnt end),0) as t6_10, \
+    nvl(max(case when eventid = 't6-12' then cnt end),0) as t6_12 \
+from result_a \
+group by appversion,deviceos,sdkVersion,productScene

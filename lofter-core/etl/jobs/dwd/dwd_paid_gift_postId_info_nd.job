@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dwd.PaidPostIdSummaryIndexJob
+conf.spark.executor.memory=10240m
+params=--date ${azkaban.flow.1.days.ago}

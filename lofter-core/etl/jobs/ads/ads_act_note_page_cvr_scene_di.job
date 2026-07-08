@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table `lofter_dm`.`ads_act_note_page_cvr_scene_di` partition(dt = '${azkaban.flow.1.days.ago}') \
+              select concat_ws('-','${azkaban.flow.1.days.ago}', tmp1.postid, tmp1.post_userid, tmp1.scene) as id, \
+                     tmp1.postid as postid, \
+                     tmp1.post_userid as blogid, \
+                     tmp1.scene as scene, \
+                     tmp1.explosureUv as explosureUv, \
+                     tmp1.clickUv as clickUv \
+              from ( \
+                    select \
+                        postid, \
+                        post_userid, \
+                        case when scene = 'attention' and is_fans is not null then if(is_fans = 1, 'attention_follow', 'attention_recommend') \
+                             else scene \
+                        end as scene, \
+                        count(distinct userid) as explosureUv, \
+                        count(distinct case when reaction = 'click' then userid end) as clickUv \
+                    from \
+                        `lofter`.`dwd_post_expose_di` \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                    group by postid, post_userid, is_fans, scene \
+              ) tmp1 \
+              where tmp1.explosureUv >= 10 and tmp1.clickUv > 0

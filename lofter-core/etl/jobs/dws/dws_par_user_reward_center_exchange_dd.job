@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_par_user_reward_center_exchange_dd \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT userId, \
+       grain_ticket_count_total, \
+       coupon_count_total, \
+       pve_stamina_count_total, \
+       ip_coupon_count_total, \
+       emote_count_total, \
+       avatarbox_count_total, \
+       comment_count_total, \
+       skin_count_total, \
+       red_packet_count_total, \
+       regret_card_count_total, \
+       boot_screen_count_total, \
+       yinge_count_total, \
+       cash_count_total, \
+       media_vip_count_total, \
+       music_vip_count_total \
+FROM ( \
+    SELECT userId, \
+           sum(case when category = 1 and subCategory = 1 then product_count else 0 end) as grain_ticket_count_total, \
+           sum(case when category = 1 and subCategory = 2 then product_count else 0 end) as coupon_count_total, \
+           sum(case when category = 1 and subCategory = 3 then product_count else 0 end) as pve_stamina_count_total, \
+           sum(case when category = 1 and subCategory = 4 then product_count else 0 end) as ip_coupon_count_total, \
+           sum(case when category = 2 and subCategory = 0 then product_count else 0 end) as emote_count_total, \
+           sum(case when category = 2 and subCategory = 1 then product_count else 0 end) as avatarbox_count_total, \
+           sum(case when category = 2 and subCategory = 3 then product_count else 0 end) as comment_count_total, \
+           sum(case when category = 2 and subCategory = 6 then product_count else 0 end) as skin_count_total, \
+           sum(case when category = 3 and subCategory = 1 then product_count else 0 end) as red_packet_count_total, \
+           sum(case when category = 3 and subCategory = 2 then product_count else 0 end) as regret_card_count_total, \
+           sum(case when category = 4 and subCategory = 1 then product_count else 0 end) as boot_screen_count_total, \
+           sum(case when category = 4 and subCategory = 2 then product_count else 0 end) as yinge_count_total, \
+           sum(case when category = 4 and subCategory = 3 then product_count else 0 end) as cash_count_total, \
+           sum(case when category = 5 and subCategory = 1 then product_count else 0 end) as media_vip_count_total, \
+           sum(case when category = 5 and subCategory = 2 then product_count else 0 end) as music_vip_count_total \
+    FROM ( \
+        SELECT userId, dt, category, subCategory, product_count \
+        FROM lofter.dwd_ad_reward_score_product_exchange_di \
+        WHERE dt <= '${azkaban.flow.1.days.ago}' \
+          AND userId > 0 \
+    ) \
+    GROUP BY userId \
+) t \
+DISTRIBUTE BY 1

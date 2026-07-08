@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_video_cover_edit_stat_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    deviceOs, \
+    appVersion, \
+    eventId, \
+    count(1)                                                       as event_count, \
+    count(distinct deviceUdid)                                     as user_uv, \
+    sum(case when cover_width is not null and cover_height is not null then 1 else 0 end) as event_with_size_count, \
+    avg(case when cover_width  > 0 then cover_width  end)          as avg_cover_width, \
+    avg(case when cover_height > 0 then cover_height end)          as avg_cover_height, \
+    sum(case when eventId = 'c1-32' and opt_type = '0' then 1 else 0 end) as c1_32_opt_0_count, \
+    sum(case when eventId = 'c1-32' and opt_type = '2' then 1 else 0 end) as c1_32_opt_2_count \
+from lofter.dwd_video_cover_edit_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by deviceOs, appVersion, eventId
+dependencies=

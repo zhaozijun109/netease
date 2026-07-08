@@ -1,0 +1,27 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select blogId as userId, \
+           nvl(score, 0) as gradeScore, \
+           nvl(warn_post_count,0) as warnPostCount, \
+           nvl(income_score,0) as incomeScore, \
+           nvl(quality_score,0) as qualityScore, \
+           nvl(active_score,0) as activeScore, \
+           nvl(quality_postnum, 0) as paidPostCount30d, \
+           nvl(quality_score_avg_30d,0) as avgQualityScore, \
+           named_struct( \
+             'quality', array( \
+                struct('avgQuality' as factor, nvl(quality_score_avg_30d,0) as value), \
+                struct('topQuality' as factor, nvl(quality_score_avg_top10,0) as value)), \
+             'income', array( \
+                struct('avgIncome' as factor, nvl(cast(income_avg_30d as bigint),0) as value), \
+                struct('topIncome' as factor, nvl(cast(income_avg_top10 as bigint),0) as value), \
+                struct('income' as factor, nvl(cast(income_total_30d as bigint),0) as value)), \
+             'active', array( \
+                struct('validPost' as factor, nvl(active_gift_post_count_30d,0) as value)) \
+           ) as scoreFactor \
+    from lofter_dm.ads_paid_post_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --topic LOFTER.PAYGRADE_SCORE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=lofter_gift_post_quality

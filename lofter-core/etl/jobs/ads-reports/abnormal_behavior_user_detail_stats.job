@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.youdata.AbnormalBehaviorUserDetailStats
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=abnormal_behavior_user_stats

@@ -1,0 +1,126 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.hadoop.hive.exec.dynamic.partition=true
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=\
+with valid_active_source as ( \
+    select dt, \
+           userId, \
+           row_number() over(partition by userId order by dt desc) as rn \
+    from lofter.dws_par_user_content_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' and browse_pv > 0 \
+), \
+stg1 as ( \
+    select t1.dt, \
+           t1.userId, \
+           t1.rn, \
+           t2.ip, \
+           t2.pv \
+    from ( \
+        select dt, \
+               userId, \
+               rn \
+        from valid_active_source \
+        where rn <= 7 \
+    ) t1 \
+    left join ( \
+        select dt, \
+               userId, \
+               ip, \
+               pv \
+        from lofter.dws_ip_user_consume_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' \
+    ) t2 \
+    on t1.dt = t2.dt and t1.userId = t2.userId \
+), \
+stg2 as ( \
+    select t1.userId, \
+           t1.ip, \
+           max(t1.ip_active_days) as ip_active_days, \
+           nvl(count(distinct if(t2.dt >= t1.first_3pv_dt, t2.dt, null)), 0) as start_from_first_3pv_active_days \
+    from ( \
+        select userId, \
+               ip, \
+               count(distinct dt) as ip_active_days, \
+               min(if(pv > 3 ,dt, null)) as first_3pv_dt \
+        from lofter.dws_ip_user_consume_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' \
+        group by userId, ip \
+    ) t1 \
+    left join valid_active_source t2 \
+    on t1.userId = t2.userId \
+    group by t1.userId, t1.ip \
+) \
+insert overwrite table lofter.dws_ip_user_life_cycle_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       ip, \
+       user_type \
+from ( \
+    select userId, \
+           ip, \
+           case when start_from_first_3pv_active_days >= 1 and start_from_first_3pv_active_days <= 3 then '新用户' \
+                when start_from_first_3pv_active_days > 3 and (latest_30d_ip_pv_cnt = 0 or latest_3_valid_active_ip_pv_cnt = 0) then '流失用户' \
+                when start_from_first_3pv_active_days > 3 and (ip_active_days >= 7 and latest_7_valid_active_ip_pv_cnt >= 20 and latest_30d_active_days > 2) then '成熟期用户' \
+                when start_from_first_3pv_active_days > 3 and ( \
+                    (latest_1_valid_active_ip_pv < 0.9 * latest_2_valid_active_ip_pv and latest_2_valid_active_ip_pv < 0.9 * latest_3_valid_active_ip_pv) \
+                    or \
+                    (latest_3_valid_active_ip_pv > 0 and latest_2_valid_active_ip_pv = 0 and latest_1_valid_active_ip_pv = 0) \
+                    or \
+                    latest_3_valid_active_ip_pv_cnt <= 3 \
+                ) then '衰退期用户' \
+                when start_from_first_3pv_active_days > 3 then '成长期用户' \
+                when start_from_first_3pv_active_days = 0 and latest_3_valid_active_ip_pv_cnt >= 2 then '潜力用户' \
+                else null \
+           end as user_type \
+    from ( \
+        select t1.userId, \
+               t1.ip, \
+               nvl(t1.ip_active_days, 0) as ip_active_days, \
+               nvl(t1.start_from_first_3pv_active_days, 0) as start_from_first_3pv_active_days, \
+               nvl(t2.latest_30d_active_days, 0) as latest_30d_active_days, \
+               nvl(t3.latest_30d_ip_pv_cnt, 0) as latest_30d_ip_pv_cnt, \
+               nvl(t4.latest_7_valid_active_ip_pv_cnt, 0) as latest_7_valid_active_ip_pv_cnt, \
+               nvl(t4.latest_3_valid_active_ip_pv_cnt, 0) as latest_3_valid_active_ip_pv_cnt, \
+               nvl(t4.latest_1_valid_active_ip_pv, 0) as latest_1_valid_active_ip_pv, \
+               nvl(t4.latest_2_valid_active_ip_pv, 0) as latest_2_valid_active_ip_pv, \
+               nvl(t4.latest_3_valid_active_ip_pv, 0) as latest_3_valid_active_ip_pv \
+        from ( \
+            select userId, \
+                   ip, \
+                   ip_active_days, \
+                   start_from_first_3pv_active_days \
+            from stg2 \
+        ) t1 \
+        join ( \
+            select userId, \
+                   count(distinct if(dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}', dt, null)) as latest_30d_active_days \
+            from lofter.dwd_user_active_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',179) and '${azkaban.flow.1.days.ago}' \
+            group by userId \
+        ) t2 \
+        on t1.userId = t2.userId \
+        left join ( \
+            select userId, \
+                   ip, \
+                   sum(pv) as latest_30d_ip_pv_cnt \
+            from lofter.dws_ip_user_consume_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+            group by userId, ip \
+        ) t3 \
+        on t1.userId = t3.userId and t1.ip = t3.ip \
+        left join ( \
+            select userId, \
+                   ip, \
+                   sum(pv) as latest_7_valid_active_ip_pv_cnt, \
+                   sum(if(rn <= 3, pv, null)) as latest_3_valid_active_ip_pv_cnt, \
+                   max(if(rn = 1, pv, null)) as latest_1_valid_active_ip_pv, \
+                   max(if(rn = 2, pv, null)) as latest_2_valid_active_ip_pv, \
+                   max(if(rn = 3, pv, null)) as latest_3_valid_active_ip_pv \
+            from stg1 \
+            group by userId, ip \
+        ) t4 \
+        on t1.userId = t4.userId and t1.ip = t4.ip \
+    ) t5 \
+) tmp1 \
+where user_type is not null
+dependencies=dws_par_user_content_di,dws_ip_user_consume_di

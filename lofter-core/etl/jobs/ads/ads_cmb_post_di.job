@@ -1,0 +1,48 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_cmb_post_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as postId, exposureUv, clickUv, hdUv, clickRatio, hdRatio, \
+       freeGiftUv, freeGiftPv, chargeGiftUv, money, \
+       c.hot, c.like_cnt, c.recommend_cnt, c.collect_cnt, c.reproduce_cnt, c.comment_cnt, \
+       d.quality_comment_30d, e.grade \
+from ( \
+    select distinct id from lofter_db_dump.ods_db_cmb_post_nd where status = 0 \
+) a \
+join ( \
+    select postId \
+    from lofter.dws_post_base_stats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union \
+    select postId \
+    from lofter.dws_post_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a1 on a.id = a1.postId \
+left join ( \
+    select postId,exposureUv,clickUv,hdUv,clickUv/exposureUv as clickRatio,hdUv/exposureUv as hdRatio, \
+       freeGiftUv,freeGiftAmount as freeGiftPv,chargeGiftUv,chargeGiftAmount as money \
+    from lofter.dws_post_base_stats_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and exposureUv > 0 and clickUv > 0 \
+) b on a.id = b.postId \
+left join ( \
+    select postId, hot, like_cnt, reproduce_cnt, recommend_cnt, collect_cnt, hot, comment_cnt \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.id = c.postId \
+left join ( \
+    select postId, quality_comment_30d \
+    from ( \
+        select cast(conv(split(item_id,'_')[1], 16, 10) as bigint) as postId, \
+               quality_comment_num as quality_comment_30d, \
+               row_number() over (partition by item_id order by day desc) as rnk \
+        from rec.rec_data_ecology_high_quality_item_by_comment \
+        where day <= '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rnk = 1 \
+) d on a.id = d.postId \
+left join ( \
+    select postId, grade \
+    from lofter_dm.ads_post_trend_grade_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) e \
+on a.id = e.postId
+dependencies=ads_post_trend_grade_di

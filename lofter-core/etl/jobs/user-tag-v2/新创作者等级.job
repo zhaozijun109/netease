@@ -1,0 +1,27 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 新创作者等级 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '新创作者等级' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select blogId as userId, '新创作者等级' as tag, \
+                                         case creatorStatus when '10' then '发文吧鸽' \
+                                                             when '20' then '回来吧鸽' \
+                                                             when '30' then '求你了鸽' \
+                                                             when '40' then '出山鸽' \
+                                                             when '50' then '成长鸽' \
+                                                             when '60' then '守护鸽' \
+                                                             when '70' then '起飞鸽' \
+                                                             when '80' then '火箭鸽' \
+                                                             when '90' then '太太鸽' \
+                                                             when '100' then '宗师鸽' \
+                                                             when '110' then '传奇鸽' \
+                                                             else '未知' end as grp \
+                                  from lofter_dm.ads_creator_ecology_identity_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}'   ) "

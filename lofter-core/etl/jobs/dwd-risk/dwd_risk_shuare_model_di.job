@@ -1,0 +1,385 @@
+type=sparksql
+driver-memory=6g
+conf.spark.executor.instances=25
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=104857600
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=create temporary function resolve_ip as 'com.netease.wm.udf.ResolveIp';
+hive.query.02=INSERT OVERWRITE TABLE lofter.dwd_risk_shuare_model_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT  tmp1.postId, \
+                      tmp1.blogId, \
+                      tmp1.blogName, \
+                      tmp1.contentType, \
+                      tmp1.publishDate, \
+                      tmp1.tags, \
+                      tmp1.url, \
+                      tmp1.hispraise, \
+                      tmp2.publisheruserid, \
+                      tmp2.ip, \
+                      tmp2.praiseDay, \
+                      tmp2.praiseTime, \
+                      tmp3.blogName                 AS praiseBlogName, \
+                      tmp4.createIp, \
+                      tmp4.ipUv, \
+                      tmp5.hotUv, \
+                      (tmp5.maxtime-tmp5.mintime)   AS hottimes, \
+                      tmp5.1minIpUv, \
+                      tmp5.10minIpUv, \
+                      tmp6.userId                   AS appUserId, \
+                      tmp6.deviceudid               AS appDeviceUdid, \
+                      tmp7.userId                   AS pcUserId, \
+                      tmp7.webwapdeviceid           AS pcDeviceId, \
+                      tmp8.deviceNum, \
+                      tmp8.ipNum, \
+                      tmp8.cityNum, \
+                      tmp9.loginIpUv, \
+                      tmp9.loginIpDeviceUv, \
+                      tmp10.profileCreateTime, \
+                      tmp10.email, \
+                      tmp10.profileType, \
+                      tmp10.platFrom, \
+                      tmp10.fans, \
+                      tmp10.followUsers, \
+                      tmp10.postNum, \
+                      tmp11.praisePv, \
+                      tmp11.praisePostPv, \
+                      tmp11.praisePostUv, \
+                      tmp11.reproducePv, \
+                      tmp11.reproducePostPv, \
+                      tmp11.reproducePostUv, \
+                      tmp11.recPv, \
+                      tmp11.recPostPv, \
+                      tmp11.recPostUv, \
+                      tmp11.subscribePv, \
+                      tmp11.subscribePostPv, \
+                      tmp11.subscribePostUv, \
+                      tmp11.commentPv, \
+                      tmp11.commentPostPv, \
+                      tmp11.commentPostUv, \
+                      tmp11.messagePv, \
+                      tmp11.messageUv, \
+                      CASE WHEN tmp10.privilegelevel = 0 THEN '白名单' \
+                           WHEN tmp10.privilegelevel = 1 THEN '黄V' \
+                           WHEN tmp10.privilegelevel = 2 THEN '绿V' ELSE '普通用户' \
+                      END AS userLevel, \
+                      tmp12.userHot, \
+                      NVL(tmp10.is_black_phone,0)*3 AS isBlackPhoneFlag, \
+                      tmp13.device_province_num_1d, \
+                      tmp14.quick_browse_pv_30d, \
+                      tmp14.real_browse_pv_30d, \
+                      nvl(tmp15.block_tag_count,0) as block_tag_count \
+              FROM \
+              ( \
+              	      SELECT  a.postId, \
+              	              a.blogId, \
+              	              b.blogName, \
+              	              b.contentType, \
+              	              b.publishDate, \
+              	              b.tags, \
+              	              b.url, \
+              	              a.dailyPraise, \
+              	              a.hisPraise, \
+              	              a.dailyHot, \
+              	              a.hisHot \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  postId, \
+              	      	              blogId, \
+              	      	              COUNT(CASE WHEN type = 1 AND FROM_UNIXTIME(CAST (optime/1000 AS bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN id ELSE null END) AS dailyPraise, \
+              	      	              COUNT(CASE WHEN type = 1 THEN id ELSE null END) AS hisPraise, \
+              	      	              COUNT(CASE WHEN FROM_UNIXTIME(CAST (optime/1000 AS bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' THEN id ELSE null END) AS dailyHot, \
+              	      	              COUNT(1) AS hisHot \
+              	      	      FROM lofter_db_dump.ods_db_post_hot_nd \
+              	      	      GROUP BY  postId, \
+              	      	                blogId \
+              	      	      HAVING dailyPraise > 0 AND hisPraise >= 80 \
+              	      ) a \
+              	      JOIN lofter.dim_post_article b \
+              	      ON a.postId = b.id AND a.blogId = b.blogId \
+              ) tmp1 \
+              JOIN \
+              ( \
+              	      SELECT  DISTINCT postid, \
+              	              blogid, \
+              	              publisheruserid, \
+              	              ip, \
+              	              FROM_UNIXTIME(CAST (optime / 1000 AS BIGINT),'yyyy-MM-dd') AS praiseDay, \
+              	              FROM_UNIXTIME(CAST (optime / 1000 AS BIGINT),'yyyy-MM-dd HH:mm:ss') AS praiseTime \
+              	      FROM lofter_db_dump.ods_db_post_hot_nd \
+              	      WHERE FROM_UNIXTIME(CAST (optime / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND type IN (1) \
+              ) tmp2 \
+              ON tmp1.postId = tmp2.postId AND tmp1.blogId = tmp2.blogId \
+              JOIN lofter_db_dump.ods_db_blog_info_nd tmp3 \
+              ON tmp2.publisheruserid = tmp3.blogId \
+              LEFT JOIN \
+              ( \
+              	      SELECT  a.userid, \
+              	              a.createip, \
+              	              b.ipUv \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  aa.userId, \
+              	      	              createip \
+              	      	      FROM \
+              	      	      ( \
+              	      	      	      SELECT  distinct userid, \
+              	      	      	              ip AS createip \
+              	      	      	      FROM lofter_db_dump.ods_db_audit_log_nd \
+              	      	      	      WHERE opType = 6 AND ip IS NOT null AND ip NOT IN ('127.0.0.1', '127.0.1') \
+              	      	      ) aa \
+              	      	      LEFT JOIN (select id as userId from lofter.dim_user where isRobot = 1) c \
+              	      	      ON aa.userId = c.userId \
+              	      	      WHERE c.userId IS null \
+              	      ) a \
+              	      JOIN \
+              	      ( \
+              	      	      SELECT  aa.ip, \
+              	      	              COUNT(distinct aa.userId) AS ipUv \
+              	      	      FROM \
+              	      	      ( \
+              	      	      	      SELECT  ip, \
+              	      	      	              userId \
+              	      	      	      FROM lofter_db_dump.ods_db_audit_log_nd \
+              	      	      	      WHERE opType = 6 AND ip is not null AND ip NOT IN ('127.0.0.1', '127.0.1') \
+              	      	      ) aa \
+              	      	      LEFT JOIN (select id as userId from lofter.dim_user where isRobot = 1) c \
+              	      	      ON aa.userId = c.userId \
+              	      	      WHERE c.userId is null \
+              	      	      GROUP BY  aa.ip \
+              	      ) b \
+              	      ON a.createip = b.ip \
+              ) tmp4 \
+              ON tmp2.publisheruserid = tmp4.userid \
+              LEFT JOIN \
+              ( \
+              	      SELECT  a.*, \
+              	              COUNT(CASE WHEN b.optime <= a.mintime+60*1000 THEN b.userId ELSE null END) AS 1minIpUv, \
+              	              COUNT(CASE WHEN b.optime <= a.mintime+600*1000 THEN b.userId ELSE null END) AS 10minIpUv \
+              	      FROM \
+              	      ( \
+              	      	      SELECT  postid, \
+              	      	              post_userid            AS blogid, \
+              	      	              ip, \
+              	      	              COUNT(DISTINCT userId) AS hotuv, \
+              	      	              MAX(opTime)            AS maxtime, \
+              	      	              MIN(opTime)            AS mintime \
+              	      	      FROM lofter.dwd_post_hot_di \
+              	      	      WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND opType = 'praise' AND ip IS NOT null AND ip NOT IN ('127.0.0.1', '127.0.1', '10.189.176.10', '10.189.176.11') \
+              	      	      GROUP BY  postid, \
+              	      	                post_userid, \
+              	      	                ip \
+              	      ) a \
+              	      JOIN \
+              	      ( \
+              	      	      SELECT  postid, \
+              	      	              post_userid AS blogid, \
+              	      	              userId, \
+              	      	              ip, \
+              	      	              opTime \
+              	      	      FROM lofter.dwd_post_hot_di \
+              	      	      WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND opType = 'praise' \
+              	      )b \
+              	      ON a.postid = b.postid AND a.ip = b.ip \
+              	      GROUP BY  a.postid, \
+              	                a.blogid, \
+              	                a.ip, \
+              	                a.hotuv, \
+              	                a.maxtime, \
+              	                a.mintime \
+              ) tmp5 \
+              ON tmp1.blogId = tmp5.blogId AND tmp1.postId = tmp5.postId AND tmp2.ip = tmp5.ip \
+              LEFT JOIN \
+              ( \
+              	       SELECT  userid, \
+              	               postid, \
+              	               deviceudid \
+              	       FROM lofter.dwd_post_hot_di \
+              	       WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND platform IN ('ANDROID' , 'IPHONE') AND opType = 'praise' \
+              	       GROUP BY  userid, \
+              	                 postid, \
+              	                 deviceudid \
+              ) tmp6 \
+              ON tmp1.postId = tmp6.postid AND tmp2.publisheruserid = tmp6.userid \
+              LEFT JOIN \
+              ( \
+              	       SELECT  a.userid, \
+              	               a.postid, \
+              	               b.userid AS webwapdeviceid \
+              	       FROM \
+              	       ( \
+              	       	       SELECT  userid, \
+              	       	               postid, \
+              	       	               dt \
+              	       	       FROM lofter.dwd_post_hot_di \
+              	       	       WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' AND platform NOT IN ('ANDROID' , 'IPHONE') AND opType = 'praise' \
+              	       	       GROUP BY  userid, \
+              	       	                 postid, \
+              	       	                 dt \
+              	       ) a \
+              	       LEFT JOIN \
+              	       ( \
+              	       	       SELECT  DISTINCT userid, \
+              	       	               dt \
+              	       	       FROM lofter.ods_mda_wap_di \
+              	       	       WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	       	       UNION \
+              	       	       SELECT  DISTINCT userid, \
+              	       	               dt \
+              	       	       FROM lofter.ods_mda_web_di \
+              	       	       WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	       	       UNION \
+              	       	       SELECT  DISTINCT userid, \
+              	       	               dt \
+              	       	       FROM lofter.ods_mda_miniprogram_di \
+              	       	       WHERE dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	       ) b \
+              	       ON a.userid = b.userid AND a.dt = b.dt \
+              	       GROUP BY  a.userid, \
+              	                 a.postid, \
+              	                 b.userid \
+              ) tmp7 \
+              ON tmp1.postId = tmp7.postid AND tmp2.publisheruserid = tmp7.userid \
+              LEFT JOIN \
+              ( \
+              	       SELECT  a.dt, \
+              	               a.userid, \
+              	               COUNT(DISTINCT a.deviceudid) AS deviceNum, \
+              	               COUNT(DISTINCT a.loginip )   AS ipNum, \
+              	               COUNT(DISTINCT a.login_city)  AS cityNum \
+              	       FROM \
+              	       ( \
+              	       	SELECT  dt, \
+              	       	        accountid                     AS userid, \
+              	       	        deviceudid, \
+              	       	        clienttype, \
+              	       	        ip                            AS loginip, \
+              	       	        login_country, login_province, login_city \
+              	       	FROM lofter.dwd_evt_user_login_di \
+              	       	WHERE actiontype = 'login' AND dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	       )a \
+              	       GROUP BY  a.dt, \
+              	                 a.userid \
+              ) tmp8 \
+              ON tmp2.publisheruserid = tmp8.userid AND tmp2.praiseDay = tmp8.dt \
+              LEFT JOIN \
+              ( \
+              	       SELECT  a.dt, \
+              	               a.loginip, \
+              	               COUNT(DISTINCT a.userid)     AS loginIpUv, \
+              	               COUNT(DISTINCT a.deviceudid) AS loginIpDeviceUv \
+              	       FROM \
+              	       ( \
+              	       	       SELECT  dt, \
+              	       	               accountid AS userid, \
+              	       	               deviceudid, \
+              	       	               clienttype, \
+              	       	               ip        AS loginip \
+              	       	       FROM lofter.dwd_evt_user_login_di \
+              	       	       WHERE actiontype = 'login' AND dt BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+              	       )a \
+              	       GROUP BY  a.dt, \
+              	                 a.loginip \
+              ) tmp9 \
+              ON tmp2.ip = tmp9.loginip AND tmp2.praiseDay = tmp9.dt \
+              LEFT JOIN \
+              ( \
+              	       SELECT  userId, \
+              	               createTime                         AS profileCreateTime, \
+              	               account                            AS email, \
+              	               accountType                        AS profileType, \
+              	               from_platform                      AS platFrom, \
+              	               all_blog_fans                      AS fans, \
+              	               CAST(size(follow_blogs) AS bigint) AS followUsers, \
+              	               post_count_std                     AS postNum, \
+              	               privilegeLevel, \
+              	               is_black_phone \
+              	       FROM lofter.dws_par_user_base_dd \
+              	       WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) tmp10 \
+              ON tmp2.publisheruserid = tmp10.userid \
+              LEFT JOIN \
+              ( \
+              	       SELECT  nvl(a.userId,b.blogId) AS publisheruserid, \
+              	               send_like_cnt          AS praisePv, \
+              	               send_like_post_cnt     AS praisePostPv, \
+              	               send_like_blog_cnt     AS praisePostUv, \
+              	               send_reproduce_cnt     AS reproducePv, \
+              	               send_reproduce_post_cnt reproducePostPv, \
+              	               send_reproduce_blog_cnt reproducePostUv, \
+              	               send_recommend_cnt recPv, \
+              	               send_recommend_post_cnt recPostPv, \
+              	               send_recommend_blog_cnt recPostUv, \
+              	               send_collect_cnt subscribePv, \
+              	               send_collect_post_cnt subscribePostPv, \
+              	               send_collect_blog_cnt subscribePostUv, \
+              	               send_comment_cnt_std commentPv, \
+              	               send_comment_post_cnt commentPostPv, \
+              	               send_comment_blog_cnt commentPostUv, \
+              	               b.messagePv, \
+              	               messageUv \
+              	       FROM \
+              	       ( \
+              	       	       SELECT  * \
+              	       	       FROM lofter.dws_par_user_interaction_dd \
+              	       	       WHERE dt = '${azkaban.flow.1.days.ago}' \
+              	       ) a \
+              	       FULL JOIN \
+              	       ( \
+              	       	       SELECT  blogId, \
+              	       	               COUNT(1)                    AS messagePv, \
+              	       	               COUNT(distinct otherblogid) AS messageUv \
+              	       	       FROM lofter_db_dump.ods_db_message_nd \
+              	       	       WHERE issender = 1 \
+              	       	       GROUP BY  blogId \
+              	       ) b \
+              	       ON a.userId = b.blogId \
+              ) tmp11 \
+              ON tmp2.publisheruserid = tmp11.publisheruserid \
+              LEFT JOIN \
+              ( \
+              	       SELECT  userId          AS blogId, \
+              	               receive_hot_std AS userHot \
+              	       FROM lofter.dws_par_creator_interaction_dd \
+              	       WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) tmp12 \
+              ON tmp2.publisheruserid = tmp12.blogid \
+              left join ( \
+              	       SELECT  a.deviceudid, \
+              	               count(distinct a.login_province) as device_province_num_1d \
+              	       FROM \
+              	       ( \
+              	       	SELECT  dt, \
+              	       	        accountid                     AS userid, \
+              	       	        deviceudid, \
+              	       	        clienttype, \
+              	       	        ip                            AS loginip, \
+              	       	        login_country, login_province, login_city \
+              	       	FROM lofter.dwd_evt_user_login_di \
+              	       	WHERE actiontype = 'login' AND dt = '${azkaban.flow.1.days.ago}' \
+              	       )a \
+              	       GROUP BY  deviceudid \
+              ) tmp13 on tmp6.deviceudid = tmp13.deviceUdid \
+              left join ( \
+                  select userId, sum(real_browse_pv) as real_browse_pv_30d, sum(quick_browse_pv) as quick_browse_pv_30d \
+                  from ( \
+                      select userId, postId, \
+                             sum(if(is_real > 0, 1, 0)) real_browse_pv, \
+                             if(sum(duration) < 10000, 1, 0) quick_browse_pv \
+                      from lofter.dwd_post_browse_di \
+                      where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and userId > 0 \
+                      group by 1, 2 \
+                  ) t \
+                  group by 1 \
+              ) tmp14 on tmp2.publisheruserid = tmp14.userId \
+              left join ( \
+                  select blogId as userId, count(distinct tagName) as block_tag_count \
+                  from ( \
+                      select blogId, tags \
+                      from lofter_db_dump.ods_db_blog_misc_setting_nd \
+                          lateral view explode(split(multiFields, '\\\\|')) as tags \
+                      where multiFields like '%56::%' \
+                  ) t \
+                  lateral view explode(split(substr(tags, 5), ',')) as tagName \
+                  where tags like '%56::%' and length(tagName) > 0 \
+                  group by 1 \
+              ) tmp15 on tmp2.publisheruserid = tmp15.userId \

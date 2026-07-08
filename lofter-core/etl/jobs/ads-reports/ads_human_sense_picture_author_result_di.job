@@ -1,0 +1,253 @@
+type=sparksql
+hive.query.01=  \
+WITH niche_tag_posts AS ( \
+SELECT \
+itemid AS postid \
+FROM lofter.dwd_rec_content_understand_dd \
+WHERE dt = GREATEST('${azkaban.flow.1.days.ago}', CAST(DATE_SUB(current_date(), 8) AS STRING)) \
+AND type IN ('图文类目V2') \
+AND ( \
+level2_tag LIKE '%草图%' OR \
+level2_tag LIKE '%游戏动画截图%' OR \
+level2_tag LIKE '%创粉沟通%' OR \
+level2_tag LIKE '%memes%' OR \
+level2_tag LIKE '%种草%' OR \
+level2_tag LIKE '%手工%' \
+) \
+GROUP BY itemid \
+), \
+base_users AS ( \
+SELECT \
+p.userid, \
+COUNT(DISTINCT CASE WHEN p.post_content_type IN ('图片') THEN p.postid END) as img_post_cnt, \
+COUNT(DISTINCT n.postid) AS niche_tag_post_cnt, \
+COUNT(DISTINCT p.dt) as publish_days, \
+CASE \
+WHEN COUNT(DISTINCT CASE WHEN p.post_content_type IN ('图片') THEN p.postid END) > 0 THEN '图片作者' \
+ELSE 'ugc作者' \
+END AS author_type \
+FROM lofter.dwd_post_publish_di p \
+LEFT JOIN niche_tag_posts n ON p.postid = n.postid \
+WHERE p.dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 180) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 0) AS STRING) \
+AND (p.post_content_type IN ('图片') OR n.postid IS NOT NULL) \
+AND p.userid IS NOT NULL \
+AND p.userid <> 1283394892 \
+GROUP BY p.userid \
+), \
+creator_info AS ( \
+SELECT \
+userid, \
+level as creator_level, \
+blog_url \
+FROM lofter.dws_par_creator_dd \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+suisui_nian_users AS ( \
+SELECT \
+blogid AS userid, \
+COUNT(DISTINCT id) AS suisui_post_cnt \
+FROM lofter.dim_post \
+WHERE contenttype IN ('问答') \
+GROUP BY blogid \
+), \
+blacklist_users AS ( \
+SELECT \
+userid, \
+COUNT(DISTINCT blacklistblogid) AS blacklist_cnt, \
+1 AS is_blacklist_flag \
+FROM lofter_db_dump.ods_db_blacklist_user_nd \
+GROUP BY userid \
+), \
+recommend_users AS ( \
+SELECT \
+userid, \
+SUM(IF(opType = 'recommend', 1, 0)) AS recommend_pv \
+FROM lofter.dwd_post_hot_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 180) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 0) AS STRING) \
+AND opType = 'recommend' \
+GROUP BY userid \
+), \
+ip_circle_tier AS ( \
+SELECT \
+ip, \
+COUNT(DISTINCT deviceudid) as ip_mau, \
+CASE \
+WHEN COUNT(DISTINCT deviceudid) > 850000 THEN '热圈' \
+WHEN COUNT(DISTINCT deviceudid) BETWEEN 350000 AND 850000 THEN '温圈' \
+ELSE '冷圈' \
+END as circle_tier \
+FROM lofter.dws_device_ip_interest_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 0) AS STRING) \
+GROUP BY ip \
+), \
+author_cold_circle_cnt AS ( \
+SELECT \
+a.userid, \
+COUNT(DISTINCT a.postid) AS cold_circle_post_cnt \
+FROM ( \
+SELECT \
+userid, \
+postid, \
+ip \
+FROM lofter.dwd_post_publish_di \
+lateral view explode(post_ips) tmp as ip \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 180) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 0) AS STRING) \
+AND ip IS NOT NULL \
+) a \
+JOIN ip_circle_tier b ON a.ip = b.ip \
+WHERE b.circle_tier = '冷圈' \
+GROUP BY a.userid \
+), \
+intro_users AS ( \
+SELECT \
+blogid AS userid, \
+LENGTH(TRIM(selfintro)) AS intro_length, \
+CASE WHEN selfintro IS NOT NULL AND TRIM(selfintro) <> '' THEN 1 ELSE 0 END AS has_intro_flag \
+FROM lofter_db_dump.ods_db_blog_info_nd \
+), \
+talk_users AS ( \
+SELECT \
+blogid AS userid, \
+COUNT(1) AS talk_receive_cnt, \
+1 AS has_talk_flag \
+FROM lofter.dim_post_talk \
+WHERE talktype = 'QUESTION' AND questiontype = '0' \
+GROUP BY blogid \
+), \
+green_v_users AS ( \
+SELECT \
+userid, \
+1 AS is_green_v_flag \
+FROM lofter.dws_par_user_base_dd \
+WHERE dt = GREATEST('${azkaban.flow.1.days.ago}', CAST(DATE_SUB(current_date(), 8) AS STRING)) \
+AND privilegelevel = 2 \
+GROUP BY userid \
+), \
+manual_tagged_users AS ( \
+SELECT \
+userid, \
+1 AS is_manual_human_flag \
+FROM lofter_db_dump.ods_db_cb_creator_tag_binding_nd \
+WHERE tagid IN ('7007','7008') \
+GROUP BY userid \
+), \
+comment_users AS ( \
+SELECT \
+userid, \
+COUNT(1) AS comment_give_cnt \
+FROM lofter.dwd_post_response_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 180) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 0) AS STRING) \
+GROUP BY userid \
+), \
+valid_history_authors AS ( \
+SELECT \
+blogid AS userid, \
+1 AS has_valid_history_flag \
+FROM lofter.dim_post \
+WHERE contentType IN ('图片','文字','视频') \
+AND publishdate >= '2022-01-01' \
+AND ispublished = true \
+AND valid = 0 \
+AND allowview = 0 \
+AND isforbidden = false \
+AND iscitedpost = false \
+AND isactivityautopost = 0 \
+AND isimported = 0 \
+AND ismoved = 0 \
+AND is_book_store = 0 \
+GROUP BY blogid \
+HAVING COUNT(DISTINCT id) >= 3 \
+), \
+custom_theme_authors AS ( \
+SELECT DISTINCT \
+blogid AS userid, \
+1 AS has_custom_theme_flag \
+FROM lofter_db_dump.ods_db_blog_settings_nd \
+WHERE themeid != 29002 \
+), \
+features_base AS ( \
+SELECT \
+t0.userid, \
+CAST(c.creator_level AS STRING) AS creator_level, \
+c.blog_url, \
+t0.author_type, \
+t0.img_post_cnt, \
+t0.publish_days, \
+ROUND(COALESCE(t1.suisui_post_cnt, 0) / GREATEST((t0.img_post_cnt + COALESCE(t1.suisui_post_cnt, 0)), 1), 4) AS suisui_post_rate, \
+COALESCE(t2.is_blacklist_flag, 0) AS is_blacklist_flag, \
+COALESCE(t3.recommend_pv, 0) AS recommend_pv, \
+t0.niche_tag_post_cnt, \
+COALESCE(t7.talk_receive_cnt, 0) AS talk_receive_cnt, \
+COALESCE(t4.cold_circle_post_cnt, 0) AS cold_circle_post_cnt, \
+COALESCE(t6.intro_length, 0) AS intro_length, \
+COALESCE(t8.is_green_v_flag, 0) AS is_green_v_flag, \
+COALESCE(c1.comment_give_cnt, 0) AS comment_give_cnt, \
+COALESCE(vh.has_valid_history_flag, 0) AS has_valid_history_flag, \
+COALESCE(th.has_custom_theme_flag, 0) AS has_custom_theme_flag, \
+COALESCE(t9.is_manual_human_flag, 0) AS is_manual_human_flag \
+FROM base_users t0 \
+LEFT JOIN creator_info c             ON t0.userid = c.userid \
+LEFT JOIN suisui_nian_users t1       ON t0.userid = t1.userid \
+LEFT JOIN blacklist_users t2         ON t0.userid = t2.userid \
+LEFT JOIN recommend_users t3         ON t0.userid = t3.userid \
+LEFT JOIN author_cold_circle_cnt t4  ON t0.userid = t4.userid \
+LEFT JOIN intro_users t6             ON t0.userid = t6.userid \
+LEFT JOIN talk_users t7              ON t0.userid = t7.userid \
+LEFT JOIN green_v_users t8           ON t0.userid = t8.userid \
+LEFT JOIN manual_tagged_users t9     ON t0.userid = t9.userid \
+LEFT JOIN comment_users c1           ON t0.userid = c1.userid \
+LEFT JOIN valid_history_authors vh   ON t0.userid = vh.userid \
+LEFT JOIN custom_theme_authors th    ON t0.userid = th.userid \
+), \
+calculated_features AS ( \
+SELECT \
+*, \
+(recommend_pv + comment_give_cnt) AS combine_rec_cmt_score, \
+( \
+CASE WHEN suisui_post_rate >= 0.75 THEN 2 WHEN suisui_post_rate >= 0.33 THEN 1 ELSE 0 END + \
+CASE WHEN (recommend_pv + comment_give_cnt) >= 88 THEN 2 WHEN (recommend_pv + comment_give_cnt) >= 12 THEN 1 ELSE 0 END + \
+CASE WHEN niche_tag_post_cnt >= 2 THEN 2 WHEN niche_tag_post_cnt >= 1 THEN 1 ELSE 0 END + \
+CASE WHEN talk_receive_cnt >= 4 THEN 2 WHEN talk_receive_cnt >= 1 THEN 1 ELSE 0 END + \
+CASE WHEN cold_circle_post_cnt >= 17 THEN 3 WHEN cold_circle_post_cnt >= 7 THEN 2 WHEN cold_circle_post_cnt >= 3 THEN 1 ELSE 0 END + \
+IF(intro_length >= 11, 1, 0) + \
+is_blacklist_flag \
+) AS human_sense_score \
+FROM features_base \
+), \
+final_human_judge AS ( \
+SELECT \
+*, \
+CASE \
+WHEN publish_days < 1 OR has_valid_history_flag = 0 THEN 0 \
+WHEN is_green_v_flag = 1 THEN 1 \
+WHEN has_custom_theme_flag = 1 THEN 1 \
+WHEN human_sense_score >= 4 THEN 1 \
+ELSE 0 \
+END AS is_human_author \
+FROM calculated_features \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_human_sense_picture_author_result_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+userid, \
+creator_level, \
+blog_url, \
+author_type, \
+img_post_cnt, \
+publish_days, \
+suisui_post_rate, \
+recommend_pv, \
+niche_tag_post_cnt, \
+talk_receive_cnt, \
+cold_circle_post_cnt, \
+intro_length, \
+is_blacklist_flag, \
+is_green_v_flag, \
+comment_give_cnt, \
+combine_rec_cmt_score, \
+has_valid_history_flag, \
+has_custom_theme_flag, \
+human_sense_score, \
+is_human_author, \
+is_manual_human_flag, \
+CASE WHEN is_human_author = 1 OR is_manual_human_flag = 1 THEN 1 ELSE 0 END AS is_finall_human_flag \
+FROM final_human_judge

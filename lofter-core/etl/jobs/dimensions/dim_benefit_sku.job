@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter.dim_benefit_sku \
+select a.skuid,a.sku_name,a.sku_createtime,a.stock,a.storeprice,a.costprice, \
+      b.*, \
+      case c.saleMode when 0 then '无' \
+                      when 1 then '采销-平销' \
+                      when 2 then '采销-抽赏' \
+                      when 3 then '代销-平销' \
+                      when 4 then '代销-抽赏' \
+                      when 5 then '自研-卡牌' \
+                      when 6 then '自研-衍生品平销' \
+                      when 7 then '自研-衍生品抽赏' \
+                      when 8 then '福利品' \
+                      else '其他' end as sale_mode \
+from ( \
+   select id as skuid,attrvalues as sku_name,productid,stock,storeprice,costprice, \
+       createtime as sku_createtime  \
+   from lofter_db_dump.ods_db_benefit_product_attribute_nd \
+)  a  \
+left join lofter.dim_benefit_product b on a.productId = b.productId \
+left join lofter_db_dump.ods_db_benefit_product_info_nd c on a.productId = c.id \
+distribute by 1
+dependencies=dim_benefit_product

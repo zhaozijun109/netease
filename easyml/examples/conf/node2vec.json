@@ -1,0 +1,37 @@
+{
+  "reader": {
+    "type": "basic",
+    "format": "csv",
+    "options": {
+      "header": "true",
+      "delimiter": ","
+    },
+    "columns": [
+      "src", "dst", "weight"
+    ]
+  },
+  "component": {
+    "type": "Pipeline",
+    "stages": [
+      {
+        "type": "RandomWalk",
+        "srcCol": "src",
+        "dstCol": "dst",
+        "weightCol": "weight",
+        "outputCol": "features",
+        "numWalks": 10,
+        "walkLength": 10,
+        "p": 1.0,
+        "q": 1.0
+      },
+      {
+        "type": "Word2Vec",
+        "inputCol": "features",
+        "vectorSize": 100,
+        "windowSize": 5,
+        "maxIter": 1
+      }
+    ]
+  },
+  "train": "toy_dataset/graph/graph.csv"
+}

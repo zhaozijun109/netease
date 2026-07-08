@@ -1,0 +1,98 @@
+type=sparksql
+hive.query.01=\
+with exp_user as( \
+   select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+   from lofter.dwd_ab_platform_exp_user_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by 1 , 2, 3, 4, 5, 6 \
+), \
+exp_device as( \
+   select deviceid, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+   from lofter.dwd_ab_platform_exp_user_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by 1 , 2, 3, 4, 5, 6 \
+), \
+push_action as( \
+    select \
+        a.userId, a.deviceudid, a.action, a.pushGroupId, c.userId as activeUserId, c.deviceUdid as activeDeviceUdid \
+    from ( \
+        select userId, deviceudid, action, pushgroupid \
+        from lofter.dwd_push_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' and action <> 4 \
+    ) a \
+    join( \
+        select pushgroupid from  lofter.dwd_push_action_di where dt = '${azkaban.flow.1.days.ago}' and action in (1,5) group by pushgroupid \
+    ) b \
+    on b.pushgroupid=a.pushgroupid \
+    left join ( \
+        select t1.pushGroupId, t1.userId, t1.deviceUdid, t1.action  \
+        from ( \
+            select pushGroupId, userId, occurTime, deviceUdid ,action from lofter.dwd_push_action_di where dt='${azkaban.flow.1.days.ago}' and action = 3  \
+        ) t1 \
+        join ( \
+            select * from lofter.dws_par_user_active_di where dt = '${azkaban.flow.1.days.ago}' \
+        ) t2 on t1.userId = t2.userId and t1.occurTime > t2.firstActiveTime  and (t1.occurTime - t2.firstActiveTime) <= 3*60000  \
+        group by 1,2,3,4 \
+    ) c on a.userId = c.userId and a.pushGroupId = c.pushGroupId and a.action = c.action \
+), \
+user_result as( \
+    select userId, exp_date, exp_id, bucket_id, null as deviceId, \
+        count(distinct if(action = 1, userId, null)) push_uv,   \
+        count(distinct if(action = 5, userId, null)) as valid_push_uv, \
+        count(distinct if(action = 2, userId, null)) as push_reach_uv, \
+        count(distinct if(action = 3, userId, null)) as push_click_uv, \
+        count(distinct activeUserId) push_activated_uv, \
+        count(concat(pushGroupId, '-', if(action = 1, userId, null))) push_pv, \
+        count(concat(pushGroupId, '-', if(action = 5, userId, null))) as valid_push_pv,  \
+        count(concat(pushGroupId, '-', if(action = 2, userId, null))) push_reach_pv, \
+        count(concat(pushGroupId, '-', if(action = 3, userId, null))) as push_click_pv \
+    from( \
+        select a.userId, exp_date, exp_id, bucket_id, b.action, b.pushGroupId, activeUserId \
+        from exp_user a \
+        left join push_action b \
+        on a.userId = b.userId \
+    ) \
+    group by userId, exp_date, exp_id, bucket_id \
+), \
+device_result as( \
+    select null as userId, exp_date, exp_id, bucket_id, deviceId, \
+        count(distinct if(action = 5, deviceId, null)) as valid_push_device_count, \
+        count(distinct if(action = 2, deviceId, null)) as push_reach_device_count, \
+        count(distinct if(action = 3, deviceId, null)) as push_click_device_count,  \
+        count(distinct activeDeviceUdid) as push_activated_device_count \
+    from( \
+        select a.deviceId, exp_date, exp_id, bucket_id, b.action, b.pushGroupId, activeDeviceUdid \
+        from exp_device a \
+        left join push_action b \
+        on a.deviceId = b.deviceudid \
+    ) \
+    group by deviceId, exp_date, exp_id, bucket_id \
+) \
+insert overwrite table lofter.dws_ab_platform_push_user_device_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select exp_id, bucket_id, exp_date as basedate, 'ALL' as dimension, userId, deviceId, metric_info.metric, metric_info.metric_value, '全部' dimension_value \
+from user_result a \
+LATERAL VIEW EXPLODE( \
+  ARRAY( \
+    STRUCT('push_uv' AS metric, CAST(push_uv AS DOUBLE) AS metric_value), \
+    STRUCT('valid_push_uv' AS metric, CAST(valid_push_uv AS DOUBLE) AS metric_value), \
+    STRUCT('push_reach_uv' AS metric, CAST(push_reach_uv AS DOUBLE) AS metric_value), \
+    STRUCT('push_click_uv' AS metric, CAST(push_click_uv AS DOUBLE) AS metric_value), \
+    STRUCT('push_activated_uv' AS metric, CAST(push_activated_uv AS DOUBLE) AS metric_value), \
+    STRUCT('push_pv' AS metric, CAST(push_pv AS DOUBLE) AS metric_value), \
+    STRUCT('valid_push_pv' AS metric, CAST(valid_push_pv AS DOUBLE) AS metric_value), \
+    STRUCT('push_reach_pv' AS metric, CAST(push_reach_pv AS DOUBLE) AS metric_value), \
+    STRUCT('push_click_pv' AS metric, CAST(push_click_pv AS DOUBLE) AS metric_value) \
+  ) \
+) metrics AS metric_info \
+union all \
+select exp_id, bucket_id, exp_date as basedate, 'ALL' as dimension, userId, deviceId, metric_info.metric, metric_info.metric_value, '全部' as dimension_value \
+from device_result a \
+LATERAL VIEW EXPLODE( \
+  ARRAY( \
+    STRUCT('valid_push_device_count' AS metric, CAST(valid_push_device_count AS DOUBLE) AS metric_value), \
+    STRUCT('push_reach_device_count' AS metric, CAST(push_reach_device_count AS DOUBLE) AS metric_value), \
+    STRUCT('push_click_device_count' AS metric, CAST(push_click_device_count AS DOUBLE) AS metric_value), \
+    STRUCT('push_activated_device_count' AS metric, CAST(push_activated_device_count AS DOUBLE) AS metric_value) \
+  ) \
+) metrics AS metric_info
+dependencies=dwd_ab_platform_exp_user_di

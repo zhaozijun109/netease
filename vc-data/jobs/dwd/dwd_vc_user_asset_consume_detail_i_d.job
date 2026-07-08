@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01 =

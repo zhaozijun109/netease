@@ -1,0 +1,140 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_creator_level_scoring_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, is_official, is_imported, import_platform_type, post_first_date, post_last_date, \
+  post_count_recommend_pool_180d,fans_std,hd_fans_1y,hot_avg_rec_pool_recent_posts_1y, score, is_above_level_entry, \
+  case when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 0 and score < 30 then 'D*' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 30 and score < 60 and fans_std < 1000 then 'D' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 30 and score < 60 and fans_std >= 1000  then 'C' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 60 and score < 70 and fans_std < 10000 then 'C' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 60 and score < 70 and fans_std >= 10000 then 'B' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 70 and score < 80 and fans_std < 100000 then 'B' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 70 and score < 80 and fans_std >= 100000 then 'A' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 80 and fans_std < 150000 then 'A' \
+       when is_above_level_entry > 0 and post_main_content_type = '视频' and score >= 80 and fans_std >= 150000 then 'S' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 0 and score < 30 then 'D*' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 30 and score < 50 and fans_std < 1000 then 'D' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 30 and score < 50 and fans_std >= 1000  then 'C' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 50 and score < 60 and fans_std < 10000 then 'C' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 50 and score < 60 and fans_std >= 10000 then 'B' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 60 and score < 70 and fans_std < 50000 then 'B' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 60 and score < 70 and fans_std >= 50000 then 'A' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 70 and fans_std < 100000 then 'A' \
+       when is_above_level_entry > 0 and post_main_content_type = '文字' and score >= 70 and fans_std >= 100000 then 'S' \
+       when is_above_level_entry > 0 and score >= 0 and score < 30 then 'D*' \
+       when is_above_level_entry > 0 and score >= 30 and score < 60 and fans_std < 1000 then 'D' \
+       when is_above_level_entry > 0 and score >= 30 and score < 60 and fans_std >= 1000  then 'C' \
+       when is_above_level_entry > 0 and score >= 60 and score < 70 and fans_std < 10000 then 'C' \
+       when is_above_level_entry > 0 and score >= 60 and score < 70 and fans_std >= 10000 then 'B' \
+       when is_above_level_entry > 0 and score >= 70 and score < 80 and fans_std < 50000 then 'B' \
+       when is_above_level_entry > 0 and score >= 70 and score < 80 and fans_std >= 50000 then 'A' \
+       when is_above_level_entry > 0 and score >= 80 and fans_std < 100000 then 'A' \
+       when is_above_level_entry > 0 and score >= 80 and fans_std >= 100000 then 'S' end as level, \
+  post_count_recommend_pool_review_180d, \
+  post_main_content_type, post_count_video_1y, post_count_text_1y, post_count_photo_1y \
+from ( \
+  select *, log(least(greatest(post_count_recommend_pool_180d,1), 180))/log(180)*22.76 + log(least(greatest(hd_fans_1y,1),250000))/log(250000)*34.20 + log(least(greatest(hot_avg_rec_pool_recent_posts_1y,1),75000))/log(75000)*43.04 as score, \
+         if(post_first_date < '${azkaban.flow.30.days.ago}' and is_official = 0 and is_imported = 0 and datediff('${azkaban.flow.1.days.ago}', post_last_date) < 365, 1, 0) as is_above_level_entry \
+  from ( \
+    select a.blogId as userId, \
+          a.is_official, \
+          if(c.blogId is not null, 1,0) as is_imported, c.import_platform_type, \
+          b.post_first_date, b.post_last_date, nvl(d.post_count_recommend_pool_180d,0) as post_count_recommend_pool_180d, \
+          nvl(e.fans_std,0) as fans_std, nvl(e.hd_fans_1y,0) as hd_fans_1y, nvl(f.hot_avg_rec_pool_recent_posts_1y,0) as hot_avg_rec_pool_recent_posts_1y, \
+          nvl(d.post_count_recommend_pool_review_180d,0) as post_count_recommend_pool_review_180d, \
+          case when post_count_photo_1y == post_count_greatest then '图片' \
+               when post_count_text_1y == post_count_greatest then '文字' \
+               when post_count_video_1y == post_count_greatest then '视频' \
+          end as post_main_content_type, \
+          post_count_video_1y, post_count_text_1y, post_count_photo_1y \
+    from (select id as blogId, isOfficial as is_official from lofter.dim_blog) a \
+    left join ( \
+      select blogId, \
+            min(publishDate) as post_first_date, \
+            max(publishDate) as post_last_date, \
+            count(if(contentType = '视频' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)) as post_count_video_1y, \
+            count(if(contentType = '文字' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)) as post_count_text_1y, \
+            count(if(contentType = '图片' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)) as post_count_photo_1y, \
+            greatest( \
+              count(if(contentType = '视频' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)), \
+              count(if(contentType = '文字' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)), \
+              count(if(contentType = '图片' and publishDate > date_sub('${azkaban.flow.1.days.ago}', 365), id, null)) \
+            ) as post_count_greatest \
+      from lofter.dim_post \
+      where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+            isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") and \
+            publishDate <= '${azkaban.flow.1.days.ago}' \
+      group by blogId \
+    ) b on a.blogId = b.blogId \
+    left join ( \
+      select userid as blogId, \
+             first_value(case when platformType='-1' then '未定义' \
+                  when platformType  ='0' then '站内' \
+                  when platformType= '1' then '知识公路' \
+                  when platformType ='2' then '云音乐' \
+                  when platformType = '3' then '抖音' \
+                  when platformType ='4' then '快手' \
+                  when platformType = '5' then 'youTube' \
+                  when platformType = '6' then '微博' \
+                  when platformType= '7' then 'MCN机构' end, true) as import_platform_type \
+      from lofter_db_dump.ods_db_media_account_import_nd \
+      where platformType in('1','2','3','4','5','6','7') \
+      group by userid \
+    ) c on a.blogId = c.blogId \
+    left join ( \
+      select blogId, count(distinct if(recomStatus = '1', postId, null)) as post_count_recommend_pool_180d, \
+             count(distinct postId) as post_count_recommend_pool_review_180d \
+      from lofter_db_dump.ods_db_recommend_review_post_nd \
+      where type in (1,2,4) and \
+            datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 180 and \
+            datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) >= 0 \
+      group by blogId \
+    ) d on a.blogId=d.blogId \
+    left join ( \
+      select x.blogId,count(distinct x.userid) fans_std, count(distinct y.userid) as hd_fans_1y \
+      from ( \
+        select blogId, userid \
+        from lofter_db_dump.ods_db_user_following_nd \
+        where from_unixtime(cast(followTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by blogId, userid \
+      ) x \
+      left join ( \
+        select publisherUserId as userId, blogId \
+        from lofter_db_dump.ods_db_post_hot_nd \
+        where datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd')) < 365 and \
+              datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd')) >= 0 \
+        union all \
+        select publisherUserid as userId, blogId \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) < 365 and \
+              datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) >= 0 \
+      ) y on x.userid = y.userid and x.blogId = y.blogId \
+      group by x.blogId \
+    ) e on a.blogId = e.blogId \
+    left join ( \
+      select blogId, avg(hot) as hot_avg_rec_pool_recent_posts_1y \
+      from ( \
+        select a.blogId, a.postId, a.time, a.rank, b.hot \
+        from ( \
+          select *, row_number() over (partition by blogId order by time desc) rank \
+          from ( \
+            select blogId, postId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd HH:mm:ss') time \
+            from lofter_db_dump.ods_db_recommend_review_post_nd \
+            where type in (1,2,4) and \
+              datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 365 and \
+              datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) >= 0 \
+            group by blogId, postId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd HH:mm:ss') \
+          ) \
+        ) a left join ( \
+            select blogId, postId,count(1) hot \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd')) < 365 and \
+                  datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd')) >= 0 \
+            group by blogId, postId \
+        ) b on a.blogId = b.blogId and a.postId = b.postId \
+        where a.rank <= 10 \
+      ) t \
+      group by blogId \
+    ) f on a.blogId = f.blogId \
+  ) t \
+) tt \
+distribute by 1

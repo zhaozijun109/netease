@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.dwd_vc_daily_message_users_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                with daily_message as (select scene, \
+                                              task_type, \
+                                              user_id, \
+                                              if(instr(anonymous_user_ids, user_id) > 0, 'Y', 'N') is_anonymous, \
+                                              trigger_time \
+                                       from (select GET_JSON_OBJECT(content, '$.scene')                          as scene, \
+                                                    GET_JSON_OBJECT(content, '$.triggerTime')                    as trigger_time, \
+                                                    task_type, \
+                                                    explode(split(regexp_replace(user_ids, '\\\\[|\\\\]', ''), ',')) as user_id, \
+                                                    GET_JSON_OBJECT(ext, '$.USER_IS_ANONYMOUS')                  as anonymous_user_ids \
+                                             from vc.ods_db_vc_sub_task_nd \
+                                             where task_type in (10, 11, 12, 13, 14, 15) \
+                                               and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}')), \
+                     duanxin as (select FROM_UNIXTIME(create_time, 'yyyy-MM-dd')          as dt1, \
+                                        FROM_UNIXTIME(create_time, 'yyyy-MM-dd HH:mm:ss') as send_time, \
+                                        source_code, \
+                                        GET_JSON_OBJECT(ext, '$.userId')                  as user_id \
+                                 from vc.ods_db_vc_url_source_info_nd \
+                                 where scene = 4 \
+                                   and FROM_UNIXTIME(create_time, 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}') \
+                 \
+                select x1.user_id, x1.scene, x1.task_type, x1.is_anonymous, x1.trigger_time, x2.send_time, x2.source_code \
+                from daily_message x1 \
+                         left join duanxin x2 on x1.user_id = x2.user_id ;

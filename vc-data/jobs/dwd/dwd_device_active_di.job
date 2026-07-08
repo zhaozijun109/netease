@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=insert overwrite table vc.dwd_device_active_di partition(dt = '${azkaban.flow.1.days.ago}') \
+    with spark_device as ( \
+        select appKey, deviceOs, appChannel, appVersion, deviceUdid, user_id as userId, deviceModel,ip, \
+               min(occurTime) occurTime, \
+               min(if(from_unixtime(cast(occurTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', occurTime, null)) as returnOccurTime, \
+               max(occurTime) as maxOccurTime \
+        from vc.ods_mda_app_di \
+        where dt = '${azkaban.flow.1.days.ago}' and length(deviceUdid) > 0 and eventId != 'rd-2' \
+        group by appKey, deviceOs, appChannel, appVersion, deviceUdid, user_id, deviceModel, ip \
+    ) \
+     select a.deviceUdid,deviceModel,deviceOs,firstAccessTime,userIds, appChannels,appVersions, firstAccessIp, returnOccurTime, appVersionChannel, last_appChannel, last_appVersion \
+     from ( \
+       select deviceUdid, \
+              filter(transform(sort_array(collect_set(struct(rank, userId)), true), x -> x.userId), x -> x > 0) as userIds, \
+              collect_set(appChannel) as appChannels, \
+              collect_set(appVersion) as appVersions, \
+              max(if(rk=1,appChannel,null)) as last_appChannel, \
+              max(if(rk=1,appVersion,null)) as last_appVersion \
+       from ( \
+         select x.*, rank() over (partition by deviceUdid order by if(u.is_anonymous = 0, u.create_time, 0) desc) rank \
+         ,rank() over (partition by deviceUdid order by x.maxOccurTime desc) rk \
+         from spark_device x \
+         left join vc.dim_user u on x.userId = u.id \
+       ) t \
+       group by deviceUdid \
+     ) a \
+     left join ( \
+      select deviceUdid,appKey,deviceModel,deviceOs,occurTime as firstAccessTime, ip as firstAccessIp, returnOccurTime \
+      from ( \
+         select deviceUdid,appKey,deviceModel,deviceOs,occurTime,ip, \
+                row_number() over (partition by deviceUdid order by occurTime) as rk, \
+                min(returnOccurTime) over (partition by deviceUdid) as returnOccurTime \
+         from spark_device \
+      ) b \
+      where rk = 1 \
+     ) c on a.deviceUdid=c.deviceUdid \
+     left join ( \
+         select deviceUdid, map_from_entries(collect_list(struct(appVersion, appChannel))) as appVersionChannel \
+         from ( \
+             select deviceUdid, appVersion, appChannel \
+             from spark_device \
+             group by deviceUdid, appVersion, appChannel \
+         ) t \
+         group by deviceUdid \
+     ) d on a.deviceUdid = d.deviceUdid \

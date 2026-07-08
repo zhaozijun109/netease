@@ -1,0 +1,126 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01=\
+with exp_user_month as( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+    from lofter.dwd_ab_platform_exp_user_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+    group by 1 , 2, 3, 4, 5, 6 \
+), \
+ad_source_month as( \
+    SELECT dt as base_date, \
+            userid, \
+            category, \
+            is_canreward, \
+            CASE \
+                WHEN grouping__id = 3            THEN '全部' \
+                WHEN grouping__id = 1            THEN '五号广告位' \
+                ELSE '信息流激励' \
+            END AS dimension, \
+            CASE \
+                WHEN grouping__id = 3            THEN 'ALL' \
+                WHEN grouping__id = 1            THEN 'EXPLOREFEEDNATIVE' \
+                ELSE 'CANREWARD' \
+            END AS dimension_value, \
+            NVL(SUM(amount),0)        AS ad_pay_money_0d, \
+            MAX(IF(amount>0,1,0))     AS ad_pay_uv, \
+            NVL(SUM(bgpv),0)          AS ad_expose_pv, \
+            MAX(IF(bgpv>0,1,0))       AS ad_expose_uv, \
+            NVL(SUM(clickpv),0)       AS ad_click_pv, \
+            MAX(IF(clickpv>0,1,0))    AS ad_click_uv \
+    FROM lofter.dwd_ad_amount_per_user_di \
+    WHERE dt between date_sub('${azkaban.flow.1.days.ago}', 29) and '${azkaban.flow.1.days.ago}' \
+    GROUP BY dt, userid, category, is_canreward \
+    GROUPING SETS ( \
+        (dt, userid), \
+        (dt, userid, category), \
+        (dt, userid, is_canreward) \
+    ) \
+    HAVING  (grouping__id = 3) \
+        OR  (grouping__id = 1 AND category = 'EXPLOREFEEDNATIVE') \
+        OR  (grouping__id = 2 AND is_canreward = '1') \
+), \
+atomic_metric_source1 as( \
+    select a.userId, a.exp_date as base_date, a.bucket_id,  \
+        b.dimension, b.dimension_value,  \
+        nvl(ad_pay_money_0d, 0) as ad_pay_money_0d, \
+        nvl(ad_pay_uv, 0) as ad_pay_uv, \
+        nvl(ad_expose_pv, 0) as ad_expose_pv, \
+        nvl(ad_expose_uv, 0) as ad_expose_uv, \
+        nvl(ad_click_pv, 0) as ad_click_pv, \
+        nvl(ad_click_uv, 0) as ad_click_uv \
+    from exp_user_month a \
+    left join ad_source_month b  \
+    on a.userId = b.userId and a.exp_date = b.base_date \
+), \
+atomic_metric_source2 as( \
+    select userId, bucket_id, exp_date as base_date, dimension, dimension_value, period, ad_pay_money \
+    from( \
+        select a.userId, a.bucket_id, a.exp_date, b.dimension, b.dimension_value,  \
+            6 as period, \
+            sum(nvl(ad_pay_money_0d, 0)) as ad_pay_money \
+        from exp_user_month a \
+        left join ad_source_month b  \
+        on a.userId = b.userId and datediff(a.exp_date, b.base_date) between 0 and 6 \
+        group by a.userId, a.bucket_id, a.exp_date, b.dimension, b.dimension_value \
+        union all  \
+        select a.userId, a.bucket_id, a.exp_date, b.dimension, b.dimension_value,  \
+            29 as period, \
+            sum(nvl(ad_pay_money_0d, 0)) as ad_pay_money \
+        from exp_user_month a \
+        left join ad_source_month b  \
+        on a.userId = b.userId and datediff(a.exp_date, b.base_date) between 0 and 29 \
+        group by a.userId, a.bucket_id, a.exp_date, b.dimension, b.dimension_value \
+    ) \
+    where date_add(exp_date, period) <= '${azkaban.flow.1.days.ago}' \
+) \
+INSERT OVERWRITE TABLE lofter.dws_ab_platform_exp8_metric_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT  base_date, \
+        dimension, \
+        userId AS userid, \
+        metric, \
+        metric_value, \
+        bucket_id, \
+        dimension_value \
+FROM  atomic_metric_source1 \
+LATERAL VIEW INLINE ( \
+    ARRAY( \
+        STRUCT('ad_pay_uv',      CAST(ad_pay_uv       AS DOUBLE)), \
+        STRUCT('ad_pay_money_0d',CAST(ad_pay_money_0d AS DOUBLE)), \
+        STRUCT('ad_expose_uv',   CAST(ad_expose_uv    AS DOUBLE)), \
+        STRUCT('ad_expose_pv',   CAST(ad_expose_pv    AS DOUBLE)), \
+        STRUCT('ad_click_uv',    CAST(ad_click_uv     AS DOUBLE)), \
+        STRUCT('ad_click_pv',    CAST(ad_click_pv     AS DOUBLE)) \
+    ) \
+) t AS metric, metric_value \
+union all \
+SELECT  base_date, \
+        dimension, \
+        userId AS userid, \
+        metric, \
+        metric_value, \
+        bucket_id, \
+        dimension_value \
+FROM  (select * from atomic_metric_source2 where period = 6) \
+LATERAL VIEW INLINE ( \
+    ARRAY( \
+        STRUCT('ad_pay_money_7d',      CAST(ad_pay_money       AS DOUBLE)) \
+    ) \
+) t AS metric, metric_value \
+union all \
+SELECT  base_date, \
+        dimension, \
+        userId AS userid, \
+        metric, \
+        metric_value, \
+        bucket_id, \
+        dimension_value \
+FROM  (select * from atomic_metric_source2 where period = 29) \
+LATERAL VIEW INLINE ( \
+    ARRAY( \
+        STRUCT('ad_pay_money_30d',      CAST(ad_pay_money       AS DOUBLE)) \
+    ) \
+) t AS metric, metric_value
+dependencies=dwd_ab_platform_exp_user_di

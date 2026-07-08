@@ -1,0 +1,112 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=40
+conf.spark.executor.cores=4
+hive.query.01=with creator_posts as ( \
+                select m.postId, m.userId, m.publishDate, m.blogId, m.contentType, m.publishTime, \
+                       nvl(n.domain, if(m.contentType = '问答', m.contentType, null)) domain \
+                from ( \
+                  select id as postId, userId, publishDate, blogId, contentType, publishTime, movefrom \
+                  from lofter.dim_post \
+                  where ispublished=true and isforbidden=false and iscitedpost=false \
+                        and allowview=0 \
+                        and ((movefrom not in("blog","lofternetease","blog163like","loftmove","BLOGPOST","bbs","photo-pp","163_news","instagram_mirror","weibo_sync","news","pp","netease_photo" ) \
+                        and movefrom not like "%blog%" and  movefrom not like "%move%") or movefrom is null) \
+                        and contenttype in ('图片','文字','视频') \
+                        and isActivityAutoPost = 0 \
+                        and isImported = 0 \
+                        and is_book_store = 0 \
+               ) m left join (select postId,domain from lofter.dim_post_category_dd where dt='${azkaban.flow.1.days.ago}') n on m.postId = n.postId \
+               left join (select postId from lofter.dim_miniprogram_post_dd where dt = '${azkaban.flow.1.days.ago}' group by postId) p on m.postId = p.postId \
+               left join (select postId from lofter.ods_risk_limit where type = 0 and status = 0) q on m.postId = q.postId \
+               where p.postId is null and q.postId is null \
+              ) \
+              insert overwrite table lofter.dws_par_creator_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select userId, post_count, isNewUser, isDaren, isAppActive, isFirstPublish, isActiveCreator, \
+                     postDomains, newPostDomains, returnPostDomains, \
+                     revenue, review_10post_avg_hot, exposure_pv, click_pv, \
+                     browse_pv, real_browse_play_pv, real_browse_pv, play_pv, real_play_pv, \
+                     case when post_count > 0 and isNewUser > 0 then '新注册发文用户' \
+                          when post_count > 0 and isFirstPublish > 0 then '首次发文老用户' \
+                          when post_count > 0 and isActiveCreator > 0 then '持续发文用户' \
+                          when post_count > 0 then '回流发文用户' end creator_type, \
+                     gift_income \
+              from ( \
+                  select u.id as userId, \
+                         a.postCount as post_count, \
+                         if(from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0) as isNewUser, \
+                         if(size(u.authDomainIds) > 0 and from_unixtime(cast(u.authTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}', 1, 0) as isDaren, \
+                         if(c.userId is not null, 1, 0) as isAppActive, \
+                         nvl(a.isFirstPublish, 0) as isFirstPublish, nvl(a.isActiveCreator, 0) as isActiveCreator, \
+                         if(size(postDomains) > 0, postDomains, null) as postDomains, \
+                         if(size(newPostDomains) > 0, newPostDomains, null) as newPostDomains, \
+                         if(size(returnPostDomains) > 0, returnPostDomains, null) as returnPostDomains, \
+                         d.revenue, k.review_10post_avg_hot, l.exposure_pv, l.click_pv, l.browse_pv, l.real_browse_play_pv, l.real_browse_pv, l.play_pv, l.real_play_pv, \
+                         nvl(gift_income,0) as gift_income \
+                  from lofter.dim_blog u \
+                      left join ( \
+                          select blogId as userId, count(1) as postCount, \
+                                 if(sum(if(rankFromEarliest = 1, 1, 0)) > 0, 1, 0) as isFirstPublish, \
+                                 if(sum(if(datediff(publishDate, prevPublishDate) <= 30, 1, 0)) > 0, 1, 0) as isActiveCreator, \
+                                 collect_set(domain) as postDomains, \
+                                 collect_set(if(rankFromEarliest = 1, domain, null)) as newPostDomains, \
+                                 collect_set(if(datediff(publishDate, prevPublishDate) > 30, domain, null)) as returnPostDomains \
+                          from ( \
+                             select postId, publishDate, blogId, contentType, publishTime, domain, \
+                                    row_number() over (partition by blogId order by publishTime) as rankFromEarliest, \
+                                    lag(publishDate, 1) over (partition by blogId order by publishTime) as prevPublishDate \
+                             from creator_posts \
+                          ) t \
+                          where publishDate = '${azkaban.flow.1.days.ago}' \
+                          group by blogId \
+                       ) a on u.id = a.userId \
+                       left join (select userId from lofter.device_active lateral view explode(userids) t as userId where dt = '${azkaban.flow.1.days.ago}' group by userId) c on u.id = c.userId \
+                       left join ( \
+                          select blogId as userId, sum(money) as revenue, \
+                                 sum(if(order_type = 'gift_present', money, 0)) as gift_income \
+                          from lofter.dwd_user_order_dd \
+                          where dt = '${azkaban.flow.1.days.ago}' and \
+                                pay_date = '${azkaban.flow.1.days.ago}' and \
+                                is_post_pay > 0 and blogId > 0 \
+                          group by blogId \
+                       ) d on u.id = d.userId \
+                         left join ( \
+                               select blogId as userId, avg(hot) review_10post_avg_hot \
+                               from ( \
+                                   select a.blogId,a.postid,a.time,a.rank,b.hot \
+                                   from ( \
+                                       select *, row_number() over (partition by blogId order by time desc) rank \
+                                       from ( \
+                                           select blogId,postid, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd HH:mm:ss') time \
+                                           from lofter_db_dump.ods_db_recommend_review_post_nd \
+                                           where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                                                 datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 365 \
+                                           group by blogId,postid,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd HH:mm:ss') \
+                                       ) \
+                                   ) a left join ( \
+                                       select blogId, postid, count(1) hot \
+                                       from lofter_db_dump.ods_db_post_hot_nd \
+                                       where from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+                                             datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(opTime/1000 as bigint),'yyyy-MM-dd')) < 365 \
+                                       group by blogId, postid \
+                                   ) b on a.blogId = b.blogId and a.postid = b.postid \
+                                   where a.rank<=10 \
+                               ) \
+                               group by blogId \
+                           ) k on u.id = k.userId \
+                           left join ( \
+                               select userId, \
+                                      sum(exposurepv) exposure_pv, sum(clickpv) click_pv, sum(browsepv) browse_pv, \
+                                      sum(realbrowsepv) + sum(realplaypv) as real_browse_play_pv, \
+                                      sum(realbrowsepv) real_browse_pv, sum(playpv) as play_pv, sum(realplaypv) real_play_pv \
+                               from  lofter.dws_post_base_stats_di \
+                               where dt = '${azkaban.flow.1.days.ago}' \
+                               group by userid \
+                           ) l on u.id = l.userId \
+                      where (a.postCount > 0 or d.revenue > 0 or c.userId is not null or size(u.authdomainids) > 0 or k.userId is not null or l.userId is not null) \
+                  ) t \
+                  distribute by 1
+dependencies=dws_post_base_stats_di

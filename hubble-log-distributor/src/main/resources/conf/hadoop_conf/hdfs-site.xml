@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+        <name>dfs.nameservices</name>
+        <value>gy-cluster8,gy-cluster10</value>
+    </property>
+
+    <property>
+        <name>dfs.ha.namenodes.gy-cluster8</name>
+        <value>nn1,nn2</value>
+    </property>
+
+    <property>
+        <name>dfs.namenode.rpc-address.gy-cluster8.nn1</name>
+        <value>public-hadoop-5.gy.ntes:8020</value>
+    </property>
+
+    <property>
+        <name>dfs.namenode.rpc-address.gy-cluster8.nn2</name>
+        <value>public-hadoop-6.gy.ntes:8020</value>
+    </property>
+
+    <property>
+        <name>dfs.client.failover.proxy.provider.gy-cluster8</name>
+        <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+    </property>
+
+    <property>
+        <name>dfs.ha.namenodes.gy-cluster10</name>
+        <value>nn1,nn2</value>
+    </property>
+
+    <property>
+        <name>dfs.namenode.rpc-address.gy-cluster10.nn1</name>
+        <value>public-hadoop-1.gy.ntes:8020</value>
+    </property>
+
+    <property>
+        <name>dfs.namenode.rpc-address.gy-cluster10.nn2</name>
+        <value>public-hadoop-2.gy.ntes:8020</value>
+    </property>
+
+
+    <property>
+        <name>dfs.client.failover.proxy.provider.gy-cluster10</name>
+        <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+    </property>
+
+    <property>
+        <name>fs.permissions.umask-mode</name>
+        <value>027</value>
+    </property>
+
+    <property>
+        <name>dfs.blocksize</name>
+        <value>268435456</value>
+    </property>
+
+    <property>
+        <name>dfs.client.read.shortcircuit</name>
+        <value>true</value>
+    </property>
+
+    <property>
+        <name>dfs.client.read.shortcircuit.streams.cache.size</name>
+        <value>1024</value>
+    </property>
+
+    <property>
+        <name>dfs.client.read.shortcircuit.streams.cache.size.expiry.ms</name>
+        <value>300000</value>
+    </property>
+
+    <property>
+        <name>dfs.domain.socket.path</name>
+        <value>/var/lib/hadoop-hdfs/dn_socket</value>
+    </property>
+
+    <property>
+        <name>dfs.namenode.kerberos.principal.pattern</name>
+        <value>*</value>
+    </property>
+
+    <property>
+        <name>dfs.client.failover.random.order</name>
+        <value>true</value>
+    </property>
+</configuration>

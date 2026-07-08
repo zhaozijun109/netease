@@ -1,0 +1,312 @@
+type=sparksql
+hive.query.01= \
+with t0 as( \
+select userid \
+    ,blog_url \
+    ,from_unixtime(cast(gift_open_time/1000 as bigint),'yyyy-MM-dd') gift_open_date \
+    ,from_unixtime(cast(fans_vip_open_time/1000 as bigint),'yyyy-MM-dd') fans_vip_open_date \
+    ,level \
+from lofter.dws_par_creator_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+    and gift_open_time is not null \
+), \
+t1 as( \
+select a.userid \
+    ,case when b.userid is not null then '升级版' \
+        else '基础版' end gift_permission_type \
+from ( \
+    select userid \
+    from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+    where agreetime > 0 \
+    group by userid \
+    ) a \
+left join \
+( \
+    select userid \
+    from lofter_dm.ads_creator_gift_open_entry_dd \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+        and is_high_bar=1 \
+    group by userid \
+    ) b \
+on a.userid = b.userid \
+), \
+t2 as( \
+select userid \
+    ,case when grade=4 then '大师' \
+        when grade=3 then '进阶' \
+        when grade=2 then '学徒' end gift_grade \
+from lofter_db_dump.ods_db_trade_pay_grade_nd \
+), \
+t3 as( \
+select blogid \
+    ,case when gift_ability_status=0 then '无' \
+        when gift_ability_status=1 then '未开通' \
+        when gift_ability_status=2 then '开通' end gift_ability_status \
+from lofter.dim_gift_post_return_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by 1,2 \
+), \
+t4 as( \
+select userid \
+    ,blackrank \
+    ,punishrank \
+from lofter_db_dump.ods_db_trade_user_black_home_nd \
+), \
+t5 as( \
+select blogid \
+    ,sum(30_fans_vip_trade_money) 30_fans_vip_trade_money \
+    ,sum(1_all_trade_money) 1_all_trade_money \
+    ,sum(7_all_trade_money) 7_all_trade_money \
+    ,sum(30_all_trade_money) 30_all_trade_money \
+from( \
+select blogid \
+    ,case when pay_type='粉丝会员' and period=30 then trade_money end 30_fans_vip_trade_money \
+    ,case when pay_type='all' and period=1 then trade_money end 1_all_trade_money \
+    ,case when pay_type='all' and period=7 then trade_money end 7_all_trade_money \
+    ,case when pay_type='all' and period=30 then trade_money end 30_all_trade_money \
+from lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by 1,2,3,4,5 \
+) \
+group by blogid \
+), \
+t6 as( \
+select blogid \
+    ,case when creatorstatus=10 then '发文吧鸽' \
+        when creatorstatus=20 then '回来吧鸽' \
+        when creatorstatus=30 then '求你了鸽' \
+        when creatorstatus=40 then '出山鸽' \
+        when creatorstatus=50 then '成长鸽' \
+        when creatorstatus=60 then '守护鸽' \
+        when creatorstatus=70 then '起飞鸽' \
+        when creatorstatus=80 then '火箭鸽' \
+        when creatorstatus=90 then '太太鸽' \
+        when creatorstatus=100 then '宗师鸽' \
+        when creatorstatus=110 then '传奇鸽' end creatorstatus \
+from lofter_dm.ads_creator_ecology_identity_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+), \
+t7 as( \
+select userid,a.level \
+from \
+( \
+select id,level \
+from lofter_db_dump.ods_db_trade_fans_vip_product_nd \
+) a \
+join \
+( \
+select userid \
+    ,explode(split(optionids, ',')) optionid \
+from lofter_db_dump.ods_db_trade_fans_vip_account_nd \
+    ) b \
+on a.id = b.optionid \
+group by 1,2 \
+), \
+t8 as ( \
+  select * from lofter.dws_par_creator_pay_di where dt = '${azkaban.flow.1.days.ago}' \
+), \
+t9 as ( \
+  select post_userid as blogId, \
+         sum(public_expose_pv) as public_expose_pv_1d, sum(public_expose_uv) as public_expose_uv_1d, \
+         sum(non_public_expose_pv) as non_public_expose_pv_1d, sum(non_public_expose_uv) as non_public_expose_uv_1d \
+  from lofter.dws_post_traffic_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by 1 \
+), \
+t10 as ( \
+   select blogId, count(distinct userId) as new_fans_1d \
+   from lofter_db_dump.ods_db_user_following_nd \
+   where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+   group by blogId \
+), \
+t11 as ( \
+  select blogId, ip, \
+         row_number() over (partition by blogId order by post_count_1d desc) ip_rk1, \
+         row_number() over (partition by blogId order by post_count_7d desc) ip_rk7, \
+         row_number() over (partition by blogId order by post_count_30d desc) ip_rk30 \
+  from ( \
+      select blogId, ip, \
+             count(distinct if(dt = '${azkaban.flow.1.days.ago}', postId, null)) as post_count_1d, \
+             count(distinct if(dt >= '${azkaban.flow.7.days.ago}', postId, null)) as post_count_7d, \
+             count(distinct if(dt >= '${azkaban.flow.30.days.ago}', postId, null)) as post_count_30d \
+      from ( \
+          select userId as blogId, ip, dt, postId \
+          from lofter.dwd_post_publish_di \
+               lateral view explode(post_ips) as ip \
+          where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+      ) t \
+      group by 1, 2 \
+  ) tt \
+), \
+t12 as ( \
+   select blogId, concat_ws(',', transform(sort_array(collect_set(struct(ip_rk1, ip)), true), x -> x.ip)) as post_ips_1d \
+   from t11 \
+   where ip_rk1 <= 5 \
+   group by 1 \
+), \
+t13 as ( \
+   select blogId, concat_ws(',', transform(sort_array(collect_set(struct(ip_rk7, ip)), true), x -> x.ip)) as post_ips_7d \
+   from t11 \
+   where ip_rk7 <= 5 \
+   group by 1 \
+), \
+t14 as ( \
+   select blogId, concat_ws(',', transform(sort_array(collect_set(struct(ip_rk30, ip)), true), x -> x.ip)) as post_ips_30d \
+   from t11 \
+   where ip_rk30 <= 5 \
+   group by 1 \
+), \
+t15 as ( \
+   select a.blogId, \
+          sum(if(b.userId is null, a.money,0)) as non_public_unlock_money_1d, \
+          sum(if(c.userId is not null, a.money,0)) as fans_unlock_money_1d \
+   from ( \
+       select blogId, postId, userId, money \
+       from lofter.dwd_gift_post_unlock_dd \
+       where dt = '${azkaban.flow.1.days.ago}' and money > 0 and \
+             from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+   ) a \
+   left join ( \
+       select postId, userId \
+       from lofter.dwd_post_expose_di \
+       where dt = '${azkaban.flow.1.days.ago}' and \
+          ((is_rec = 1 and scene <> 'search') or scene = 'tag') \
+       group by 1, 2 \
+   ) b on a.postId = b.postId and a.userId = b.userId \
+   left join lofter_db_dump.ods_db_user_following_nd c on a.blogId = c.blogId and a.userId = c.userId \
+   group by 1 \
+), \
+t16 as ( \
+   select a.blogId, count(distinct a.postId) as publish_post_count_1d, \
+          count(distinct b.postId) as publish_pay_post_count_1d \
+   from ( \
+      select userId as blogId, postId \
+      from lofter.dwd_post_publish_di \
+      where dt = '${azkaban.flow.1.days.ago}' \
+   ) a \
+   left join ( \
+       select postid \
+       from lofter.dim_gift_post_return_dd \
+       where dt = '${azkaban.flow.1.days.ago}' and \
+             ispay_returngift in (0, 1) \
+       group by 1 \
+   ) b on a.postId = b.postId \
+   group by 1 \
+), \
+t18 as( \
+  select blogid,concat_ws(',', flgs) as flgs \
+  from lofter_dm.ads_gift_post_title_classify_1_modle_blog_priority_all_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by blogid,flgs \
+), \
+t19 as( \
+  select blogid,concat_ws(',', flgs) as flgs \
+  from lofter_dm.ads_gift_post_title_classify_2_element_blog_priority_all_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by blogid,flgs \
+) \
+insert overwrite table lofter_dm.ads_gift_easy_fetch_creator_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t0.userid \
+    ,gift_open_date \
+    ,gift_permission_type \
+    ,gift_grade \
+    ,gift_ability_status \
+    ,blackrank \
+    ,punishrank \
+    ,fans_vip_open_date \
+    ,t7.level fans_vip_price_level \
+    ,30_fans_vip_trade_money \
+    ,1_all_trade_money \
+    ,7_all_trade_money \
+    ,30_all_trade_money \
+    ,t0.level creatorlevel \
+    ,creatorstatus \
+    ,first_unlock_uv,first_unlock_money, first_unlock_fans_uv, first_unlock_collection_subscribe_uv, first_unlock_non_fans_collection_subscribe_uv, first_unlock_uv_1d, first_unlock_money_1d \
+    ,public_expose_pv_1d, public_expose_uv_1d, non_public_expose_pv_1d, non_public_expose_uv_1d \
+    ,new_fans_1d, post_ips_1d, post_ips_7d, post_ips_30d \
+    ,non_public_unlock_money_1d, fans_unlock_money_1d \
+    ,publish_post_count_1d, publish_pay_post_count_1d \
+    ,if(blog_channel = 0, 'UGC', 'PGC') blog_channel \
+    ,blog_url \
+    ,t18.flgs as contenttype_prefer \
+    ,t19.flgs as element_prefer \
+    ,article_money_1d \
+    ,photo_money_1d \
+    ,article_money_7d \
+    ,photo_money_7d \
+    ,article_money_30d \
+    ,photo_money_30d \
+from t0 \
+left join t1 \
+on t0.userid = t1.userid \
+left join t2 \
+on t0.userid = t2.userid \
+left join t3 \
+on t0.userid = t3.blogid \
+left join t4 \
+on t0.userid = t4.userid \
+left join t5 \
+on t0.userid = t5.blogid \
+left join t6 \
+on t0.userid = t6.blogid \
+left join t7 \
+on t0.userid = t7.userid \
+left join t8 \
+on t0.userid = t8.userid \
+left join t9 \
+on t0.userid = t9.blogId \
+left join t10 \
+on t0.userid = t10.blogId \
+left join t12 \
+on t0.userid = t12.blogId \
+left join t13 \
+on t0.userid = t13.blogId \
+left join t14 \
+on t0.userid = t14.blogId \
+left join t15 \
+on t0.userid = t15.blogId \
+left join t16 \
+on t0.userid = t16.blogId \
+left join ( \
+    select blogId, max(blog_channel) as blog_channel \
+    from lofter.dim_gift_post_return \
+    group by 1 \
+) t17 on t0.userId = t17.blogId \
+left join t18 on t0.userId = t18.blogid \
+left join t19 on t0.userid = t19.blogid \
+left join( \
+    select blogId, \
+    	sum(if(contenttype = '文字' and days < 1, money,0)) as article_money_1d, \
+    	sum(if(contenttype = '图片' and days < 1, money,0)) as photo_money_1d, \
+    	sum(if(contenttype = '文字' and days < 7, money,0)) as article_money_7d, \
+    	sum(if(contenttype = '图片' and days < 7, money,0)) as photo_money_7d, \
+    	sum(if(contenttype = '文字' and days < 30, money,0)) as article_money_30d, \
+    	sum(if(contenttype = '图片' and days < 30, money,0)) as photo_money_30d \
+    from( \
+    	select blogId, contenttype, days, \
+    		sum(money) as money \
+    	from( \
+    		SELECT blogid, postid ,money ,datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as days \
+    		FROM lofter.dwd_evt_post_paid_detail_dd \
+    		WHERE dt = '${azkaban.flow.1.days.ago}' \
+    			AND pay_type IN ('粉丝会员') \
+    			and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+    	)a \
+    	left join( \
+    		select id as postId, contenttype \
+    		from lofter.dim_post \
+    	)b on a.postId = b.postId \
+    	where b.contenttype in ('文字','图片') \
+    	group by blogId, contenttype, days \
+    union all \
+    	SELECT blogid , content_type,datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as days, \
+    		sum(MONEY) AS MONEY \
+    	FROM lofter.dwd_gift_post_unlock_dd \
+    	WHERE dt = '${azkaban.flow.1.days.ago}' \
+    		AND MONEY > 0 \
+    		AND content_type in ('文字', '图片') \
+    		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}' \
+    	GROUP BY blogid, content_type, datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) \
+    ) a \
+    group by blogId \
+)t20 on t0.userId = t20.blogId

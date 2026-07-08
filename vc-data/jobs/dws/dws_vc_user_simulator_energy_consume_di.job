@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table vc.dws_vc_user_simulator_energy_consume_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select user_id, \
+       get_json_object(ext, '$.simulatorId') as simulator_id, \
+       case when scene in (20, 31, 32) then 'vc' \
+            when scene in (21, 31, 32) then 'lofter' \
+            when scene in (22, 23) then 'theater' \
+       end as simulator_def, \
+       sum(amount) as total_consume \
+from vc.dwd_vc_user_simulator_asset_consume_di \
+where dt = '${azkaban.flow.1.days.ago}' and scene in (20, 21, 22, 23) \
+group by user_id, get_json_object(ext, '$.simulatorId'), scene
+

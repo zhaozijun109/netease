@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_kol_attribution_order_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select *, \
+      case when platform in (2,7) then 'ios' else 'android' end as client_type \
+from ( \
+    select order_id as orderId, order_type, userid, postId, blogid, actpwd, actpwd_search_time, pay_time, platform, amount \
+    from lofter.dwd_paid_subscribe_order_di \
+    where dt ='${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and (is_official > 0 or is_vip_fans > 0) and \
+          from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select orderId, 5 as order_type, userid, postId, blogId, actpwd, actpwd_search_time, pay_time, platform, amount \
+    from lofter.dwd_coupon_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+          actpwd_channel like '米良[%' and \
+          from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select order_id as orderId, order_type, userid, postId, blogid, actpwd, actpwd_search_time, pay_time, platform, amount \
+    from lofter.dwd_membership_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+          from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select order_id as orderId, 7 as order_type, userid, null as postId, null as blogid, actpwd, actpwd_search_time, payTime as pay_time, platform, amount \
+    from lofter.dwd_pve_ml_order_di \
+    where dt = '${azkaban.flow.1.days.ago}' and length(actpwd) > 0 and \
+          from_unixtime(cast(actpwd_search_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t \

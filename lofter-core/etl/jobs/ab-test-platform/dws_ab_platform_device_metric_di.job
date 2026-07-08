@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01= \
+with exp_device as ( \
+     select deviceId, dt as exp_date, appId, sceneId, exp_id, bucket_id, count(1) as pv \
+     from lofter.dwd_ab_platform_exp_user_di \
+     where dt = '${azkaban.flow.1.days.ago}' \
+     group by 1 , 2, 3, 4, 5, 6 \
+), \
+device_source as ( \
+    select deviceUdid, \
+           device_type, \
+           is_whiteboard \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter.dws_ab_platform_device_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.deviceId,a.exp_date,a.appId,a.sceneId,a.exp_id,a.bucket_id,a.metric,a.dimension,a.dimension_value,a.metric_value \
+from (  \
+    select a.deviceId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'exp_device_uv' as metric, \
+      '全部' as dimension, 'ALL' as dimension_value, \
+      1.0 as metric_value \
+    from exp_device a \
+union all \
+    select a.deviceId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'exp_pv' as metric, \
+      '全部' as dimension, 'ALL' as dimension_value, \
+      cast(pv as double) as metric_value \
+   from exp_device a \
+union all \
+    select a.deviceId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        b.metric as metric, \
+        b.dimension as dimension, b.dimension_value as dimension_value, \
+        nvl(b.metric_value,0.0) as metric_value \
+    from exp_device a \
+    left join ( \
+        select * from lofter.dws_ab_platform_push_user_device_metric_di where dt = '${azkaban.flow.1.days.ago}' and deviceId is not null \
+    ) b \
+    on a.deviceId = b.deviceId and a.exp_id = b.exp_id and a.exp_date = b.basedate and a.bucket_id = b.bucket_id \
+union all \
+    select a.deviceId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        b.metric as metric, \
+        b.dimension as dimension, b.dimension_value as dimension_value, \
+        nvl(b.metric_value,0.0) as metric_value \
+    from exp_device a \
+    left join ( \
+        select deviceUdid, \
+               case when device_type = 'new' then 'new_device_whiteboard' \
+                    when device_type = 'return_30' then 'return_device_whiteboard' \
+               end as metric, \
+               '全部' as dimension, \
+               'ALL' as dimension_value, \
+               1.0 as metric_value \
+        from device_source \
+        where is_whiteboard = 1 \
+    ) b \
+    on a.deviceId = b.deviceUdid \
+union all \
+    select a.deviceId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+        b.metric as metric, \
+        b.dimension as dimension, b.dimension_value as dimension_value, \
+        nvl(b.metric_value,0.0) as metric_value \
+    from exp_device a \
+    left join ( \
+        select deviceUdid, \
+               case when device_type = 'new' then 'new_device' \
+                    when device_type = 'return_30' then 'return_device' \
+               end as metric, \
+               '全部' as dimension, \
+               'ALL' as dimension_value, \
+               1.0 as metric_value \
+        from device_source \
+    ) b \
+    on a.deviceId = b.deviceUdid \
+) a
+dependencies=dws_ab_platform_push_user_device_metric_di

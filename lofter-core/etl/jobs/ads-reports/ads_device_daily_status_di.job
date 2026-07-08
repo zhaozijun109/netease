@@ -1,0 +1,128 @@
+type=sparksql
+hive.query.01=  \
+WITH target_date AS ( \
+    SELECT '${azkaban.flow.1.days.ago}' AS dt \
+), \
+today_attribution AS ( \
+    SELECT \
+        a.deviceudid, \
+        a.device_type, \
+        CASE \
+            WHEN a.origin_type = '自然' \
+                THEN '自然' \
+            WHEN a.origin_type = '广告' \
+                 AND a.origin_channel IN ('快手聚星', '抖音(达人)') \
+                THEN '广告_水上CPA' \
+            WHEN a.origin_type = '广告' \
+                 AND a.origin_channel NOT IN ('快手聚星', '抖音(达人)') \
+                THEN '广告_DSP' \
+            WHEN a.origin_type = '口令' \
+                 AND a.is_paid_subscribe = 1 \
+                THEN '口令_付费' \
+            WHEN a.origin_type = '口令' \
+                 AND a.origin_channel IN ( \
+                     '米良[光点纪年]', '米良[灵心科技]', '米良[淘金前线]', \
+                     '米良[超量空间]', '米良[云创商院]' \
+                 ) \
+                THEN '口令_水下机构' \
+            WHEN a.origin_type = '口令' \
+                 AND a.origin_channel = '用户拉新' \
+                THEN '口令_分享官' \
+            WHEN a.origin_type = '口令' \
+                 AND a.origin_channel IN ('站外运粮官', '运粮官') \
+                THEN '口令_运粮官' \
+            ELSE '历史免费口令尾量' \
+        END AS origin_type_detail \
+    FROM lofter.dwd_device_growth_attribution_di a \
+    CROSS JOIN target_date t \
+    WHERE a.dt = t.dt \
+      AND a.device_type IN ('new', 'return_30') \
+), \
+history_new_attribution AS ( \
+    SELECT \
+        deviceudid, \
+        CASE \
+            WHEN origin_type = '自然' THEN '自然' \
+            WHEN origin_type = '广告' \
+                 AND origin_channel IN ('快手聚星', '抖音(达人)') THEN '广告_水上CPA' \
+            WHEN origin_type = '广告' \
+                 AND origin_channel NOT IN ('快手聚星', '抖音(达人)') THEN '广告_DSP' \
+            WHEN origin_type = '口令' \
+                 AND is_paid_subscribe = 1 THEN '口令_付费' \
+            WHEN origin_type = '口令' \
+                 AND origin_channel IN ( \
+                     '米良[光点纪年]', '米良[灵心科技]', '米良[淘金前线]', \
+                     '米良[超量空间]', '米良[云创商院]' \
+                 ) THEN '口令_水下机构' \
+            WHEN origin_type = '口令' \
+                 AND origin_channel = '用户拉新' THEN '口令_分享官' \
+            WHEN origin_type = '口令' \
+                 AND origin_channel IN ('站外运粮官', '运粮官') THEN '口令_运粮官' \
+            ELSE '历史免费口令尾量' \
+        END AS origin_type_detail \
+    FROM lofter.dwd_device_growth_attribution_di \
+    WHERE device_type = 'new' \
+), \
+today_active AS ( \
+    SELECT a.deviceudid \
+    FROM lofter.dws_device_growth_dau_stratify_di a \
+    CROSS JOIN target_date t \
+    WHERE a.dt = t.dt \
+), \
+today_continuous AS ( \
+    SELECT \
+        a.deviceudid, \
+        COALESCE(h.origin_type_detail, '23年前新增无渠道信息') AS channel \
+    FROM today_active a \
+    LEFT JOIN today_attribution  b ON a.deviceudid = b.deviceudid \
+    LEFT JOIN history_new_attribution h ON a.deviceudid = h.deviceudid \
+    WHERE b.deviceudid IS NULL \
+), \
+active_on_day30 AS ( \
+    SELECT DISTINCT a.deviceudid \
+    FROM lofter.dws_device_growth_dau_stratify_di a \
+    CROSS JOIN target_date t \
+    WHERE a.dt = DATE_SUB(t.dt, 30) \
+), \
+active_after_day30 AS ( \
+    SELECT DISTINCT a.deviceudid \
+    FROM lofter.dws_device_growth_dau_stratify_di a \
+    CROSS JOIN target_date t \
+    WHERE a.dt >  DATE_SUB(t.dt, 30) \
+      AND a.dt <= t.dt \
+), \
+today_new_churn AS ( \
+    SELECT \
+        d.deviceudid, \
+        COALESCE(h.origin_type_detail, '23年前新增无渠道信息') AS channel \
+    FROM active_on_day30 d \
+    LEFT JOIN active_after_day30  e ON d.deviceudid = e.deviceudid \
+    LEFT JOIN history_new_attribution h ON d.deviceudid = h.deviceudid \
+    WHERE e.deviceudid IS NULL \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_device_daily_status_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    '新增'                                        AS device_type, \
+    COALESCE(origin_type_detail, '渠道信息缺失') AS channel, \
+    CAST(deviceudid AS STRING)                    AS deviceudid \
+FROM today_attribution \
+WHERE device_type = 'new' \
+UNION ALL \
+SELECT \
+    '回流'                                               AS device_type, \
+    COALESCE(origin_type_detail, '23年前新增无渠道信息') AS channel, \
+    CAST(deviceudid AS STRING)                           AS deviceudid \
+FROM today_attribution \
+WHERE device_type = 'return_30' \
+UNION ALL \
+SELECT \
+    '持续活跃'                 AS device_type, \
+    channel, \
+    CAST(deviceudid AS STRING) AS deviceudid \
+FROM today_continuous \
+UNION ALL \
+SELECT \
+    '今日新增流失'  AS device_type, \
+    channel, \
+    CAST(deviceudid AS STRING) AS deviceudid \
+FROM today_new_churn

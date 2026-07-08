@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,source,large_type,reason,scene,type,expose_pv,expose_uv,click_pv,click_uv from lofter_dm.ads_rec_easy_fetch_reason_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_rec_easy_fetch_reason_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_rec_easy_fetch_reason_di

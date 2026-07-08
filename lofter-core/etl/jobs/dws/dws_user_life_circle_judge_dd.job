@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter.dws_user_life_circle_judge_dd partition(dt='${azkaban.flow.1.days.ago}')  \
+          select userId,    \
+          	case when datediff('${azkaban.flow.1.days.ago}',create_date)<15 and datediff('${azkaban.flow.1.days.ago}',last_login_date)<15 and real_browse_pv_15d<=2 and discuss_browse_15d<=2 and post_cnt_15d=0 and discuss_cnt_15d=0 and send_comment_cnt_15d=0 	and trade_money_15d=0 and paid_content_real_browse_pv_15d<=2 and product_browse_pv_15d+card_browse_pv_15d<=2 then '导入期'   \
+          		when datediff('${azkaban.flow.1.days.ago}',create_date)>=15 and datediff('${azkaban.flow.1.days.ago}',last_login_date)<15 and real_browse_pv_15d<=2 and discuss_browse_15d<=2 and post_cnt_1y=0 and discuss_cnt_1y=0 and send_comment_cnt_1y=0 and trade_money_1y=0 and paid_content_real_browse_pv_15d<=2 and product_browse_pv_15d+card_browse_pv_15d<=2 then '低价值'   \
+          		when datediff('${azkaban.flow.1.days.ago}',last_login_date)<15 and (real_browse_pv_15d>2 or discuss_browse_15d>2 or paid_content_real_browse_pv_15d>2 or product_browse_pv_15d+card_browse_pv_15d>2) and post_cnt_1y=0 and discuss_cnt_1y=0 and send_comment_cnt_1y=0 and trade_money_1y=0  then '成长期'   \
+          		when datediff('${azkaban.flow.1.days.ago}',last_login_date)<15 and (post_cnt_15d>=1 or discuss_cnt_15d>=1 or send_comment_cnt_15d>=1 or trade_money_15d>0)  then '成熟期'   \
+          		when datediff('${azkaban.flow.1.days.ago}',last_login_date)<15 and post_cnt_15d=0 and discuss_cnt_15d=0 and send_comment_cnt_15d=0 and trade_money_15d=0 and (post_cnt_1y>0 or discuss_cnt_1y>0 or send_comment_cnt_1y>0 or trade_money_1y>0) then '休眠期'   \
+          		when datediff('${azkaban.flow.1.days.ago}',last_login_date) between 15 and 30 then '沉默期'   \
+          		when datediff('${azkaban.flow.1.days.ago}',last_login_date)>30  or last_login_date is null then '流失期'   \
+          		else 'undefine'   \
+          	end as life_cycle_type   \
+          from lofter.dws_user_life_circle_index_dd   \
+          where dt='${azkaban.flow.1.days.ago}' and create_date <= '${azkaban.flow.1.days.ago}'    \
+          distribute by userId % 10
+dependencies= dws_user_life_circle_index_dd
+

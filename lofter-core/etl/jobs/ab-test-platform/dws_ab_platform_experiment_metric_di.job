@@ -1,0 +1,574 @@
+type=sparksql
+hive.query.01= \
+with metric_sum_source1 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+          metric as metric, \
+          dimension,dimension_value, sum(metric_value) as metric_value \
+    from lofter.dws_ab_platform_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not RLIKE 'ctr|cvr' \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+metric_sum_source2 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+        metric as metric, \
+        dimension,dimension_value, sum(metric_value) as metric_value \
+    from lofter.dws_ab_platform_device_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by exp_date, appid, sceneid, exp_id, bucket_id, metric, dimension, dimension_value \
+), \
+metric_sum_source3 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+          metric as metric, \
+          dimension,dimension_value, sum(metric_value) as metric_value \
+    from lofter.dws_ab_platform_new_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not RLIKE 'ctr|cvr' \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+metric_sum_source4 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+          metric as metric, \
+          dimension,dimension_value, sum(metric_value) as metric_value \
+    from lofter.dws_ab_platform_return_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not RLIKE 'ctr|cvr' \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+metric_sum_source5 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id, \
+          metric as metric, \
+          dimension,dimension_value, sum(metric_value) as metric_value \
+    from lofter.dws_ab_platform_active_user_metric_di \
+    where dt = '${azkaban.flow.1.days.ago}' and metric not RLIKE 'ctr|cvr' \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,metric,dimension,dimension_value \
+), \
+atomic_metric_source1 as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'exp_uv' then metric_value end) as exp_uv, \
+        max(case when metric = 'visit_uv' then metric_value end) as visit_uv, \
+        max(case when metric = 'retain_uv_1d' then metric_value end) as retain_uv_1d, \
+        max(case when metric = 'retain_uv_3d' then metric_value end) as retain_uv_3d, \
+        max(case when metric = 'retain_uv_7d' then metric_value end) as retain_uv_7d, \
+        max(case when metric = 'retain_uv_15d' then metric_value end) as retain_uv_15d, \
+        max(case when metric = 'ad_pay_money_0d' then metric_value end) as ad_pay_money_0d, \
+        max(case when metric = 'ad_pay_money_7d' then metric_value end) as ad_pay_money_7d, \
+        max(case when metric = 'ad_pay_money_15d' then metric_value end) as ad_pay_money_15d, \
+        max(case when metric = 'paycontent_pay_money_0d' then metric_value end) as paycontent_pay_money_0d, \
+        max(case when metric = 'paycontent_pay_money_7d' then metric_value end) as paycontent_pay_money_7d, \
+        max(case when metric = 'paycontent_pay_money_15d' then metric_value end) as paycontent_pay_money_15d, \
+        max(case when metric = 'tag_interaction_pv' then metric_value end) as tag_interaction_pv, \
+        max(case when metric = 'tag_browse_pv' then metric_value end) as tag_browse_pv, \
+        max(case when metric = 'tag_browse_uv' then metric_value end) as tag_browse_uv, \
+        max(case when metric = 'tag_new_interaction_pv' then metric_value end) as tag_new_interaction_pv, \
+        max(case when metric = 'tag_new_browse_pv' then metric_value end) as tag_new_browse_pv, \
+        max(case when metric = 'tag_new_browse_uv' then metric_value end) as tag_new_browse_uv, \
+        max(case when metric = 'tag_hot_interaction_pv' then metric_value end) as tag_hot_interaction_pv, \
+        max(case when metric = 'tag_hot_browse_pv' then metric_value end) as tag_hot_browse_pv, \
+        max(case when metric = 'tag_hot_browse_uv' then metric_value end) as tag_hot_browse_uv, \
+        max(case when metric = 'tag_browse_duration' then metric_value end) as tag_browse_duration, \
+        max(case when metric = 'tag_new_browse_duration' then metric_value end) as tag_new_browse_duration, \
+        max(case when metric = 'tag_hot_browse_duration' then metric_value end) as tag_hot_browse_duration, \
+        max(case when metric = 'gmv' then metric_value end) as gmv, \
+        max(case when metric = 'discovery_expose_pv' then metric_value end) as discovery_expose_pv, \
+        max(case when metric = 'discovery_click_pv' then metric_value end) as discovery_click_pv, \
+        max(case when metric = 'discovery_interaction_pv' then metric_value end) as discovery_interaction_pv, \
+        max(case when metric = 'membership_pay_uv' then metric_value end) as membership_pay_uv, \
+        max(case when metric = 'membership_pay_amount' then metric_value end) as membership_pay_amount, \
+        max(case when metric = 'membership_vip_browse_uv' then metric_value end) as membership_vip_browse_uv, \
+        max(case when metric = 'membership_vip_browse_pv' then metric_value end) as membership_vip_browse_pv, \
+        max(case when metric = 'ad_incentive_expose_pv' then metric_value end) as ad_incentive_expose_pv, \
+        max(case when metric = 'ad_incentive_expose_uv' then metric_value end) as ad_incentive_expose_uv, \
+        max(case when metric = 'ad_incentive_unlock_pv' then metric_value end) as ad_incentive_unlock_pv, \
+        max(case when metric = 'ad_incentive_unlock_uv' then metric_value end) as ad_incentive_unlock_uv, \
+        max(case when metric = 'ad_incentive_cost_amount' then metric_value end) as ad_incentive_cost_amount, \
+        max(case when metric = 'ad_patch_expose_pv' then metric_value end) as ad_patch_expose_pv, \
+        max(case when metric = 'ad_patch_expose_uv' then metric_value end) as ad_patch_expose_uv, \
+        max(case when metric = 'ad_patch_click_pv' then metric_value end) as ad_patch_click_pv, \
+        max(case when metric = 'ad_patch_click_uv' then metric_value end) as ad_patch_click_uv, \
+        max(case when metric = 'ad_patch_cost_amount' then metric_value end) as ad_patch_cost_amount, \
+		max(case when metric = 'coupon_gmv_0d' then metric_value end) as coupon_gmv_0d, \
+		max(case when metric = 'rewardcenter_uv' then metric_value end) as rewardcenter_uv, \
+        max(case when metric = 'rewardcenter_new_uv' then metric_value end) as rewardcenter_new_uv, \
+        max(case when metric = 'rewardcenter_active_retain_1d' then metric_value end) as rewardcenter_active_retain_1d, \
+        max(case when metric = 'rewardcenter_new_retain_1d' then metric_value end) as rewardcenter_new_retain_1d, \
+        max(case when metric = 'rewardcenter_active_app_retain_1d' then metric_value end) as rewardcenter_active_app_retain_1d, \
+        max(case when metric = 'rewardcenter_new_app_retain_1d' then metric_value end) as rewardcenter_new_app_retain_1d, \
+        max(case when metric = 'rewardcenter_rc_ad_revenue' then metric_value end) as rewardcenter_rc_ad_revenue, \
+        max(case when metric = 'rewardcenter_rc_indirect_ad_revenue' then metric_value end) as rewardcenter_rc_indirect_ad_revenue, \
+        max(case when metric = 'rewardcenter_get_score_abs' then metric_value end) as rewardcenter_get_score_abs, \
+        max(case when metric = 'paycontent_pay_uv' then metric_value end) as paycontent_pay_uv \
+    from metric_sum_source1 \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+atomic_metric_source2 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'valid_push_device_count' then metric_value end) as valid_push_device_count, \
+        max(case when metric = 'push_reach_device_count' then metric_value end) as push_reach_device_count, \
+        max(case when metric = 'push_click_device_count' then metric_value end) as push_click_device_count, \
+        max(case when metric = 'push_activated_device_count' then metric_value end) as push_activated_device_count \
+    from metric_sum_source2 \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+atomic_metric_source3 as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'new_user_exp_uv' then metric_value end) as new_user_exp_uv, \
+        max(case when metric = 'new_user_visit_uv' then metric_value end) as new_user_visit_uv, \
+        max(case when metric = 'new_user_retain_uv_1d' then metric_value end) as new_user_retain_uv_1d, \
+        max(case when metric = 'new_user_retain_uv_3d' then metric_value end) as new_user_retain_uv_3d, \
+        max(case when metric = 'new_user_retain_uv_7d' then metric_value end) as new_user_retain_uv_7d, \
+        max(case when metric = 'new_user_retain_uv_15d' then metric_value end) as new_user_retain_uv_15d, \
+        max(case when metric = 'new_user_ad_pay_money_0d' then metric_value end) as new_user_ad_pay_money_0d, \
+        max(case when metric = 'new_user_ad_pay_money_7d' then metric_value end) as new_user_ad_pay_money_7d, \
+        max(case when metric = 'new_user_ad_pay_money_15d' then metric_value end) as new_user_ad_pay_money_15d, \
+        max(case when metric = 'new_user_paycontent_pay_money_0d' then metric_value end) as new_user_paycontent_pay_money_0d, \
+        max(case when metric = 'new_user_paycontent_pay_money_7d' then metric_value end) as new_user_paycontent_pay_money_7d, \
+        max(case when metric = 'new_user_paycontent_pay_money_15d' then metric_value end) as new_user_paycontent_pay_money_15d, \
+        max(case when metric = 'new_user_tag_interaction_pv' then metric_value end) as new_user_tag_interaction_pv, \
+        max(case when metric = 'new_user_tag_browse_pv' then metric_value end) as new_user_tag_browse_pv, \
+        max(case when metric = 'new_user_tag_browse_uv' then metric_value end) as new_user_tag_browse_uv, \
+        max(case when metric = 'new_user_tag_new_interaction_pv' then metric_value end) as new_user_tag_new_interaction_pv, \
+        max(case when metric = 'new_user_tag_new_browse_pv' then metric_value end) as new_user_tag_new_browse_pv, \
+        max(case when metric = 'new_user_tag_new_browse_uv' then metric_value end) as new_user_tag_new_browse_uv, \
+        max(case when metric = 'new_user_tag_hot_interaction_pv' then metric_value end) as new_user_tag_hot_interaction_pv, \
+        max(case when metric = 'new_user_tag_hot_browse_pv' then metric_value end) as new_user_tag_hot_browse_pv, \
+        max(case when metric = 'new_user_tag_hot_browse_uv' then metric_value end) as new_user_tag_hot_browse_uv, \
+        max(case when metric = 'new_user_tag_browse_duration' then metric_value end) as new_user_tag_browse_duration, \
+        max(case when metric = 'new_user_tag_new_browse_duration' then metric_value end) as new_user_tag_new_browse_duration, \
+        max(case when metric = 'new_user_tag_hot_browse_duration' then metric_value end) as new_user_tag_hot_browse_duration, \
+        max(case when metric = 'new_user_gmv' then metric_value end) as new_user_gmv, \
+        max(case when metric = 'new_user_discovery_expose_pv' then metric_value end) as new_user_discovery_expose_pv, \
+        max(case when metric = 'new_user_discovery_click_pv' then metric_value end) as new_user_discovery_click_pv, \
+        max(case when metric = 'new_user_discovery_interaction_pv' then metric_value end) as new_user_discovery_interaction_pv \
+    from metric_sum_source3 \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+atomic_metric_source4 as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'return_user_exp_uv' then metric_value end) as return_user_exp_uv, \
+        max(case when metric = 'return_user_visit_uv' then metric_value end) as return_user_visit_uv, \
+        max(case when metric = 'return_user_retain_uv_1d' then metric_value end) as return_user_retain_uv_1d, \
+        max(case when metric = 'return_user_retain_uv_3d' then metric_value end) as return_user_retain_uv_3d, \
+        max(case when metric = 'return_user_retain_uv_7d' then metric_value end) as return_user_retain_uv_7d, \
+        max(case when metric = 'return_user_retain_uv_15d' then metric_value end) as return_user_retain_uv_15d, \
+        max(case when metric = 'return_user_retain_uv_30d' then metric_value end) as return_user_retain_uv_30d, \
+        max(case when metric = 'return_user_ad_pay_money_0d' then metric_value end) as return_user_ad_pay_money_0d, \
+        max(case when metric = 'return_user_ad_pay_money_7d' then metric_value end) as return_user_ad_pay_money_7d, \
+        max(case when metric = 'return_user_ad_pay_money_15d' then metric_value end) as return_user_ad_pay_money_15d, \
+        max(case when metric = 'return_user_paycontent_pay_money_0d' then metric_value end) as return_user_paycontent_pay_money_0d, \
+        max(case when metric = 'return_user_paycontent_pay_money_7d' then metric_value end) as return_user_paycontent_pay_money_7d, \
+        max(case when metric = 'return_user_paycontent_pay_money_15d' then metric_value end) as return_user_paycontent_pay_money_15d, \
+        max(case when metric = 'return_user_tag_interaction_pv' then metric_value end) as return_user_tag_interaction_pv, \
+        max(case when metric = 'return_user_tag_browse_pv' then metric_value end) as return_user_tag_browse_pv, \
+        max(case when metric = 'return_user_tag_browse_uv' then metric_value end) as return_user_tag_browse_uv, \
+        max(case when metric = 'return_user_tag_new_interaction_pv' then metric_value end) as return_user_tag_new_interaction_pv, \
+        max(case when metric = 'return_user_tag_new_browse_pv' then metric_value end) as return_user_tag_new_browse_pv, \
+        max(case when metric = 'return_user_tag_new_browse_uv' then metric_value end) as return_user_tag_new_browse_uv, \
+        max(case when metric = 'return_user_tag_hot_interaction_pv' then metric_value end) as return_user_tag_hot_interaction_pv, \
+        max(case when metric = 'return_user_tag_hot_browse_pv' then metric_value end) as return_user_tag_hot_browse_pv, \
+        max(case when metric = 'return_user_tag_hot_browse_uv' then metric_value end) as return_user_tag_hot_browse_uv, \
+        max(case when metric = 'return_user_tag_browse_duration' then metric_value end) as return_user_tag_browse_duration, \
+        max(case when metric = 'return_user_tag_new_browse_duration' then metric_value end) as return_user_tag_new_browse_duration, \
+        max(case when metric = 'return_user_tag_hot_browse_duration' then metric_value end) as return_user_tag_hot_browse_duration, \
+        max(case when metric = 'return_user_gmv' then metric_value end) as return_user_gmv, \
+        max(case when metric = 'return_user_discovery_expose_pv' then metric_value end) as return_user_discovery_expose_pv, \
+        max(case when metric = 'return_user_discovery_click_pv' then metric_value end) as return_user_discovery_click_pv, \
+        max(case when metric = 'return_user_discovery_interaction_pv' then metric_value end) as return_user_discovery_interaction_pv \
+    from metric_sum_source4 \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+atomic_metric_source5 as ( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        max(case when metric = 'active_user_exp_uv' then metric_value end) as active_user_exp_uv, \
+        max(case when metric = 'active_user_visit_uv' then metric_value end) as active_user_visit_uv, \
+        max(case when metric = 'active_user_retain_uv_1d' then metric_value end) as active_user_retain_uv_1d, \
+        max(case when metric = 'active_user_retain_uv_3d' then metric_value end) as active_user_retain_uv_3d, \
+        max(case when metric = 'active_user_retain_uv_7d' then metric_value end) as active_user_retain_uv_7d, \
+        max(case when metric = 'active_user_retain_uv_15d' then metric_value end) as active_user_retain_uv_15d, \
+        max(case when metric = 'active_user_ad_pay_money_0d' then metric_value end) as active_user_ad_pay_money_0d, \
+        max(case when metric = 'active_user_ad_pay_money_7d' then metric_value end) as active_user_ad_pay_money_7d, \
+        max(case when metric = 'active_user_ad_pay_money_15d' then metric_value end) as active_user_ad_pay_money_15d, \
+        max(case when metric = 'active_user_paycontent_pay_money_0d' then metric_value end) as active_user_paycontent_pay_money_0d, \
+        max(case when metric = 'active_user_paycontent_pay_money_7d' then metric_value end) as active_user_paycontent_pay_money_7d, \
+        max(case when metric = 'active_user_paycontent_pay_money_15d' then metric_value end) as active_user_paycontent_pay_money_15d, \
+        max(case when metric = 'active_user_tag_interaction_pv' then metric_value end) as active_user_tag_interaction_pv, \
+        max(case when metric = 'active_user_tag_browse_pv' then metric_value end) as active_user_tag_browse_pv, \
+        max(case when metric = 'active_user_tag_browse_uv' then metric_value end) as active_user_tag_browse_uv, \
+        max(case when metric = 'active_user_tag_new_interaction_pv' then metric_value end) as active_user_tag_new_interaction_pv, \
+        max(case when metric = 'active_user_tag_new_browse_pv' then metric_value end) as active_user_tag_new_browse_pv, \
+        max(case when metric = 'active_user_tag_new_browse_uv' then metric_value end) as active_user_tag_new_browse_uv, \
+        max(case when metric = 'active_user_tag_hot_interaction_pv' then metric_value end) as active_user_tag_hot_interaction_pv, \
+        max(case when metric = 'active_user_tag_hot_browse_pv' then metric_value end) as active_user_tag_hot_browse_pv, \
+        max(case when metric = 'active_user_tag_hot_browse_uv' then metric_value end) as active_user_tag_hot_browse_uv, \
+        max(case when metric = 'active_user_tag_browse_duration' then metric_value end) as active_user_tag_browse_duration, \
+        max(case when metric = 'active_user_tag_new_browse_duration' then metric_value end) as active_user_tag_new_browse_duration, \
+        max(case when metric = 'active_user_tag_hot_browse_duration' then metric_value end) as active_user_tag_hot_browse_duration, \
+        max(case when metric = 'active_user_gmv' then metric_value end) as active_user_gmv, \
+        max(case when metric = 'active_user_discovery_expose_pv' then metric_value end) as active_user_discovery_expose_pv, \
+        max(case when metric = 'active_user_discovery_click_pv' then metric_value end) as active_user_discovery_click_pv, \
+        max(case when metric = 'active_user_discovery_interaction_pv' then metric_value end) as active_user_discovery_interaction_pv \
+    from metric_sum_source5 \
+    group by exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value \
+), \
+composite_metric_source1 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(retain_uv_1d/visit_uv,0) as double) as retain_rate_1d, \
+        cast(nvl(retain_uv_3d/visit_uv,0) as double) as retain_rate_3d, \
+        cast(nvl(retain_uv_7d/visit_uv,0) as double) as retain_rate_7d, \
+        cast(nvl(retain_uv_15d/visit_uv,0) as double) as retain_rate_15d, \
+        cast(ad_pay_money_0d/exp_uv as double) as ad_arpu, \
+        cast(ad_pay_money_7d/exp_uv as double) as ad_arpu_7d, \
+        cast(ad_pay_money_15d/exp_uv as double) as ad_arpu_15d, \
+        cast(paycontent_pay_money_0d/exp_uv as double) as paycontent_arpu_0d, \
+        cast(paycontent_pay_money_7d/exp_uv as double) as paycontent_arpu_7d, \
+        cast(paycontent_pay_money_15d/exp_uv as double) as paycontent_arpu_15d, \
+        cast((nvl(ad_pay_money_0d,0)+nvl(paycontent_pay_money_0d,0))/exp_uv as double) as all_arpu, \
+        cast((nvl(ad_pay_money_7d,0)+nvl(paycontent_pay_money_7d,0))/exp_uv as double) as all_arpu_7d, \
+        cast((nvl(ad_pay_money_15d,0)+nvl(paycontent_pay_money_15d,0))/exp_uv as double) as all_arpu_15d, \
+        cast(nvl(tag_interaction_pv/tag_browse_pv,0) as double) as tag_interaction_rate, \
+        cast(nvl(tag_new_interaction_pv/tag_new_browse_pv,0) as double) as tag_new_interaction_rate, \
+        cast(nvl(tag_hot_interaction_pv/tag_hot_browse_pv,0) as double) as tag_hot_interaction_rate, \
+        cast(nvl(tag_browse_duration/(exp_uv*60000),0) as double) as tag_browse_duration_avg, \
+        cast(nvl(tag_new_browse_duration/(exp_uv*60000),0) as double) as tag_new_browse_duration_avg, \
+        cast(nvl(tag_hot_browse_duration/(exp_uv*60000),0) as double) as tag_hot_browse_duration_avg, \
+        cast(gmv/exp_uv as double) as arpu, \
+        cast(nvl(discovery_click_pv/discovery_expose_pv,0) as double) as discovery_ctr, \
+        cast(nvl(discovery_interaction_pv/discovery_expose_pv,0) as double) as discovery_cvr \
+    from atomic_metric_source1 \
+), \
+composite_metric_source2 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(push_reach_device_count/valid_push_device_count,0) as double) as valid_push_reach_rate, \
+        cast(nvl(push_click_device_count/push_reach_device_count,0) as double) as push_reach_click_rate, \
+        cast(nvl(push_activated_device_count/push_click_device_count,0) as double) as push_click_activated_rate \
+    from atomic_metric_source2 \
+), \
+composite_metric_source3 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(new_user_retain_uv_1d/new_user_visit_uv,0) as double) as new_user_retain_rate_1d, \
+        cast(nvl(new_user_retain_uv_3d/new_user_visit_uv,0) as double) as new_user_retain_rate_3d, \
+        cast(nvl(new_user_retain_uv_7d/new_user_visit_uv,0) as double) as new_user_retain_rate_7d, \
+        cast(nvl(new_user_retain_uv_15d/new_user_visit_uv,0) as double) as new_user_retain_rate_15d, \
+        cast(new_user_ad_pay_money_0d/new_user_exp_uv as double) as new_user_ad_arpu, \
+        cast(new_user_ad_pay_money_7d/new_user_exp_uv as double) as new_user_ad_arpu_7d, \
+        cast(new_user_ad_pay_money_15d/new_user_exp_uv as double) as new_user_ad_arpu_15d, \
+        cast(new_user_paycontent_pay_money_0d/new_user_exp_uv as double) as new_user_paycontent_arpu_0d, \
+        cast(new_user_paycontent_pay_money_7d/new_user_exp_uv as double) as new_user_paycontent_arpu_7d, \
+        cast(new_user_paycontent_pay_money_15d/new_user_exp_uv as double) as new_user_paycontent_arpu_15d, \
+        cast((nvl(new_user_ad_pay_money_0d,0)+nvl(new_user_paycontent_pay_money_0d,0))/new_user_exp_uv as double) as new_user_all_arpu, \
+        cast((nvl(new_user_ad_pay_money_7d,0)+nvl(new_user_paycontent_pay_money_7d,0))/new_user_exp_uv as double) as new_user_all_arpu_7d, \
+        cast((nvl(new_user_ad_pay_money_15d,0)+nvl(new_user_paycontent_pay_money_15d,0))/new_user_exp_uv as double) as new_user_all_arpu_15d, \
+        cast(nvl(new_user_tag_interaction_pv/new_user_tag_browse_pv,0) as double) as new_user_tag_interaction_rate, \
+        cast(nvl(new_user_tag_new_interaction_pv/new_user_tag_new_browse_pv,0) as double) as new_user_tag_new_interaction_rate, \
+        cast(nvl(new_user_tag_hot_interaction_pv/new_user_tag_hot_browse_pv,0) as double) as new_user_tag_hot_interaction_rate, \
+        cast(nvl(new_user_tag_browse_duration/(new_user_exp_uv*60000),0) as double) as new_user_tag_browse_duration_avg, \
+        cast(nvl(new_user_tag_new_browse_duration/(new_user_exp_uv*60000),0) as double) as new_user_tag_new_browse_duration_avg, \
+        cast(nvl(new_user_tag_hot_browse_duration/(new_user_exp_uv*60000),0) as double) as new_user_tag_hot_browse_duration_avg, \
+        cast(new_user_gmv/new_user_exp_uv as double) as new_user_arpu, \
+        cast(nvl(new_user_discovery_click_pv/new_user_discovery_expose_pv,0) as double) as new_user_discovery_ctr, \
+        cast(nvl(new_user_discovery_interaction_pv/new_user_discovery_expose_pv,0) as double) as new_user_discovery_cvr \
+    from atomic_metric_source3 \
+), \
+composite_metric_source4 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(return_user_retain_uv_1d/return_user_visit_uv,0) as double) as return_user_retain_rate_1d, \
+        cast(nvl(return_user_retain_uv_3d/return_user_visit_uv,0) as double) as return_user_retain_rate_3d, \
+        cast(nvl(return_user_retain_uv_7d/return_user_visit_uv,0) as double) as return_user_retain_rate_7d, \
+        cast(nvl(return_user_retain_uv_15d/return_user_visit_uv,0) as double) as return_user_retain_rate_15d, \
+        cast(nvl(return_user_retain_uv_30d/return_user_visit_uv,0) as double) as return_user_retain_rate_30d, \
+        cast(return_user_ad_pay_money_0d/return_user_exp_uv as double) as return_user_ad_arpu, \
+        cast(return_user_ad_pay_money_7d/return_user_exp_uv as double) as return_user_ad_arpu_7d, \
+        cast(return_user_ad_pay_money_15d/return_user_exp_uv as double) as return_user_ad_arpu_15d, \
+        cast(return_user_paycontent_pay_money_0d/return_user_exp_uv as double) as return_user_paycontent_arpu_0d, \
+        cast(return_user_paycontent_pay_money_7d/return_user_exp_uv as double) as return_user_paycontent_arpu_7d, \
+        cast(return_user_paycontent_pay_money_15d/return_user_exp_uv as double) as return_user_paycontent_arpu_15d, \
+        cast((nvl(return_user_ad_pay_money_0d,0)+nvl(return_user_paycontent_pay_money_0d,0))/return_user_exp_uv as double) as return_user_all_arpu, \
+        cast((nvl(return_user_ad_pay_money_7d,0)+nvl(return_user_paycontent_pay_money_7d,0))/return_user_exp_uv as double) as return_user_all_arpu_7d, \
+        cast((nvl(return_user_ad_pay_money_15d,0)+nvl(return_user_paycontent_pay_money_15d,0))/return_user_exp_uv as double) as return_user_all_arpu_15d, \
+        cast(nvl(return_user_tag_interaction_pv/return_user_tag_browse_pv,0) as double) as return_user_tag_interaction_rate, \
+        cast(nvl(return_user_tag_new_interaction_pv/return_user_tag_new_browse_pv,0) as double) as return_user_tag_new_interaction_rate, \
+        cast(nvl(return_user_tag_hot_interaction_pv/return_user_tag_hot_browse_pv,0) as double) as return_user_tag_hot_interaction_rate, \
+        cast(nvl(return_user_tag_browse_duration/(return_user_exp_uv*60000),0) as double) as return_user_tag_browse_duration_avg, \
+        cast(nvl(return_user_tag_new_browse_duration/(return_user_exp_uv*60000),0) as double) as return_user_tag_new_browse_duration_avg, \
+        cast(nvl(return_user_tag_hot_browse_duration/(return_user_exp_uv*60000),0) as double) as return_user_tag_hot_browse_duration_avg, \
+        cast(return_user_gmv/return_user_exp_uv as double) as return_user_arpu, \
+        cast(nvl(return_user_discovery_click_pv/return_user_discovery_expose_pv,0) as double) as return_user_discovery_ctr, \
+        cast(nvl(return_user_discovery_interaction_pv/return_user_discovery_expose_pv,0) as double) as return_user_discovery_cvr \
+    from atomic_metric_source4 \
+), \
+composite_metric_source5 as( \
+    select exp_date,appid,sceneid,exp_id,bucket_id,dimension,dimension_value, \
+        cast(nvl(active_user_retain_uv_1d/active_user_visit_uv,0) as double) as active_user_retain_rate_1d, \
+        cast(nvl(active_user_retain_uv_3d/active_user_visit_uv,0) as double) as active_user_retain_rate_3d, \
+        cast(nvl(active_user_retain_uv_7d/active_user_visit_uv,0) as double) as active_user_retain_rate_7d, \
+        cast(nvl(active_user_retain_uv_15d/active_user_visit_uv,0) as double) as active_user_retain_rate_15d, \
+        cast(active_user_ad_pay_money_0d/active_user_exp_uv as double) as active_user_ad_arpu, \
+        cast(active_user_ad_pay_money_7d/active_user_exp_uv as double) as active_user_ad_arpu_7d, \
+        cast(active_user_ad_pay_money_15d/active_user_exp_uv as double) as active_user_ad_arpu_15d, \
+        cast(active_user_paycontent_pay_money_0d/active_user_exp_uv as double) as active_user_paycontent_arpu_0d, \
+        cast(active_user_paycontent_pay_money_7d/active_user_exp_uv as double) as active_user_paycontent_arpu_7d, \
+        cast(active_user_paycontent_pay_money_15d/active_user_exp_uv as double) as active_user_paycontent_arpu_15d, \
+        cast((nvl(active_user_ad_pay_money_0d,0)+nvl(active_user_paycontent_pay_money_0d,0))/active_user_exp_uv as double) as active_user_all_arpu, \
+        cast((nvl(active_user_ad_pay_money_7d,0)+nvl(active_user_paycontent_pay_money_7d,0))/active_user_exp_uv as double) as active_user_all_arpu_7d, \
+        cast((nvl(active_user_ad_pay_money_15d,0)+nvl(active_user_paycontent_pay_money_15d,0))/active_user_exp_uv as double) as active_user_all_arpu_15d, \
+        cast(nvl(active_user_tag_interaction_pv/active_user_tag_browse_pv,0) as double) as active_user_tag_interaction_rate, \
+        cast(nvl(active_user_tag_new_interaction_pv/active_user_tag_new_browse_pv,0) as double) as active_user_tag_new_interaction_rate, \
+        cast(nvl(active_user_tag_hot_interaction_pv/active_user_tag_hot_browse_pv,0) as double) as active_user_tag_hot_interaction_rate, \
+        cast(nvl(active_user_tag_browse_duration/(active_user_exp_uv*60000),0) as double) as active_user_tag_browse_duration_avg, \
+        cast(nvl(active_user_tag_new_browse_duration/(active_user_exp_uv*60000),0) as double) as active_user_tag_new_browse_duration_avg, \
+        cast(nvl(active_user_tag_hot_browse_duration/(active_user_exp_uv*60000),0) as double) as active_user_tag_hot_browse_duration_avg, \
+        cast(active_user_gmv/active_user_exp_uv as double) as active_user_arpu, \
+        cast(nvl(active_user_discovery_click_pv/active_user_discovery_expose_pv,0) as double) as active_user_discovery_ctr, \
+        cast(nvl(active_user_discovery_interaction_pv/active_user_discovery_expose_pv,0) as double) as active_user_discovery_cvr \
+    from atomic_metric_source5 \
+), \
+composite_metric_membership as ( \
+        select exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+        cast(nvl(sum(membership_pay_uv) / nullif(sum(exp_uv), 0), 0) as double) as membership_conversion_rate, \
+        cast(nvl(sum(membership_pay_amount) / nullif(sum(exp_uv), 0), 0) as double) as membership_arpu, \
+        cast(nvl(sum(membership_pay_amount) / nullif(sum(membership_pay_uv), 0), 0) as double) as membership_arppu \
+    from atomic_metric_source1 \
+        group by exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value \
+        ), \
+composite_metric_ad as ( \
+        select exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+        cast(nvl((sum(ad_incentive_cost_amount) * 1000) / nullif(sum(ad_incentive_expose_pv), 0), 0) as double) as ad_incentive_ecpm, \
+        cast(nvl((sum(ad_patch_cost_amount) * 1000) / nullif(sum(ad_patch_expose_pv), 0), 0) as double) as ad_patch_ecpm \
+    from atomic_metric_source1 \
+        group by exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value \
+        ), \
+composite_metric_source_rc as ( \
+    select exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+        cast(nvl(rewardcenter_uv / nullif(exp_uv, 0), 0) as double) as rewardcenter_penetration_rate, \
+        cast(nvl(rewardcenter_active_retain_1d / nullif(rewardcenter_uv, 0), 0) as double) as rewardcenter_active_retain_rate_1d, \
+        cast(nvl(rewardcenter_new_retain_1d / nullif(rewardcenter_new_uv, 0), 0) as double) as rewardcenter_new_retain_rate_1d, \
+        cast(nvl(rewardcenter_active_app_retain_1d / nullif(rewardcenter_uv, 0), 0) as double) as rewardcenter_active_app_retain_rate_1d, \
+        cast(nvl(rewardcenter_new_app_retain_1d / nullif(rewardcenter_new_uv, 0), 0) as double) as rewardcenter_new_app_retain_rate_1d, \
+        cast(nvl(paycontent_pay_uv / nullif(exp_uv, 0), 0) as double) as pay_rate, \
+        cast(nvl(rewardcenter_rc_ad_revenue  / (nvl(rewardcenter_get_score_abs,0) * 0.001), 0) as double) as direct_roi, \
+        cast(nvl(rewardcenter_rc_indirect_ad_revenue / (nvl(rewardcenter_get_score_abs,0) * 0.001), 0) as double) as indirect_roi \
+    from atomic_metric_source1 \
+), \
+special_atomic_metric as( \
+    select a.exp_date, a.appid, a.sceneid, a.exp_id, a.bucket_id, '全部' as dimension, 'ALL' as dimension_value, \
+        count(distinct b.postId) as real_browse_post_cnt, \
+        count(distinct(case when a.is_return_user = 1 then b.postId end)) as return_user_real_browse_post_cnt, \
+        count(distinct(case when a.register_date = a.exp_date then b.postId end)) as new_user_real_browse_post_cnt, \
+        count(distinct(case when a.is_return_user = 0 and (a.register_date is null or a.register_date <> a.exp_date) then b.postId end)) as active_user_real_browse_post_cnt \
+    from( \
+        select user_id as userId, dt as exp_date, exp_id, bucket_id, appid, sceneid, \
+               max(is_return_user) as is_return_user, max(register_date) as register_date \
+        from lofter.dwd_ab_platform_exp_user_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by user_id , dt, exp_id, bucket_id, appid, sceneid \
+    )a \
+    left join( \
+		select userId, postId \
+		from lofter.dwd_post_browse_di \
+		where dt = '${azkaban.flow.1.days.ago}' and userId > 0 and action_type = 'page_duration' and is_real > 0 \
+		group by userId, postId \
+    )b \
+    on a.userId = b.userId \
+    group by a.exp_date,a.appid,a.sceneid,a.exp_id,a.bucket_id \
+), \
+composite_metric_result as ( \
+    select exp_date, appid, sceneid, exp_id, bucket_id, metric, dimension, dimension_value, metric_value \
+    from( \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+            'retain_rate_1d',               retain_rate_1d, \
+            'retain_rate_3d',               retain_rate_3d, \
+            'retain_rate_7d',               retain_rate_7d, \
+            'retain_rate_15d',              retain_rate_15d, \
+            'ad_arpu',                      ad_arpu, \
+            'ad_arpu_7d',                   ad_arpu_7d, \
+            'ad_arpu_15d',                  ad_arpu_15d, \
+            'paycontent_arpu_0d',           paycontent_arpu_0d, \
+            'paycontent_arpu_7d',           paycontent_arpu_7d, \
+            'paycontent_arpu_15d',          paycontent_arpu_15d, \
+            'all_arpu',                     all_arpu, \
+            'all_arpu_7d',                  all_arpu_7d, \
+            'all_arpu_15d',                 all_arpu_15d, \
+            'tag_interaction_rate',         tag_interaction_rate, \
+            'tag_new_interaction_rate',     tag_new_interaction_rate, \
+            'tag_hot_interaction_rate',     tag_hot_interaction_rate, \
+            'tag_browse_duration_avg',      tag_browse_duration_avg, \
+            'tag_new_browse_duration_avg',  tag_new_browse_duration_avg, \
+            'tag_hot_browse_duration_avg',  tag_hot_browse_duration_avg, \
+            'arpu',                         arpu, \
+            'discovery_ctr',                discovery_ctr, \
+            'discovery_cvr',                discovery_cvr \
+            ) AS metric_map \
+        FROM composite_metric_source1 \
+        union all \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+             map( \
+               'valid_push_reach_rate',             valid_push_reach_rate, \
+               'push_reach_click_rate',             push_reach_click_rate, \
+               'push_click_activated_rate',         push_click_activated_rate \
+             ) AS metric_map \
+        FROM composite_metric_source2 \
+        union all \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+            'new_user_retain_rate_1d',              new_user_retain_rate_1d, \
+            'new_user_retain_rate_3d',              new_user_retain_rate_3d, \
+            'new_user_retain_rate_7d',              new_user_retain_rate_7d, \
+            'new_user_retain_rate_15d',             new_user_retain_rate_15d, \
+            'new_user_ad_arpu',                     new_user_ad_arpu, \
+            'new_user_ad_arpu_7d',                  new_user_ad_arpu_7d, \
+            'new_user_ad_arpu_15d',                 new_user_ad_arpu_15d, \
+            'new_user_paycontent_arpu_0d',          new_user_paycontent_arpu_0d, \
+            'new_user_paycontent_arpu_7d',          new_user_paycontent_arpu_7d, \
+            'new_user_paycontent_arpu_15d',         new_user_paycontent_arpu_15d, \
+            'new_user_all_arpu',                    new_user_all_arpu, \
+            'new_user_all_arpu_7d',                 new_user_all_arpu_7d, \
+            'new_user_all_arpu_15d',                new_user_all_arpu_15d, \
+            'new_user_tag_interaction_rate',        new_user_tag_interaction_rate, \
+            'new_user_tag_new_interaction_rate',    new_user_tag_new_interaction_rate, \
+            'new_user_tag_hot_interaction_rate',    new_user_tag_hot_interaction_rate, \
+            'new_user_tag_browse_duration_avg',     new_user_tag_browse_duration_avg, \
+            'new_user_tag_new_browse_duration_avg', new_user_tag_new_browse_duration_avg, \
+            'new_user_tag_hot_browse_duration_avg', new_user_tag_hot_browse_duration_avg, \
+            'new_user_arpu',                        new_user_arpu, \
+            'new_user_discovery_ctr',               new_user_discovery_ctr, \
+            'new_user_discovery_cvr',               new_user_discovery_cvr \
+            ) AS metric_map \
+        FROM composite_metric_source3 \
+        union all \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+            'return_user_retain_rate_1d',              return_user_retain_rate_1d, \
+            'return_user_retain_rate_3d',              return_user_retain_rate_3d, \
+            'return_user_retain_rate_7d',              return_user_retain_rate_7d, \
+            'return_user_retain_rate_15d',             return_user_retain_rate_15d, \
+            'return_user_retain_rate_30d',             return_user_retain_rate_30d, \
+            'return_user_ad_arpu',                     return_user_ad_arpu, \
+            'return_user_ad_arpu_7d',                  return_user_ad_arpu_7d, \
+            'return_user_ad_arpu_15d',                 return_user_ad_arpu_15d, \
+            'return_user_paycontent_arpu_0d',          return_user_paycontent_arpu_0d, \
+            'return_user_paycontent_arpu_7d',          return_user_paycontent_arpu_7d, \
+            'return_user_paycontent_arpu_15d',         return_user_paycontent_arpu_15d, \
+            'return_user_all_arpu',                    return_user_all_arpu, \
+            'return_user_all_arpu_7d',                 return_user_all_arpu_7d, \
+            'return_user_all_arpu_15d',                return_user_all_arpu_15d, \
+            'return_user_tag_interaction_rate',        return_user_tag_interaction_rate, \
+            'return_user_tag_new_interaction_rate',    return_user_tag_new_interaction_rate, \
+            'return_user_tag_hot_interaction_rate',    return_user_tag_hot_interaction_rate, \
+            'return_user_tag_browse_duration_avg',     return_user_tag_browse_duration_avg, \
+            'return_user_tag_new_browse_duration_avg', return_user_tag_new_browse_duration_avg, \
+            'return_user_tag_hot_browse_duration_avg', return_user_tag_hot_browse_duration_avg, \
+            'return_user_arpu',                        return_user_arpu, \
+            'return_user_discovery_ctr',               return_user_discovery_ctr, \
+            'return_user_discovery_cvr',               return_user_discovery_cvr \
+            ) AS metric_map \
+        FROM composite_metric_source4 \
+        union all \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+            'active_user_retain_rate_1d',              active_user_retain_rate_1d, \
+            'active_user_retain_rate_3d',              active_user_retain_rate_3d, \
+            'active_user_retain_rate_7d',              active_user_retain_rate_7d, \
+            'active_user_retain_rate_15d',             active_user_retain_rate_15d, \
+            'active_user_ad_arpu',                     active_user_ad_arpu, \
+            'active_user_ad_arpu_7d',                  active_user_ad_arpu_7d, \
+            'active_user_ad_arpu_15d',                 active_user_ad_arpu_15d, \
+            'active_user_paycontent_arpu_0d',          active_user_paycontent_arpu_0d, \
+            'active_user_paycontent_arpu_7d',          active_user_paycontent_arpu_7d, \
+            'active_user_paycontent_arpu_15d',         active_user_paycontent_arpu_15d, \
+            'active_user_all_arpu',                    active_user_all_arpu, \
+            'active_user_all_arpu_7d',                 active_user_all_arpu_7d, \
+            'active_user_all_arpu_15d',                active_user_all_arpu_15d, \
+            'active_user_tag_interaction_rate',        active_user_tag_interaction_rate, \
+            'active_user_tag_new_interaction_rate',    active_user_tag_new_interaction_rate, \
+            'active_user_tag_hot_interaction_rate',    active_user_tag_hot_interaction_rate, \
+            'active_user_tag_browse_duration_avg',     active_user_tag_browse_duration_avg, \
+            'active_user_tag_new_browse_duration_avg', active_user_tag_new_browse_duration_avg, \
+            'active_user_tag_hot_browse_duration_avg', active_user_tag_hot_browse_duration_avg, \
+            'active_user_arpu',                        active_user_arpu, \
+            'active_user_discovery_ctr',               active_user_discovery_ctr, \
+            'active_user_discovery_cvr',               active_user_discovery_cvr \
+            ) AS metric_map \
+        FROM composite_metric_source5 \
+        union all \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+            'real_browse_post_cnt',                    real_browse_post_cnt, \
+            'return_user_real_browse_post_cnt',        return_user_real_browse_post_cnt, \
+            'new_user_real_browse_post_cnt',           new_user_real_browse_post_cnt, \
+            'active_user_real_browse_post_cnt',        active_user_real_browse_post_cnt \
+            ) AS metric_map \
+        FROM special_atomic_metric \
+    )combined \
+    LATERAL VIEW explode(metric_map) exploded AS metric, metric_value \
+    where case when rlike(metric, '.*_[0-9]+d') then endsWith(metric, concat('_', datediff('${azkaban.flow.1.days.ago}', exp_date), 'd')) \
+               else exp_date = '${azkaban.flow.1.days.ago}' end \
+) \
+insert overwrite table lofter.dws_ab_platform_experiment_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.exp_date,a.appid,a.sceneid,a.exp_id,a.bucket_id,a.metric,a.dimension,a.dimension_value,a.metric_value, \
+    b.metricDetailId, \
+    c.metricDimId \
+from ( \
+    select * from metric_sum_source1 \
+    union \
+    select * from metric_sum_source2 \
+    union \
+    select * from metric_sum_source3 \
+    union \
+    select * from metric_sum_source4 \
+    union \
+    select * from metric_sum_source5 \
+    union \
+    select * from composite_metric_result where metric_value is not null \
+    union \
+    select exp_date, appid, sceneid, exp_id, bucket_id, metric, dimension, dimension_value, metric_value \
+    from ( \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+                'membership_conversion_rate', membership_conversion_rate, \
+                'membership_arpu', membership_arpu, \
+                'membership_arppu', membership_arppu \
+            ) AS metric_map \
+        FROM composite_metric_membership \
+    ) combined \
+    LATERAL VIEW explode(metric_map) exploded AS metric, metric_value \
+    where exp_date = '${azkaban.flow.1.days.ago}' \
+    union \
+    select exp_date, appid, sceneid, exp_id, bucket_id, metric, dimension, dimension_value, metric_value \
+    from ( \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+                'ad_incentive_ecpm', ad_incentive_ecpm, \
+                'ad_patch_ecpm', ad_patch_ecpm \
+            ) AS metric_map \
+        FROM composite_metric_ad \
+    ) combined \
+    LATERAL VIEW explode(metric_map) exploded AS metric, metric_value \
+    where exp_date = '${azkaban.flow.1.days.ago}' \
+	union \
+    select exp_date, appid, sceneid, exp_id, bucket_id, metric, dimension, dimension_value, metric_value \
+    from ( \
+        SELECT exp_date, appid, sceneid, exp_id, bucket_id, dimension, dimension_value, \
+            map( \
+                'rewardcenter_penetration_rate',            rewardcenter_penetration_rate, \
+                'rewardcenter_active_retain_rate_1d',       rewardcenter_active_retain_rate_1d, \
+                'rewardcenter_new_retain_rate_1d',          rewardcenter_new_retain_rate_1d, \
+                'rewardcenter_active_app_retain_rate_1d',   rewardcenter_active_app_retain_rate_1d, \
+                'rewardcenter_new_app_retain_rate_1d',      rewardcenter_new_app_retain_rate_1d, \
+                'pay_rate',                                 pay_rate, \
+                'rewardcenter_direct_roi',                  direct_roi, \
+                'rewardcenter_indirect_roi',                 indirect_roi \
+            ) AS metric_map \
+        FROM composite_metric_source_rc \
+    ) combined \
+    LATERAL VIEW explode(metric_map) exploded AS metric, metric_value \
+    where case when rlike(metric, '.*_[0-9]+d') then endsWith(metric, concat('_', datediff('${azkaban.flow.1.days.ago}', exp_date), 'd')) \
+               else exp_date = '${azkaban.flow.1.days.ago}' end \
+) a \
+join ( \
+    select metricCode, id as metricDetailId \
+    from lofter_db_dump.ods_db_ab_metric_detail_nd \
+    where status = 1 \
+) b on a.metric = b.metricCode \
+join ( \
+    select id as metricDimId, metricId, dimName, dimCode \
+    from lofter_db_dump.ods_db_ab_metric_dim_nd \
+) c on b.metricDetailId = c.metricId and a.dimension_value = c.dimCode
+dependencies=dws_ab_platform_user_metric_di,dws_ab_platform_device_metric_di,dws_ab_platform_new_user_metric_di,dws_ab_platform_active_user_metric_di,dws_ab_platform_return_user_metric_di,dwd_ab_platform_exp_user_di

@@ -1,0 +1,152 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.shuffle.partitions=400
+hive.query.01=\
+with user_score_rule1 as ( \
+    select userId, \
+           tag, \
+           5 * cnt as score_rule1 \
+    from ( \
+        select blogId as userId, \
+               tag, \
+               count(1) as cnt \
+        from lofter.dim_post_talk lateral view explode(tags) as tag \
+        where talkType not in ('QUESTION','COS_QUESTION','SCORE_QUESTION') and createDate between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+        group by blogId, tag \
+    ) t1 \
+), \
+user_score_rule2 as ( \
+    select userId, \
+           tag, \
+           5 * cnt as score_rule2 \
+    from ( \
+        select a.userId, \
+               b.tag, \
+               count(1) as cnt \
+        from ( \
+            select postId, \
+                   publisherUserId as userId \
+            from lofter.ods_binlog_post_response_di \
+            where dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' and `_bin_op` < 2 and replyL1CommentId = 0 \
+        ) a \
+        join ( \
+            select id, \
+                   tag \
+            from lofter.dim_post_article lateral view explode(tags) as tag \
+            where publishDate <= '${azkaban.flow.1.days.ago}' and isPublished = true and valid = 0 and allowView = 0 and \
+            isForbidden = false and isCitedPost = false and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 \
+        ) b \
+        on a.postId = b.id \
+        group by a.userId, b.tag \
+    ) t1 \
+), \
+user_score_rule3 as ( \
+    select userId, \
+           tag, \
+           5 * cnt as score_rule3 \
+    from ( \
+        select userId, \
+               tag, \
+               count(1) as cnt \
+        from lofter.dim_post_article lateral view explode(tags) as tag \
+        where publishDate between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+        group by userId, tag \
+    ) t1 \
+), \
+user_score_rule4 as ( \
+    select userId, \
+           tag, \
+           1 * cnt as score_rule4 \
+    from ( \
+        select userId, \
+               tag, \
+               count(1) as cnt \
+        from lofter.dwd_post_hot_di lateral view explode(post_tags) as tag \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+        group by userId, tag \
+    ) t1 \
+), \
+user_score_rule5 as ( \
+    select userId, \
+           tag, \
+           1 * cnt as score_rule5 \
+    from ( \
+        select t3.userId, \
+               t1.tag, \
+               count(1) as cnt \
+        from ( \
+            select talkId as questionId, \
+                   tag \
+            from lofter.dim_post_talk lateral view explode(tags) as tag \
+            where talkType = 'SCORE_QUESTION' \
+        ) t1 \
+        join ( \
+            select parentQuestionId, \
+                   id as subquestionId \
+            from lofter_db_dump.ods_db_ask_question_nd \
+            where parentQuestionId <> 0 and cosplay = 3 \
+        ) t2 \
+        on t1.questionId = t2.parentQuestionId \
+        join ( \
+            select questionId, \
+                   userId \
+            from lofter_db_dump.ods_db_ask_user_item_score_nd \
+            where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+        ) t3 \
+        on t2.subquestionId = t3.questionId \
+        group by t3.userId, t1.tag \
+    ) t4 \
+), \
+user_source as ( \
+    select userId, \
+           t1.tag \
+    from ( \
+        select tag, \
+               userId \
+        from lofter.dws_tag_user_consume_di \
+        where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+        group by tag, userId \
+    ) t1 \
+    left join ( \
+        select tag from lofter.dim_black_tag \
+    ) t2 \
+    on t1.tag = t2.tag \
+    where t2.tag is null \
+), \
+tag_new_user as ( \
+    select tag, \
+           userId \
+    from lofter.dws_tag_user_consume_di \
+    where dt between date_sub('${azkaban.flow.1.days.ago}', 79) and date_sub('${azkaban.flow.1.days.ago}', 7) \
+    group by tag, userId \
+) \
+insert overwrite table lofter.dws_post_talk_user_crowd_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, \
+       tag, \
+       score, \
+       case when newFlag = 1 then '新用户' \
+            when score <= 5 and score > 3 then '浅度用户' \
+            when score <= 15 and score > 5 then '中度用户' \
+            when score > 15 then '重度用户' \
+       end as userType \
+from ( \
+    select t1.userId, \
+           t1.tag, \
+           nvl(t2.score_rule1, 0) + nvl(t3.score_rule2, 0) + nvl(t4.score_rule3, 0) + nvl(t5.score_rule4, 0) + nvl(t6.score_rule5, 0) as score, \
+           if (t7.userId is null and t7.tag is null, 1, 0) as newFlag \
+    from user_source t1 \
+    left join user_score_rule1 t2 \
+    on t1.userId = t2.userId and t1.tag = t2.tag \
+    left join user_score_rule2 t3 \
+    on t1.userId = t3.userId and t1.tag = t3.tag \
+    left join user_score_rule3 t4 \
+    on t1.userId = t4.userId and t1.tag = t4.tag \
+    left join user_score_rule4 t5 \
+    on t1.userId = t5.userId and t1.tag = t5.tag \
+    left join user_score_rule5 t6 \
+    on t1.userId = t6.userId and t1.tag = t6.tag \
+    left join tag_new_user t7 \
+    on t1.userId = t7.userId and t1.tag = t7.tag \
+) tmp1 \
+where score > 3
+dependencies=dws_tag_user_consume_di

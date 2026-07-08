@@ -1,0 +1,83 @@
+type=sparksql
+hive.query.01= \
+with t1 as ( \
+    select blogid,blog_channel,'${azkaban.flow.1.days.ago}' as day \
+    from lofter.dim_gift_post_return \
+    where blog_channel = 1 \
+    group by blogid,blog_channel \
+  union \
+    select a.blogid,blog_channel,b.day \
+    from ( \
+        select blogid,blog_channel \
+        from lofter.dim_gift_post_return \
+        where blog_channel=0 \
+        group by blogid,blog_channel \
+    ) a \
+    join ( \
+        select userid,from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as day \
+        from lofter_db_dump.ods_db_trade_pay_grade_nd \
+        where grade=1 and protectedType in (0,2) \
+    ) b on a.blogid=b.userid \
+    group by blogid,blog_channel,day \
+), \
+t2 as ( \
+    select a.blogid,count(distinct a.postid) as postnum,count(distinct c.tag) as tagnum \
+    from ( \
+        select postid,blogid \
+        from lofter.dim_gift_post_return \
+        where ispay_returngift in (0,1) and \
+              publishdate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by  postid,blogid \
+    ) a \
+    join ( \
+        select id,tag \
+        from lofter.dim_post \
+        lateral view explode(tags) myTable as tag \
+        group by id,tag \
+    ) b on a.postid=b.id \
+    join ( \
+        select tag \
+        from lofter.dim_tag \
+        where cpflag=1 \
+        group by tag \
+    ) c on b.tag=c.tag \
+    group by a.blogid \
+), \
+t3 as ( \
+    select blogid \
+    from lofter_db_dump.ods_db_blog_settings_nd \
+    where commentrank=0 \
+    group by blogid \
+), \
+t4 as ( \
+    select userid \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and level in ('S','A','B','C') \
+    group by userid \
+) \
+insert overwrite table lofter_dm.ads_ip_yiyou_traffic_limit_creator_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId as userId \
+from ( \
+    select blogid , '分成比例' as type \
+    from t1 \
+    group by blogid \
+  union \
+    select blogid,'兴趣圈层' as type \
+    from t2 \
+    where postnum>=10 and tagnum>=3 \
+    group by blogid \
+  union \
+    select b.blogid,'关闭评论区' as type \
+    from t2 a \
+    join t3 b on a.blogid=b.blogid \
+    where a.postnum>=10 \
+    group by b.blogid \
+  union \
+    select a.blogid,'创作者等级低' as type \
+    from t2 a \
+    left join t4 b on a.blogid=b.userid \
+    where a.postnum>=10 and b.userid is null \
+    group by  a.blogid \
+) a \
+group by 1 \

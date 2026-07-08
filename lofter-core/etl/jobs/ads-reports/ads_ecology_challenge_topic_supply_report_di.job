@@ -1,0 +1,166 @@
+type=sparksql
+hive.query.01=  \
+WITH ods_q_raw AS ( \
+  SELECT id AS questionid, question, \
+    from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') AS createdate_raw \
+  FROM lofter_db_dump.ods_db_ask_question_nd \
+  WHERE status = 1 AND cosplay = 6 \
+  AND from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') BETWEEN '2026-03-26' AND '${azkaban.flow.1.days.ago}' \
+), \
+challenge_post_raw AS ( \
+  SELECT questionid, postid, blogid, \
+    from_unixtime(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS create_dt \
+  FROM lofter_db_dump.ods_db_ask_challenge_post_nd \
+  WHERE from_unixtime(CAST(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '2026-03-26' AND '${azkaban.flow.1.days.ago}' \
+), \
+dim_post_tags AS ( \
+  SELECT p.id AS postid, p.userid AS blogid, p.publishdate AS dt, e.tag \
+  FROM lofter.dim_post p \
+  LATERAL VIEW explode(p.tags) e AS tag \
+  WHERE p.publishdate BETWEEN '2026-03-26' AND '${azkaban.flow.1.days.ago}' \
+  AND p.contenttype IN ('图片','文字','视频') \
+), \
+target_q_a AS ( \
+  SELECT questionid, question, createdate_raw AS createdate \
+  FROM ods_q_raw WHERE createdate_raw >= '2026-05-26' \
+), \
+ods_link_first AS ( \
+  SELECT /*+ broadcast(qo) */ qo.question, MIN(a.create_dt) AS link_first_dt \
+  FROM challenge_post_raw a \
+  INNER JOIN (SELECT questionid, question FROM ods_q_raw) qo ON a.questionid = qo.questionid \
+  GROUP BY qo.question \
+), \
+ods_tag_first AS ( \
+  SELECT /*+ broadcast(qo) */ qo.question, MIN(x.dt) AS tag_first_dt \
+  FROM dim_post_tags x \
+  INNER JOIN (SELECT DISTINCT question FROM ods_q_raw) qo ON x.tag = qo.question \
+  GROUP BY qo.question \
+), \
+target_q_ods_b AS ( \
+  SELECT r.questionid, r.question, \
+    COALESCE( \
+      CASE WHEN l.link_first_dt IS NOT NULL AND t.tag_first_dt IS NOT NULL \
+        THEN LEAST(l.link_first_dt, t.tag_first_dt) \
+        ELSE COALESCE(l.link_first_dt, t.tag_first_dt) END, \
+      r.createdate_raw) AS createdate \
+  FROM ods_q_raw r \
+  LEFT JOIN ods_link_first l ON r.question = l.question \
+  LEFT JOIN ods_tag_first  t ON r.question = t.question \
+), \
+tag_only_list AS ( \
+  SELECT tag AS question FROM ( \
+    SELECT array( \
+      '心电图刘海','不同类型的狗','看上去在生气','我喜欢这种胶带', \
+      '当家产要分开五分钟','家产的两副面孔','登场人物介绍','三人拍照模板', \
+      '猫猫钻瓶子挑战','猫的杀戮模式','谷子摄影转绘','怎么用原著福华解释QPR', \
+      '在对抗恨海情天比赛中获得零秒好成绩','带着双强挤入赛道','对抗路，欢喜冤家or宿敌？', \
+      '锐评口味表','夸夸口味表','假破镜，真重圆','怎么没人懂一下未亡人', \
+      '竹马组赛高！','破镜重圆的爽点','57种口味介绍','挚友型恋人是极好的', \
+      '什么是破镜重圆？','战斗中的感情太好吃了','恨海情天吃什么', \
+      '【同人文设】花吐症变种','幼年形态已经很完美了','你为什么嗑的是博潘', \
+      '关于29卖得比想象中大得多','博潘剧情解析：他从此不敢看观音','博潘官糖嗑点', \
+      '入坑我推来时路','我推的mbti','我推出圈梗','用物理学解释我嗑的cp', \
+      '娃圈101','作文里的我推','我推冷知识','三个词语形容我推', \
+      '晒谷大会','梦是我见你的门票','带我推打卡啦','是什么让我们无法分离', \
+      '感受vs思考','当家产偷看对方') AS arr) t \
+    LATERAL VIEW explode(arr) tmp AS tag \
+), \
+tag_only_first AS ( \
+  SELECT /*+ broadcast(tt) */ tt.question, MIN(x.dt) AS createdate \
+  FROM dim_post_tags x \
+  INNER JOIN tag_only_list tt ON x.tag = tt.question \
+  GROUP BY tt.question \
+), \
+target_q_b AS ( \
+  SELECT question, MIN(createdate) AS createdate FROM ( \
+    SELECT question, createdate FROM target_q_ods_b \
+    UNION ALL \
+    SELECT question, createdate FROM tag_only_first) u \
+  GROUP BY question \
+), \
+link_post_a_all AS ( \
+  SELECT /*+ broadcast(q) */ a.postid, a.blogid, a.create_dt AS dt \
+  FROM challenge_post_raw a \
+  INNER JOIN target_q_a q ON a.questionid = q.questionid \
+  WHERE a.create_dt >= '2026-05-26' AND a.create_dt >= q.createdate \
+), \
+challenge_post_a AS ( \
+  SELECT postid, MIN(blogid) AS blogid FROM link_post_a_all \
+  GROUP BY postid HAVING MIN(dt) = '${azkaban.flow.1.days.ago}' \
+), \
+link_post_b_all AS ( \
+  SELECT /*+ broadcast(q) */ a.postid, a.blogid, a.create_dt AS dt \
+  FROM challenge_post_raw a \
+  INNER JOIN target_q_ods_b q ON a.questionid = q.questionid \
+  WHERE a.create_dt >= q.createdate \
+), \
+tag_post_b_all AS ( \
+  SELECT /*+ broadcast(tt) */ x.postid, x.blogid, x.dt \
+  FROM dim_post_tags x \
+  INNER JOIN target_q_b tt ON x.tag = tt.question AND x.dt >= tt.createdate \
+), \
+challenge_post_b AS ( \
+  SELECT postid, MIN(blogid) AS blogid FROM ( \
+    SELECT postid, blogid, dt FROM link_post_b_all \
+    UNION ALL \
+    SELECT postid, blogid, dt FROM tag_post_b_all) u \
+  GROUP BY postid HAVING MIN(dt) = '${azkaban.flow.1.days.ago}' \
+), \
+challenge_post_all AS ( \
+  SELECT '仅挑战话题' AS scope, postid, blogid FROM challenge_post_a \
+  UNION ALL \
+  SELECT '挑战话题+tag' AS scope, postid, blogid FROM challenge_post_b \
+), \
+all_post AS ( \
+  SELECT DISTINCT postid FROM challenge_post_all \
+), \
+post_meta AS ( \
+  SELECT /*+ broadcast(cp) */ p.id AS postid, p.valid, p.contenttype \
+  FROM lofter.dim_post p \
+  INNER JOIN all_post cp ON p.id = cp.postid \
+  WHERE p.contenttype IN ('图片','文字','视频') \
+), \
+recom_pass AS ( \
+  SELECT /*+ broadcast(cp) */ DISTINCT a.postid \
+  FROM lofter_db_dump.ods_db_recommend_review_post_nd a \
+  INNER JOIN all_post cp ON a.postid = cp.postid \
+  WHERE a.recomstatus = 1 \
+), \
+first_pub AS ( \
+  SELECT DISTINCT blogid FROM lofter.dwd_par_creator_first_publish_di \
+  WHERE dt = '${azkaban.flow.1.days.ago}' AND valid = 0 AND isforbidden = false \
+), \
+metrics_all AS ( \
+  SELECT cp.scope, \
+    COUNT(cp.postid) AS new_post, \
+    SUM(CASE WHEN pm.valid <> 32 AND pm.contenttype = '图片' THEN 1 ELSE 0 END) AS new_pic_post, \
+    SUM(CASE WHEN pm.valid <> 32 AND pm.contenttype = '文字' THEN 1 ELSE 0 END) AS new_text_post, \
+    SUM(CASE WHEN pm.valid <> 32 AND pm.contenttype = '视频' THEN 1 ELSE 0 END) AS new_video_post, \
+    SUM(CASE WHEN pm.valid = 32 THEN 1 ELSE 0 END) AS new_deleted_post, \
+    SUM(CASE WHEN rp.postid IS NOT NULL THEN 1 ELSE 0 END) AS new_recom_pass_post, \
+    COUNT(DISTINCT cp.blogid) AS daily_author, \
+    COUNT(DISTINCT CASE WHEN fp.blogid IS NOT NULL THEN cp.blogid END) AS new_author \
+  FROM challenge_post_all cp \
+  LEFT JOIN post_meta  pm ON cp.postid = pm.postid \
+  LEFT JOIN recom_pass rp ON cp.postid = rp.postid \
+  LEFT JOIN first_pub  fp ON cp.blogid = fp.blogid \
+  GROUP BY cp.scope \
+), \
+topic_all AS ( \
+  SELECT scope, \
+    SUM(CASE WHEN createdate = '${azkaban.flow.1.days.ago}' THEN 1 ELSE 0 END) AS new_topic, \
+    COUNT(*) AS total_topic \
+  FROM ( \
+    SELECT '仅挑战话题' AS scope, MIN(createdate) AS createdate FROM target_q_a GROUP BY question \
+    UNION ALL \
+    SELECT '挑战话题+tag' AS scope, createdate FROM target_q_b \
+  ) u \
+  GROUP BY scope \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_ecology_challenge_topic_supply_report_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT m.scope, t.new_topic, t.total_topic, m.new_post, m.new_pic_post, m.new_text_post, m.new_video_post, \
+  m.new_recom_pass_post, ROUND(m.new_recom_pass_post / NULLIF(m.new_post, 0), 4) AS recom_pass_ratio, \
+  m.new_deleted_post, ROUND(m.new_deleted_post / NULLIF(m.new_post, 0), 4) AS delete_ratio, \
+  m.daily_author, m.new_author, ROUND(m.new_author / NULLIF(m.daily_author, 0), 4) AS new_author_ratio \
+FROM metrics_all m \
+JOIN topic_all t ON m.scope = t.scope

@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_risk_brush_hot_suspect_post_rank_posts_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postId, a.blogId, \
+    count(distinct a.userId) as hot_uv, \
+    count(distinct b.userId) as suspect_uv \
+from ( \
+    select postId, blogId, userId, ip \
+    from ( \
+        select postId, blogId, userId, ip, opTime, \
+            row_number() over (partition by postId order by opTime desc) as rk, \
+            count(1) over (partition by postId) as hot_uv \
+        from ( \
+            select postId, blogId, publisheruserid as userId, opTime, ip, \
+                row_number() over (partition by postId, publisheruserid order by opTime) as rk \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        ) t \
+        where rk = 1 \
+    ) a \
+    where rk <= 100 and hot_uv >= 20 \
+) a \
+join ( \
+    select userId from lofter.dwd_risk_brush_hot_suspect_users_di where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \
+join ( \
+    select postId \
+    from ( \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        union all \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+        union all \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    where rk <= 100 \
+    group by 1 \
+) d on a.postId = d.postId \
+left join ( \
+    select postId from lofter.dwd_risk_brush_hot_suspect_post_rank_posts_di where dt < '${azkaban.flow.1.days.ago}' \
+) e on a.postId = e.postId \
+where e.postId is null \
+group by 1, 2 \
+having suspect_uv >= hot_uv * 0.3 and suspect_uv >= 35 \
+
+dependencies=dwd_risk_brush_hot_suspect_users_di

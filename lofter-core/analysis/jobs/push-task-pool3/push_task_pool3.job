@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId,push_topic,push_params,priority,rk from lofter_dm.ads_push_task_pool3_schedule_di where dt = '${azkaban.flow.current.date}' "
+params= --topic lofter.push.json --key userId --order rk --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092
+dependencies=ads_push_task_pool3_schedule_di

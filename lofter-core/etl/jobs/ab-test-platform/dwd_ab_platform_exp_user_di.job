@@ -1,0 +1,198 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.02=\
+with base_source as( \
+    select a.*, eventId, event_cnts \
+    from( \
+        select t1.*, t2.appId, nvl(t3.hashtype, 0) hashtype, exptype, event_groupId \
+        from( \
+            select ablogversion, appversion, deviceid, expid, groupid, os, sceneid, time, traceid, cast(userid as bigint) as userId, backend_deviceid \
+            from lofter.ods_log_ab_platform_sdk_log_di \
+            where dt = '${azkaban.flow.1.days.ago}' and expId <> 47 \
+        )t1 \
+        join( \
+            select id, event_groupId, exptype, layerid, appId \
+            from lofter_db_dump.ods_db_ab_exp_nd \
+            lateral view explode(split(eventgroupids, ',')) as event_groupId \
+        )t2 on t1.expid = t2.id \
+		join lofter_db_dump.ods_db_ab_exp_group_nd t_grp \
+			 on t1.expid = t_grp.expid and t1.groupid = t_grp.id \
+        left join lofter_db_dump.ods_db_ab_flow_layer_nd t3 \
+        on t2.layerid = t3.id \
+    )a \
+    left join ( \
+        select id, appId, eventId, size(map_keys(str_to_map(regexp_replace(eventInfo , '["{}]', ''), ',', ':'))) as event_cnts \
+        from lofter_db_dump.ods_db_ab_exp_event_group_nd \
+        lateral view explode(map_keys(str_to_map(regexp_replace(eventInfo , '["{}]', ''), ',', ':'))) AS eventId \
+    ) b \
+    on a.event_groupId = b.id and a.appId = b.appId \
+), \
+mda_source AS ( \
+  SELECT distinct userid, customudid, eventId, params['style'] as style \
+  FROM lofter.ods_mda_app_di \
+  WHERE dt = '${azkaban.flow.1.days.ago}' \
+    AND occurtime BETWEEN CAST(UNIX_TIMESTAMP('${azkaban.flow.1.days.ago}','yyyy-MM-dd')*1000 AS BIGINT) \
+                   AND CAST((UNIX_TIMESTAMP('${azkaban.flow.1.days.ago}','yyyy-MM-dd') + 86400)*1000-1 AS BIGINT) \
+), \
+log_exp_layer_source as( \
+    select ablogversion, appversion, deviceid, expid, groupid, os, sceneid, time, traceid, userid, backend_deviceid, appId, hashtype, exptype \
+    from base_source a \
+    where exptype = 0 \
+    union all \
+    select ablogversion, appversion, deviceid, a.expid, a.groupid, os, sceneid, time, traceid, a.userid, backend_deviceid, appId, hashtype, exptype \
+    from( \
+        select * \
+        from base_source \
+        where exptype = 1 and (event_cnts is null or event_cnts = 0) \
+    )a \
+    union all \
+    select ablogversion, appversion, deviceid, a.expid, a.groupid, os, sceneid, time, traceid, a.userid, backend_deviceid, appId, hashtype, exptype \
+    from( \
+        select * \
+        from base_source \
+        where exptype = 1 and hashtype = 0 and event_cnts > 0 \
+    )a \
+    join( \
+        select a.userid, expid, groupId, event_cnts \
+        from( \
+            select * \
+            from base_source \
+            where exptype = 1 and hashtype = 0 and userid > 0 and event_cnts > 0 \
+        )a \
+        join mda_source b on a.userid = b.userid and a.eventId = b.eventId \
+        group by a.userid, expid, groupId, event_cnts \
+        having count(distinct b.eventId) = event_cnts \
+    )b  \
+    on a.userid = b.userid and a.expid = b.expid and a.groupId = b.groupId \
+    union all \
+    select ablogversion, appversion, a.deviceid, a.expid, a.groupid, os, sceneid, time, traceid, userid, backend_deviceid, appId, hashtype, exptype \
+    from( \
+        select * \
+        from base_source \
+        where exptype = 1 and hashtype = 1 and event_cnts > 0 \
+    )a \
+    join( \
+        select deviceId, expid, groupId, event_cnts \
+        from( \
+            select * \
+            from base_source \
+            where exptype = 1 and hashtype = 1 and event_cnts > 0 \
+        )a \
+        join mda_source b on a.deviceId = b.customudid and a.eventId = b.eventId \
+        group by deviceId, expid, groupId, event_cnts \
+        having count(distinct b.eventId) = event_cnts \
+    )b \
+    on a.deviceId = b.deviceId and a.expid = b.expid and a.groupId = b.groupId \
+    union all \
+    select ablogversion, appversion, deviceid, a.expid, a.groupid, os, sceneid, time, traceid, a.userid, backend_deviceid, 1 as appId, 0 as hashtype, 1 as exptype \
+    from( \
+        select ablogversion, appversion, deviceid, expid, groupid, os, sceneid, time, traceid, cast(userid as bigint) as userId, backend_deviceid \
+        from lofter.ods_log_ab_platform_sdk_log_di \
+        where dt = '${azkaban.flow.1.days.ago}' and expId = 47 \
+    )a \
+    join( \
+        select distinct a.userId, expId, groupId \
+        from( \
+            select distinct cast(userid as bigint) as userId, expId, groupId \
+            from lofter.ods_log_ab_platform_sdk_log_di \
+            where dt = '${azkaban.flow.1.days.ago}' and expId = 47 \
+        )a \
+        join( \
+            select userId, concat_ws(',', collect_set(style)) as styles \
+            from mda_source \
+            where eventId = 'z6-1' and style is not null \
+            group by userId \
+        )b \
+        on a.userId = b.userId \
+            and b.styles = CASE \
+                WHEN a.groupId = 109 THEN 'base' \
+                WHEN a.groupId = 110 THEN 'old' \
+                WHEN a.groupId = 111 THEN 'new' \
+                END \
+    )b \
+    on a.userId = b.userId and a.expId = b.expId and a.groupId = b.groupId \
+), \
+middle_result_source as( \
+select user_id, appId, appversion, os, deviceid, traceid, sceneid, expid, groupid, modify_time, exp_ver, exp_type, ablogversion, time, backend_deviceid \
+from( \
+    select user_id, appId, appversion, os, deviceid, traceid, sceneid, expid, groupid, modify_time, exp_ver, exp_type, ablogversion, time, backend_deviceid \
+    from( \
+        select if(a.user_id is not null and a.user_id <> 0,a.user_id,d.userid) as user_id, appId, \
+               appversion, os, c.deviceUdid as deviceid, traceid, sceneid, expid, groupid, modify_time,exp_ver, exp_type, ablogversion, time, a.deviceid as backend_deviceid \
+        from ( \
+            select userid as user_id, \
+                   appversion, \
+                   os, \
+                   deviceid, \
+                   traceid, \
+                   sceneid, \
+                   expid, \
+                   groupid, \
+                   time as modify_time, \
+                   null as exp_ver, \
+                   exptype as exp_type, \
+                   ablogversion, \
+                   time, \
+                   appId \
+            from log_exp_layer_source \
+            where hashtype = 1 \
+        ) a \
+        left join ( \
+            select customudid as device_id, deviceUdid \
+            from lofter.dwd_device_mapping_detail_di \
+            where dt = '${azkaban.flow.1.days.ago}' and customudid != 'null' \
+        ) c on a.deviceid = c.device_id \
+        left join ( \
+            select deviceudid,userids[0] as userid \
+            from lofter.device_active \
+            where dt = '${azkaban.flow.1.days.ago}' and size(userids) > 0 \
+        ) d on c.deviceUdid = d.deviceUdid \
+    ) \
+    union all \
+    select user_id, appId, appversion, os, c.deviceUdid as deviceid, traceid, sceneid, expid, groupid, modify_time, exp_ver, exp_type, ablogversion, time, a.deviceid  as backend_deviceid \
+    from ( \
+        select userid as user_id, \
+            appversion, \
+            os, \
+            deviceid, \
+            traceid, \
+            sceneid, \
+            expid, \
+            groupid, \
+            time as modify_time, \
+            null as exp_ver, \
+            exptype as exp_type, \
+            ablogversion, \
+            time, \
+            appId \
+        from log_exp_layer_source where hashtype = 0 \
+    )a \
+    left join ( \
+        select customudid as device_id, deviceUdid \
+        from lofter.dwd_device_mapping_detail_di \
+        where dt = '${azkaban.flow.1.days.ago}' and customudid is not null and customudid != 'null' \
+    ) c on a.deviceid = c.device_id \
+) where user_id is not null \
+) \
+insert overwrite table lofter.dwd_ab_platform_exp_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select m.user_id, m.appId, m.appversion, m.os, m.deviceid, m.traceid, m.sceneid, m.expid, m.groupid, m.modify_time, m.exp_ver, m.exp_type, m.ablogversion, m.time, m.backend_deviceid, s.state as exp_state, \
+       if(r.userId is not null, 1, 0) as is_return_user, \
+       dm.register_date \
+from middle_result_source m \
+left join ( \
+    select id, state from lofter_db_dump.ods_db_ab_exp_nd \
+) s on m.expid = s.id \
+left join ( \
+    select distinct userId \
+    from lofter.dwd_user_return_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) r on m.user_id = r.userId \
+left join ( \
+    select id, from_unixtime(createtime/1000, 'yyyy-MM-dd') as register_date \
+    from lofter.dim_user \
+) dm on m.user_id = dm.id \
+where m.user_id <> 0 and \
+      (m.expId != 185 or m.appVersion = '8.3.38.1' or version_compare(m.appVersion, '8.3.38.1') > 0) \

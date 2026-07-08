@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_blog_monitor_qianfen_di partition(dt='${azkaban.flow.1.days.ago}') \
+select b.blogid, c.ljfans, d.blognickname, concat('https://', d.blogname,'.lofter.com') as blogurl, \
+       a.level, a.post_count_std, a.tupian, a.wenzi, a.shipin, a.maxfwdt, a.category_r1, a.lingyu_r1, \
+       case when c.ljfans < 5000 then '千粉' when c.ljfans < 10000 then '5千粉' when c.ljfans >= 10000 then '万粉' else null end as fanstype, \
+       case when c.ljfans < 5000 then b.fans1kdt when c.ljfans < 10000 then b.fans5kdt else fans1wdt end as fansdt, \
+       c.fans_30d, c.fans_1d, concat_ws(',', d.authDomainNames) as authenticatenames \
+from ( \
+     select blogId, \
+                first_value(if(currentFans >= 1000 and prevFans < 1000, dt, null), true) as fans1kdt, \
+                first_value(if(currentFans >= 5000 and prevFans < 5000, dt, null), true) as fans5kdt, \
+                first_value(if(currentFans >= 10000 and prevFans < 10000, dt, null), true) as fans1wdt \
+         from ( \
+           select blogId, dt, \
+                  sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as currentFans, \
+                  nvl(sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) as prevFans \
+           from ( \
+             select blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') as dt, count(distinct userId) fans \
+             from lofter_db_dump.ods_db_user_following_nd \
+             where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+             group by blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd')  \
+           ) tt \
+         ) \
+         where currentFans >= 1000 \
+         group by blogId \
+     ) b \
+     join ( \
+        select blogId, \
+               count(distinct userId) as ljfans, \
+               count(distinct if(datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd')) < 30, userId, null)) as fans_30d, \
+               count(distinct if(from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', userId, null)) as fans_1d \
+        from lofter_db_dump.ods_db_user_following_nd \
+        where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by blogId \
+     ) c on b.blogId = c.blogId \
+     join lofter.dim_blog d on b.blogId = d.id \
+     left join ( \
+        select userId as blogId, level, post_count_std, 0 as tupian, 0 as wenzi, 0 as shipin, post_last_date as maxfwdt, \
+               element_at(post_top_categories,1) as category_r1, element_at(post_top_domains,1) as lingyu_r1 \
+        from lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}' \
+     ) a on b.blogId = a.blogId \
+ where c.ljfans >= 1000 \
+distribute by 1
+dependencies=

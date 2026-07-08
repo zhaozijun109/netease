@@ -1,0 +1,21 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "TrafficSensingItemFeature",
+  "fields": [
+    {"name": "itemId", "type": "string"},
+    {"name": "itemType", "type": "string"},
+    {"name": "publishTime", "type": "long"},
+    {"name": "blogLevel", "type": "string"},
+    {"name": "ip", "type": "string"},
+    {"name": "exposure", "type": "long"},
+    {"name": "hot", "type": "long"},
+    {"name": "recommend", "type": "long"},
+    {"name": "share", "type": "long"},
+    {"name": "isInRecommendPool", "type": "int"},
+    {"name": "response", "type": ["null", "long"], "default": null},
+    {"name": "collectionBrowse", "type": ["null", "long"], "default": null},
+    {"name": "recommendExposure", "type": ["null", "long"], "default": null},
+    {"name": "click", "type": ["null", "long"], "default": null}
+  ]
+}

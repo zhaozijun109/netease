@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_post_content_info_total_dd` partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.columnId, \
+		tmp1.columnType, \
+		tmp1.contentid AS postId, \
+		tmp1.exposureCount, \
+        tmp1.clickCount, \
+		tmp1.clickRateCount, \
+        tmp2.hotCount \
+FROM \
+( \
+        SELECT  columnId, \
+                columnType, \
+                contentid, \
+                SUM(exposureCount)  AS exposureCount, \
+                SUM(clickCount)     AS clickCount, \
+                NVL(SUM(clickCount)/SUM(exposureCount),0) AS clickRateCount \
+        FROM  `lofter_dm`.`ads_column_content_info_total_dd` \
+        WHERE dt = '${azkaban.flow.1.days.ago}' AND columnType = 'ARTICLE' \
+        GROUP BY columnId, \
+                 columnType, \
+                 contentid \
+) tmp1 \
+LEFT JOIN \
+( \
+        SELECT postid, \
+               NVL(hot, 0) AS hotCount \
+        FROM lofter.dws_post_interaction_dd \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+) tmp2 \
+ON tmp1.contentid = tmp2.postid
+dependencies=ads_column_content_info_total_dd

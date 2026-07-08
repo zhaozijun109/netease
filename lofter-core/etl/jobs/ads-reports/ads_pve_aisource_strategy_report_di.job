@@ -1,0 +1,429 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_pve_aisource_strategy_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+  a.dt as base_date, \
+  strategyid, \
+  fufei_flg, \
+  strategyflowrange, \
+  modelname, \
+  a.roleid, \
+  rolename, \
+  roletype, \
+  datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_1d, \
+  sum( \
+    CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_1d, \
+  sum( \
+    CASE \
+      WHEN b.dt = date_add(a.dt, 0) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount1d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_3d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_3d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats3d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_3d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_3d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount3d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_5d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_5d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats5d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_5d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_5d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount5d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_7d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_7d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 6) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount7d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_15d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_15d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 14) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount15d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.chatuser \
+      ELSE NULL \
+    END \
+  ) AS chat_uv_30d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN concat_ws(',', b.chatuser, b.chatrole) \
+      ELSE NULL \
+    END \
+  ) AS chat_rolenum_30d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN total_chats \
+      ELSE 0 \
+    END \
+  ) as total_chats30d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.amountuser \
+      ELSE NULL \
+    END \
+  ) AS amount_uv_30d, \
+  count( \
+    DISTINCT CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN concat_ws(',', b.amountuser, b.amountrole) \
+      ELSE NULL \
+    END \
+  ) AS amount_rolenum_30d, \
+  sum( \
+    CASE \
+      WHEN b.dt between date_add(a.dt, 0) and date_add(a.dt, 29) \
+      AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN total_amount \
+      ELSE 0 \
+    END \
+  ) as total_amount30d, \
+  abgroup, \
+    count( \
+      DISTINCT CASE \
+        WHEN b.dt = date_add(a.dt, 0) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_1d, \
+      count( \
+      DISTINCT CASE \
+        WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 2) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (2) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_3d, \
+        count( \
+      DISTINCT CASE \
+        WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 4) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (4) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_5d, \
+         count( \
+      DISTINCT CASE \
+        WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 6) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_7d, \
+          count( \
+      DISTINCT CASE \
+        WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 14) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (14) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_15d, \
+            count( \
+      DISTINCT CASE \
+        WHEN b.dt between date_add(a.dt, 0) and   date_add(a.dt, 29) \
+        AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN concat_ws(',', b.chatuser, b.chatrole,b.dt) \
+        ELSE NULL \
+      END \
+    ) AS chat_role_days_30d \
+from \
+  ( \
+    select \
+      dt, \
+      strategyid, \
+      roleid, \
+      userid, \
+      modelname, \
+      id, \
+      usergroup as fufei_flg, \
+      strategyflowrange, \
+	  abgroup \
+    from \
+      lofter.ods_log_pve_model_match_log_di \
+    where \
+      dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 29) \
+      AND '${azkaban.flow.1.days.ago}' \
+      and logtype = 'MODEL_MATCH_LOG' \
+      and bigmodel = TRUE \
+      and strategychatrange = -1 \
+  ) a \
+  join ( \
+    select \
+      id, \
+      rolename, \
+      case \
+        when type in (1, 2, 3, 4) then 'ugc' \
+        when type in (0, 10, 20) then 'ogc' \
+        else 'other' \
+      end as roletype \
+    from \
+      lofter_db_dump.ods_db_pve_role_info_nd \
+    where \
+      rolename is not null \
+      and id > 0 \
+    group by \
+      id, \
+      rolename, \
+      case \
+        when type in (1, 2, 3, 4) then 'ugc' \
+        when type in (0, 10, 20) then 'ogc' \
+        else 'other' \
+      end \
+  ) d on a.roleid = d.id \
+  left join ( \
+    select \
+      a.dt, \
+      a.userId as chatuser, \
+      a.roleid as chatrole, \
+     total_chats , \
+	  b.userid as amountuser, \
+	  b.roleid as amountrole, \
+	  total_amount   \
+    from \
+     \
+    (select dt,userId,roleid,total_chats \
+    from \
+      lofter.dws_pve_user_role_chats_di \
+      where dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+      AND '${azkaban.flow.1.days.ago}') a \
+ \
+	  left join \
+	   \
+	  (select  dt,userId,roleid,total_amount \
+	  from  \
+      lofter.dws_pve_user_role_amount_di \
+      where dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+      AND '${azkaban.flow.1.days.ago}') b \
+	  on a.dt=b.dt and a.userid=b.userid and a.roleid=b.roleid \
+  ) b  \
+  on a.userId = b.chatuser \
+  and a.roleid = b.chatrole \
+  and b.dt BETWEEN date_add(a.dt, 0) \
+  AND date_add(a.dt, 29) \
+ \
+WHERE \
+  datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 2, 4, 6, 14, 29) \
+group by \
+  a.dt, \
+  strategyid, \
+  fufei_flg, \
+  strategyflowrange, \
+  modelname, \
+  a.roleid, \
+  rolename, \
+  roletype, \
+  datediff('${azkaban.flow.1.days.ago}', a.dt), \
+  abgroup \
+  grouping sets ( \
+    ( \
+      a.dt, \
+      strategyid, \
+      fufei_flg, \
+      strategyflowrange, \
+      modelname, \
+      a.roleid, \
+      rolename, \
+      roletype, \
+      datediff('${azkaban.flow.1.days.ago}', a.dt), \
+	  abgroup \
+    ), \
+    ( \
+      a.dt, \
+      strategyid, \
+      fufei_flg, \
+      strategyflowrange, \
+      modelname, \
+      roletype, \
+      datediff('${azkaban.flow.1.days.ago}', a.dt), \
+	  abgroup \
+    ), \
+    ( \
+      a.dt, \
+      strategyid, \
+      fufei_flg, \
+      strategyflowrange, \
+      modelname, \
+      datediff('${azkaban.flow.1.days.ago}', a.dt), \
+	  abgroup \
+    ) \
+  ) \
+

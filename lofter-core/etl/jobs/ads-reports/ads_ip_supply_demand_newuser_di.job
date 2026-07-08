@@ -1,0 +1,91 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_to_array as 'com.netease.wm.udf.bitmap.BitmapToArrayUDF';
+hive.query.02=insert overwrite table lofter_dm.ads_ip_supply_demand_newuser_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select a.ip,case when c.name is not null then 1 else 0 end as isguide, rec_pool_post_cnt, \
+       all_scene_post_validpv,rec_post_validpv,all_scene_validuv, \
+       rec_validuv,all_scene_post_valid_cnt,rec_post_valid_cnt, \
+       content_device_type device_type \
+from \
+( \
+    select content_device_type,ip,count(distinct t1.postid) rec_pool_post_cnt \
+    from \
+    ( \
+        select postid,content_device_type \
+        from \
+        ( \
+            select cast(conv(split(item_id,'_')[1], 16, 10) as bigint)as postid,array('new','return_30') as content_device_types \
+            from rec.rec_ra_item_pool_v1 \
+            where day = '${azkaban.flow.1.days.ago}' \
+            union all \
+            select cast(conv(split(item_id,'_')[1], 16, 10) as bigint)as postid,array('new') as content_device_types \
+            from rec.rec_new_user_addition_item_pool_v1 \
+            where day = '${azkaban.flow.1.days.ago}' \
+        ) \
+        lateral view explode(content_device_types) t1 as content_device_type \
+        group by postid,content_device_type \
+    ) t1 \
+    join \
+    ( \
+        select id postid,ip \
+        from lofter.dim_post \
+        lateral view explode(ips) t1 as ip \
+        where  ispublished=true and isforbidden=false and iscitedpost=false \
+        and allowview=0 \
+        and contenttype in ("图片","文字","视频") \
+        and valid in (0,12) \
+        group by postid,ip \
+    ) t2 \
+    on t1.postid=t2.postid \
+    group by content_device_type,ip \
+) a \
+left join \
+( \
+select device_type,ip,count(all_scene_postid) all_scene_post_validpv,count(rec_postid) rec_post_validpv,count(distinct deviceudid) all_scene_validuv,count(distinct case when rec_postid is not null then deviceudid end) rec_validuv,count(distinct all_scene_postid) all_scene_post_valid_cnt,count(distinct rec_postid ) rec_post_valid_cnt \
+from \
+( \
+select device_type,ip,deviceudid,t1.postid all_scene_postid,case when device_type= 'new' and (t2.postid is not null or t3.postid is not null) then t1.postid when device_type= 'return_30' and t2.postid is not null then t1.postid end rec_postid \
+from \
+( \
+    select device_type,ip,deviceudid,postid \
+    from \
+        ( \
+        select device_type,post_ip ip,deviceudid,bitmap_to_array(browse_post_bitmap) postids \
+        from lofter.dws_growth_device_ip_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        and is_paid_subscribe=0 \
+        group by device_type,post_ip,deviceudid,postids \
+        ) \
+    lateral view explode(postids) t1 as postid \
+    group by device_type,ip,deviceudid,postid  \
+)t1   \
+left join \
+( \
+    select day dt,cast(conv(split(item_id,'_')[1], 16, 10) as bigint)as postid \
+    from rec.rec_ra_item_pool_v1 \
+    where day = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.postid = t2.postid \
+left join \
+( \
+    select cast(conv(split(item_id,'_')[1], 16, 10) as bigint)as postid \
+    from rec.rec_new_user_addition_item_pool_v1 \
+    where day = '${azkaban.flow.1.days.ago}' \
+) t3 \
+on t1.postid=t3.postid \
+group by device_type,ip,deviceudid,t1.postid,t2.postid,t3.postid \
+) \
+group by device_type,ip \
+) b \
+on a.ip=b.ip and a.content_device_type=b.device_type \
+left join \
+( \
+    SELECT name,case when effectusers=1 then 'new' else 'return_30' end device_type \
+    from \
+    ( \
+    select name,split(effectusers,',') effectusers_array \
+    from lofter_db_dump.ods_db_user_guide_ip_nd where status=0 and effectusers is not null limit 10 \
+    ) \
+    lateral view explode(effectusers_array) a effectusers \
+    where effectusers in (1,2) \
+) c \
+on a.ip=c.name and a.content_device_type=c.device_type \

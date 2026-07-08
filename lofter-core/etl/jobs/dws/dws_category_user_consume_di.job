@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=create temporary function expand_category as 'com.netease.wm.udf.ExpandPostCategory';
+hive.query.02=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.03=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.04=insert overwrite table lofter.dws_category_user_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+select category, userId, count(1) as pv, bitmap_count(to_bitmap(a.postId)) as post_count, \
+       to_bitmap(a.postId) as post_bitmap \
+from ( \
+  select postId, userId \
+  from lofter.dwd_post_browse_di \
+  where dt = '${azkaban.flow.1.days.ago}' and userId > 0 and postId > 0 and is_real > 0 \
+) a join ( \
+  select postId, array(category, category2, category3) as post_categories \
+  from lofter.dim_post_category_dd \
+  where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+   lateral view explode(expand_category(post_categories)) tg as category \
+where length(category) > 0 \
+group by category, userId

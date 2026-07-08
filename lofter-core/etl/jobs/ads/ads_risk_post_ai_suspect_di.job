@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=create temporary function html_text as 'com.netease.wm.udf.HtmlText';
+hive.query.02=insert overwrite table lofter_dm.ads_risk_post_ai_suspect_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, a.blogId, b.title, a.ai_suspect_comment_pv \
+from ( \
+    select postId, blogId, count(1) as ai_suspect_comment_pv \
+    from lofter.dwd_post_response_di \
+    where dt = '${azkaban.flow.1.days.ago}' and !array_contains(post_tags, 'ai') and is_valid > 0 and \
+          html_text(content) rlike '(?<![A-Za-z0-9])ai|AI(?![A-Za-z0-9])' \
+    group by 1, 2 \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select postId \
+    from lofter_dm.ads_risk_post_ai_suspect_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId \
+where c.postId is null and b.contentType = '图片' \

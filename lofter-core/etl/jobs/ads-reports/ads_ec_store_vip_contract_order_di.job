@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_store_vip_contract_order_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+SELECT sum(CASE  \
+			WHEN source = 0 \
+				THEN amount \
+			ELSE 0 \
+			END) AS amount_user \
+	,sum(CASE  \
+			WHEN source = 1 \
+				THEN amount \
+			ELSE 0 \
+			END) AS amount_auto \
+	,sum(CASE  \
+			WHEN source = 0 \
+				THEN channeldivision \
+			ELSE 0 \
+			END) AS channeldivision_user \
+	,sum(CASE  \
+			WHEN source = 1 \
+				THEN channeldivision \
+			ELSE 0 \
+			END) AS channeldivision_auto \
+	,count(DISTINCT CASE  \
+			WHEN source = 0 \
+				THEN userid \
+			ELSE NULL \
+			END) AS uv_user \
+	,count(DISTINCT CASE  \
+			WHEN source = 1 \
+				THEN userid \
+			ELSE NULL \
+			END) AS uv_auto \
+	,count(CASE  \
+			WHEN source = 0 \
+				THEN userid \
+			ELSE NULL \
+			END) AS pv_user \
+	,count(CASE  \
+			WHEN source = 1 \
+				THEN userid \
+			ELSE NULL \
+			END) AS pv_auto \
+	,paytype \
+	,platform \
+	,vipdays \
+	,amount AS price \
+FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+WHERE STATUS = 1 \
+	AND from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+GROUP BY paytype \
+	,platform \
+	,vipdays \
+	,amount \

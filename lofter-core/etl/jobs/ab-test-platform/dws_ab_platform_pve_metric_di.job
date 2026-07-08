@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter.dws_ab_platform_pve_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.userId,t2.chats_pv,t2.chats_uv,t2.roles_uv,t3.pay_money,t3.pay_uv,t4.visit_uv \
+from ( \
+    select userId \
+    from lofter.dim_pve_user  \
+)t1 \
+left join( \
+    select userId, sum(total_chats) as chats_pv, \
+        if(sum(total_chats)>0,1,0) as chats_uv, \
+        count(distinct roleId) as roles_uv \
+    from lofter.dws_pve_user_role_chats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+)t2 on t1.userId = t2.userId \
+left join( \
+    select userId, sum(total_amount) as pay_money, \
+        1 as pay_uv \
+    from lofter.dws_pve_user_role_amount_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+)t3 on t1.userId = t3.userId \
+left join( \
+    select userId,1 as visit_uv \
+    from lofter.dws_pve_user_action_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+)t4 on t1.userId = t4.userId

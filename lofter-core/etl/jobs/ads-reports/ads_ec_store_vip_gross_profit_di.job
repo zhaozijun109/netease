@@ -1,0 +1,157 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_store_vip_gross_profit_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.* \
+	,b.settledNewUserMoney \
+	,b.settledOrderMoney \
+	,b.settledMoney \
+FROM ( \
+	SELECT sum(amount) AS amount \
+		,sum(channeldivision) AS channeldivision \
+		,from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') AS day \
+		,is_official \
+		,CASE  \
+			WHEN is_internal_attribute_order IS NULL \
+				THEN 0 \
+			ELSE is_internal_attribute_order \
+			END is_internal_attribute_order \
+		,actpwd_channel \
+		,'day' AS period \
+	FROM ( \
+		SELECT amount \
+			,channeldivision \
+			,finishtime \
+			,id \
+		FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+		WHERE STATUS = 1 \
+			AND from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+		) a \
+	LEFT JOIN ( \
+		SELECT dt \
+			,is_official \
+			,is_internal_attribute_order \
+			,actpwd_channel \
+			,order_id \
+		FROM lofter.dwd_paid_subscribe_order_di \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+			AND from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+			AND order_type = 3 \
+		) b ON a.id = b.order_id \
+	GROUP BY from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') \
+		,is_official \
+		,CASE  \
+			WHEN is_internal_attribute_order IS NULL \
+				THEN 0 \
+			ELSE is_internal_attribute_order \
+			END \
+		,actpwd_channel \
+	 \
+	UNION \
+	 \
+	SELECT sum(amount) AS amount \
+		,sum(channeldivision) AS channeldivision \
+		,from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM') AS day \
+		,is_official \
+		,CASE  \
+			WHEN is_internal_attribute_order IS NULL \
+				THEN 0 \
+			ELSE is_internal_attribute_order \
+			END is_internal_attribute_order \
+		,actpwd_channel \
+		,'month' AS period \
+	FROM ( \
+		SELECT amount \
+			,channeldivision \
+			,finishtime \
+			,id \
+		FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+		WHERE STATUS = 1 \
+			AND from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM') = substr('${azkaban.flow.2.days.ago}', 1, 7) \
+		) a \
+	LEFT JOIN ( \
+		SELECT dt \
+			,is_official \
+			,is_internal_attribute_order \
+			,actpwd_channel \
+			,order_id \
+		FROM lofter.dwd_paid_subscribe_order_di \
+		WHERE substr(dt, 1, 7) = substr('${azkaban.flow.2.days.ago}', 1, 7) \
+			AND from_unixtime(cast(pay_time / 1000 AS BIGINT), 'yyyy-MM') = substr('${azkaban.flow.2.days.ago}', 1, 7) \
+			AND order_type = 3 \
+		) b ON a.id = b.order_id \
+	GROUP BY from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM') \
+		,is_official \
+		,CASE  \
+			WHEN is_internal_attribute_order IS NULL \
+				THEN 0 \
+			ELSE is_internal_attribute_order \
+			END \
+		,actpwd_channel \
+	) a \
+LEFT JOIN ( \
+	SELECT b.nickname \
+		,a.settledNewUserMoney \
+		,a.settledOrderMoney \
+		,a.settledMoney \
+		,a.day \
+		,period \
+	FROM ( \
+		SELECT userid \
+			,sum(settledNewUserMoney / 100) AS settledNewUserMoney \
+			,sum(settledOrderMoney / 100) AS settledOrderMoney \
+			,sum(settledMoney / 100) AS settledMoney \
+			,concat_ws('-', substr(cast(DATE AS string), 1, 4), substr(cast(DATE AS string), 5, 2), substr(cast(DATE AS string), 7, 2)) AS day \
+			,'day' AS period \
+		FROM lofter_db_dump.ods_db_kol_statis_user_day_result_nd \
+		WHERE concat_ws('-', substr(cast(DATE AS string), 1, 4), substr(cast(DATE AS string), 5, 2), substr(cast(DATE AS string), 7, 2)) = '${azkaban.flow.1.days.ago}' \
+			AND settlementType = 'CPS' \
+		GROUP BY userid \
+			,concat_ws('-', substr(cast(DATE AS string), 1, 4), substr(cast(DATE AS string), 5, 2), substr(cast(DATE AS string), 7, 2)) \
+		 \
+		UNION \
+		 \
+		SELECT userid \
+			,sum(settledNewUserMoney / 100) AS settledNewUserMoney \
+			,sum(settledOrderMoney / 100) AS settledOrderMoney \
+			,sum(settledMoney / 100) AS settledMoney \
+			,concat_ws('-', substr(cast(month AS string), 1, 4), substr(cast(month AS string), 5, 2)) AS day \
+			,'month' AS period \
+		FROM ( \
+			SELECT userid \
+				,settledNewUserMoney \
+				,settledOrderMoney \
+				,settledMoney \
+				,month \
+				,settlementType \
+			FROM lofter_db_dump.ods_db_kol_statis_user_month_result_nd \
+			 \
+			UNION ALL \
+			 \
+			SELECT userid \
+				,0 AS settledNewUserMoney \
+				,rebatemoney AS settledOrderMoney \
+				,rebatemoney AS settledMoney \
+				,month \
+				,'CPS' AS settlementType \
+			FROM lofter_db_dump.ods_db_kol_statis_user_month_rebate_result_nd \
+			) a \
+		WHERE concat_ws('-', substr(cast(month AS string), 1, 4), substr(cast(month AS string), 5, 2)) = substr('${azkaban.flow.2.days.ago}', 1, 7) \
+			AND settlementType = 'CPS' \
+		GROUP BY userid \
+			,concat_ws('-', substr(cast(month AS string), 1, 4), substr(cast(month AS string), 5, 2)) \
+		) a \
+	JOIN ( \
+		SELECT CONCAT ( \
+				'米良[' \
+				,nickname \
+				,']' \
+				) AS nickname \
+			,userid \
+		FROM lofter_db_dump.ods_db_kol_user_nd \
+		WHERE settlementType = 'CPS' \
+			AND leaderid = 0 \
+		GROUP BY nickname \
+			,userid \
+		) b ON a.userid = b.userid \
+	) b ON a.day = b.day \
+	AND a.actpwd_channel = b.nickname \
+	AND a.period = b.period \

@@ -1,0 +1,165 @@
+type=sparksql
+hive.query.01=\
+with tagSource as ( \
+    select t1.tag, \
+           t2.ip, \
+           t1.post_count_std \
+    from ( \
+        select tag, post_count_std from lofter.dws_tag_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std > 1000 and length(tag) < 10 \
+    ) t1 \
+    join ( \
+        select tag, ip from lofter.dwd_tag_ip_mapping_nd \
+    ) t2 \
+    on t1.tag = t2.tag \
+), \
+userTagIpSource as ( \
+    select t1.userType, \
+           t1.tag, \
+           t2.ip, \
+           t1.searchUv \
+    from ( \
+        select case when user_type = 'new' then 1 \
+                    when user_type = 'reback' then 2 \
+               end as userType, \
+               tag, \
+               max(uv) as searchUv \
+        from rec.rec_new_user_guide_v3 \
+        where day = '${azkaban.flow.1.days.ago}' and user_type in ('new', 'reback') \
+        group by user_type, tag \
+    ) t1 \
+    join ( \
+        select tag, ip from tagSource \
+    ) t2 \
+    on t1.tag = t2.tag \
+), \
+complementUserIpTagSource as ( \
+    select userType, \
+           tag, \
+           ip, \
+           type, \
+           searchUv \
+    from ( \
+        select userType, \
+               tag, \
+               ip, \
+               type, \
+               searchUv, \
+               row_number() over(partition by userType, ip, tag order by type, searchUv desc) as rn \
+        from ( \
+            select userType, \
+                   tag, \
+                   ip, \
+                   1 as type, \
+                   max(searchUv) as searchUv \
+            from userTagIpSource \
+            group by userType, \
+                     tag, \
+                     ip \
+            union all \
+            select userType, \
+                   tag, \
+                   ip, \
+                   2 as type, \
+                   max(searchUv) as searchUv \
+            from ( \
+                select 1 as userType, \
+                       tag, \
+                       ip, \
+                       post_count_std as searchUv \
+                from tagSource \
+                union all \
+                select 2 as userType, \
+                       tag, \
+                       ip, \
+                       post_count_std as searchUv \
+                from tagSource \
+            ) t1 \
+             group by userType, \
+                      tag, \
+                      ip \
+        ) t2 \
+    ) t3 \
+    where rn = 1 \
+), \
+top15IpSource as ( \
+    select userType, \
+           ip, \
+           ipUserRank \
+    from ( \
+        select userType, \
+               ip, \
+               row_number() over(partition by userType order by searchUv desc) as ipUserRank \
+        from ( \
+            select userType, ip, max(searchUv) as searchUv from userTagIpSource group by userType, ip \
+        ) t1 \
+    ) t2 \
+    where ipUserRank <= 15 \
+), \
+top15UserSource as ( \
+    select userType, \
+           ip, \
+           ipUserRank, \
+           tag, \
+           tagIpRank \
+    from ( \
+        select t1.userType, \
+               t1.ip, \
+               t1.ipUserRank, \
+               t2.tag, \
+               row_number() over(partition by t1.userType, t1.ip order by t2.type, t2.searchUv desc) as tagIpRank \
+        from top15IpSource t1 \
+        left join complementUserIpTagSource t2 \
+        on t1.userType = t2.userType and t1.ip = t2.ip \
+    ) t3 \
+    where tagIpRank <= 5 and ipUserRank <= 15 \
+) \
+insert overwrite table lofter_dm.ads_ecology_new_return_user_guide_di partition(dt='${azkaban.flow.1.days.ago}') \
+select ip, \
+       userTypes, \
+       newUserRank, \
+       returnUserRank, \
+       collect_list(tag) as tags \
+from ( \
+    select ip, \
+           userTypes, \
+           nvl(newUserRank, -1) as newUserRank, \
+           nvl(returnUserRank, -1) as returnUserRank, \
+           posexplode(tags) as (pos, tag) \
+    from ( \
+        select ip, \
+               transform(sort_array(collect_set(struct(tagIpRank, tag)), true), x -> x.tag) as tags, \
+               collect_set(userType) as userTypes, \
+               min(if(userType = 1, ipUserRank, null)) as newUserRank, \
+               min(if(userType = 2, ipUserRank, null)) as returnUserRank \
+        from ( \
+            select userType, \
+                   ip, \
+                   ipUserRank, \
+                   tag, \
+                   tagIpRank \
+            from ( \
+                select t1.userType, \
+                       t1.ip, \
+                       t1.ipUserRank, \
+                       t1.tag, \
+                       t2.tagIpRank \
+                from top15UserSource t1 \
+                left join ( \
+                    select ip, \
+                           tag, \
+                           sum(tagIpRank) as tagIpRank \
+                    from top15UserSource \
+                    group by ip, \
+                             tag \
+                ) t2 \
+                on t1.ip = t2.ip and t1.tag = t2.tag \
+            ) t3 \
+        ) t4 \
+        group by ip \
+    ) t5 \
+) t6 \
+where pos < 5 \
+group by ip, \
+         userTypes, \
+         newUserRank, \
+         returnUserRank

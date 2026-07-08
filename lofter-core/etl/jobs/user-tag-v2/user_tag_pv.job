@@ -1,0 +1,61 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag user_tag_pv --bitmap
+retries=0
+conf.spark.execute.sql = " select userid               as userId, \
+                                  'user_tag_pv' as tag_name, \
+                                  cat                  as dim1, \
+                                  grp               as dim2, \
+                                  ''                   as dim3, \
+                                  ''                   as dim4, \
+                                  subcat                  as grp, \
+                                  ''                   as value \
+                           from (          SELECT \
+                                           	    t.`userid` AS `userId`, \
+                                                 t.`count_period` AS `cat`, \
+                                                 CASE WHEN t.`pv` >= 1 AND t.`pv` < 10 THEN '1-10' \
+                                                      WHEN t.`pv` >= 10 AND t.`pv` < 50 THEN '10-50' \
+                                                      WHEN t.`pv` >= 50 AND t.`pv` < 100 THEN '50-100' \
+                                           	         WHEN t.`pv` >= 100 AND t.`pv` < 500 THEN '100-500' \
+                                           	         WHEN t.`pv` >= 500 AND t.`pv` < 1000 THEN '500-1000' \
+                                           	         WHEN t.`pv` >= 1000 THEN '1000及以上' END AS `subcat`, \
+                                           	    t.`tag` AS `grp` \
+                                           FROM ( \
+                                           	    SELECT \
+                                           	    	   `userid`, \
+                                           	    	   `tag`, \
+                                           	    	   'DAY_7' AS `count_period`, \
+                                           	    	   COUNT(`userid`) AS `pv` \
+                                           	    FROM \
+                                           	    	  `lofter`.`dwd_tag_browse_di` \
+                                           	    WHERE \
+                                           	    	  `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` >= date_sub('${azkaban.flow.1.days.ago}',7) \
+                                           	    GROUP BY `userid`,`tag` \
+                                            \
+                                           	    UNION ALL \
+                                            \
+                                           	    SELECT \
+                                           	    	   `userid`, \
+                                           	    	   `tag`, \
+                                           	    	   'DAY_15' AS `count_period`, \
+                                           	    	   COUNT(`userid`) AS `pv` \
+                                           	    FROM \
+                                           	    	  `lofter`.`dwd_tag_browse_di` \
+                                           	    WHERE \
+                                           	    	  `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` >= date_sub('${azkaban.flow.1.days.ago}',15) \
+                                           	    GROUP BY `userid`,`tag` \
+                                            \
+                                           	    UNION ALL \
+                                            \
+                                           	    SELECT \
+                                           	    	   `userid`, \
+                                           	    	   `tag`, \
+                                           	    	   'DAY_30' AS `count_period`, \
+                                           	    	   COUNT(`userid`) AS `pv` \
+                                           	    FROM \
+                                           	    	  `lofter`.`dwd_tag_browse_di` \
+                                           	    WHERE \
+                                           	    	  `dt` <= '${azkaban.flow.1.days.ago}' AND `dt` >= date_sub('${azkaban.flow.1.days.ago}',30) \
+                                           	    GROUP BY `userid`,`tag` \
+                                           ) t \
+                                           WHERE t.`pv` > 0 and length(t.`tag`) > 0  ) "

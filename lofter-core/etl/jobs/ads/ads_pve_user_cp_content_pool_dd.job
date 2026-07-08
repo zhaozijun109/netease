@@ -1,0 +1,62 @@
+type=sparksql
+executor-memory=14g
+conf.spark.executor.memoryOverhead=4g
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+conf.spark.sql.shuffle.partitions=400
+hive.query.01= \
+insert overwrite table lofter_dm.ads_pve_user_cp_content_pool_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       publishTime, \
+       blogId, \
+       title, \
+       tags, \
+       hot, \
+       row_number() over(order by publishDate, hot desc) as rank \
+from ( \
+    select t2.id as postId, \
+           t2.publishTime, \
+           t2.blogId, \
+           t2.title, \
+           t2.tags, \
+           t3.publishDate, \
+           t3.hot, \
+           row_number() over(partition by postId order by t3.publishDate,t3.hot desc) as rn \
+    from ( \
+        select id,roleName,creatorUid,createTime \
+        from lofter_db_dump.ods_db_pve_role_info_nd \
+        where type in (2,4) and (chatCount > 0 or visitCount > 0) and roleName is not null and roleName != '' and roleName != ' ' \
+    ) t1 \
+    join ( \
+        select id, blogId, blogName, publishTime, title, tags \
+        from ( \
+            select id, blogId, blogName, publishTime, title, tags, collect_set(roleName) as roleNames \
+            from ( \
+                select id, blogId, blogName, publishTime, title, tags \
+                from lofter.dim_post_article \
+                where isPublished = true and isForbidden = false and isCitedPost = false and allowView = 0 \
+                and contentType = '图片' and isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 \
+                and is_book_store = 0 and valid = 0 and publishDate <= '${azkaban.flow.1.days.ago}' \
+                and size(array_intersect(tags,array('破次元恋人','虚拟恋人','虚拟社交','自由cp'))) > 0 \
+            ) a \
+            join ( \
+                select roleName \
+                from lofter_db_dump.ods_db_pve_role_info_nd \
+                where status = 1 and publicView = 1 and (type = 0 or type = 4) \
+                group by roleName \
+            ) b \
+            where locate(roleName,title) = 0 \
+            group by id, blogId, blogName, publishTime, title, tags \
+        ) c \
+        where size(array_intersect(tags,roleNames)) = 0 \
+    ) t2 \
+    on t1.creatorUid = t2.blogId \
+    join ( \
+        select postId,publishDate,hot \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t3 \
+    on t2.id = t3.postId \
+    where t2.publishTime >= t1.createTime and (locate(t1.roleName, t2.title) > 0 or size(array_intersect(t2.tags, array(t1.roleName))) > 0) \
+) t4 \
+where rn = 1

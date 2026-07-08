@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.04=insert overwrite table lofter_dm.ads_post_highlight_comment_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid,blogid,pid,interaction_pv,ips,is_rec,content, interaction_pv_7d, post_publish_date, \
+       underscore_comment_pv, sweet_pv, bitter_pv \
+from ( \
+    select *, \
+          row_number() over (partition by postId order by interaction_pv desc) as rk \
+    from lofter.dws_post_highlight_comment_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and length(content) > 0 and interaction_pv >= 5 \
+) t \
+where rk = 1

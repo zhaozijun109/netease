@@ -1,0 +1,23 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 安全等级 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '安全等级' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select a.userId, '安全等级' as tag, \
+                                         case when a.grade = 0 then 'LEVEL_GREEN' \
+                                              when a.grade = 1 then 'LEVEL_YELLOW' \
+                                              when a.grade = 2 then 'LEVEL_RED' \
+                                              when a.grade = 3 then 'LEVEL_HIGHT_GREEN' \
+                                              end as grp \
+                                  from ( \
+                                      select blogId as userId, grade \
+                                      from lofter.dws_user_security_level_di \
+                                      where dt = '${azkaban.flow.1.days.ago}' and grade in (0,1,2,3) \
+                                  ) a   ) "

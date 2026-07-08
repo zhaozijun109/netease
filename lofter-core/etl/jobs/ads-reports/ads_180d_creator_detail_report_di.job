@@ -1,0 +1,84 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+params AS ( \
+    SELECT  \
+        '${azkaban.flow.1.days.ago}' AS base_dt,                \
+        date_sub('${azkaban.flow.1.days.ago}', 2)  AS dt_2d_ago, \
+        date_sub('${azkaban.flow.1.days.ago}', 7)  AS dt_7d_ago, \
+        date_sub('${azkaban.flow.1.days.ago}', 30) AS dt_30d_ago \
+), \
+activity_log AS ( \
+    SELECT userid, publishdate \
+    FROM lofter.dim_post_article \
+    WHERE contenttype IN ('图片','文字','视频')  \
+      AND ispublished = true  \
+      AND iscitedpost = false  \
+      AND isactivityautopost = 0  \
+      AND is_book_store = 0 \
+      and allowview=0 \
+      and valid <> 32  \
+      AND publishdate BETWEEN date_sub('${azkaban.flow.1.days.ago}', 30) AND '${azkaban.flow.1.days.ago}' \
+), \
+base_users AS ( \
+    SELECT t1.userid, t1.dt, level, blog_url, t2.blog_nickname, 'T' as data_type \
+    FROM lofter.dwd_post_publish_di t1 \
+    JOIN lofter.dws_par_creator_dd t2 ON t1.userId = t2.userId \
+    WHERE t1.dt = (SELECT base_dt FROM params) \
+      AND t2.dt = date_sub((SELECT base_dt FROM params), 1) \
+      AND datediff((SELECT base_dt FROM params), t2.post_last_date) >= 179 \
+    GROUP BY 1,2,3,4,5 \
+    UNION ALL \
+    SELECT t1.userid, t1.dt, level, blog_url, t2.blog_nickname, '2d' as data_type \
+    FROM lofter.dwd_post_publish_di t1 \
+    JOIN lofter.dws_par_creator_dd t2 ON t1.userId = t2.userId \
+    WHERE t1.dt = (SELECT dt_2d_ago FROM params) \
+      AND t2.dt = date_sub((SELECT dt_2d_ago FROM params), 1) \
+      AND datediff((SELECT dt_2d_ago FROM params), t2.post_last_date) >= 179 \
+    GROUP BY 1,2,3,4,5 \
+    UNION ALL \
+    SELECT t1.userid, t1.dt, level, blog_url, t2.blog_nickname, '7d' as data_type \
+    FROM lofter.dwd_post_publish_di t1 \
+    JOIN lofter.dws_par_creator_dd t2 ON t1.userId = t2.userId \
+    WHERE t1.dt = (SELECT dt_7d_ago FROM params) \
+      AND t2.dt = date_sub((SELECT dt_7d_ago FROM params), 1) \
+      AND datediff((SELECT dt_7d_ago FROM params), t2.post_last_date) >= 179 \
+    GROUP BY 1,2,3,4,5 \
+    UNION ALL \
+    SELECT t1.userid, t1.dt, level, blog_url, t2.blog_nickname, '30d' as data_type \
+    FROM lofter.dwd_post_publish_di t1 \
+    JOIN lofter.dws_par_creator_dd t2 ON t1.userId = t2.userId \
+    WHERE t1.dt = (SELECT dt_30d_ago FROM params) \
+      AND t2.dt = date_sub((SELECT dt_30d_ago FROM params), 1) \
+      AND datediff((SELECT dt_30d_ago FROM params), t2.post_last_date) >= 179 \
+    GROUP BY 1,2,3,4,5 \
+), \
+calc_stats AS ( \
+    SELECT  \
+        b.userid, \
+        b.dt AS stat_date, \
+        b.data_type, \
+        b.level,  \
+        b.blog_url,  \
+        b.blog_nickname, \
+        MAX(CASE WHEN log.publishdate = date_add(b.dt, 1) THEN 1 ELSE 0 END) AS has_2d, \
+        MAX(CASE WHEN log.publishdate BETWEEN date_add(b.dt, 1) AND date_add(b.dt, 7) THEN 1 ELSE 0 END) AS has_7d, \
+        MAX(CASE WHEN log.publishdate BETWEEN date_add(b.dt, 1) AND date_add(b.dt, 30) THEN 1 ELSE 0 END) AS has_30d \
+    FROM base_users b \
+    LEFT JOIN activity_log log  \
+        ON b.userid = log.userid  \
+        AND log.publishdate >= date_add(b.dt, 1)  \
+        AND log.publishdate <= date_add(b.dt, 30) \
+    GROUP BY 1,2,3,4,5,6 \
+) \
+insert overwrite table lofter_dm.ads_180d_creator_detail_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    userid, \
+    level,  \
+    blog_url, \
+    blog_nickname, \
+    CASE WHEN data_type IN ('2d', '7d', '30d') AND has_2d = 1 THEN '是' ELSE '否' END AS is_retain_2d, \
+    CASE WHEN data_type IN ('7d', '30d') AND has_7d = 1 THEN '是' ELSE '否' END AS is_retain_7d, \
+    CASE WHEN data_type IN ('30d') AND has_30d = 1 THEN '是' ELSE '否' END AS is_retain_30d, \
+    stat_date  \
+FROM calc_stats

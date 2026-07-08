@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.usergroup.UserGroupDeviceExportJob
+params=--date ${azkaban.flow.1.days.ago}

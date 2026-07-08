@@ -1,0 +1,110 @@
+type=sparksql
+hive.query.01=\
+insert \
+    overwrite table lofter_dm.ads_post_easy_fetch_comment_info_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    item_id, \
+    a.postId, \
+    a.blogId, \
+    b.url as post_url, \
+    publisher_id, \
+    c.blogname as publisher_blogname, \
+    c.blognickname as publisher_blognickname, \
+    nvl(concat('https://', c.blogname, '.lofter.com'), '') publisher_blogurl, \
+    commentid, \
+    content, \
+    comment_time, \
+    comment_date, \
+    c.allblogfans, \
+    c.followusers, \
+    c.postnum, \
+    c.followblogs, \
+    praise_cnt, \
+    recommend_cnt, \
+    loginDayCount, \
+    loginTimes \
+from \
+( \
+    select \
+        concat(conv(blogid, 10, 16), '_', conv(postid, 10, 16)) as item_id, \
+        postId, \
+        blogId, \
+        userId as publisher_id, \
+        commentid, \
+        content, \
+        concat( \
+            from_unixtime( \
+                cast(1756628304936 / 1000 as bigint), \
+                'yyyy-MM-dd HH:mm:ss' \
+            ), \
+            '.', \
+            lpad(1756628304936 % 1000, 3, '0') \
+        ) as comment_time, \
+        FROM_UNIXTIME(optime / 1000, 'yyyy-MM-dd') as comment_date \
+    from \
+        lofter.dwd_post_response_di \
+    where \
+        dt = '${azkaban.flow.1.days.ago}' \
+        and is_valid = 1 \
+        and postId <> userId \
+) a \
+left join( \
+    select \
+        id, \
+        url, \
+        blogid \
+    from \
+        lofter.dim_post \
+) b on a.postId = b.id \
+and a.blogId = b.blogId \
+left join lofter_dm.dwb_par_user_info_nd c on a.publisher_id = c.userId \
+left join( \
+    select \
+        postId, \
+        userId, \
+        sum( \
+            case \
+                when optype = 'praise' then 1 \
+                else 0 \
+            end \
+        ) as praise_cnt, \
+        sum( \
+            case \
+                when optype = 'recommend' then 1 \
+                else 0 \
+            end \
+        ) as recommend_cnt, \
+        sum( \
+            case \
+                when optype = 'subscribe' then 1 \
+                else 0 \
+            end \
+        ) as subscribe_cnt, \
+        sum( \
+            case \
+                when optype = 'reproduce' then 1 \
+                else 0 \
+            end \
+        ) as reproduce_cnt \
+    from \
+        lofter.dwd_post_hot_di \
+    where \
+        dt = '${azkaban.flow.1.days.ago}' \
+        and blogId <> userId \
+    group by \
+        postId, \
+        userId \
+) d on a.postId = d.postId \
+and a.publisher_id = d.userId \
+left join( \
+    select \
+        accountId as userId, \
+        count(distinct dt) loginDayCount, \
+        count(1) loginTimes \
+    from \
+        lofter.dwd_evt_user_login_di \
+    where \
+        dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+        accountId \
+) e on a.publisher_id = e.userId

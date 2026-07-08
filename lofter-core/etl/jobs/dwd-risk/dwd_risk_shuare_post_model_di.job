@@ -1,0 +1,98 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function resolve_ip as 'com.netease.wm.udf.ResolveIp';
+hive.query.02=insert overwrite table lofter.dwd_risk_shuare_post_model_di partition(dt = '${azkaban.flow.1.days.ago}') \
+              select  a.blogId, \
+                      a.postId, \
+                      c.title, \
+                      c.contentType, \
+                      c.url, \
+                      concat('https://', b.blogName,'.lofter.com') as blog_url, \
+                      b.blognickname, \
+                      a.hot, \
+                      a.comment_cnt, \
+                      d.revenue, \
+                      a.web_praise_no_device_info_uv, \
+                      a.max_city_ip_praise_ratio, \
+                      a.like_cnt * 1.0 / a.comment_cnt as praise2comment_ratio, \
+                      a.praise_no_browse_uv, \
+                      a.praise_quick_browse_ratio, \
+                      c.publishDate \
+              from ( \
+              	      select  x.postId, \
+              	              x.blogId, \
+              	              x.like_cnt, \
+              	              x.hot, \
+                              x.comment_cnt, \
+                              y.praise_no_browse_uv, \
+                              y.praise_quick_browse_ratio, \
+                              y.web_praise_no_device_info_uv, \
+                              z.max_city_ip_praise_ratio \
+              	      from ( \
+              	          select postId, blogId, hot, like_cnt, comment_cnt \
+              	          from lofter.dws_post_interaction_dd \
+              	          where dt = '${azkaban.flow.1.days.ago}' and like_cnt_30d > 0 \
+              	      ) x \
+                      left join ( \
+                          select a.postId, \
+                                 count(distinct if(nvl(b.real_browse_pv,0) == 0, b.userId, null)) as praise_no_browse_uv, \
+                                 count(distinct if(nvl(b.is_quick_browse,1) > 0, b.userId, null)) * 1.0 / count(distinct a.userId) as praise_quick_browse_ratio, \
+                                 count(distinct c.userId) as web_praise_no_device_info_uv \
+                          from ( \
+                              select postId, userId \
+                              from lofter.dwd_post_hot_di \
+                              where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' AND opType = 'praise' \
+                              group by 1, 2 \
+                          ) a \
+                          left join ( \
+                              select userId, \
+                                     postId, \
+                                     sum(if(is_real > 0, 1, 0)) real_browse_pv, \
+                                     if(sum(duration) < 10000, 1, 0) is_quick_browse \
+                              from lofter.dwd_post_browse_di \
+                              where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                              group by 1, 2 \
+                          ) b on a.userId = b.userId and a.postId = b.postId \
+                          left join ( \
+                              select a.userId \
+                              from lofter_db_dump.ods_db_profile_nd a \
+                              left join ( \
+                                  select userId \
+                                  from lofter.device_active \
+                                       lateral view explode(userIds) as userId \
+                                  where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+                                  group by 1 \
+                              ) b on a.userId = b.userId \
+                              where b.userId is null and (a.profileCreateFrom is null or a.profileCreateFrom like 'web%') \
+                              group by 1 \
+                          ) c on a.userId = c.userId \
+                          group by 1 \
+                      ) y on x.postId = y.postId \
+                      left join ( \
+                          select postId, city_hot / total_hot as max_city_ip_praise_ratio \
+                          from ( \
+                              select postId, city, hot as city_hot, sum(hot) over (partition by postId) as total_hot, \
+                                     row_number() over (partition by postId order by hot desc) as city_rk \
+                              from ( \
+                                  select postId, city, count(1) as hot \
+                                  from ( \
+                                      select postId, userId, inline(Array(resolve_ip(ip))) as (country, province, city) \
+                                      from lofter.dwd_post_hot_di \
+                                      where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' AND opType = 'praise' \
+                                  ) t1 \
+                                  where length(city) > 0 \
+                                  group by 1, 2 \
+                              ) t \
+                          ) tt \
+                          where city_rk = 1 \
+                      ) z on x.postId = z.postId \
+              ) a \
+              join lofter.dim_blog b on a.blogId = b.id \
+              join lofter.dim_post_article c on a.postId = c.id AND a.blogId = c.blogId \
+              left join ( \
+                  select postId, sum(money) as revenue \
+                  from lofter.dwd_user_order_dd \
+                  where dt <= '${azkaban.flow.1.days.ago}' \
+                  group by 1 \
+              ) d on a.postId = d.postId \
+              where c.publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'

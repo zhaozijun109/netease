@@ -1,0 +1,13 @@
+dependencies {
+  compileOnlyPackages.each { packageName ->
+    compileOnly packageName
+  }
+  testImplementation packages.junit
+}
+
+task createPackageDir(type: Copy) {
+  dependsOn "build"
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/")
+}

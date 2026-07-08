@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="\
+select case module when '激励广告' then 'ad' \
+                   when '广告文' then 'adpost' \
+                   when '视频合集' then 'advideo' end as bizId, \
+       replace(dt, '-', '') as intDay, \
+       postId, blogId, \
+       0 as orderCount, 0 as orderAmount, \
+       nvl(cast(post_ad_revenue as decimal(10,2)), 0) as revenueAmount, \
+       count(1) over (partition by dt) as totalDataCount, \
+       sum(cast(post_ad_revenue as decimal(10,2))) over (partition by dt) as totalAmount, \
+       nvl(cast(raw_ad_revenue as decimal(10,2)), 0) as rawAdRevenue \
+from lofter_dm.ads_ad_content_revenue_post_di \
+where dt = '${azkaban.flow.2.days.ago}' and module in ('激励广告', '广告文') \
+"
+params= --messageType 1 --topic lofter.common.trade.ad.revenue --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

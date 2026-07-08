@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.youdata.GrainIpHotListsMonthly
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=

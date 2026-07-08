@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_store_vip_user_effective_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.userid \
+	,a.trade_num \
+	,effectivefirstday \
+	,effectivelastday \
+	,effectivedays \
+	,last_login_day \
+	,login_days_30d \
+	,d.ips \
+FROM ( \
+	SELECT userid \
+		,count(DISTINCT tradeid) AS trade_num \
+		,min(from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS effectivefirstday \
+	FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+	WHERE STATUS = 1 \
+	GROUP BY userid \
+	) a \
+JOIN ( \
+	SELECT a.userid \
+		,date_add(from_unixtime(cast(effectivetime / 1000 AS BIGINT), 'yyyy-MM-dd'), cast(vipdays AS INT)) AS effectivelastday \
+		,datediff(date_add(from_unixtime(cast(effectivetime / 1000 AS BIGINT), 'yyyy-MM-dd'), cast(vipdays AS INT)), date_sub(CURRENT_DATE (), 1)) AS effectivedays \
+	FROM ( \
+		SELECT userid \
+			,effectivetime \
+			,vipdays \
+			,row_number() OVER ( \
+				PARTITION BY userid ORDER BY effectivetime DESC \
+				) AS rk \
+		FROM lofter_db_dump.ods_db_trade_store_vip_order_nd \
+		WHERE STATUS = 1 \
+		) a \
+	WHERE a.rk = 1 \
+	) b ON a.userid = b.userid \
+JOIN ( \
+	SELECT from_unixtime(cast(last_login_time / 1000 AS BIGINT), 'yyyy-MM-dd') AS last_login_day \
+		,userid \
+		,login_days_30d \
+	FROM lofter.dws_par_user_base_dd \
+	WHERE dt = date_sub(CURRENT_DATE (), 1) \
+	) c ON b.userid = c.userid \
+LEFT JOIN ( \
+	SELECT userid \
+		,concat_ws(',', collect_set(ip)) AS ips \
+	FROM lofter.dws_ip_user_consume_dd \
+	WHERE dt = date_sub(CURRENT_DATE (), 1) \
+	GROUP BY userid \
+	) d ON b.userid = d.userid \

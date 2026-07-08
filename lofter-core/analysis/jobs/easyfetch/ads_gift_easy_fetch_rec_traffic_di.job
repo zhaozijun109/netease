@@ -1,0 +1,56 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_gift_easy_fetch_rec_traffic_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.item_id,a.postid,article_type,c.ai_contenttype,c.element_tag,ips,scene, \
+    exposed_cnt,browse_pv,real_browse_pv,pay_times,gmv \
+from( \
+    select a.item_id, cast(conv(split(a.item_id,'_')[1],16,10) as bigint) as postid,  \
+        case when a.scene = 'tag_rec' then 'tag推荐' when a.scene = 'feed_rec' then '发现页' when a.scene = 'related_item' then '相关文章' end as scene, \
+        case article_type \
+            when 1 then  '文本' \
+            when 2 then  '图片' \
+            when 3 then  '音乐' \
+            when 4 then  '视频' \
+            when 5 then  '问答' \
+            when 6 then  '长文章' \
+            else null \
+        end as article_type, \
+        sum(exposed_count) exposed_cnt, \
+        sum(if(cost_time>0, exposed_count, 0)) as browse_pv,  \
+        sum(if(cost_time>=3000, exposed_count, 0)) as real_browse_pv, \
+        count(if(return_gift_coin>0, 1, null)) as pay_times, \
+        sum(return_gift_coin/10.0) as gmv \
+    from  ( \
+        select * \
+        from rec.alg_data_noblog_action_di_user_item  \
+        where day="${azkaban.flow.1.days.ago}" and  \
+        flow_name in ("FeedRecBoostGift","FeedRecPGCBoostGift","RelatedBoostGift","TagRecBoostGift","TagRecPGC") \
+    )a \
+    left join( \
+        select * \
+        from rec.rec_data_noblog_action_di_user_item_business  \
+        where day="${azkaban.flow.1.days.ago}" \
+    )b on a.user_id = b.user_id and a.item_id = b.item_id and a.rec_id = b.rec_id \
+    group by a.item_id,conv(split(a.item_id,'_')[1],16,10), a.scene, a.article_type \
+) a \
+left join( \
+    select id, \
+        concat_ws(', ', coalesce(ips, array())) AS ips \
+    from lofter.dim_post \
+)b on a.postid = b.id \
+left join( \
+    select \
+        post_id, \
+        concat_ws(',', COLLECT_LIST(if(classify = 1,result,null))) as AI_contenttype, \
+        concat_ws(',', COLLECT_LIST(if(classify = 2,result,null))) as element_tag \
+    from rec.content_reg_payed_title_classify_output2 \
+    where day <= '${azkaban.flow.1.days.ago}' and result != '无题材' and probability >= cast(0.7 as float) and result is not null and classify in (1,2) \
+    group by post_id \
+)c on a.postid = c.post_id \
+left join( \
+    select postId, \
+           concat_ws(',', collect_list(concat_ws(',', mark_tags))) as mark_tags  \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by postid \
+)d on a.postid = d.postid

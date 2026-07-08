@@ -1,0 +1,10 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_resource_action_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postid,userid, \
+       case when groupId like '%\\\\_%' then nvl(regexp_extract(groupId, '([^\\\\d_]+)_(\\\\d+)', 1), groupId) else groupId end as groupId, \
+       deviceid,os,optime,optype, \
+       regexp_extract(groupId, '([^\\\\d_]+)_(\\\\d+)', 2) as materialId \
+from lofter.ods_log_ad_resource_action_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+
+dependencies=ods_log_ad_resource_action_di

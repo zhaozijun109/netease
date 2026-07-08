@@ -1,0 +1,380 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_ecology_penetrate_state_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  action_type, \
+  a.scene, \
+  a.is_from_rec, \
+  blog_channel, \
+  post_content_type, \
+  j.ip, \
+  case \
+    when b.postid is null then -1 \
+    else ispay_returngift \
+  end ispay_returngift, \
+  case \
+    when g.postid is null then 0 \
+    else 1 \
+  end gift_ecology_rectify_limit_post_flg, \
+  case \
+    when h.postid is null then 0 \
+    else 1 \
+  end yiyou_traffic_limit_post_flg, \
+  case \
+    when i.postid is null then 0 \
+    else 1 \
+  end gift_return_dizhi_tag_post_flg, \
+  case \
+    when c.userid is null then 0 \
+    else 1 \
+  end high_net_value_user_flg, \
+  case \
+    when d.userid is null then 0 \
+    else 1 \
+  end gift_ecology_rectify_limit_user_flg, \
+  case \
+    when e.userid is null then '普通' \
+    else type \
+  end rec_gift_stratify_user_flg, \
+  case \
+    when f.userid is null then 0 \
+    else 1 \
+  end rec_refuse_gift_user_flg, \
+  count(distinct a.postid) as postnum, \
+  count(distinct a.userid) as uv, \
+  count(distinct concat_ws(',', a.userid, a.postid)) as num, \
+  count(1) pv \
+from \
+  ( \
+    select \
+      action_type, \
+      post_content_type, \
+      userid, \
+      postid, \
+      dt, \
+      occurtime, \
+      NVL(source1_scene, '未知') as scene, \
+      is_from_rec \
+    from \
+      lofter.dwd_post_browse_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and ( \
+        action_type = 'page_duration' \
+        and source1_scene != '' \
+        and is_real = 1 \
+      ) \
+    union \
+    select \
+      'expose' as action_type, \
+      post_content_type, \
+      userid, \
+      postid, \
+      dt, \
+      occurtime, \
+      NVL(scene, '未知') as scene, \
+      is_rec as is_from_rec \
+    from \
+      lofter.dwd_post_expose_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and (reaction is null) \
+      and scene != '' \
+      and postid > 0 \
+    union \
+    select \
+      'click' as action_type, \
+      post_content_type, \
+      userid, \
+      postid, \
+      dt, \
+      occurtime, \
+      NVL(scene, '未知') as scene, \
+      is_rec as is_from_rec \
+    from \
+      lofter.dwd_post_expose_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and scene != '' \
+      and postid > 0 \
+      and reaction = 'click' \
+  ) a \
+  left join ( \
+    select \
+      postid, \
+      blogid, \
+      blog_channel, \
+      ispay_returngift \
+    from \
+      lofter.dwd_gift_return_post_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and blog_channel in (0, 1) \
+      and ispay_returngift in (0, 1) \
+    group by \
+      postid, \
+      blogid, \
+      blog_channel, \
+      ispay_returngift \
+    union \
+    select \
+      postid, \
+      blogid, \
+      blog_channel, \
+      999 ispay_returngift \
+    from \
+      lofter.dwd_gift_return_post_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and blog_channel in (0, 1) \
+      and ispay_returngift in (0, 1) \
+    group by \
+      postid, \
+      blogid, \
+      blog_channel \
+  ) b on a.postid = b.postid \
+  left join ( \
+    select \
+      postid \
+    from \
+      lofter_dm.ads_gift_ecology_rectify_limit_post_di \
+    where \
+      dt = '${azkaban.flow.2.days.ago}' \
+    group by \
+      postid \
+  ) g on a.postid = g.postid \
+  left join ( \
+    select \
+      b.postid \
+    from \
+      ( \
+        select \
+          userid blogid \
+        from \
+          lofter_dm.ads_ip_yiyou_traffic_limit_creator_di \
+        where \
+          dt = '${azkaban.flow.2.days.ago}' \
+        group by \
+          userid \
+      ) a \
+      join ( \
+        select \
+          postid, \
+          blogid \
+        from \
+          lofter.dim_gift_post_return_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+          and ispay_returngift in (0, 1) \
+        group by \
+          postid, \
+          blogid \
+      ) b on a.blogid = b.blogid \
+    group by \
+      b.postid \
+  ) h on a.postid = h.postid \
+  left join ( \
+    select \
+      a.tag, \
+      postid \
+    from \
+      ( \
+        select \
+          dt, \
+          tag, \
+          postid, \
+          case \
+            when tag_state = '' then 0 \
+            else 1 \
+          end as tag_state, \
+          row_number() over( \
+            partition by tag, \
+            postid \
+            order by \
+              dt desc, \
+              case \
+                when tag_state = '' then 0 \
+                else 1 \
+              end desc \
+          ) as rk \
+        from \
+          lofter_dm.ads_gift_return_tag_di \
+        where \
+          dt <= '${azkaban.flow.2.days.ago}' \
+      ) a \
+    where \
+      rk = 1 \
+      and tag_state > 0 \
+    group by \
+      a.tag, \
+      postid \
+    UNION \
+    select \
+      '汇总' as tag, \
+      postid \
+    from \
+      ( \
+        select \
+          dt, \
+          tag, \
+          postid, \
+          case \
+            when tag_state = '' then 0 \
+            else 1 \
+          end as tag_state, \
+          row_number() over( \
+            partition by tag, \
+            postid \
+            order by \
+              dt desc, \
+              case \
+                when tag_state = '' then 0 \
+                else 1 \
+              end desc \
+          ) as rk \
+        from \
+          lofter_dm.ads_gift_return_tag_di \
+        where \
+          dt <= '${azkaban.flow.2.days.ago}' \
+      ) a \
+    where \
+      rk = 1 \
+      and tag_state > 0 \
+    group by \
+      postid \
+  ) i on a.postid = i.postid \
+  left join ( \
+    select \
+      a.id, \
+      case \
+        when b.ip is not null then b.ip \
+        else '其他' \
+      end as ip \
+    from \
+      ( \
+        select \
+          id, \
+          ip \
+        from \
+          lofter.dim_post LATERAL VIEW explode( \
+            case \
+              when size(ips) < 1 then array('无ip归属') \
+              else ips \
+            end \
+          ) adTable AS ip \
+        group by \
+          id, \
+          ip \
+      ) a \
+      left join ( \
+        select \
+          ip \
+        from \
+          lofter.dws_gift_post_premium_ip_scoring_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          ip \
+      ) b on a.ip = b.ip \
+    group by \
+      a.id, \
+      case \
+        when b.ip is not null then b.ip \
+        else '其他' \
+      end \
+    union \
+    select \
+      id, \
+      '汇总' as ip \
+    from \
+      lofter.dim_post LATERAL VIEW explode( \
+        case \
+          when size(ips) < 1 then array('无ip归属') \
+          else ips \
+        end \
+      ) adTable AS ip \
+    group by \
+      id \
+  ) j on a.postid = j.id \
+  left join ( \
+    select \
+      userid \
+    from \
+      lofter_dm.ads_ip_yiyou_high_net_value_user_di \
+    where \
+      dt = '${azkaban.flow.2.days.ago}' \
+    group by \
+      userid \
+  ) c on a.userid = c.userid \
+  left join ( \
+    select \
+      userid \
+    from \
+      lofter_dm.ads_gift_ecology_rectify_limit_user_di \
+    where \
+      dt = '${azkaban.flow.2.days.ago}' \
+    group by \
+      userid \
+  ) d on a.userid = d.userid \
+  left join ( \
+    select \
+      type, \
+      userid \
+    from \
+      lofter_dm.ads_rec_gift_user_stratify_di \
+    where \
+      dt = '${azkaban.flow.2.days.ago}' \
+    group by \
+      type, \
+      userid \
+  ) e on a.userid = e.userid \
+  left join ( \
+    select \
+      user_id as userid \
+    from \
+      rec.rec_gift_low_acceptance_users \
+    where \
+      refuse_gift_user = '1' \
+      and day = '${azkaban.flow.2.days.ago}' \
+    group by \
+      user_id \
+  ) f on a.userid = f.userid \
+group by \
+  action_type, \
+  a.scene, \
+  a.is_from_rec, \
+  blog_channel, \
+  post_content_type, \
+  j.ip, \
+  case \
+    when b.postid is null then -1 \
+    else ispay_returngift \
+  end, \
+  case \
+    when g.postid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when h.postid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when i.postid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when c.userid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when d.userid is null then 0 \
+    else 1 \
+  end, \
+  case \
+    when e.userid is null then '普通' \
+    else type \
+  end, \
+  case \
+    when f.userid is null then 0 \
+    else 1 \
+  end \
+

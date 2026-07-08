@@ -1,0 +1,47 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_discuss_hot_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+select tag, question_id, publish_date, discuss_count_15d, \
+       if(hot_rank = 1, 1, 0) hot_rank, \
+       if(new_rank = 1, 1, 0) as new_rank \
+from ( \
+    select x.*, \
+           row_number() over (partition by tag order by if(hot_rank = 1, 1, 2)) as final_rank \
+    from ( \
+        select t.tag, t.question_id, publish_date, is_recommend, discuss_count_15d, \
+               row_number() over (partition by tag order by is_recommend desc, discuss_count_15d desc) as hot_rank, \
+               row_number() over (partition by tag order by is_recommend desc, if(publish_date <= '${azkaban.flow.1.days.ago}' and publish_date >= '${azkaban.flow.3.days.ago}', discuss_count_15d, 0) desc, publish_time desc) as new_rank \
+        from ( \
+            select a.tag, a.id as question_id, a.publish_date, a.publish_time, if(d.question_id is not null, 0, 1) as is_recommend, \
+                   nvl(count(distinct if(datediff('${azkaban.flow.1.days.ago}', discuss_date) < 15, b.answer_post_id,null)),0) + \
+                   nvl(count(distinct c.answer_response_id),0) as discuss_count_15d \
+            from (  \
+                select id, tag, from_unixtime(cast(submitTime / 1000 AS BIGINT), 'yyyy-MM-dd') as publish_date, submitTime as publish_time \
+                from lofter_db_dump.ods_db_ask_question_nd \
+                    lateral view explode(split(tags, ',')) as tag \
+                where type = 3 and cosplay = 0 and status > 0 and length(trim(tag)) > 0 and \
+                      nvl(complaintCount,0) < 3 \
+            ) a \
+            join ( \
+                select id as answer_post_id, questionId, from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as discuss_date \
+                from lofter_db_dump.ods_db_ask_answer_post_nd  \
+                where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            ) b on a.id = b.questionId \
+            left join ( \
+                select postId, id as answer_response_id \
+                from lofter_db_dump.ods_db_post_response_nd \
+                where from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                      datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 15 \
+            ) c on b.answer_post_id = c.postId \
+            left join ( \
+                select question_id \
+                from rec.rec_data_neg_question_res \
+                where day <= '${azkaban.flow.1.days.ago}' and label = 1 \
+                group by 1 \
+            ) d on a.id = d.question_id \
+            group by 1,2,3,4,5 \
+        ) t \
+    ) x \
+    where (hot_rank = 1 and discuss_count_15d >= 10) or \
+          (new_rank = 1 and discuss_count_15d > 0 and publish_date <= '${azkaban.flow.1.days.ago}' and publish_date >= '${azkaban.flow.3.days.ago}') \
+) tt \
+where final_rank = 1 and is_recommend = 1

@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01= \
+with publish_data as ( \
+    select '${azkaban.flow.1.days.ago}' as dt  \
+        ,count(distinct case when post_publish_date = '${azkaban.flow.1.days.ago}' then userid end) as cnt_userid  \
+        ,count(distinct case when post_publish_date = '${azkaban.flow.1.days.ago}' then postid end) as cnt_publish_postid \
+        ,count(distinct userid) as cnt_active_userid \
+    from lofter.dwd_post_publish_di \
+    where post_publish_date between DATE_SUB('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+    and post_content_type = '视频' \
+) \
+,post_data as ( \
+    select dt  \
+        ,count(distinct userid) as cnt_browse_userid \
+        ,count(userid) as cnt_browse_pv \
+        ,count(distinct case when is_real = 1 then userid end) as cnt_valid_userid \
+        ,count(case when is_real = 1 then userid end) as cnt_valid_pv \
+        ,count(distinct case when is_video_finish = 1 then userid end) as cnt_finish_userid \
+        ,count(case when is_video_finish = 1 then userid end) as cnt_finish_pv \
+        ,COUNT(1) as cnt_play_vv  \
+        ,SUM(case when duration >= 3000 then 1 else 0 end) as cnt_play_3s_vv  \
+        ,SUM(case when duration >= 5000 then 1 else 0 end) as cnt_play_5s_vv \
+        ,SUM(case when is_real = 1 then 1 else 0 end) as cnt_valid_vv \
+        ,SUM(case when is_video_finish = 1 then 1 else 0 end) as cnt_finish_vv \
+    from lofter.dwd_post_browse_di \
+    where dt ='${azkaban.flow.1.days.ago}' \
+    and post_content_type ='视频' \
+    and action_type = 'page_duration' \
+    group by dt \
+) \
+insert overwrite table lofter_dm.ads_video_post_daily_stat_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+    coalesce(a.cnt_userid, 0) as cnt_userid  \
+    ,coalesce(a.cnt_publish_postid, 0) as cnt_publish_postid \
+    ,coalesce(a.cnt_active_userid, 0) as cnt_active_userid  \
+    ,coalesce(c.cnt_browse_userid, 0) as cnt_browse_userid  \
+    ,coalesce(c.cnt_valid_userid, 0) as cnt_valid_userid   \
+    ,coalesce(c.cnt_finish_userid, 0) as cnt_finish_userid \
+    ,coalesce(c.cnt_browse_pv, 0) as cnt_browse_pv \
+    ,coalesce(c.cnt_valid_pv, 0) as cnt_valid_pv      \
+    ,coalesce(c.cnt_finish_pv, 0) as cnt_finish_pv \
+    ,coalesce(c.cnt_play_vv, 0) as cnt_play_vv \
+    ,coalesce(c.cnt_play_3s_vv, 0) as cnt_play_3s_vv \
+    ,coalesce(c.cnt_play_5s_vv, 0) as cnt_play_5s_vv \
+    ,coalesce(c.cnt_valid_vv, 0) as cnt_valid_vv \
+    ,coalesce(c.cnt_finish_vv, 0) as cnt_finish_vv \
+from publish_data a  \
+left join post_data c on a.dt = c.dt

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.dim.DarenJob
+params= --date ${azkaban.flow.1.days.ago}  --output /user/da_lofter/warehouse/dim_daren
+dependencies=

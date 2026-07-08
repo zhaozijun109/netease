@@ -1,0 +1,25 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "RecItemFeature",
+  "fields": [
+    {"name": "appName", "type": "string"},
+    {"name": "dt", "type": "int"},
+    {"name": "itemId", "type": "string"},
+    {"name": "itemType", "type": "string"},
+    {"name": "exposure", "type": "long"},
+    {"name": "click", "type": "long"},
+    {"name": "videoPv", "type": "long"},
+    {"name": "active", "type": "long"},
+    {"name": "gmv", "type": "double"},
+    {"name": "orders", "type": "long"},
+    {"name": "feed_rec_pv", "type": "long"},
+    {"name": "feed_rec_click", "type": "long"},
+    {"name": "similar_article_pv", "type": "long"},
+    {"name": "similar_article_click", "type": "long"},
+    {"name": "tag_rec_pv", "type": "long"},
+    {"name": "tag_rec_click", "type": "long"},
+    {"name": "tag_new_pv", "type": "long"},
+    {"name": "tag_new_click", "type": "long"}
+  ]
+}

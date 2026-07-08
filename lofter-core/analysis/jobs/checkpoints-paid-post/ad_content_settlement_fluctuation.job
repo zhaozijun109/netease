@@ -1,0 +1,31 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.pre="select count(1) as cnt from lofter_dm.ads_ad_content_revenue_post_di where dt = '${azkaban.flow.1.days.ago}' having cnt > 0 "
+conf.spark.check.bad="\
+select a.module, a.unlock_count, a.revenue, \
+    b.unlock_count as prev_day_unlock_count, b.revenue as prev_day_revenue, \
+    c.unlock_count as prev_week_unlock_count, c.revenue as prev_week_revenue \
+from ( \
+    select module, sum(unlock_count) as unlock_count, sum(post_ad_revenue) as revenue \
+    from lofter_dm.ads_ad_content_revenue_post_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select module, sum(unlock_count) as unlock_count, sum(post_ad_revenue) as revenue \
+    from lofter_dm.ads_ad_content_revenue_post_di \
+    where dt = '${azkaban.flow.2.days.ago}' \
+    group by 1 \
+) b on a.module = b.module \
+left join ( \
+    select module, sum(unlock_count) as unlock_count, sum(post_ad_revenue) as revenue \
+    from lofter_dm.ads_ad_content_revenue_post_di \
+    where dt = date_sub('${azkaban.flow.7.days.ago}', 1) \
+    group by 1 \
+) c on a.module = c.module \
+where a.module in ('激励广告', '广告文') and \
+    ((a.revenue/a.unlock_count) > (b.revenue/b.unlock_count) * 1.1 or (a.revenue/a.unlock_count) < (b.revenue/b.unlock_count) * 0.9 or \
+     (a.revenue/a.unlock_count) > (c.revenue/c.unlock_count) * 1.1 or (a.revenue/a.unlock_count) < (c.revenue/c.unlock_count) * 0.9 or \
+     (a.revenue > b.revenue * 1.5) or (a.revenue < b.revenue * 0.5) ) \
+"
+dependencies=

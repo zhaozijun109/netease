@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_post_talk_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select id, talkId, talkType, blogId, questionId, questionUserId, talkContent, recomStatus, forbidStatus, \
+       valid, allowView, status, auditStatus, tags, questionType, ips, ext, discussCount, scoreCount, parentQuestionId, \
+       answerCount, cosplay, answerType, relatedBlogId, relatedPostId, contentType, topicChat, topicId, \
+       if(rn = 1, 1, 0) as is_user_first_post_talk \
+from ( \
+    select id, talkId, talkType, blogId, questionId, questionUserId, talkContent, recomStatus, forbidStatus, \
+           valid, allowView, status, auditStatus, tags, questionType, ips, ext, discussCount, scoreCount, parentQuestionId, \
+           answerCount, cosplay, answerType, relatedBlogId, relatedPostId, contentType, topicChat, topicId, \
+           row_number() over (partition by blogId order by createTime) as rn \
+    from lofter.dim_post_talk \
+    where createDate = '${azkaban.flow.1.days.ago}' \
+) t1

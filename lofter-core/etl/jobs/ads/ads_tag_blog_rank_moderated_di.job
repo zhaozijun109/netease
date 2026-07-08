@@ -1,0 +1,84 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_blog_rank_moderated_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select x.tag, x.blogId, \
+           nvl(nvl(master_rank, newbie_rank), black_horse_rank) as rank, \
+           case when master_rank is not null then 0 \
+                when newbie_rank is not null then 2 \
+                when black_horse_rank is not null then 1 \
+                end as rank_type, \
+           case when master_rank is not null then master_index \
+                       when newbie_rank is not null then newbie_index \
+                       when black_horse_rank is not null then black_horse_index \
+                       end as rank_score, \
+          y.hot_std, y.post_count_std, y.post_ids_std, y.first_publish_time \
+    from ( \
+        select *, \
+               if(black_horse_moderated_rank <= 500, black_horse_moderated_rank, null) as black_horse_rank \
+        from ( \
+            select *, if(newbie_moderated_rank <= 500, newbie_moderated_rank, null) as newbie_rank, \
+                   row_number() over (partition by tag order by if(master_moderated_rank > 10 and newbie_moderated_rank > 10, black_horse_index, null) desc) as black_horse_moderated_rank \
+            from ( \
+                select *, if(master_moderated_rank <= 100, master_moderated_rank, null) as master_rank, \
+                       row_number() over (partition by tag order by if(master_moderated_rank > 100, newbie_index, null) desc) as newbie_moderated_rank \
+                from ( \
+                    select a.tag, a.blogId, a.master_index, a.newbie_index, a.black_horse_index, \
+                           row_number() over (partition by tag order by if(master_rank < newbie_rank - 10 or master_rank < black_horse_rank - 10, master_index, 0) desc) as master_moderated_rank \
+                    from ( \
+                        select * \
+                        from lofter_dm.ads_tag_blog_rank_di \
+                        where dt = '${azkaban.flow.1.days.ago}' \
+                    ) a \
+                ) t \
+            ) tt \
+        ) ttt \
+    ) x \
+    join ( \
+        select tag, blogId, hot_std, concat_ws(',', slice(post_ids_std, 1, 5)) as post_ids_std, \
+              size(post_ids_std) as post_count_std, \
+              first_publish_time \
+        from lofter_dm.ads_tag_blog_index_di \
+        where dt = '${azkaban.flow.1.days.ago}' and size(post_ids_std) > 0 \
+    ) y on x.blogId = y.blogId and x.tag = y.tag \
+    where nvl(nvl(master_rank, newbie_rank), black_horse_rank) > 0 and \
+          (case when master_rank is not null then master_index \
+                             when newbie_rank is not null then newbie_index \
+                             when black_horse_rank is not null then black_horse_index \
+                             end) > 0 \
+  union all \
+    select m.tag, m.blogId, m.rank, m.rank_type, m.rank_score, \
+            n.hot_std, n.post_count_std, n.post_ids_std, n.first_publish_time \
+    from ( \
+        select a.tag, a.blogId, 3 as rank_type, support_score as rank_score, \
+               row_number() over (partition by tag order by support_score desc) as rank, \
+               count(1) over (partition by tag) as user_count \
+        from ( \
+            select * \
+            from lofter_dm.ads_tag_blog_index_di \
+            where dt = '${azkaban.flow.1.days.ago}' and repay_ratio > 0 and support_score > 0 \
+        ) a \
+        left join ( \
+            select x.blogId \
+            from ( \
+                select id as return_gift_id, blogId \
+                from lofter.dim_gift_post_return_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) x \
+            join ( \
+                select returnGiftId as return_gift_id \
+                from lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+                where `type` = 1 and \
+                      from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                      datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 90 \
+            ) y on x.return_gift_id = y.return_gift_id \
+            group by 1 \
+        ) b on a.blogId = b.blogId \
+    ) m \
+    join ( \
+        select tag, blogId, hot_std, concat_ws(',', slice(post_ids_std, 1, 5)) as post_ids_std, \
+              size(post_ids_std) as post_count_std, \
+              first_publish_time \
+        from lofter_dm.ads_tag_blog_index_di \
+        where dt = '${azkaban.flow.1.days.ago}' and size(post_ids_std) > 0 \
+    ) n on m.blogId = n.blogId and m.tag = n.tag \
+    where m.user_count >= 20
+dependencies=ads_tag_blog_rank_di

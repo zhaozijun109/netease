@@ -1,0 +1,192 @@
+type=sparksql
+hive.query.01=\
+with source_data as( \
+   select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+   from lofter.dwd_ab_platform_exp_user_di \
+   where dt = '${azkaban.flow.1.days.ago}' \
+   group by 1 , 2, 3, 4, 5, 6 \
+), \
+paid_source as( \
+    select postId from lofter.dim_gift_post_return group by postid \
+), \
+metric_source1 as( \
+    select a.*,is_free,post_content_type,aggregateId,post_hot,new_published_hot \
+    from source_data a \
+    left join( \
+        select userId,is_free,post_content_type,grouping__id as aggregateId, \
+            sum(hot_pv) as post_hot, \
+            sum(if(post_publish_date = '${azkaban.flow.1.days.ago}',hot_pv,0)) as new_published_hot \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free \
+            from( \
+                select post_userid as userId,hot_pv,post_publish_date,postid,post_content_type \
+                from lofter.dws_post_interaction_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,is_free,post_content_type \
+        grouping sets((userId),(userId,is_free),(userId,post_content_type)) \
+    ) b on a.userId = b.userId \
+), \
+metric_source2 as( \
+    select a.*,is_free,post_content_type,aggregateId,post_browse_cnt \
+    from source_data a \
+    left join( \
+        select userId,is_free,post_content_type,grouping__id as aggregateId, \
+            count(distinct postid) as post_browse_cnt \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free \
+            from( \
+                select post_userid as userId,postid,post_content_type \
+                from lofter.dwd_post_browse_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,is_free,post_content_type \
+        grouping sets((userId),(userId,is_free),(userId,post_content_type)) \
+    ) b on a.userId = b.userId \
+), \
+metric_source3 as( \
+    select a.*,is_free,post_content_type,aggregateId,publish_post_cnt,publish_post_uv \
+    from source_data a \
+    left join( \
+        select userId,is_free,post_content_type,grouping__id as aggregateId, \
+            count(distinct postid) as publish_post_cnt, \
+            1 as publish_post_uv \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free \
+            from( \
+                select userid, postid, post_content_type \
+                from lofter.dwd_post_publish_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+        ) \
+        group by userId,is_free,post_content_type \
+        grouping sets((userId),(userId,is_free),(userId,post_content_type)) \
+    ) b on a.userId = b.userId \
+), \
+metric_source4 as( \
+    select a.*,is_free,post_content_type,aggregateId,fans_increase_cnt \
+    from source_data a \
+    left join( \
+        select userId,is_free,post_content_type,grouping__id as aggregateId, \
+            count(distinct fans_user_id) as fans_increase_cnt \
+        from( \
+            select t1.*,if(t2.postId is null,'免费','付费') as is_free,post_content_type \
+            from( \
+                select blogid as userId,source_postid as postid,userid as fans_user_id \
+                from lofter.dwd_blog_follow_di \
+                where from_unixtime(cast(follow_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            )t1 \
+            left join paid_source t2 on t1.postId = t2.postId \
+            left join( \
+                select userid,id as postid ,contenttype as post_content_type \
+                from lofter.dim_post \
+            )t3 on t1.userId = t3.userId and t1.postId = t3.postId \
+        ) \
+        group by userId,is_free,post_content_type \
+        grouping sets((userId),(userId,is_free),(userId,post_content_type)) \
+    ) b on a.userId = b.userId \
+) \
+insert overwrite table lofter.dws_ab_platform_ecology_creator_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end) \
+    end as dimension_value \
+from metric_source1 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('creator_post_hot' AS metric, CAST(post_hot AS BIGINT) AS metric_value), \
+        STRUCT('creator_new_published_hot' AS metric, CAST(new_published_hot AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end) \
+    end as dimension_value \
+from metric_source2 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('creator_post_browse_cnt' AS metric, CAST(post_browse_cnt AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end) \
+    end as dimension_value \
+from metric_source3 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('creator_publish_post_uv' AS metric, CAST(publish_post_uv AS BIGINT) AS metric_value), \
+        STRUCT('creator_publish_post_cnt' AS metric, CAST(publish_post_cnt AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info \
+union all \
+select \
+    exp_id, \
+    bucket_id, \
+    exp_date AS basedate, \
+    case aggregateId \
+        when  3 then '全部' \
+        when 1 then is_free \
+        when 2 then post_content_type \
+    end as dimension, \
+    userid, \
+    metric_info.metric, \
+    metric_info.metric_value, \
+    case aggregateId \
+        when 3 then 'ALL' \
+        when 1 then (case is_free when  '免费' then 'FREE' else 'PAY' end) \
+        when 2 then (case post_content_type when '文字' then 'ARTICLE' when '图片' then 'PHOTO' end) \
+    end as dimension_value \
+from metric_source4 a \
+LATERAL VIEW EXPLODE( \
+    ARRAY( \
+        STRUCT('creator_fans_increase_cnt' AS metric, CAST(fans_increase_cnt AS BIGINT) AS metric_value) \
+    ) \
+)metrics AS metric_info
+dependencies=dwd_ab_platform_exp_user_di

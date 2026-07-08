@@ -1,0 +1,110 @@
+name	is_fea	group	is_sequence_fea	format	feature_column	embed_name	embed_dim	ckpt_to_load_from	wide_deep	default_value	is_context_fea	key	external	initializer
+is_train	0			string										
+rid	0			string										
+user_id	1	user+shared+se_block_u+din_query+highway		string	embed	user_id	24				1		0
+item_id	1	item+shared+se_block_i	1	string	embed	item_id	24
+item_id_cb	1	item	1	string	embed	item_id_cb	24					item_id		
+log_time	0			string										
+label	0			float										
+act_code	0			string										
+cost_time_secs	0			float										
+o_alg	1	item+poso		string	embed	o_alg	8							0
+o_os	1	user+debias		string	embed	o_os	2				1			
+main_item_id	1	item	1	string	embed	item_id	24							
+o_hour	0	user		string	embed	o_hour	8				1			
+i_item_type	1	item		string	embed	i_item_type	4							
+i_title	0	item		list_string	dynamic_embed	i_title	8							
+i_tags	1	item+dropout+strings+se_block_i	1	list_string	embed	i_tags	24							
+i_first_tag	1	item+strings	1	string	embed	i_tags	24							
+i_fields_str	1	item		string	embed	i_fields	8							
+i_blog_id	1	item		string	embed	i_blog_id	24							
+i_create_time_days	1	item		float	bucket		8			0				
+i_like_num	1	item		float	numeric+bucket		8			0				0
+i_comment_num	1	item		float	numeric+bucket		8			0				
+i_up_num	1	item		float	numeric+bucket		8			0				
+i_reblog_num	1	item		float	numeric+bucket		8			0				
+i_pic_num	1	item		float	numeric+bucket		8			0				
+i_mul_pic	1	item		float	numeric					0				
+i_cluster	1	item		string	embed	i_cluster	16							
+i_ra_ctr_1_day	1	item		float	numeric+bucket		8			0				
+i_ra_ctr_3_day	1	item		float	numeric+bucket		8			0				
+i_ra_ctr_7_day	1	item		float	numeric+bucket		8			0				
+i_ra_cvr_1_day	1	item		float	numeric+bucket		8			0				
+i_ra_cvr_3_day	1	item		float	numeric+bucket		8			0				
+i_ra_cvr_7_day	1	item		float	numeric+bucket		8			0				
+i_ra_cost_time_1_day	1	item		float	numeric+bucket		8			0				
+i_ra_cost_time_3_day	1	item		float	numeric+bucket		8			0				
+i_ra_cost_time_7_day	1	item		float	numeric+bucket		8			0				
+u_gender	1	user		string	embed	u_gender	2				1			
+u_lofter_age	0	user		float	bucket		8				1			
+u_tags	1	user+strings	1	list_string	embed	i_tags	24				1			
+u_follow_blogs	1	user		list_string	embed	i_blog_id	24				1			
+u_prefer_tags_180d	1	user+strings	1	kv	embed	i_tags	24				1			
+u_prefer_tags_60d	1	user+strings	1	kv	embed	i_tags	24				1			
+u_prefer_tags_30d	1	user+strings	1	kv	embed	i_tags	24				1			
+u_prefer_tags_10d	1	user+strings	1	kv	embed	i_tags	24				1			
+u_prefer_tags_3d	1	user+strings	1	kv	embed	i_tags	24				1			
+u_prefer_clusters	1	user		kv	embed	i_cluster	16				1			
+u_rec_num_1d	0	user+se_block_u+poso		float	bucket		8				1			
+u_clk_num_1d	0	user+se_block_u+poso		float	bucket		4				1			
+u_rec_num_7d	0	user+poso		float	bucket		4				1			
+u_clk_num_7d	0	user+poso		float	bucket		4				1			
+u_recent_items	1	user+mixed_shared	1	list_string	embed	item_id	24		wide_and_deep		1			
+u_recent_arttypes	1	user		list_string	embed	i_item_type	4				1			
+u_recent_blogs	1	user		list_string	embed	i_blog_id	24				1			
+u_recent_tags	1	user+strings	1	list_string	embed	i_tags	24				1			
+u_recent_fields	1	user		list_string	embed	i_fields	8				1			
+u_rt_tags	1	user+strings	1	list_string	embed	i_tags	24				1			
+c_firsttag_in_u_rt_itags	1	item		float	numeric					0				
+c_firsttag_in_u_rt_tags	1	item		float	numeric					0				
+c_firsttag_in_utags	1	item		float	numeric					0				
+c_itags_utags	1	item		float	numeric					0				
+c_itags_u_rt_itags	1	item		float	numeric					0				
+c_itags_u_rt_tags	1	item		float	numeric					0				
+c_ifields_rfields	1	item		float	numeric					0				
+c_blog_in_u_rtblogs	1	item		float	numeric					0				
+c_blog_in_u_fblogs	1	item		float	numeric					0				
+c_u_prefer_tags_180d_i_tags	1	item		float	numeric				wide	0				
+c_u_prefer_tags_180d_i_first_tag	1	item		float	numeric					0				
+c_u_prefer_tags_60d_i_tags	1	item		float	numeric					0				
+c_u_prefer_tags_60d_i_first_tag	1	item		float	numeric					0				
+c_u_prefer_tags_30d_i_tags	1	item		float	numeric					0				
+c_u_prefer_tags_30d_i_first_tag	1	item		float	numeric					0				
+c_u_prefer_tags_10d_i_tags	1	item		float	numeric					0				
+c_u_prefer_tags_10d_i_first_tag	1	item		float	numeric					0				
+c_u_prefer_tags_3d_i_tags	1	item		float	numeric					0				
+c_u_prefer_tags_3d_i_first_tag	1	item		float	numeric					0				
+c_u_prefer_clusters_i_cluster	1	item		float	numeric					0				
+c_iblog_tags_utags	0	item		float	numeric									
+c_iblog_tags_u_rt_itags	0	item		float	numeric									
+c_iblog_tags_u_rt_tags	0	item		float	numeric									
+c_iblog_tags_mainblog_tags	0	item		float	numeric									
+c_iblog_tags_maintags	0	item		float	numeric									
+c_itags_iblog_most_tags	0	item		float	numeric									
+c_item_in_iblog_most_items	0	item		float	numeric									
+i_blog_article_num	0	item		float	numeric+bucket		8							
+i_blog_avg_hd_count	0	item		float	numeric+bucket		8							
+i_blog_total_hd_count	0	item		float	numeric+bucket		8							
+i_blog_most_popular_tags	0	item		list_string	embed	i_tags	24							
+c_itags_maintags	1	item		float	numeric					0				
+c_ifields_mainfields	1	item		float	numeric					0				
+c_iblog_mainblog	1	item		float	numeric					0				
+c_itype_maintype	1	item		float	numeric					0				
+c_itags_maintags_positions	1	item		list_string	embed	c_itags_maintags_positions	4							
+i_tags_num	0	item		float	bucket		8							
+main_tags_num	0	item		float	bucket		8							
+m_item_type	0	item		string	embed	i_item_type	4							
+m_title	0	item		list_string	embed	i_title	8							
+m_tags	0	item		list_string	embed	i_tags	24							
+m_first_tag	0	item		string	embed	i_tags	24							
+m_blog_id	0	item		string	embed	i_blog_id	24							
+m_cluster	0	item		string	embed	i_cluster	16							
+m_content_keywords	0	item		kv	embed	i_keywords	24							
+m_img_clusters	0	item		kv	embed	i_img_clusters	16							
+i_content_keywords	0	item		kv	embed	i_keywords	24							
+i_img_clusters	0	item		kv	embed	i_img_clusters	16							
+u_recent_items_tags	0	user		nested_list_string	embed	i_tags	24				1			
+u_light_items	1	user	1	list_string	embed	item_id	24				1			
+u_high_items	1	user	1	list_string	embed	item_id	24				1			
+u_light_items_tags	1	user	1	nested_list_string	embed	i_tags	24				1			
+u_high_items_tags	1	user	1	nested_list_string	embed	i_tags	24				1			

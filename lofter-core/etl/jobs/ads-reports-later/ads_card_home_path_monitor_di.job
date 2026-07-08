@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_card_home_path_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a4.pathname, \
+    max(cardaggregation_pv) cardaggregation_pv, \
+    count(distinct if(a4.pathname like '%聚合页%', a4.userid1, null)) cardaggregation_uv, \
+    max(cardhome_pv) cardhome_pv, count(distinct a4.userid) cardhome_uv, \
+    count(a5.userid) consume_pv, count(distinct a5.userid) consume_uv, sum(a5.amount) consume_money \
+from ( \
+    select dt, userid1, userid, pathname, cardaggregation_pv, cardhome_pv, occurtime, \
+        lead(occurtime, 1) over(partition by userid1 order by occurtime) next_occurtime \
+    from ( \
+        select a1.dt, a1.userid userid1, a1.pathname, \
+            cardaggregation_pv, \
+            count(if(a1.pathname like '%聚合页%', a2.userid, a1.userid)) over(partition by a1.dt, a1.pathname) cardhome_pv, \
+            case when a1.pathname like '%聚合页%' and a2.userid is not null then a2.occurtime \
+                 when a1.pathname like '%聚合页%' and a2.userid is null then null \
+            else a1.occurtime end occurtime, \
+            case when a1.pathname like '%聚合页%' and a2.userid is not null then a2.userid \
+                 when a1.pathname like '%聚合页%' and a2.userid is null then null \
+            else a1.userid end userid \
+        from ( \
+            select dt, userid, pathname, occurtime, \
+                lead(occurtime, 1) over(partition by userid order by occurtime) next_occurtime, \
+                count(if(pathname like '%聚合页%', userid, null)) over(partition by dt, pathname) cardaggregation_pv \
+            from ( \
+                select dt, userid, occurtime, \
+                    case when eventid = 'e1-45' then '我的元气赏-》聚合页-》房间' \
+                         when eventid = 'w1-21' then '市集元气赏-》聚合页-》房间' \
+                         when eventid = 'ad-22' and substr(params['URL'], 39, 15) = 'cardAggregation' then '外部硬广资源位-首页banner-》聚合页-》房间' \
+                         when eventid = 'f1-5' and substr(params['URL'], 39, 15) = 'cardAggregation' then '外部硬广资源位-TAGbanner-》聚合页-》房间' \
+                         when eventid = 'ad-54' and substr(params['URL'], 39, 15) = 'cardAggregation' then '外部硬广资源位-我的中部banner-》聚合页-》房间' \
+                         when eventid = 'w1-54' and scene = 'market_mainpage' and substr(params['URL'], 39, 15) = 'cardAggregation' then '内部硬广资源位-市集首页轮播-》聚合页-》房间' \
+                         when eventid = 'ad-35' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-开机-》房间' \
+                         when eventid = 'ad-37' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-全局吸边-》房间' \
+                         when eventid = 'ad-22' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-首页banner-》房间' \
+                         when eventid = 'b1-46' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-首页feed流-》房间' \
+                         when eventid = 'a2-5' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-关注页feed流-》房间' \
+                         when eventid = 'f1-5' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-TAGbanner-》房间' \
+                         when eventid = 'ad-54' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-我的中部banner-》房间' \
+                         when eventid = 'f1-33' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-TAGfeed流-》房间' \
+                         when eventid = 'g1-41' and substr(params['URL'], 39, 8) = 'cardHome' then '外部硬广资源位-相关文章推荐-》房间' \
+                         when eventid = 'w1-54' and scene = 'market_mainpage' and substr(params['URL'], 39, 8) = 'cardHome' then '内部硬广资源位-市集首页轮播-》房间' \
+                         when eventid = 'w1-19' and scene = 'market_mainpage' and itemtype = 'CARD' then '内部硬广资源位-市集feed流-》房间' \
+                         when eventid = 'w10-6' and itemtype = 'CARD' then '内部硬广资源位-市集搜索引导-》房间' \
+                         when eventid = 'w1-78' and itemtype = 'CARD' then  '新品速递-》房间' \
+                         when eventid = 'w1-80' and itemtype = 'CARD' then  '热销系列-》房间' \
+                         when eventid = 'w1-29' and itemtype = 'CARD' then  '新品专区-》房间' \
+                    end pathname \
+                from lofter.ods_mda_app_partition_di \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                and ( \
+                (eventid = 'e1-45' and substr(params['URL'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'w1-21' and substr(params['url'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'ad-22' and substr(params['URL'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'f1-5' and substr(params['URL'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'ad-54' and substr(params['URL'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'w1-54' and scene = 'market_mainpage' and substr(params['URL'], 39, 15) = 'cardAggregation') \
+                or (eventid = 'ad-35' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'ad-37' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'ad-22' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'b1-46' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'a2-5' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'f1-5' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'ad-54' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'f1-33' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'g1-41' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'w1-54' and scene = 'market_mainpage' and substr(params['URL'], 39, 8) = 'cardHome') \
+                or (eventid = 'w1-19' and scene = 'market_mainpage' and itemtype = 'CARD') \
+                or (eventid = 'w10-6' and itemtype = 'CARD') \
+                or (eventid = 'w1-78' and itemtype = 'CARD') \
+                or (eventid = 'w1-80' and itemtype = 'CARD') \
+                or (eventid = 'w1-29' and itemtype = 'CARD') \
+                ) \
+            ) a \
+        ) a1 left join ( \
+            select dt, userid, occurtime \
+            from lofter.ods_mda_app_partition_di \
+            where dt = '${azkaban.flow.1.days.ago}' and \
+                  actionType = 'benefit_market' and \
+                  eventId = 'w1-19' and \
+                  scene = 'card_mainpage' \
+        ) a2 \
+        on a1.pathname like '%聚合页%' and a1.dt = a2.dt and a1.userid = a2.userid \
+        and a2.occurtime >= a1.occurtime and a2.occurtime < a1.next_occurtime \
+    ) a3 \
+) a4 left join ( \
+    select from_unixtime(cast(tradetime/1000 as bigint),'yyyy-MM-dd') dt1, userid, \
+        tradetime occurtime, sum(product_money) amount \
+    from lofter.dwd_benefit_trade_order_product_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(tradetime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    and producttype = 5 and status = 1 \
+    group by tradeid, from_unixtime(cast(tradetime/1000 as bigint),'yyyy-MM-dd'), userid, tradetime \
+) a5 \
+on a4.dt = a5.dt1 and a4.userid = a5.userid and a5.occurtime >= a4.occurtime and a5.occurtime < a4.next_occurtime \
+group by a4.pathname
+

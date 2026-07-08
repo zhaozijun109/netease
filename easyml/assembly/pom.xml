@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-assembly</artifactId>
+
+    <properties>
+        <antrun.build.dir>${project.basedir}/target</antrun.build.dir>
+        <antrun.starter.dir>${antrun.build.dir}/starter-tmp</antrun.starter.dir>
+        <antrun.dist.dir>${antrun.build.dir}/easyml-dist</antrun.dist.dir>
+        <antrun.dist.jar.tmp.dir>${antrun.dist.dir}/jars/tmp</antrun.dist.jar.tmp.dir>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-graphx</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-mllib</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-mllib-local</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-3rd</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-examples</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-ndarray</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-shade</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.parent.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>dist</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>src/main/assembly/assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- make easyml-starter.jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <target>
+                        <!-- only keep linux so -->
+                        <!-- onnxruntime -->
+                        <delete dir="${antrun.dist.jar.tmp.dir}" failonerror="false"/>
+                        <mkdir dir="${antrun.dist.jar.tmp.dir}"/>
+                        <unzip src="${antrun.dist.dir}/jars/onnxruntime-${onnx.version}.jar"
+                               dest="${antrun.dist.jar.tmp.dir}"/>
+                        <delete dir="${antrun.dist.jar.tmp.dir}/ai/onnxruntime/native/osx-x64"/>
+                        <delete dir="${antrun.dist.jar.tmp.dir}/ai/onnxruntime/native/win-x64"/>
+                        <delete file="${antrun.dist.dir}/jars/onnxruntime-${onnx.version}.jar"/>
+                        <jar destfile="${antrun.dist.dir}/jars/onnxruntime-${onnx.version}.jar"
+                             basedir="${antrun.dist.jar.tmp.dir}"/>
+                        <delete dir="${antrun.dist.jar.tmp.dir}"/>
+
+                        <!-- tensorflow -->
+                        <delete>
+                            <fileset dir="${antrun.dist.dir}/jars" includes="javacpp-*windows*"/>
+                            <fileset dir="${antrun.dist.dir}/jars" includes="javacpp-*macosx*"/>
+                            <fileset dir="${antrun.dist.dir}/jars" includes="mkl-dnn-*windows*"/>
+                            <fileset dir="${antrun.dist.dir}/jars" includes="mkl-dnn-*macosx*"/>
+                            <fileset dir="${antrun.dist.dir}/jars" includes="tensorflow-core-*"/>
+                        </delete>
+
+                        <!-- bigdl -->
+<!--                        <mkdir dir="${antrun.dist.jar.tmp.dir}"/>-->
+<!--                        <unzip src="${antrun.dist.dir}/jars/all-${bigdl.version}.jar"-->
+<!--                               dest="${antrun.dist.jar.tmp.dir}"/>-->
+<!--                        <delete>-->
+<!--                            <fileset dir="${antrun.dist.jar.tmp.dir}" includes="*.dll"/>-->
+<!--                            <fileset dir="${antrun.dist.jar.tmp.dir}" includes="*.dylib"/>-->
+<!--                        </delete>-->
+<!--                        <delete file="${antrun.dist.dir}/jars/all-${bigdl.version}.jar"/>-->
+<!--                        <jar destfile="${antrun.dist.dir}/jars/all-${bigdl.version}.jar"-->
+<!--                             basedir="${antrun.dist.jar.tmp.dir}"/>-->
+<!--                        <delete dir="${antrun.dist.jar.tmp.dir}"/>-->
+
+                        <!-- torch4j -->
+                        <mkdir dir="${antrun.dist.jar.tmp.dir}"/>
+                        <unzip src="${antrun.dist.dir}/jars/libtorch_jni-${t4j.version}.jar"
+                               dest="${antrun.dist.jar.tmp.dir}"/>
+                        <delete dir="${antrun.dist.jar.tmp.dir}/org/torch/native/darwin-x86_64"/>
+                        <delete file="${antrun.dist.dir}/jars/libtorch_jni-${t4j.version}.jar"/>
+                        <jar destfile="${antrun.dist.dir}/jars/libtorch_jni-${t4j.version}.jar"
+                             basedir="${antrun.dist.jar.tmp.dir}"/>
+                        <delete dir="${antrun.dist.jar.tmp.dir}"/>
+
+                        <mkdir dir="${antrun.starter.dir}"/>
+                        <unzip src="${antrun.dist.dir}/jars/reflections-${reflections.version}.jar"
+                               dest="${antrun.starter.dir}"/>
+                        <unzip src="${antrun.dist.dir}/jars/easyml-common-${project.version}.jar"
+                               dest="${antrun.starter.dir}"/>
+                        <unzip src="${antrun.dist.dir}/jars/easyml-launcher-${project.version}.jar"
+                               dest="${antrun.starter.dir}"/>
+                        <jar destfile="${antrun.dist.dir}/easyml-starter-${project.version}.jar"
+                             basedir="${antrun.starter.dir}"/>
+                        <tar destfile="${antrun.build.dir}/easyml-dist.tar" basedir="${antrun.dist.dir}"/>
+                        <gzip destfile="${antrun.build.dir}/easyml-dist-${project.version}.tar.gz"
+                              src="${antrun.build.dir}/easyml-dist.tar"/>
+                        <delete file="${antrun.build.dir}/easyml-dist.tar"/>
+                        <delete dir="${antrun.starter.dir}"/>
+                    </target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

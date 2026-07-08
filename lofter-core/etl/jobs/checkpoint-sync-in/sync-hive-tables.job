@@ -1,0 +1,3 @@
+type=sparksql
+hive.query.01=msck repair table lofter.ads_iad_lofter_info_flow_di;
+dependencies=checkpoint_ads_iad_lofter_info_flow_di

@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.bridge_collection_post_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.name as collection_name \
+from ( \
+    select id, collectionId, postId, blogId \
+    from ( \
+        select id, collectionId, postId, blogId, \
+               row_number() over (partition by postId order by createTime desc) as rk \
+        from lofter_db_dump.ods_db_post_collection_record_nd \
+        where status = 0 \
+    ) t \
+    where rk = 1 \
+) a \
+join lofter_db_dump.ods_db_post_collection_nd b on a.collectionId = b.id \
+
+hive.query.02=create or replace view lofter.bridge_collection_post as select * from lofter.bridge_collection_post_dd where dt = '${azkaban.flow.1.days.ago}';

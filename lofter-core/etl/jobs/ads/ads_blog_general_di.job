@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ads.BlogGeneral
+params= --date ${azkaban.flow.1.days.ago}
+dependencies=ads_post_general_di

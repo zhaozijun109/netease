@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_emote_dun_ti_record_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select commentId, \
+       postId, \
+       blogId, \
+       dunUserId, \
+       tiStatus, \
+       paiCount, \
+       createTime, \
+       db_update_time as dbUpdateTime, \
+       tiTime \
+from lofter_db_dump.ods_db_emote_dun_nd \
+where from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' or \
+from_unixtime(cast(tiTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'

@@ -1,0 +1,3 @@
+execution-jar=${classpath}
+class=com.netease.wm.ad.etl.AdDspEtl
+params= --date ${azkaban.flow.1.days.ago}

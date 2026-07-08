@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select `date`, itemId, itemType, ipName, seriesName, gmv, showCount, messageCount \
+from ( \
+    select `date`, itemId, itemType, ipName, seriesName, gmv, showCount \
+    from lofter_dm.ads_ec_product_amount_expose_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+cross join ( \
+    select count(1) as messageCount from lofter_dm.ads_ec_product_amount_expose_dd where dt = '${azkaban.flow.1.days.ago}' \
+) t2 \
+"
+params= --topic LOFTER.BENEFIT.ipSeriesReport --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

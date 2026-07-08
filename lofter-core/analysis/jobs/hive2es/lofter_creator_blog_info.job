@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(blog_id as string) as id, blog_id as blogId, post_count_180d as post_count, avg_hot_of_recent10_post as avg_hot, fans_7d as new_fans_weekly, tag_r1 as post_r1_tag, tag_r1_post_count / post_count_1y as  post_r1_tag_percent, tag_r2 as post_r2_tag, tag_r2_post_count / post_count_1y as post_r2_tag_percent, tag_r3 as post_r3_tag, tag_r3_post_count / post_count_1y as  post_r3_tag_percent from lofter_dm.ads_daren_dd where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_creator_blog_info --full --atom

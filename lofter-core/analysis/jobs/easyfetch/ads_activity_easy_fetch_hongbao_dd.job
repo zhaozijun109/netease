@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_activity_easy_fetch_hongbao_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    hongbaoid, \
+    activity_date, \
+    COUNT(distinct a.relaId) AS trade_num, \
+    COUNT(distinct a.userid) AS trade_uv, \
+    SUM(count/10)            AS hongbaopreferential, \
+    SUM(b.amount)            AS amount, \
+    COUNT(distinct c.userId ) AS first_trade_uv, \
+    SUM(case WHEN c.userId is not null THEN b.amount else 0 end ) AS first_trade_amount, \
+    SUM(case WHEN c.userId is not null THEN count/10 else 0 end ) AS firsthongbaopreferential, \
+    COUNT(distinct CASE WHEN c.userId is not null THEN a.relaId else null end ) AS first_order_cnt \
+FROM \
+( \
+    SELECT  relaId, \
+            userid, \
+            hongbaoid, \
+            from_unixtime(cast(createtime / 1000 AS BIGINT),'yyyy-MM-dd') as activity_date, \
+            SUM(count) AS count \
+    FROM lofter_db_dump.ods_db_hong_bao_user_balance_log_nd \
+    WHERE operation < 0 \
+    AND status = 0 \
+    GROUP BY  hongbaoid, relaId, userid, from_unixtime(cast(createtime / 1000 AS BIGINT),'yyyy-MM-dd') \
+) a \
+JOIN \
+( \
+    SELECT  id, \
+            buyerid AS userid, \
+            from_unixtime(cast(paytime / 1000 AS BIGINT),'yyyy-MM-dd') as pay_date, \
+            amount \
+    FROM lofter_db_dump.ods_db_benefit_trade_nd \
+    WHERE hongbaopreferential > 0 \
+    AND status > 0 \
+) b \
+ON a.userid = b.userid AND a.relaId = b.id and a.activity_date = b.pay_date \
+LEFT JOIN \
+( \
+    SELECT  userid, \
+            MIN(from_unixtime(cast(first_pay_time / 1000 AS BIGINT),'yyyy-MM-dd')) AS firstday \
+    FROM lofter.dws_user_pay_type_info_dd \
+    WHERE dt = date_sub(current_date(), 1) \
+    AND pay_type IN ('一番赏', '市集', '抽赏') \
+    GROUP BY  userid \
+) c \
+ON a.userid = c.userid and a.activity_date = c.firstday \
+group by hongbaoid, activity_date

@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.Hive2Kafka
+conf.spark.source.query="select exp_date as day, exp_id as expId, bucket_id as expGroupId, metricDetailId, metricDimId, metric_value as value from lofter.dws_ab_platform_experiment_metric_di where dt='${azkaban.flow.1.days.ago}' and if(exp_id in(9,10,11,16),exp_date='${azkaban.flow.1.days.ago}',exp_date<='${azkaban.flow.1.days.ago}')"
+params= --topic data_center_ab_exp_result  --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092
+dependencies=dws_ab_platform_experiment_metric_di

@@ -1,0 +1,124 @@
+type=sparksql
+hive.query.01= \
+WITH target_tag_config AS ( \
+SELECT tag AS target_tag \
+FROM lofter.dim_act_premium_grain_tag \
+GROUP BY tag \
+), \
+human_authors AS ( \
+SELECT userid \
+FROM lofter_dm.ads_human_sense_picture_author_result_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' AND is_finall_human_flag = 1 \
+UNION \
+SELECT blogid AS userid \
+FROM lofter_dm.ads_human_sense_text_author_result_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' AND user_label IN ('真人') \
+), \
+paid_posts AS ( \
+SELECT postid \
+FROM lofter.dim_gift_post_return_dd \
+WHERE dt = '${azkaban.flow.1.days.ago}' AND status = 1 \
+GROUP BY postid \
+), \
+filtered_post_tags AS ( \
+SELECT \
+exploded_base.author_id, \
+exploded_base.postid, \
+exploded_base.contentType, \
+exploded_base.post_tag AS tag \
+FROM ( \
+SELECT \
+base.author_id, \
+base.postid, \
+base.contentType, \
+t.post_tag \
+FROM ( \
+SELECT \
+b.blogid AS author_id, \
+b.id AS postid, \
+b.contentType, \
+b.tags \
+FROM lofter.dim_post b \
+JOIN lofter.dws_post_traffic_dd pv ON b.id = pv.postid \
+JOIN human_authors ha ON b.blogid = ha.userid \
+WHERE b.publishdate >= date_sub('${azkaban.flow.1.days.ago}', 14) \
+AND pv.dt = '${azkaban.flow.1.days.ago}' \
+AND pv.expose_pv_15d > 50 \
+) base \
+LATERAL VIEW explode(base.tags) t AS post_tag \
+) exploded_base \
+JOIN target_tag_config tc ON exploded_base.post_tag = tc.target_tag \
+), \
+user_unified_interaction AS ( \
+SELECT \
+postId AS postid, \
+userId AS reader_userid, \
+SUM(like_cnt) AS like_cnt, SUM(collect_cnt) AS collect_cnt, SUM(reproduce_cnt) AS reproduce_cnt, \
+SUM(recommend_cnt) AS recommend_cnt, MAX(normal_cm_uv) AS normal_cm_uv, MAX(special_cm_uv) AS special_cm_uv, \
+( SUM(like_cnt) * 0.2 + SUM(collect_cnt) * 5.0 + SUM(reproduce_cnt) * 5.0 + \
+SUM(recommend_cnt) * 2.0 + MAX(normal_cm_uv) * 2.0 + MAX(special_cm_uv) * 0.5 ) AS user_base_score \
+FROM ( \
+SELECT h.postId, h.userId, \
+IF(h.opType = 'praise', 1, 0) AS like_cnt, IF(h.opType = 'subscribe', 1, 0) AS collect_cnt, \
+IF(h.opType = 'reproduce', 1, 0) AS reproduce_cnt, IF(h.opType = 'recommend', 1, 0) AS recommend_cnt, \
+0 AS normal_cm_uv, 0 AS special_cm_uv \
+FROM lofter.dwd_post_hot_di h \
+LEFT SEMI JOIN filtered_post_tags fpt ON h.postId = fpt.postid \
+WHERE h.dt >= date_sub('${azkaban.flow.1.days.ago}', 14) AND h.dt <= '${azkaban.flow.1.days.ago}' \
+UNION ALL \
+SELECT c.postId, c.userId, \
+0 AS like_cnt, 0 AS collect_cnt, 0 AS reproduce_cnt, 0 AS recommend_cnt, \
+IF(c.is_underscore = 0 AND c.is_circle_comment = 0, 1, 0) AS normal_cm_uv, \
+IF(c.is_underscore = 1 OR c.is_circle_comment = 1, 1, 0) AS special_cm_uv \
+FROM lofter.dwd_post_response_di c \
+LEFT SEMI JOIN filtered_post_tags fpt ON c.postId = fpt.postid \
+WHERE c.dt >= date_sub('${azkaban.flow.1.days.ago}', 14) AND c.dt <= '${azkaban.flow.1.days.ago}' \
+) raw_interactions \
+GROUP BY postId, userId \
+), \
+user_ship AS ( \
+SELECT userid AS reader_userid, tag, shipNum AS user_ship_score \
+FROM lofter_db_dump.ods_db_tag_user_ship_info_nd \
+LEFT SEMI JOIN target_tag_config tc ON tag = tc.target_tag \
+), \
+post_tag_score_agg AS ( \
+SELECT \
+b.postid, \
+b.tag, \
+b.author_id, \
+b.contentType, \
+COALESCE(SUM(ui.user_base_score), 0) AS new_interaction_score, \
+COALESCE(SUM(ui.user_base_score * (1.0 + LN(1.0 + COALESCE(us.user_ship_score, 0)))), 0) AS final_new_score_log \
+FROM filtered_post_tags b \
+LEFT JOIN user_unified_interaction ui ON b.postid = ui.postid \
+LEFT JOIN user_ship us ON b.tag = us.tag AND ui.reader_userid = us.reader_userid \
+GROUP BY b.postid, b.tag, b.author_id, b.contentType \
+), \
+apply_discount_and_rn AS ( \
+SELECT \
+agg.tag, \
+agg.postid, \
+agg.author_id AS userid, \
+agg.new_interaction_score, \
+(agg.final_new_score_log * IF(pp.postid IS NOT NULL AND agg.contentType = '文字', 0.7, 1.0)) AS score_log_discount \
+FROM post_tag_score_agg agg \
+LEFT JOIN paid_posts pp ON agg.postid = pp.postid \
+), \
+calc_author_rn AS ( \
+SELECT *, \
+ROW_NUMBER() OVER(PARTITION BY tag, userid ORDER BY score_log_discount DESC) AS author_rn_discount \
+FROM apply_discount_and_rn \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_ecology_premium_grain_list_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+tag, \
+postid AS postId, \
+userid AS blogId, \
+new_interaction_score AS newPostHot, \
+(score_log_discount * \
+CASE WHEN author_rn_discount <= 2 THEN 1.0 \
+WHEN author_rn_discount = 3 THEN 0.8 \
+WHEN author_rn_discount = 4 THEN 0.6 \
+ELSE 0.5 END \
+) AS totalScore \
+FROM calc_author_rn

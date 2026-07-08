@@ -1,0 +1,112 @@
+type=sparksql
+hive.query.01=\
+with post_talk_source as ( \
+    select * from lofter.dim_post_talk \
+) \
+insert overwrite table lofter.dwd_post_talk_discuss_score_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.Id, \
+       t1.talkId, \
+       t1.talkType, \
+       t1.blogId, \
+       t1.questionId, \
+       t1.questionUserId, \
+       t1.talkContent, \
+       t1.recomStatus, \
+       t1.forbidStatus, \
+       t1.valid, \
+       t1.allowView, \
+       t1.status, \
+       t1.auditStatus, \
+       t1.tags, \
+       t1.questionType, \
+       t1.ips, \
+       t1.ext, \
+       t1.discussCount, \
+       t1.scoreCount, \
+       t1.parentQuestionId, \
+       t1.answerCount, \
+       t1.cosplay, \
+       t1.answerType, \
+       t1.relatedBlogId, \
+       t1.relatedPostId, \
+       t1.contentType, \
+       t1.topicChat, \
+       t1.topicId, \
+       t2.publisherUserId as userId, \
+       t2.content, \
+       t2.replyL1CommentId, \
+       t2.replyL2CommentId, \
+       t2.commentHot, \
+       t2.replyL2Count, \
+       null as score, \
+       null as words \
+from ( \
+    select *, \
+           get_json_object(ext,'$.commentId') as commentId, \
+           get_json_object(ext,'$.postId') as commentPostId, \
+           get_json_object(ext,'$.blogId') as commentPostBlogId \
+    from post_talk_source where lower(talkType) like '%answer%' or talkType = 'QUESTION_POST' and questionId <> 0 \
+) t1 \
+left join ( \
+    select id as commentId, \
+           postId, \
+           blogId, \
+           publisherUserId, \
+           content, \
+           replyL1CommentId, \
+           replyL2CommentId, \
+           commentHot, \
+           replyL2Count \
+    from lofter_db_dump.ods_db_post_response_nd \
+    where from_unixtime(cast(publishTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.commentId = t2.commentId and t1.commentPostId = t2.postId and t1.commentPostBlogId = t2.blogId \
+union all \
+select t1.Id, \
+       t1.talkId, \
+       t1.talkType, \
+       t1.blogId, \
+       t1.questionId, \
+       t1.questionUserId, \
+       t1.talkContent, \
+       t1.recomStatus, \
+       t1.forbidStatus, \
+       t1.valid, \
+       t1.allowView, \
+       t1.status, \
+       t1.auditStatus, \
+       t1.tags, \
+       t1.questionType, \
+       t1.ips, \
+       t1.ext, \
+       t1.discussCount, \
+       t1.scoreCount, \
+       t1.parentQuestionId, \
+       t1.answerCount, \
+       t1.cosplay, \
+       t1.answerType, \
+       t1.relatedBlogId, \
+       t1.relatedPostId, \
+       t1.contentType, \
+       t1.topicChat, \
+       t1.topicId, \
+       t2.userId, \
+       null as content, \
+       null as replyL1CommentId, \
+       null as replyL2CommentId, \
+       null as commentHot, \
+       null as replyL2Count, \
+       t2.score, \
+       t2.words \
+from ( \
+    select * from post_talk_source where parentQuestionId <> 0 and cosplay = 3 and talkType = 'NOMINATESIGN_QUESTION' \
+) t1 \
+left join ( \
+    select questionId, \
+           userId, \
+           score, \
+           words \
+    from lofter_db_dump.ods_db_ask_user_item_score_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.talkId = t2.questionId

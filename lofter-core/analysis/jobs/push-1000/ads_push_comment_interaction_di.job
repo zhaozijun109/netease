@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_comment_interaction_di partition(dt = '${azkaban.flow.current.date}') \
+select userId, sum(commenthot) as commenthot, sum(replyl2count) as replyl2count, \
+    max(if(replied_rk = 1 and replied_blogId > 0, replied_blogId, null)) as last_replied_blogId, \
+    max(if(interact_time_rk = 1 and interact_userId > 0, interact_userId, null)) as last_interact_userId, \
+    max(if(interact_data_rk = 1, commentId, null)) as notify_commentId, \
+    max(if(interact_data_rk = 1, postId, null)) as notify_postId, \
+    max(if(interact_data_rk = 1, blogId, null)) as notify_blogId, \
+    max(if(interact_data_rk = 1, content, null)) as notify_content, \
+    max(if(interact_data_rk = 1, commentHot, null)) as notify_commenthot, \
+    max(if(interact_data_rk = 1, replyl2count, null)) as notify_replyl2count \
+from ( \
+    select a.*, \
+        b.userId as replied_blogId, b.opTime as replied_optime, \
+        row_number() over (partition by a.userId order by b.opTime desc) as replied_rk, \
+        c.userId as interact_userid, c.opTime as interact_optime, \
+        row_number() over (partition by a.userId order by c.opTime desc) as interact_time_rk, \
+        row_number() over (partition by a.userId order by replyl2count desc, commenthot desc) as interact_data_rk \
+    from ( \
+        select publisheruserid as userId, postId, blogId, id as commentId, content, commenthot, replyl2count \
+        from ( \
+            select *, \
+                row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+            from lofter.ods_binlog_post_response_di \
+            where dt <= '${azkaban.flow.current.date}' and \
+                dt >= '${azkaban.flow.1.days.ago}' and \
+                from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH') >= '${azkaban.flow.1.days.ago} 09:50' and \
+                from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd HH:mm') < '${azkaban.flow.current.date} 09:50' \
+        ) t \
+        where rk = 1 and _bin_op in (0, 2) \
+    ) a \
+    left join ( \
+        select replyl1commentid as parentCommentId, publisheruserid as userId, max(publishTime) as opTime \
+        from lofter.ods_binlog_post_response_di \
+        where dt <= '${azkaban.flow.current.date}' and \
+            dt >= '${azkaban.flow.1.days.ago}' and _bin_op = 0 \
+        group by 1, 2 \
+    ) b on a.blogId = b.userId and a.commentId = b.parentCommentId \
+    left join ( \
+        select commentId, userId, opTime \
+        from ( \
+            select *, row_number() over (partition by commentId order by opTime desc) as rk \
+            from ( \
+                select commentId, userId, opTime \
+                from lofter.ods_binlog_comment_hot_di \
+                where dt <= '${azkaban.flow.current.date}' and \
+                    dt >= '${azkaban.flow.1.days.ago}' and _bin_op = 0 \
+            union all \
+                select replyl1commentid as commentId, publisheruserid as userId, publishTime as opTime \
+                from lofter.ods_binlog_post_response_di \
+                where dt <= '${azkaban.flow.current.date}' and \
+                    dt >= '${azkaban.flow.1.days.ago}' and _bin_op = 0 \
+            ) t \
+        ) tt \
+        where rk = 1 \
+    ) c on a.commentId = c.commentId \
+) t \
+group by 1 \
+having nvl(commenthot,0) + nvl(replyl2count,0) > 0 \

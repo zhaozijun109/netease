@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.dws_vc_device_active_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+              select x1.deviceudid as device_udid, \
+                     x1.deviceOs   as device_os, \
+                     x3.userids, \
+                     x1.first_active_time, \
+                     x1.first_active_date, \
+                     x3.last_active_date, \
+                     x2.active_days_1d, \
+                     x2.active_days_7d, \
+                     x2.active_days_15d, \
+                     x2.active_days_30d \
+              from (select deviceudid, \
+                           lower(deviceOs)                                                            as deviceOs, \
+                           FROM_UNIXTIME(min(firstAccessTime) / 1000, 'yyyy-MM-dd HH:mm:ss')          as first_active_time, \
+                           TO_DATE(FROM_UNIXTIME(min(firstAccessTime) / 1000, 'yyyy-MM-dd HH:mm:ss')) as first_active_date \
+                    from vc.dwd_device_all_dd \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                    group by 1, 2) x1 \
+                       left join \
+                   (select deviceudid, \
+                           deviceos, \
+                           FLATTEN(COLLECT_SET(userids)), \
+                           count(distinct if(dt = '${azkaban.flow.1.days.ago}', dt, null))               as active_days_1d, \
+                           count(distinct if(dt >= '${azkaban.flow.7.days.ago}', dt, null))              as active_days_7d, \
+                           count(distinct if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as active_days_15d, \
+                           count(distinct if(dt >= '${azkaban.flow.30.days.ago}', dt, null))             as active_days_30d \
+                    from vc.dwd_device_active_di \
+                    where dt <= '${azkaban.flow.1.days.ago}' \
+                      and dt >= '${azkaban.flow.30.days.ago}' \
+                    group by deviceudid, deviceos) x2 on x1.deviceudid = x2.deviceudid \
+                       left join \
+                   (select deviceudid, collect_set(userid) as userids, max(dt) as last_active_date \
+                    from (select deviceudid, collect_set(userid) as userids, max(dt) as dt \
+                          from vc.dwd_device_all_dd \
+                          where dt = '${azkaban.flow.2.days.ago}' \
+                          group by deviceudid \
+                          union all \
+                          select deviceudid, userids, dt \
+                          from vc.dwd_device_active_di \
+                          where dt = '${azkaban.flow.1.days.ago}') a lateral view outer explode(userids) as userid \
+                    group by 1) x3 on x1.deviceudid = x3.deviceudid;

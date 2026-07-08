@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select blogId, hot_std as hot from lofter_dm.ads_blog_hot_dd where dt='${azkaban.flow.1.days.ago}' and hot_1d != 0"
+params= --id blogId --dest lofter_blog_hot_stats --update

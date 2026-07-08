@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_audio_hot_search_list_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select collectionId, \
+       rank as listRank, \
+       13 as listName, \
+       '听书热搜榜' as source \
+from ( \
+    select collectionId, \
+           row_number() over(order by ln(valid_maxprogress/post_cnt)+ln(valid_pv/post_cnt)+ln(valid_playedtime/post_cnt) desc) as rank \
+    from ( \
+        select collectionId, \
+               count(distinct postId) as post_cnt, \
+               sum(case when is_valid = 1 then 1 else 0 end) as valid_pv, \
+               count(distinct case when is_valid = 1 then deviceUdid else null end) as valid_uv, \
+               sum(case when is_valid = 1 then playedTime else 0 end) as valid_playedtime, \
+               sum(case when is_valid = 1 then maxProgress else 0 end) as valid_maxprogress \
+        from lofter.dwd_post_audio_di \
+        where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by collectionId \
+    ) t1 \
+) t2 \
+where rank <= 100

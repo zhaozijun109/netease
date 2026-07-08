@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_creator_level_publish_remain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+level,post_main_content_type \
+,count(distinct a.userid) user_cnt \
+,count(distinct a7.userid)/count(distinct a.userid) 7D_retention \
+,count(distinct a14.userid)/count(distinct a.userid) 14D_retention \
+,count(distinct a30.userid)/count(distinct a.userid) 30D_retention \
+from (select userid,level,post_main_content_type \
+from lofter.dws_par_creator_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+) a  \
+left join \
+(select userid \
+from lofter.dws_par_creator_di \
+where dt between date_add('${azkaban.flow.1.days.ago}',1) and date_add('${azkaban.flow.1.days.ago}',7) and post_count>0 \
+group by userid \
+) a7 \
+on a.userid=a7.userid \
+left join \
+(select userid \
+from lofter.dws_par_creator_di \
+where dt between date_add('${azkaban.flow.1.days.ago}',1) and date_add('${azkaban.flow.1.days.ago}',14) and post_count>0 \
+group by userid \
+) a14 \
+on a.userid=a14.userid \
+left join \
+(select userid \
+from lofter.dws_par_creator_di \
+where dt between date_add('${azkaban.flow.1.days.ago}',1) and date_add('${azkaban.flow.1.days.ago}',30) and post_count>0 \
+group by userid \
+) a30 \
+on a.userid=a30.userid \
+GROUP BY level,post_main_content_type \

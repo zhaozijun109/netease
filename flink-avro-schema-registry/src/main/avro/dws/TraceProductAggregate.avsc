@@ -1,0 +1,18 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "TraceProductAggregate",
+  "fields": [
+    {"name": "userId", "type": "long"},
+    {"name": "action", "type": "int", "doc": "1 曝光 2 点击 3 浏览 4 交易"},
+    {"name": "scene", "type": "string"},
+    {"name": "dt", "type": "long"},
+    {"name": "dh", "type": "long"},
+    {"name": "productId", "type": "long"},
+    {"name": "productType", "type": "int"},
+    {"name": "new_flag", "type": "long"},
+    {"name": "order_amount", "type": "double", "doc": "金额"},
+    {"name": "order_new", "type": "int"},
+    {"name": "order_new_amount", "type": "double"}
+  ]
+}

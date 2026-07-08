@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_subscribe_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.activityCode as activity_code, a.activityname as activity_name, \
+       a.adtrace, \
+       subscribe_users as subscribe_users_std, \
+       vistors_users as visit_users_1d, \
+       buy_users_std, buy_money_std, buy_users_1d, buy_money_1d, \
+       activity_code_type \
+from ( \
+    select activityCode,activity_code_type,adtrace,name activityName,count(distinct userid) as vistors_users \
+    from ( \
+        select parse_url(currentUrl,"QUERY","adTrace") adtrace, \
+               parse_url(currentUrl,"QUERY","activityCode") activityCode, \
+               b.name,userid, \
+               case when b.slotType=4 then '一番赏' else '抽赏' end as activity_code_type \
+        from lofter.ods_mda_wap_di a \
+        join lofter_db_dump.ods_db_benefit_card_activity_nd b on parse_url(currentUrl,"QUERY","activityCode") = b.code \
+        where dt = '${azkaban.flow.1.days.ago}' and parse_url(currentUrl,"QUERY","adTrace")  like '%_cmstogether' \
+    ) t \
+    group by activityCode,activity_code_type,adtrace,name \
+) a \
+left join ( \
+    select activitycode, count(distinct userid) as subscribe_users \
+    from lofter_db_dump.ods_db_benefit_card_activity_sale_notice_nd \
+    where from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by activitycode \
+) b on a.activitycode=b.activitycode \
+left join ( \
+    select adtrace, \
+           count(distinct buyerid) as buy_users_std, \
+           sum(storeprice * productnum - newcouponpreferential) as buy_money_std, \
+           count(distinct if(from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', buyerid, null)) as buy_users_1d, \
+           sum(if(from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', storeprice * productnum - newcouponpreferential, 0)) buy_money_1d \
+    from lofter_db_dump.ods_db_benefit_order_product_nd \
+    where status in (1,3,4) and type = 5 \
+    group by adtrace \
+) c on a.adtrace=c.adtrace

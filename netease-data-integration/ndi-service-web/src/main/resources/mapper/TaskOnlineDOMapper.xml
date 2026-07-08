@@ -1,0 +1,641 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.TaskOnlineDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.TaskOnlineDO">
+    <id column="id" jdbcType="BIGINT" property="id"/>
+    <result column="owner" jdbcType="VARCHAR" property="owner"/>
+    <result column="product" jdbcType="VARCHAR" property="product"/>
+    <result column="cluster" jdbcType="VARCHAR" property="cluster"/>
+    <result column="creator" jdbcType="VARCHAR" property="creator"/>
+    <result column="modifier" jdbcType="VARCHAR" property="modifier"/>
+    <result column="executor" jdbcType="VARCHAR" property="executor"/>
+    <result column="task_id" jdbcType="VARCHAR" property="taskId"/>
+    <result column="task_name" jdbcType="VARCHAR" property="taskName"/>
+    <result column="task_description" jdbcType="VARCHAR" property="taskDescription"/>
+    <result column="migration_type" jdbcType="TINYINT" property="migrationType"/>
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime"/>
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime"/>
+    <result column="execute_time" jdbcType="TIMESTAMP" property="executeTime"/>
+    <result column="version" jdbcType="INTEGER" property="version"/>
+    <result column="status" jdbcType="TINYINT" property="status"/>
+    <result column="properties" jdbcType="OTHER" property="properties"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler"/>
+    <result column="handlers" jdbcType="VARCHAR" property="handlers"/>
+    <result column="reader_id" jdbcType="BIGINT" property="readerId"/>
+    <result column="reader_type" jdbcType="TINYINT" property="readerType"/>
+    <result column="reader_url" jdbcType="VARCHAR" property="readerUrl"/>
+    <result column="writer_url" jdbcType="VARCHAR" property="writerUrl"/>
+    <result column="reader_table_name" jdbcType="VARCHAR" property="readerTableName"/>
+    <result column="writer_id" jdbcType="BIGINT" property="writerId"/>
+    <result column="writer_type" jdbcType="TINYINT" property="writerType"/>
+    <result column="writer_table_name" jdbcType="VARCHAR" property="writerTableName"/>
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, `owner`, product, cluster, creator, modifier, executor, task_id, task_name, task_description,
+    migration_type, create_time, modify_time, execute_time, version, `status`, properties,
+    handlers, reader_id, reader_type, reader_url, writer_url, reader_table_name, writer_id, writer_type, writer_table_name
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from task_online
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+
+  <select id="selectByTaskId" parameterType="string" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from task_online
+    where
+    id in
+    (select MAX(id) from task_online group by task_id)
+    and
+    task_id = #{taskId,jdbcType=VARCHAR}
+  </select>
+  <select id="selectCountByTaskId" parameterType="string" resultType="int">
+    select
+    count(*)
+    from task_online
+    where task_id = #{taskId, jdbcType=VARCHAR}
+  </select>
+  <select id="selectByProductAndCluster" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from task_online
+    where
+    id in
+    (select MAX(id) from task_online group by task_id)
+    and product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="owner != null and owner != ''">
+      and owner = #{owner,jdbcType=VARCHAR}
+    </if>
+    <if test="writerType != null and writerType != ''">
+      and writer_type = #{writerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerType != null and readerType != ''">
+      and reader_type = #{readerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerUrl != null and readerUrl != ''">
+      and reader_url like concat('%', #{readerUrl,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="writerUrl != null and writerUrl != ''">
+      and writer_url like concat('%', #{writerUrl,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="writerTableName != null and writerTableName != ''">
+      and writer_table_name like concat('%', #{writerTableName,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="taskName != null and taskName != ''">
+      and task_name like concat('%', #{taskName,jdbcType=VARCHAR}, '%')
+    </if>
+    <choose>
+      <when test="sortType == 1">
+        order by modify_time desc
+      </when>
+      <when test="sortType == 2">
+        order by modify_time asc
+      </when>
+      <when test="sortType == 3">
+        order by create_time desc
+      </when>
+      <when test="sortType == 4">
+        order by create_time asc
+      </when>
+      <otherwise>
+        order by modify_time desc
+      </otherwise>
+    </choose>
+  </select>
+  <select id="selectByProductAndClusterAndTaskName" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from task_online
+    where
+    id in
+    (select MAX(id) from task_online group by task_id)
+    and product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="taskName != null and taskName != ''">
+      and task_name like concat('%', #{taskName,jdbcType=VARCHAR}, '%')
+    </if>
+  </select>
+
+  <select id="selectTaskList" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List"/>
+    from task_online
+    where id in
+    (select MAX(id) from task_online group by task_id)
+    and product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="writerType != null and writerType != ''">
+      and writer_type = #{writerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerType != null and readerType != ''">
+      and reader_type = #{readerType,jdbcType=TINYINT}
+    </if>
+    <choose>
+      <when test="searchKey != null and searchKey != ''">
+        and task_name like concat('%', #{searchKey, jdbcType=VARCHAR}, '%')
+      </when>
+    </choose>
+    <choose>
+      <when test="sortType == 'descend' and sortBy == 'createTime'">
+        order by create_time desc
+      </when>
+      <when test="sortType == 'ascend' and sortBy == 'createTime'">
+        order by create_time asc
+      </when>
+      <when test="sortType == 'descend' and sortBy == 'modifyTime'">
+        order by modify_time desc
+      </when>
+      <when test="sortType == 'ascend' and sortBy == 'modifyTime'">
+        order by modify_time asc
+      </when>
+      <otherwise>
+        order by modify_time desc
+      </otherwise>
+    </choose>
+  </select>
+
+  <select id="selectTaskCount" resultType="int">
+    select count(distinct task_id)
+    from task_online
+    where product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="writerType != null and writerType != ''">
+      and writer_type = #{writerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerType != null and readerType != ''">
+      and reader_type = #{readerType,jdbcType=TINYINT}
+    </if>
+    <choose>
+      <when test="searchKey != null and searchKey != ''">
+        and task_name like concat('%', #{searchKey, jdbcType=VARCHAR}, '%')
+      </when>
+    </choose>
+  </select>
+
+  <select id="selectIdAndNameCount" resultType="int">
+    select
+    count(*)
+    from task_online
+    where
+    id in
+    (select MAX(id) from task_online group by task_id)
+    and product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="taskName != null and taskName != ''">
+      and task_name like concat('%', #{taskName,jdbcType=VARCHAR}, '%')
+    </if>
+  </select>
+  <select id="selectCountByProductAndCluster" resultType="int">
+    select
+    count(distinct task_id)
+    from task_online
+    where
+    product = #{product, jdbcType=VARCHAR}
+    and cluster = #{cluster, jdbcType=VARCHAR}
+    <if test="owner != null and owner != ''">
+      and owner = #{owner,jdbcType=VARCHAR}
+    </if>
+    <if test="writerType != null and writerType != ''">
+      and writer_type = #{writerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerType != null and readerType != ''">
+      and reader_type = #{readerType,jdbcType=TINYINT}
+    </if>
+    <if test="readerUrl != null and readerUrl != ''">
+      and reader_url like concat('%', #{readerUrl,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="writerUrl != null and writerUrl != ''">
+      and writer_url like concat('%', #{writerUrl,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="writerTableName != null and writerTableName != ''">
+      and writer_table_name like concat('%', #{writerTableName,jdbcType=VARCHAR}, '%')
+    </if>
+    <if test="taskName != null and taskName != ''">
+      and task_name like concat('%', #{taskName,jdbcType=VARCHAR}, '%')
+    </if>
+  </select>
+  <select id="selectOwnersByProductAndCluster" resultType="string">
+    select distinct owner
+    from task_online
+    where
+    product = #{product, jdbcType = VARCHAR}
+    and cluster = #{cluster, jdbcType = VARCHAR}
+  </select>
+  <select id="selectOwnersCountByProductAndCluster" resultType="int">
+    select count(distinct owner)
+    from task_online
+    where
+    product = #{product, jdbcType = VARCHAR}
+    and cluster = #{cluster, jdbcType = VARCHAR}
+  </select>
+  <select id="selectVersionByTaskId" parameterType="string" resultType="integer">
+    select
+    version
+    from task_online
+    where task_id = #{taskId,jdbcType=VARCHAR}
+  </select>
+
+  <select id="selectReaderIdByTaskId" parameterType="string" resultType="java.lang.Long">
+    select
+    DISTINCT(reader_id)
+    from task_online
+    where task_id = #{taskId, jdbcType=VARCHAR}
+  </select>
+
+  <select id="selectWriterIdByTaskId" parameterType="string" resultType="java.lang.Long">
+    select
+    DISTINCT(writer_id)
+    from task_online
+    where task_id = #{taskId, jdbcType=VARCHAR}
+  </select>
+
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from task_online
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+
+  <delete id="deleteByTaskId">
+    delete from task_online
+    where
+    product = #{product,jdbcType=VARCHAR}
+    and cluster = #{cluster,jdbcType=VARCHAR}
+    and task_id = #{taskId,jdbcType=VARCHAR}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskOnlineDO" useGeneratedKeys="true"
+          keyProperty="id">
+    insert into task_online (id, owner, product, cluster,
+    creator, modifier, executor,
+    task_id, task_name, task_description,
+    migration_type, create_time, modify_time,
+    execute_time, version, status,
+    properties, handlers, reader_id,
+    reader_type, reader_url, writer_url, reader_table_name, writer_id,
+    writer_type, writer_table_name)
+    values (#{id,jdbcType=BIGINT}, #{owner,jdbcType=VARCHAR}, #{product,jdbcType=VARCHAR}, #{cluster,jdbcType=VARCHAR},
+    #{creator,jdbcType=VARCHAR}, #{modifier,jdbcType=VARCHAR}, #{executor,jdbcType=VARCHAR},
+    #{taskId,jdbcType=VARCHAR}, #{taskName,jdbcType=VARCHAR}, #{taskDescription,jdbcType=VARCHAR},
+    #{migrationType,jdbcType=TINYINT}, #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP},
+    #{executeTime,jdbcType=TIMESTAMP}, #{version,jdbcType=INTEGER}, #{status,jdbcType=TINYINT},
+    #{properties,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+    #{handlers,jdbcType=VARCHAR}, #{readerId,jdbcType=BIGINT},
+    #{readerType,jdbcType=TINYINT}, #{readerUrl,jdbcType=VARCHAR}, #{writerUrl,jdbcType=VARCHAR}, #{readerTableName,jdbcType=VARCHAR},
+    #{writerId,jdbcType=BIGINT}, #{writerType,jdbcType=TINYINT}, #{writerTableName,jdbcType=VARCHAR})
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskOnlineDO"
+          useGeneratedKeys="true" keyProperty="id">
+    insert into task_online
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="owner != null">
+        owner,
+      </if>
+      <if test="product != null">
+        product,
+      </if>
+      <if test="cluster != null">
+        cluster,
+      </if>
+      <if test="creator != null">
+        creator,
+      </if>
+      <if test="modifier != null">
+        modifier,
+      </if>
+      <if test="executor != null">
+        executor,
+      </if>
+      <if test="taskId != null">
+        task_id,
+      </if>
+      <if test="taskName != null">
+        task_name,
+      </if>
+      <if test="taskDescription != null">
+        task_description,
+      </if>
+      <if test="migrationType != null">
+        migration_type,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+      <if test="executeTime != null">
+        execute_time,
+      </if>
+      <if test="version != null">
+        version,
+      </if>
+      <if test="status != null">
+        status,
+      </if>
+      <if test="properties != null">
+        properties,
+      </if>
+      <if test="handlers != null">
+        handlers,
+      </if>
+      <if test="readerId != null">
+        reader_id,
+      </if>
+      <if test="readerType != null">
+        reader_type,
+      </if>
+      <if test="readerUrl != null">
+        reader_Url,
+      </if>
+      <if test="writerUrl != null">
+        writer_Url,
+      </if>
+      <if test="readerTableName != null">
+        reader_table_name,
+      </if>
+      <if test="writerId != null">
+        writer_id,
+      </if>
+      <if test="writerType != null">
+        writer_type,
+      </if>
+      <if test="writerTableName != null">
+        writer_table_name,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="owner != null">
+        #{owner,jdbcType=VARCHAR},
+      </if>
+      <if test="product != null">
+        #{product,jdbcType=VARCHAR},
+      </if>
+      <if test="cluster != null">
+        #{cluster,jdbcType=VARCHAR},
+      </if>
+      <if test="creator != null">
+        #{creator,jdbcType=VARCHAR},
+      </if>
+      <if test="modifier != null">
+        #{modifier,jdbcType=VARCHAR},
+      </if>
+      <if test="executor != null">
+        #{executor,jdbcType=VARCHAR},
+      </if>
+      <if test="taskId != null">
+        #{taskId,jdbcType=VARCHAR},
+      </if>
+      <if test="taskName != null">
+        #{taskName,jdbcType=VARCHAR},
+      </if>
+      <if test="taskDescription != null">
+        #{taskDescription,jdbcType=VARCHAR},
+      </if>
+      <if test="migrationType != null">
+        #{migrationType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="executeTime != null">
+        #{executeTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="version != null">
+        #{version,jdbcType=INTEGER},
+      </if>
+      <if test="status != null">
+        #{status,jdbcType=TINYINT},
+      </if>
+      <if test="properties != null">
+        #{properties,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="handlers != null">
+        #{handlers,jdbcType=VARCHAR},
+      </if>
+      <if test="readerId != null">
+        #{readerId,jdbcType=BIGINT},
+      </if>
+      <if test="readerType != null">
+        #{readerType,jdbcType=TINYINT},
+      </if>
+      <if test="readerUrl != null">
+        #{readerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="writerUrl != null">
+        #{writerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="readerTableName != null">
+        #{readerTableName,jdbcType=VARCHAR},
+      </if>
+      <if test="writerId != null">
+        #{writerId,jdbcType=BIGINT},
+      </if>
+      <if test="writerType != null">
+        #{writerType,jdbcType=TINYINT},
+      </if>
+      <if test="writerTableName != null">
+        #{writerTableName,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskOnlineDO">
+    update task_online
+    <set>
+      <if test="owner != null">
+        owner = #{owner,jdbcType=VARCHAR},
+      </if>
+      <if test="product != null">
+        product = #{product,jdbcType=VARCHAR},
+      </if>
+      <if test="cluster != null">
+        cluster = #{cluster,jdbcType=VARCHAR},
+      </if>
+      <if test="creator != null">
+        creator = #{creator,jdbcType=VARCHAR},
+      </if>
+      <if test="modifier != null">
+        modifier = #{modifier,jdbcType=VARCHAR},
+      </if>
+      <if test="executor != null">
+        executor = #{executor,jdbcType=VARCHAR},
+      </if>
+      <if test="taskId != null">
+        task_id = #{taskId,jdbcType=VARCHAR},
+      </if>
+      <if test="taskName != null">
+        task_name = #{taskName,jdbcType=VARCHAR},
+      </if>
+      <if test="taskDescription != null">
+        task_description = #{taskDescription,jdbcType=VARCHAR},
+      </if>
+      <if test="migrationType != null">
+        migration_type = #{migrationType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="executeTime != null">
+        execute_time = #{executeTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="version != null">
+        version = #{version,jdbcType=INTEGER},
+      </if>
+      <if test="status != null">
+        status = #{status,jdbcType=TINYINT},
+      </if>
+      <if test="properties != null">
+        properties =
+        #{properties,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="handlers != null">
+        handlers = #{handlers,jdbcType=VARCHAR},
+      </if>
+      <if test="readerId != null">
+        reader_id = #{readerId,jdbcType=BIGINT},
+      </if>
+      <if test="readerType != null">
+        reader_type = #{readerType,jdbcType=TINYINT},
+      </if>
+      <if test="readerUrl != null">
+        reader_Url = #{readerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="writerUrl != null">
+        writer_Url = #{writerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="readerTableName != null">
+        reader_table_name = #{readerTableName,jdbcType=VARCHAR},
+      </if>
+      <if test="writerId != null">
+        writer_id = #{writerId,jdbcType=BIGINT},
+      </if>
+      <if test="writerType != null">
+        writer_type = #{writerType,jdbcType=TINYINT},
+      </if>
+      <if test="writerTableName != null">
+        writer_table_name = #{writerTableName,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.TaskOnlineDO">
+    update task_online
+    set owner = #{owner,jdbcType=VARCHAR},
+    product = #{product,jdbcType=VARCHAR},
+    cluster = #{cluster,jdbcType=VARCHAR},
+    creator = #{creator,jdbcType=VARCHAR},
+    modifier = #{modifier,jdbcType=VARCHAR},
+    executor = #{executor,jdbcType=VARCHAR},
+    task_id = #{taskId,jdbcType=VARCHAR},
+    task_name = #{taskName,jdbcType=VARCHAR},
+    task_description = #{taskDescription,jdbcType=VARCHAR},
+    migration_type = #{migrationType,jdbcType=TINYINT},
+    create_time = #{createTime,jdbcType=TIMESTAMP},
+    modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+    execute_time = #{executeTime,jdbcType=TIMESTAMP},
+    version = #{version,jdbcType=INTEGER},
+    status = #{status,jdbcType=TINYINT},
+    properties =
+    #{properties,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+    handlers = #{handlers,jdbcType=VARCHAR},
+    reader_id = #{readerId,jdbcType=BIGINT},
+    reader_type = #{readerType,jdbcType=TINYINT},
+    reader_Url = #{readerUrl,jdbcType=VARCHAR},
+    writer_Url = #{writerUrl,jdbcType=VARCHAR},
+    reader_table_name = #{readerTableName,jdbcType=VARCHAR},
+    writer_id = #{writerId,jdbcType=BIGINT},
+    writer_type = #{writerType,jdbcType=TINYINT},
+    writer_table_name = #{writerTableName,jdbcType=VARCHAR}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByTaskIdSelective" parameterType="string">
+    update task_online
+    <set>
+      version = version + 1,
+      <if test="owner != null">
+        owner = #{owner,jdbcType=VARCHAR},
+      </if>
+      <if test="product != null">
+        product = #{product,jdbcType=VARCHAR},
+      </if>
+      <if test="cluster != null">
+        cluster = #{cluster,jdbcType=VARCHAR},
+      </if>
+      <if test="creator != null">
+        creator = #{creator,jdbcType=VARCHAR},
+      </if>
+      <if test="modifier != null">
+        modifier = #{modifier,jdbcType=VARCHAR},
+      </if>
+      <if test="executor != null">
+        executor = #{executor,jdbcType=VARCHAR},
+      </if>
+      <if test="taskName != null">
+        task_name = #{taskName,jdbcType=VARCHAR},
+      </if>
+      <if test="taskDescription != null">
+        task_description = #{taskDescription,jdbcType=VARCHAR},
+      </if>
+      <if test="migrationType != null">
+        migration_type = #{migrationType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="executeTime != null">
+        execute_time = #{executeTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="status != null">
+        status = #{status,jdbcType=TINYINT},
+      </if>
+      <if test="properties != null">
+        properties =
+        #{properties,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="handlers != null">
+        handlers = #{handlers,jdbcType=VARCHAR},
+      </if>
+      <if test="readerId != null">
+        reader_id = #{readerId,jdbcType=BIGINT},
+      </if>
+      <if test="readerType != null">
+        reader_type = #{readerType,jdbcType=TINYINT},
+      </if>
+      <if test="readerUrl != null">
+        reader_Url = #{readerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="writerUrl != null">
+        writer_Url = #{writerUrl,jdbcType=VARCHAR},
+      </if>
+      <if test="readerTableName != null">
+        reader_table_name = #{readerTableName,jdbcType=VARCHAR},
+      </if>
+      <if test="writerId != null">
+        writer_id = #{writerId,jdbcType=BIGINT},
+      </if>
+      <if test="writerType != null">
+        writer_type = #{writerType,jdbcType=TINYINT},
+      </if>
+      <if test="writerTableName != null">
+        writer_table_name = #{writerTableName,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where task_id = #{taskId,jdbcType=VARCHAR}
+  </update>
+</mapper>

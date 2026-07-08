@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'interest_tag_content_browse') \
+select userId, \
+       'LOFTER.PUSH.NEW.TASK' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'interest_tag_content' as policy, \
+       2 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, 28 as messageType, postId as itemId, tag as interest, blogId \
+    from lofter_dm.ads_push_interest_tag_content_browse_di \
+    where dt = '${azkaban.flow.current.date}' \
+) t \
+
+dependencies=ads_push_interest_tag_content_browse_di

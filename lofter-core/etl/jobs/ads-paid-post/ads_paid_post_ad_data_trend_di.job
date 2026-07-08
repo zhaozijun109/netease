@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_ad_data_trend_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, '${azkaban.flow.30.days.ago}' as startDate, '${azkaban.flow.1.days.ago}' as endDate, \
+    least(cast(100 * (sum((nvl(wide_new_browse_uv,0) + nvl(new_browse_uv,0))/2) / sum(browse_uv)) as bigint), 100) as newReaderRatio, \
+    collect_list(struct(dt as `date`, nvl(new_browse_pv,0) as adCloseReadCount, wide_new_browse_pv as adOpenReadCount)) as dailyStats, \
+    cast(sum(browse_pv)/30 as bigint) as avgDailyReadCount \
+from lofter_dm.ads_paid_post_ad_unlock_users_di \
+where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+group by 1 \
+
+dependencies=ads_paid_post_ad_unlock_users_di

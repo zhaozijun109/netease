@@ -1,0 +1,57 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2ClickhouseWD
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag category_consume --bitmap
+retries=0
+conf.spark.execute.sql = " select userid               as userId, \
+                                    'category_consume' as tag_name, \
+                                    cat                  as dim1, \
+                                    grp               as dim2, \
+                                    ''                   as dim3, \
+                                    ''                   as dim4, \
+                                    subcat                  as grp, \
+                                    ''                   as value \
+                             from (select userId, cat, subcat, grp \
+                                   from ( \
+                                            select userId, \
+                                                   'DAY_90'                as cat, \
+                                                   case \
+                                                       when pc < 10 then 'COUNT_1_10' \
+                                                       when pc < 100 then 'COUNT_10_100' \
+                                                       when pc < 500 then 'COUNT_100_500' \
+                                                       when pc < 1000 then 'COUNT_500_1k' \
+                                                       else 'COUNT_1k' end as subcat, \
+                                                   post_category           as grp, \
+                                                   pc \
+                                            from ( \
+                                                     select category                                as post_category, \
+                                                            userId, \
+                                                            bitmap_count(bitmap_union(post_bitmap)) as pc \
+                                                     from lofter.dws_category_user_consume_di \
+                                                     where dt <= '${azkaban.flow.1.days.ago}' \
+                                                       and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 180) \
+                                                     group by category, userId \
+                                                     ) tt \
+                                    \
+                                            union all \
+                                    \
+                                            select userId, \
+                                                   'DAY_180'               as cat, \
+                                                   case \
+                                                       when pc < 10 then 'COUNT_1_10' \
+                                                       when pc < 100 then 'COUNT_10_100' \
+                                                       when pc < 500 then 'COUNT_100_500' \
+                                                       when pc < 1000 then 'COUNT_500_1k' \
+                                                       else 'COUNT_1k' end as subcat, \
+                                                   post_category           as grp, \
+                                                   pc \
+                                            from ( \
+                                                     select category                                as post_category, \
+                                                            userId, \
+                                                            bitmap_count(bitmap_union(post_bitmap)) as pc \
+                                                     from lofter.dws_category_user_consume_di \
+                                                     where dt <= '${azkaban.flow.1.days.ago}' \
+                                                       and dt > DATE_SUB('${azkaban.flow.1.days.ago}', 180) \
+                                                     group by category, userId \
+                                                     ) tt \
+                                            ) t \
+                                   where userId > 0 )"

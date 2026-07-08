@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,hongbaoid,activity_date,trade_num,trade_uv,hongbaopreferential,amount,first_trade_uv,first_trade_amount,firsthongbaopreferential,first_order_cnt from lofter_dm.ads_activity_easy_fetch_hongbao_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_activity_easy_fetch_hongbao_dd --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=ads_activity_easy_fetch_hongbao_dd

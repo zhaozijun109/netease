@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_return_user_tag_push_di partition(dt = '${azkaban.flow.current.date}') \
+select a.userId, a.blogId, a.postId, a.tag, nvl(b.hot,0) as hot \
+from ( \
+    select user_id as userId, tag, \
+           conv(split(item_id, '_') [1], 16, 10) as postId, conv(split(item_id, '_') [0], 16, 10) as blogId \
+    from rec.reback_user_push_info2send \
+) a \
+left join ( \
+    select postId, hot \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId

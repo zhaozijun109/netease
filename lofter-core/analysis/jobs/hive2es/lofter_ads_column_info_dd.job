@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select a.columnId as id, a.`columnId`, a.`columnExposureCount`,a.`columnClickCount`,a.`columnClickRateCount`,a.`contentExposureCount`,a.`contentClickCount`,a.`contentClickRateCount`,a.`dt` from (select * from `lofter_dm`.`ads_column_info_dd` where dt='${azkaban.flow.1.days.ago}') a join (select columnId from `lofter_dm`.`ads_column_delivery_task_info_total_dd` where dt = '${azkaban.flow.1.days.ago}' group by columnId) b on a.columnId = b.columnId"
+params= --partition ${azkaban.flow.1.days.ago} --id id --dest lofter_ads_column_info_dd --postfixsep --atom

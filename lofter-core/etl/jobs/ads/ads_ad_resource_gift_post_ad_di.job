@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_ad_resource_gift_post_ad_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.bid_amount, a.bg_pv, a.click_pv, b.unlock_count, null as total_real_income \
+from ( \
+    select dt, sum(bid_amount)/1000 as bid_amount, sum(bgPv) as bg_pv, sum(clickpv) click_pv \
+    from lofter.dwd_ad_actions_di \
+    where dt = '${azkaban.flow.1.days.ago}' and positionId = 279600 and bgPv > 0 \
+    group by 1 \
+) a \
+left join ( \
+    select from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') as dt, count(distinct postId, userId) as unlock_count \
+    from lofter_db_dump.ods_db_trade_ad_reward_complete_nd \
+    where from_unixtime(cast(completeTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.dt = b.dt \

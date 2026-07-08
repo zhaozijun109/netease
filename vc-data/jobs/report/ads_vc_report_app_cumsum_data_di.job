@@ -1,0 +1,168 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_report_app_cumsum_data_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT t1.period, \
+t3.register_uv, \
+t1.chat_uv, \
+t1.total_chat_rounds, \
+t1.chat_characters, \
+t2.consum_uv, \
+t2.total_amount \
+from \
+( \
+select '1' AS period, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender = 2  \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')>='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+ \
+union ALL \
+ \
+select '7' AS period, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender = 2  \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')>='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')<= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+ \
+union ALL \
+ \
+select '15' AS period, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender = 2  \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')>='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')<= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 15 \
+ \
+union ALL \
+ \
+select '30' AS period, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender = 2  \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')>='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')<= '${azkaban.flow.1.days.ago}' \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+ \
+union ALL \
+ \
+select 'all' AS period, \
+count(distinct user_id) as chat_uv, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender = 2  \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')>='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')<= '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join \
+( \
+select '1' AS period, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.ods_db_vc_order_nd \
+where order_status = 2 \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') >='2024-12-19' \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}' \
+ \
+union ALL \
+ \
+select '7' AS period, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.ods_db_vc_order_nd \
+where order_status = 2 \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') >='2024-12-19' \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+and datediff('${azkaban.flow.1.days.ago}',FROM_UNIXTIME(create_time,'yyyy-MM-dd'))<7 \
+ \
+union ALL \
+ \
+select '15' AS period, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.ods_db_vc_order_nd \
+where order_status = 2 \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') >='2024-12-19' \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+and datediff('${azkaban.flow.1.days.ago}',FROM_UNIXTIME(create_time,'yyyy-MM-dd'))<15 \
+ \
+union ALL \
+ \
+select '30' AS period, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.ods_db_vc_order_nd \
+where order_status = 2 \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') >='2024-12-19' \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+and datediff('${azkaban.flow.1.days.ago}',FROM_UNIXTIME(create_time,'yyyy-MM-dd'))<30 \
+ \
+union ALL \
+ \
+select 'all' AS period, \
+count(distinct user_id) as consum_uv, \
+sum(order_price) as total_amount \
+from vc.ods_db_vc_order_nd \
+where order_status = 2 \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') >='2024-12-19' \
+and FROM_UNIXTIME(create_time,'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' \
+) t2 on t1.period=t2.period  \
+left join \
+( \
+select '1' AS period, \
+count(distinct id) as register_uv \
+from vc.ods_db_vc_user_account_nd \
+where status=0 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') >='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  \
+ \
+union ALL \
+ \
+select '7' AS period, \
+count(distinct id) as register_uv \
+from vc.ods_db_vc_user_account_nd \
+where status=0 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') >='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  <= '${azkaban.flow.1.days.ago}'  \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+ \
+union ALL \
+ \
+select '15' AS period, \
+count(distinct id) as register_uv \
+from vc.ods_db_vc_user_account_nd \
+where status=0 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') >='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  <= '${azkaban.flow.1.days.ago}'  \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 15 \
+ \
+union ALL \
+ \
+select '30' AS period, \
+count(distinct id) as register_uv \
+from vc.ods_db_vc_user_account_nd \
+where status=0 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') >='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  <= '${azkaban.flow.1.days.ago}'  \
+AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+ \
+union ALL \
+ \
+select 'all' AS period, \
+count(distinct id) as register_uv \
+from vc.ods_db_vc_user_account_nd \
+where status=0 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') >='2024-12-19' \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')  <= '${azkaban.flow.1.days.ago}'  \
+) t3 on t1.period=t3.period  \

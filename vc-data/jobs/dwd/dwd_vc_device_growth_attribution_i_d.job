@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=insert OVERWRITE TABLE vc.dwd_vc_device_growth_attribution_i_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+              select x1.deviceUdid                                           as device_udid, \
+                     FROM_UNIXTIME(x1.time_1 / 1000, 'yyyy-MM-dd HH:mm:ss')  as occur_time, \
+                     x1.device_type, \
+                     nvl(x2.type, if(x4.deviceUdid is null, '自然', '邀请')) as origin_type, \
+                     nvl(x2.channel, '')                                     as origin_channel, \
+                     x1.deviceOS, \
+                     x2.proxy, \
+                     x3.user_id, \
+                     x3.user_code, \
+                     x1.appchannel, \
+                     x1.appversion \
+              from ( \
+                       select deviceUdid, dt, firstAccessTime time_1, 'new' device_type, deviceOS, appchannel, appversion \
+                       from vc.dwd_device_new_di \
+                       where dt = '${azkaban.flow.1.days.ago}' \
+                       union all \
+                       select deviceUdid, dt, returnOccurTime time_1, 'return_30' device_type, deviceOS, last_appChannel, last_appVersion \
+                       from vc.dwd_device_return_di \
+                       where dt = '${azkaban.flow.1.days.ago}' \
+                       ) x1 \
+                       left join ( \
+                  select deviceUdid, media as channel, '广告' as type, proxy, device_type \
+                  from ( \
+                           select deviceUdid, media, proxy,IF(device_type = 'return','return_30',device_type) as device_type \
+                           from lofter.dwd_ad_growth_device_di \
+                           where appid = 'virtualapp' and \
+                                 dt = '${azkaban.flow.1.days.ago}' \
+                           ) t \
+                  ) x2 on x1.deviceUdid = x2.deviceUdid and x1.device_type = x2.device_type \
+                       left join \
+                   (select x1.user_id, x2.device_udid as deviceUdid \
+                       from (select user_id, \
+                                    code, \
+                                    device_id, \
+                                    code_user_id                                       as parent_user_id, \
+                                    FROM_UNIXTIME(receive_time, 'yyyy-MM-dd HH:mm:ss') as receive_time, \
+                                    FROM_UNIXTIME(receive_time, 'yyyy-MM-dd')          as receive_date \
+                             from vc.ods_db_vc_redeem_code_receive_record_nd \
+                             where FROM_UNIXTIME(create_time, 'yyyy-MM-dd') >= '2025-04-11' \
+                               and type = 2) x1 \
+                                left join \
+                            (select device_id, GET_JSON_OBJECT(ext, '$.dadeviceId') as device_udid \
+                             from vc.ods_db_vc_device_report_record_nd) x2 on x1.device_id = x2.device_id \
+                       ) x4 on x1.deviceUdid = x4.deviceUdid \
+                       left join \
+                   (select device_udid \
+                         , user_id \
+                         , user_code \
+                         , deviceOS \
+                    from vc.dwd_vc_device_user_correlation_a_d \
+                    where dt = if('${azkaban.flow.1.days.ago}' < '2025-02-09', '2025-02-09', '${azkaban.flow.1.days.ago}') \
+                      and user_id is not null) x3 \
+                   on x1.deviceUdid = x3.device_udid ;
+
+dependencies=dwd_device_return_di,dwd_device_new_di,dwd_vc_device_user_correlation_a_d

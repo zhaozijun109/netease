@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_private_zone_induction_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select blogId, publicPostId, privatePostId, userId \
+    from ( \
+        select a.blogId, a.userId, \
+            a.postId as publicPostId, \
+            b.postId as privatePostId, \
+            row_number() over (partition by b.postId order by a.occurTime desc) as rk \
+        from ( \
+        select post_userid as blogId, postId, userId, occurTime \
+        from lofter.dwd_post_expose_di \
+        where dt = '${azkaban.flow.1.days.ago}' and reaction = 'click' and \
+            ((is_rec = 1 and scene <> 'search') or scene = 'tag') \
+        ) a \
+        join ( \
+            select post_userid as blogId, postId, userId, occurTime \
+            from lofter.dwd_post_browse_di \
+            where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+        ) b on a.blogId = b.blogId and a.userId = b.userId and a.occurTime < b.occurTime and b.occurTime - a.occurTime < 3600* 1000L \
+    ) t \
+    where rk = 1 and publicPostId != privatePostId \
+  union all \
+    select blogId, publicPostId, privatePostId, userId \
+    from ( \
+        select a.blogId, a.userId, \
+            a.postId as publicPostId, \
+            b.postId as privatePostId, \
+            row_number() over (partition by b.postId order by a.occurTime desc) as rk \
+        from ( \
+        select post_userid as blogId, postId, userId, occurTime \
+        from lofter.dwd_post_expose_di \
+        where dt = '${azkaban.flow.1.days.ago}' and reaction = 'click' and \
+            ((is_rec = 1 and scene <> 'search') or scene = 'tag') \
+        ) a \
+        join ( \
+            select blogId, postId, userId, unlock_time as occurTime \
+            from lofter.dwd_gift_post_unlock_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        ) b on a.blogId = b.blogId and a.userId = b.userId and a.occurTime < b.occurTime and b.occurTime - a.occurTime < 3600* 1000L \
+    ) t \
+    where rk = 1 and publicPostId != privatePostId \
+) t \
+distribute by 1

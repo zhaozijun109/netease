@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_low_quality_post_limit_scene_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogId, min(scene) as scene \
+from ( \
+    select postId, blogId, \
+           case when rule_flg1 > 0 or rule_flg2 > 0 then 1 \
+                when rule_flg3 > 0 and rule_flg4 > 0 then 1 \
+                when rule_flg3 > 0 then 2 \
+           else 0 end as scene \
+    from lofter_dm.ads_paid_post_low_quality_post_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+) t \
+where scene > 0 \
+group by 1, 2 \
+
+dependencies=ads_paid_post_low_quality_post_di

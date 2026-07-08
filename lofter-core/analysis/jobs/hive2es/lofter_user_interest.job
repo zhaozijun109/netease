@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('_', a.userId, a.rk) as id, a.userId as userId, a.interest_name as interest_name, a.rk as rk from (select userId, ip as interest_name, rk from lofter_dm.ads_ip_user_top_di where dt = '${azkaban.flow.1.days.ago}' and rk <= 5 ) a left join (select userId, ip as interest_name, rk from lofter_dm.ads_ip_user_top_di where dt = '${azkaban.flow.2.days.ago}' and rk <= 5 ) b on a.userId = b.userId and a.rk = b.rk where b.rk is null or a.interest_name != b.interest_name"
+params= --update --dest lofter_user_interest_v1

@@ -1,0 +1,13 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select customudid as deviceId, \
+       max(userId) as userId, \
+       deviceOs as os, \
+       collect_set(apk_name) as pks \
+from lofter.dwd_device_collect_apk_di \
+where dt = '${azkaban.flow.1.days.ago}' and is_installed = 1 \
+      and length(customudid) > 0 and customudid != 'null' \
+group by customudid, deviceOs \
+"
+params=--id deviceId --dest lofter_user_applist_v1 --update

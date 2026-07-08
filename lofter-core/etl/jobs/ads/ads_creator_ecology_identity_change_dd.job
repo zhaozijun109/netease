@@ -1,0 +1,38 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_identity_change_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT userId, \
+	   creatorNewStatus, \
+	   creatorOldStatus, \
+	   growingSign \
+FROM ( \
+	SELECT  tmp1.userId, \
+			tmp1.creatorStatus AS creatorNewStatus, \
+			NVL(tmp2.creatorStatus,0) AS creatorOldStatus, \
+			CASE WHEN tmp1.creatorStatus = tmp2.creatorStatus AND tmp1.creatorStatus = 40 THEN if(tmp1.fans_hd_uv_30d >= 10 * 0.95, 1, 0) \
+				 WHEN tmp1.creatorStatus = tmp2.creatorStatus AND tmp1.creatorStatus = 50 THEN if(tmp1.fans_hd_uv_30d >= 50 * 0.95, 1, 0) \
+				 WHEN tmp1.creatorStatus = tmp2.creatorStatus AND tmp1.creatorStatus = 70 THEN if(tmp1.fans_hd_uv_30d >= 200 * 0.95, 1, 0) \
+				 WHEN tmp1.creatorStatus = tmp2.creatorStatus AND tmp1.creatorStatus = 90 THEN if(tmp1.fans_hd_uv_30d >= 1000 * 0.95, 1, 0) \
+				 WHEN tmp1.creatorStatus = tmp2.creatorStatus AND tmp1.creatorStatus = 100 THEN if(tmp1.fans_hd_uv_30d >= 3000 * 0.95, 1, 0) \
+				 ELSE 0 \
+			END AS growingSign \
+	FROM \
+	( \
+		SELECT blogId AS userId, \
+			   creatorStatus, \
+               fans_hd_uv_30d \
+		FROM lofter_dm.ads_creator_ecology_identity_dd \
+		WHERE dt = '${azkaban.flow.1.days.ago}' \
+	) tmp1 \
+	LEFT JOIN \
+	( \
+		SELECT blogId AS userId, \
+			   creatorStatus, \
+               fans_hd_uv_30d \
+		FROM lofter_dm.ads_creator_ecology_identity_dd \
+		WHERE dt = '${azkaban.flow.2.days.ago}' \
+	) tmp2 \
+	ON tmp1.userId = tmp2.userId \
+) tmp3 \
+WHERE creatorNewStatus <> creatorOldStatus OR growingSign = 1
+dependencies=ads_creator_ecology_identity_dd

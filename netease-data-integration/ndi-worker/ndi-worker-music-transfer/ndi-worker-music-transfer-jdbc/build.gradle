@@ -1,0 +1,7 @@
+dependencies {
+  compileOnlyPackages.each { packageName ->
+    compileOnly packageName
+  }
+  compileOnly project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-common")
+  testImplementation packages.junit
+}

@@ -1,0 +1,66 @@
+type=sparksql
+hive.query.01 = insert overwrite table  vc.ads_uc_ctype_talk_cnt_a_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select 'DAY_7' as statistical_period,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where dt >= date_sub('${azkaban.flow.1.days.ago}', 7) \
+                    and character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags \
+                union all \
+                select 'DAY_15' as ,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where dt >= date_sub('${azkaban.flow.1.days.ago}', 15) \
+                    and character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags \
+                union all \
+                select 'DAY_30' as ,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where dt >= date_sub('${azkaban.flow.1.days.ago}', 30) \
+                    and character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags \
+                union all \
+                select 'DAY_90' as ,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where dt >= date_sub('${azkaban.flow.1.days.ago}', 90) \
+                    and character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags \
+                union all \
+                select 'DAY_180' as ,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where dt >= date_sub('${azkaban.flow.1.days.ago}', 180) \
+                    and character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags \
+                union all \
+                select 'DAY_ALL' as ,x1.user_id, x1.character_id, x2.category, x2.backend_tags,sum(x1.talk_cnt) as talk_cnt \
+                from (select user_id, character_id, talk_cnt \
+                    from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                    where character_type = 'ugc') x1 \
+                    left join \
+                    (select id as character_id, category, backend_tags from vc.ods_db_vc_character_nd where public_scope = 1 and type = 1) x2 \
+                on x1.character_id = x2.character_id \
+                where x2.category is not null \
+                group by x1.user_id, x1.character_id, x2.category, x2.backend_tags

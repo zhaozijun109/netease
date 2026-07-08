@@ -1,0 +1,151 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_post_talk_hot_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  t1.userId, \
+        t1.opType, \
+        t1.opTime, \
+        t1.ip, \
+        t1.talkId, \
+        t2.talkType, \
+        t2.blogId, \
+        t2.questionId, \
+        t2.questionUserId, \
+        t2.talkContent, \
+        t2.createDate, \
+        t2.tags, \
+        t3.clientType                      AS platform, \
+        t4.actionType                      AS action_type, \
+        t4.deviceUdId, \
+        t4.eventId, \
+        t4.scene, \
+        t4.source1_scene, \
+        t4.source2_scene, \
+        t4.module, \
+        t4.source1_module, \
+        t4.source2_module, \
+        t4.params_add_item_id, \
+        t4.params_add_item_type, \
+        t4.occurTime, \
+        t4.kafkaTime, \
+        t4.rec_alg, \
+        t4.detail_source1_scene_level_1, \
+        t4.detail_source1_scene_level_2, \
+        IF(t5.createDate = '${azkaban.flow.1.days.ago}',1,0) AS is_new_user, \
+        t6.deviceId, \
+        IF(t7.userId IS NULL,0,1)          AS is_fans, \
+        t2.ips \
+FROM \
+( \
+      SELECT  postId AS talkId, \
+              ip, \
+              publisherUserid AS userId, \
+              'praise' AS opType, \
+              opTime \
+      FROM \
+      ( \
+              SELECT  *, \
+                      ROW_NUMBER() OVER (PARTITION BY publisherUserid,postId,type ORDER BY _bin_op_time DESC, _bin_op_seqno DESC) AS rk \
+              FROM lofter.ods_binlog_post_hot_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' \
+              AND `_bin_op` < 2 \
+              AND `type` = 1 \
+      ) a \
+      WHERE rk = 1 AND `_bin_op` = 0 \
+      GROUP BY  postId, \
+                ip, \
+                publisherUserid, \
+                opTime \
+) t1 \
+JOIN ( \
+     SELECT * FROM lofter.dim_post_talk WHERE lower(talkType) LIKE '%answer%' OR talkType = 'QUESTION_POST' \
+) t2 \
+ON t1.talkId = t2.talkId \
+LEFT JOIN \
+( \
+      SELECT  * \
+      FROM \
+      ( \
+              SELECT  *, \
+                      ROW_NUMBER() OVER (PARTITION BY userId,talkId,opType ORDER BY time DESC) AS rk \
+              FROM \
+              ( \
+                      SELECT  'praise'  AS opType, \
+                              accountId AS userId, \
+                              postId AS talkId, \
+                              clientType, \
+                              time \
+                      FROM lofter.ods_log_praise_di \
+                      WHERE dt = '${azkaban.flow.1.days.ago}' \
+              ) t \
+      ) b \
+      WHERE rk = 1 \
+) t3 \
+ON t1.userId = t3.userId AND t1.talkId = t3.talkId AND t1.opType = t3.opType \
+LEFT JOIN \
+( \
+      SELECT  * \
+      FROM \
+      ( \
+              SELECT userId, \
+                     deviceUdId, \
+                     deviceOs, \
+                     CASE WHEN params['add_itemType'] = 'PostAnswer' THEN CAST(params['add_itemId'] AS bigint) \
+                          WHEN params['ext_itemType'] = 'PostAnswer' THEN CAST(params['ext_itemId'] AS bigint) \
+                          ELSE CAST(itemId AS bigint) \
+                     END AS talkId, \
+                     IF(params['add_itemType'] = 'PostAnswer' OR params['ext_itemType'] = 'PostAnswer', 'PostAnswer', itemType) AS talkType, \
+                     eventId, \
+                     scene, \
+                     GET_JSON_OBJECT(source,'$[1].scene')  AS source1_scene, \
+                     GET_JSON_OBJECT(source,'$[2].scene')  AS source2_scene, \
+                     params['module']                      AS module, \
+                     GET_JSON_OBJECT(source,'$[1].module') AS source1_module, \
+                     GET_JSON_OBJECT(source,'$[2].module') AS source2_module, \
+                     NVL(params['add_itemId'],params['ext_itemId']) AS params_add_item_id, \
+                     NVL(params['add_itemType'],params['ext_itemType']) AS params_add_item_type, \
+                     occurTime, \
+                     kafkaTime, \
+                     appVersion, \
+                     'praise'                              AS actionType, \
+                     GET_JSON_OBJECT(algInfo,"$.algName")  AS rec_alg, \
+                     CASE WHEN GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec_chat' THEN 'related_talk' \
+                          ELSE GET_JSON_OBJECT(source,'$[1].scene') \
+                     END AS detail_source1_scene_level_1, \
+                     CASE WHEN GET_JSON_OBJECT(source,'$[1].scene') = 'tag' AND GET_JSON_OBJECT(GET_JSON_OBJECT(source,'$[1].ext'),'$.tab') IN ('动态推荐','动态最新') THEN 'tag_talk' \
+                          WHEN GET_JSON_OBJECT(source,'$[1].module') = 'tag_rec_chat' THEN GET_JSON_OBJECT(source,'$[1].scene') \
+                     END AS detail_source1_scene_level_2, \
+                     ROW_NUMBER() OVER (PARTITION BY userId, \
+                          CASE WHEN GET_JSON_OBJECT(params['ext'],'$.add_itemType') = 'PostAnswer' THEN CAST(GET_JSON_OBJECT(params['ext'],'$.add_itemId') AS BIGINT) \
+                               WHEN GET_JSON_OBJECT(params['ext'],'$.ext_itemType') = 'PostAnswer' THEN CAST(GET_JSON_OBJECT(params['ext'],'$.ext_itemId') AS BIGINT) \
+                               ELSE CAST(GET_JSON_OBJECT(params['ext'],'$.itemId') AS BIGINT) \
+                          END \
+                     ORDER BY kafkaTime desc,occurTime DESC) AS rk \
+              FROM lofter.ods_mda_app_partition_di \
+              WHERE dt = '${azkaban.flow.1.days.ago}' AND actionType IN ('like') AND (LOWER(itemType) LIKE '%answer%' OR params['add_itemType'] = 'PostAnswer' OR params['ext_itemType'] = 'PostAnswer') \
+      ) c \
+      WHERE rk = 1 \
+) t4 \
+ON t1.userId = t4.userId AND t1.talkId = t4.talkId AND t1.opType = t4.actionType AND t4.kafkaTime BETWEEN t1.opTime-300000 AND t1.opTime+300000 \
+LEFT JOIN lofter.dim_user t5 \
+ON t1.userId = t5.id \
+LEFT JOIN \
+( \
+      SELECT  deviceUdId, \
+              deviceId \
+      FROM lofter.dwd_par_device_all_dd \
+      WHERE dt = '${azkaban.flow.1.days.ago}' \
+) t6 \
+ON t4.deviceUdId = t6.deviceUdId \
+LEFT JOIN \
+( \
+      SELECT  userId, \
+              blogId \
+      FROM lofter_db_dump.ods_db_user_following_nd \
+      WHERE FROM_UNIXTIME(CAST(followTime/1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+      GROUP BY  userId, \
+                blogId \
+) t7 \
+ON t1.userId = t7.userId AND t2.blogId = t7.blogId
+dependencies=dwd_par_device_all_dd

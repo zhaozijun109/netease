@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select dt,deviceOs,appVersion,scene,post_content_type,creator_level,browse_play_pv,browse_play_device_bitmap,real_browse_play_pv,real_browse_play_device_bitmap,real_browse_times,real_browse_play_item_bitmap from lofter.dws_page_note_source_scene_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.dws_note_page_scene_v2_bm_di --partition '${azkaban.flow.1.days.ago}'
+retries=0
+dependencies=dws_page_note_source_scene_di

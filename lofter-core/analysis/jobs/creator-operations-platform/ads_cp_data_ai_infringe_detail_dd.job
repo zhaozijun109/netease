@@ -1,0 +1,11 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_cp_data_ai_infringe_detail_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, \
+       blogId, \
+       userId, \
+       source, \
+       createTime, \
+       createDate \
+from lofter.dwd_ecology_ai_infringe_post_dd \
+where dt = '${azkaban.flow.1.days.ago}'

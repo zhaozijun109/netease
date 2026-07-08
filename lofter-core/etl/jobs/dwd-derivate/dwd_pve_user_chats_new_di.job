@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_pve_user_chats_new_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId \
+from lofter.dim_pve_user_dd \
+where dt = '${azkaban.flow.1.days.ago}' and userType = 0 and first_chats_date = '${azkaban.flow.1.days.ago}'

@@ -1,0 +1,123 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc_dm.ads_vc_ogc_ugc_summary_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+with chat_table as ( \
+SELECT  \
+t1.dt, \
+t1.user_id, \
+t1.character_id, \
+t1.character_type, \
+t2.type, \
+t2.status, \
+t2.public_scope, \
+sum(t1.message_cnt)        as message_cnt, \
+sum(t1.mmt_cnt)            as mmt_cnt, \
+sum(t1.heart_cnt)          as heart_cnt, \
+sum(t1.energy_consume)     as energy_consume, \
+sum(t1.free_energy)        as free_energy, \
+sum(t1.buy_energy)         as buy_energy, \
+sum(t1.reward_energy)      as reward_energy, \
+sum(t1.free_message_cnt)   as free_message_cnt, \
+sum(t1.message_consume)    as message_consume \
+FROM vc.dws_vc_uc_talk_day_cnt_single_i_d t1 \
+left join vc.ods_db_vc_character_nd t2 on t1.character_id=t2.id \
+where t1.dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY  \
+t1.dt, \
+t1.user_id, \
+t1.character_id, \
+t1.character_type, \
+t2.type, \
+t2.status, \
+t2.public_scope \
+), \
+order_table as ( \
+select t1.dt, \
+t1.user_id, \
+t1.character_id, \
+t2.type, \
+t2.status, \
+t2.public_scope, \
+sum(order_price) as total_amount \
+from vc.dwd_vc_ucr_order_amount_i_d t1 \
+left join vc.ods_db_vc_character_nd t2 on t1.character_id=t2.id \
+where t1.dt = '${azkaban.flow.1.days.ago}' \
+group by t1.dt, \
+t1.user_id, \
+t1.character_id, \
+t2.type, \
+t2.status, \
+t2.public_scope \
+), \
+chat_metrics AS ( \
+SELECT dt, \
+type, \
+status, \
+public_scope, \
+count(distinct character_id) as chat_character_cnt, \
+sum(message_cnt)        as message_cnt, \
+sum(mmt_cnt)            as mmt_cnt, \
+sum(heart_cnt)          as heart_cnt, \
+sum(energy_consume)     as energy_consume, \
+sum(free_energy)        as free_energy, \
+sum(buy_energy)         as buy_energy, \
+sum(reward_energy)      as reward_energy, \
+sum(free_message_cnt)   as free_message_cnt, \
+sum(message_consume)    as message_consume, \
+COUNT(DISTINCT user_id) AS chat_uv, \
+COUNT(DISTINCT case when message_cnt >10 then user_id end) AS  chat_uv_10up, \
+COUNT(DISTINCT case when message_cnt >30 then user_id end) AS  chat_uv_30up, \
+COUNT(DISTINCT case when message_cnt >100 then user_id end) AS chat_uv_100up, \
+COUNT(DISTINCT case when message_cnt >150 then user_id end) AS chat_uv_150up \
+FROM chat_table \
+GROUP BY dt, \
+type, \
+status, \
+public_scope \
+), \
+payment_metrics AS ( \
+SELECT  \
+dt, \
+type, \
+status, \
+public_scope, \
+count(distinct character_id) as pay_character_cnt, \
+COUNT(DISTINCT user_id) AS pay_uv, \
+SUM(total_amount) AS total_amount \
+FROM order_table \
+GROUP BY dt, \
+type, \
+status, \
+public_scope \
+) \
+ \
+SELECT  \
+c.type, \
+c.status, \
+c.public_scope, \
+c.chat_character_cnt, \
+c.message_cnt, \
+c.mmt_cnt, \
+c.heart_cnt, \
+c.energy_consume, \
+c.free_energy, \
+c.buy_energy, \
+c.reward_energy, \
+c.free_message_cnt, \
+c.message_consume, \
+c.chat_uv, \
+c.chat_uv_10up, \
+c.chat_uv_30up, \
+c.chat_uv_100up, \
+c.chat_uv_150up, \
+p.pay_uv,  \
+p.pay_character_cnt, \
+p.total_amount \
+FROM chat_metrics c \
+left JOIN payment_metrics p ON c.dt = p.dt  \
+AND c.type = p.type \
+and c.status = p.status   \
+and c.public_scope = p.public_scope   \
+where c.dt = '${azkaban.flow.1.days.ago}' \
+ORDER BY c.type, \
+c.status, \
+c.public_scope \

@@ -1,0 +1,93 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=400
+conf.spark.executor.cores=4
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=\
+insert overwrite table lofter.dws_post_interaction_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as postId, a.userId, a.blogId, a.publishDate, \
+       b.like_cnt, b.reproduce_cnt, b.recommend_cnt, b.collect_cnt, b.hot_uv, b.hot, \
+       c.comment_uv, c.comment_cnt, comment_uv_1d, comment_cnt_1d, long_comment_cnt_std, \
+       long_comment_cnt_1d, long_comment_cnt_7d, long_comment_cnt_15d, long_comment_cnt_30d, \
+       hot_7d, hot_15d, hot_30d, hot_90d, hot_365d, \
+       comment_cnt_7d, comment_cnt_15d, comment_cnt_30d, \
+       valid_comment_cnt, valid_comment_cnt_7d, valid_comment_cnt_15d, valid_comment_cnt_30d, \
+       like_cnt_1d, like_cnt_7d, like_cnt_15d, like_cnt_30d, \
+       recommend_cnt_1d, recommend_cnt_7d, recommend_cnt_15d, recommend_cnt_30d, \
+       collect_cnt_1d, collect_cnt_7d, collect_cnt_15d, collect_cnt_30d, \
+       share_cnt_1d, share_cnt_7d, share_cnt_15d, share_cnt_30d, \
+       valid_comment_cnt_1d, \
+       recommend_user_bitmap \
+from lofter.dim_post_article a \
+left join ( \
+      select postId, \
+             like_cnt, \
+             reproduce_cnt, \
+             recommend_cnt, \
+             collect_cnt, \
+             hot_uv, \
+             hot, \
+             hot_7d, \
+             hot_15d, \
+             hot_30d, \
+             hot_90d, \
+             hot_365d, \
+             like_cnt_1d, \
+             like_cnt_7d, \
+             like_cnt_15d, \
+             like_cnt_30d, \
+             recommend_cnt_1d, \
+             recommend_cnt_7d, \
+             recommend_cnt_15d, \
+             recommend_cnt_30d, \
+             collect_cnt_1d, \
+             collect_cnt_7d, \
+             collect_cnt_15d, \
+             collect_cnt_30d, \
+             recommend_user_bitmap \
+      from lofter.stg_post_interaction_in_130d_dd \
+      where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.id = b.postId \
+left join ( \
+    select postId, \
+          bitmap_count(to_bitmap(userId)) as comment_uv, \
+          count(1) comment_cnt, \
+          bitmap_count(to_bitmap(if(days = 0, userId, null))) as comment_uv_1d, \
+          sum(if(days = 0,1,0)) as comment_cnt_1d, \
+          sum(if(comment_length > 40, 1, 0)) as long_comment_cnt_std, \
+          sum(if(comment_length > 40 and days = 0, 1, 0)) as long_comment_cnt_1d, \
+          sum(if(comment_length > 40 and days < 7, 1, 0)) as long_comment_cnt_7d, \
+          sum(if(comment_length > 40 and days < 15, 1, 0)) as long_comment_cnt_15d, \
+          sum(if(comment_length > 40 and days < 30, 1, 0)) as long_comment_cnt_30d, \
+          sum(if(days < 7,1,0)) as comment_cnt_7d, \
+          sum(if(days < 15,1,0)) as comment_cnt_15d, \
+          sum(if(days < 30,1,0)) as comment_cnt_30d, \
+          sum(if(comment_length > 5, 1, 0)) as valid_comment_cnt, \
+          sum(if(comment_length > 5 and days = 0, 1, 0)) as valid_comment_cnt_1d, \
+          sum(if(comment_length > 5 and days < 7, 1, 0)) as valid_comment_cnt_7d, \
+          sum(if(comment_length > 5 and days < 15, 1, 0)) as valid_comment_cnt_15d, \
+          sum(if(comment_length > 5 and days < 30, 1, 0)) as valid_comment_cnt_30d \
+    from ( \
+          select datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd')) as days, \
+                 length(regexp_replace(content,'[.*?]','')) as comment_length, \
+                 publisherUserId as userId, postId \
+          from lofter_db_dump.ods_db_post_response_nd \
+          where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) t \
+    group by postId \
+) c on a.id = c.postId \
+left join ( \
+    select postId, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 1, 1, 0)) as share_cnt_1d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, 1, 0)) as share_cnt_7d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, 0)) as share_cnt_15d, \
+          sum(if(datediff('${azkaban.flow.1.days.ago}', dt) < 30, 1, 0)) as share_cnt_30d \
+    from lofter.dwd_post_share_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by postId \
+) d on a.id = d.postId \
+where b.hot > 0 or c.comment_cnt > 0 or d.share_cnt_30d > 0
+dependencies=

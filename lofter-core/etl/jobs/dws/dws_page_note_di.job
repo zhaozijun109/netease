@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_page_note_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select deviceOs, appVersion, is_from_rec as isRec, \
+      post_content_type, \
+      nvl(creator_level,'') as creator_level,  \
+      count(1) browse_play_pv,  \
+      to_bitmap(deviceId) browse_play_device_bitmap,  \
+      sum(if(is_real>0,1,0)) as real_browse_play_pv,    \
+      to_bitmap(if(is_real>0,deviceId,null)) real_browse_play_device_bitmap,  \
+      sum(if(is_real>0,duration,0)) real_browse_times,  \
+      to_bitmap(if(is_real>0,postId,null)) real_browse_play_item_bitmap \
+from ( \
+    select nvl(source1_scene,'else') as scene,deviceOs,appVersion, \
+           post_userid,post_content_type,postId,duration,is_real,is_from_rec,deviceId \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          action_type = 'page_duration' \
+) a \
+left join ( \
+    select userId,level as creator_level \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b on a.post_userid = b.userId \
+group by deviceOs,appVersion,is_from_rec,post_content_type,creator_level
+dependencies=dws_par_creator_level_scoring_dd

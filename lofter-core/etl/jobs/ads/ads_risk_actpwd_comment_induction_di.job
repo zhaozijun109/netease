@@ -1,0 +1,34 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter_dm.ads_risk_actpwd_comment_induction_di partition  (dt = '${azkaban.flow.1.days.ago}') \
+select x.* \
+from ( \
+    select a.id as commentId, a.postId, a.blogId, a.content as comment_content, \
+           b.actpwd \
+    from ( \
+        select id, postId, blogId, content, `_bin_op`, \
+               row_number() over (partition by id order by `_bin_op_time` desc) as rnk \
+        from lofter.ods_binlog_post_response_di \
+        where dt = '${azkaban.flow.1.days.ago}' and blogId = publisherUserid and \
+              ( ((content like '%搜索%' or content like '%输入%') and (content like '%主页%' or content like '%首页%' or content like '%全文%' )) or \
+                 content like '%看后续🔍%' or content like '%看后续➡️%' or content like '%全文未删减版%') \
+    ) a \
+    join ( \
+        select actpwd \
+        from lofter.dim_actpwd_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              is_paid_subscribe > 0 and \
+              content_type != '合集' and is_first_level_channel = 1 and \
+              from_unixtime(cast(endTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' \
+       group by actpwd \
+    ) b on locate(b.actpwd,a.content) > 0 \
+    where a.rnk = 1 and a.`_bin_op` in (0, 2) \
+) x \
+left join ( \
+    select actpwd, itemId as postId \
+    from lofter.dim_actpwd_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and content_type = '单日志' and \
+          from_unixtime(cast(endTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' and \
+          length(actpwd) > 4 \
+) y on x.actpwd = y.actpwd and x.postId = y.postId \
+where y.actpwd is null and y.postId is null \

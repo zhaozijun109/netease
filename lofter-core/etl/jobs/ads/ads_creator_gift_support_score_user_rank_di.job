@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_gift_support_score_user_rank_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select b.blogId, b.userId, b.support_score_7d, b.support_score, b.rk \
+from ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+    where status = 2 \
+) a \
+join ( \
+    select *, row_number() over (partition by blogId order by support_score_7d desc) as rk \
+    from ( \
+        select blogId, supporterBlogid as userid, \
+               sum(score) as support_score, \
+               sum(if(from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}', score, 0)) as  support_score_7d \
+        from lofter_db_dump.ods_db_trade_support_record_nd \
+        where itemType = 'POST'  and reason != '赠送礼物3001，价值0' and \
+            score > 0 and \
+            from_unixtime(cast(time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+        having support_score_7d > 0 \
+    ) t \
+) b on a.userId = b.blogId \
+where b.rk <= 20 \

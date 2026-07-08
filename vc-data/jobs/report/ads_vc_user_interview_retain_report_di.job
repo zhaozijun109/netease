@@ -1,0 +1,55 @@
+type=sparksql
+hive.query.01= insert overwrite table vc_dm.ads_vc_user_interview_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select b.dt as base_date,       \
+datediff('${azkaban.flow.1.days.ago}', b.dt) as period, a.origin_type, a.device_os,       \
+case when d.user_id is null then 0 else 1 end as new_flg,       \
+count(DISTINCT b.user_id) AS uv,       \
+count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 0) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0) THEN f.user_id ELSE NULL END ) AS uv_1d,      \
+ count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 1) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (1) THEN f.user_id ELSE NULL END ) AS uv_2d,       \
+ count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 2) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (2) THEN f.user_id ELSE NULL END ) AS uv_3d,      \
+  count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 4) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (4) THEN f.user_id ELSE NULL END ) AS uv_5d,       \
+  count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 6) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (6) THEN f.user_id ELSE NULL END ) AS uv_7d,       \
+  count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 14) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (14) THEN f.user_id ELSE NULL END ) AS uv_15d,       \
+  count( DISTINCT CASE WHEN f.dt = date_add(b.dt, 29) AND datediff('${azkaban.flow.1.days.ago}', b.dt) IN (29) THEN f.user_id ELSE NULL END ) AS uv_30d,       \
+  a.is_anonymity,       \
+   case WHEN datediff(b.dt,a.register_date) = 0 THEN 'd0'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 1 AND 7 THEN 'd1_d7'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 8 AND 15 THEN 'd8_d15'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 16 AND 31 THEN 'd16_d31'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 32 AND 60 THEN 'd32_d60'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 61 AND 90 THEN 'd61_d90'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 91 AND 180 THEN 'd91_d180'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 181 AND 360 THEN 'd181_d360'       \
+ELSE 'd361_plus'       \
+END as new_register_level       \
+        \
+        \
+from ( select user_id, origin_type, device_os, is_anonymity ,register_date      \
+        \
+        \
+      \
+from vc.dws_vc_user_behavior_info_a_d where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) ) a       \
+      \
+join ( select user_id, dt from vc.dwd_vc_user_active_i_d where dt BETWEEN'${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' ) b on a.user_id = b.user_id       \
+      \
+left join ( select user_id, register_date as dt from vc.dws_vc_user_behavior_info_a_d where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) ) d on b.user_id = d.user_id and b.dt = d.dt      \
+      \
+left join ( select user_id, dt from vc.dwd_vc_user_active_i_d where dt BETWEEN'${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' ) f on b.user_id = f.user_id AND f.dt BETWEEN date_add(b.dt, 0) AND date_add(b.dt, 30)       \
+      \
+WHERE datediff('${azkaban.flow.1.days.ago}', b.dt) IN (0, 1, 2, 4, 6, 14, 29)       \
+        \
+group by b.dt,      \
+datediff('${azkaban.flow.1.days.ago}', b.dt), a.origin_type, a.device_os, a.is_anonymity, case when d.user_id is null then 0 else 1 end ,     \
+ case WHEN datediff(b.dt,a.register_date) = 0 THEN 'd0'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 1 AND 7 THEN 'd1_d7'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 8 AND 15 THEN 'd8_d15'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 16 AND 31 THEN 'd16_d31'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 32 AND 60 THEN 'd32_d60'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 61 AND 90 THEN 'd61_d90'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 91 AND 180 THEN 'd91_d180'       \
+WHEN datediff(b.dt,a.register_date) BETWEEN 181 AND 360 THEN 'd181_d360'       \
+ELSE 'd361_plus'       \
+END      \
+      \
+      \
+     \

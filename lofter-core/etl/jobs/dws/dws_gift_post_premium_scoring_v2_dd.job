@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=\
+with merge_data as ( \
+        select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk,type,dt,case when type='优质' then 0 when type='低质' then 1 else 2 end as value \
+        from lofter.dws_gift_post_premium_scoring_v2_dd \
+        where dt = '${azkaban.flow.2.days.ago}' \
+      union all \
+        select postid,blogid,tags,ips,url,recomstatus,blogname,blognickname,styouzhiflg,yinliuflg,review_status,contenttype,exposureuv,qianbg_amount,liulan_fufei_rate,furate,zhenrate,publishdate,blog_channel,recommendflg,rec_reviewflg,unlocktype,collectionid,provider_type,bg_flg,qianbg_amount_ln,liulan_fufei_rate_ln,furate_ln,zhenrate_ln,realbrowse_rate_ln,hd_rate_ln,zonghe_score,rk,type,dt,case when type='优质' then 0 when type='低质' then 1 else 2 end as value \
+        from lofter.dws_gift_post_premium_scoring_v2_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter.dws_gift_post_premium_scoring_v2_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postid, a.blogid, a.tags, a.ips, a.url, a.recomstatus, a.blogname, a.blognickname, a.styouzhiflg, a.yinliuflg, a.review_status, a.contenttype, a.exposureuv, a.qianbg_amount, a.liulan_fufei_rate, a.furate, a.zhenrate, a.publishdate, a.blog_channel, a.recommendflg, a.rec_reviewflg, a.unlocktype, a.collectionid, a.provider_type, a.bg_flg, a.qianbg_amount_ln, a.liulan_fufei_rate_ln, a.furate_ln, a.zhenrate_ln, a.realbrowse_rate_ln, a.hd_rate_ln, a.zonghe_score, a.latest_rk as rk, b.type \
+from ( \
+    select *, \
+           row_number() over (partition by postId order by dt desc) as latest_rk \
+    from merge_data \
+) a \
+join ( \
+    select *, \
+           row_number() over (partition by postId order by value asc) as value_rk \
+    from merge_data \
+) b on a.postId = b.postId \
+where a.latest_rk = 1 and b.value_rk = 1 \
+
+dependencies=dws_gift_post_premium_scoring_v2_di

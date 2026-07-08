@@ -1,0 +1,17 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.executor.cores=4
+hive.query.01= insert overwrite table lofter.dwd_collection_user_subscribe_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select b.userId as subscribe_userId,b.createTime as subscribeTime, b.lastfetchtime, \
+       a.id as collectionId,tags,a.blogId,coverUrl as cover_url,name,a.createTime,a.lastpublishtime, \
+       status,collectiontype,postcount,postcollectionhot,viewcount \
+from ( \
+    select id,blogId,coverUrl,name,tags,createTime,lastpublishtime,postcount,status,postcollectionhot,collectiontype \
+    from lofter_db_dump.ods_db_post_collection_nd \
+) a \
+join lofter_db_dump.ods_db_subscribe_collection_nd b on a.id=b.collectionId \
+left join lofter_db_dump.ods_db_post_collection_view_count_nd c on a.id = c.collectionId    \
+distribute by collectionId % 10

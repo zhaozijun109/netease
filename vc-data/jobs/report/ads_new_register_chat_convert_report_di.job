@@ -1,0 +1,92 @@
+type = sparksql
+hive.query.01 =           \
+with kpi_new_user_deatil(       \
+select         \
+a.register_date,       \
+datediff('${azkaban.flow.1.days.ago}',a.register_date) diff,       \
+a.user_id,       \
+a.origin_type,       \
+a.device_os,       \
+a.origin,       \
+a.amounts,       \
+b.user_id talk_user_id,       \
+max(case when character_type='ugc' then b.user_id end) ugc_talk_user,       \
+max(case when character_type='ogc' then b.user_id end) ogc_talk_user,       \
+sum(b.talk_cnt) talk_cnt,       \
+count(distinct b.dt) talk_days_cnt,       \
+count(distinct b.character_id) cnt_talk_character,       \
+count(distinct case when character_type='ugc' then  b.character_id end) cnt_talk_ugc_character,       \
+count(distinct case when character_type='ogc' then  b.character_id end) cnt_talk_ogc_character   ,  \
+sum(case when character_type='ugc' then   talk_cnt end   ) cnt_talk_ugc,  \
+sum(case when character_type='ogc' then   talk_cnt end   ) cnt_talk_ogc  \
+  \
+from(       \
+select '${azkaban.flow.1.days.ago}' dt,register_date, user_id,origin_type,device_os,        \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'        \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'        \
+     else '非LOFTER' end origin ,       \
+amounts       \
+from  vc.dws_vc_user_behavior_info_a_d        \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )        \
+and register_date>='${azkaban.flow.30.days.ago}'        \
+and register_date<='${azkaban.flow.1.days.ago}'        \
+ and is_anonymity='N'        \
+ AND is_test_user='N'        \
+group by 1,2,3,4,5,6 ,7       \
+) a        \
+left join        \
+(       \
+select dt,user_id ,	       \
+character_id,character_name,       \
+case when character_type in (1,2) then 'ugc'        \
+     when character_type=0 then 'ogc'       \
+     end character_type,       \
+count(distinct message_id)    as talk_cnt       \
+from vc.dwd_vc_uc_talk_info_i_d        \
+where dt>='${azkaban.flow.30.days.ago}'       \
+and dt<='${azkaban.flow.1.days.ago}'        \
+and sender in (2, 4)        \
+and type = 1        \
+group by 1,2,3,4,5       \
+) b on a.user_id=b.user_id  and a.register_date<=b.dt         \
+  \
+group by 1,2,3,4,5,6,7,8       \
+)        \
+insert overwrite table vc_dm.ads_new_register_chat_convert_report_di partition(dt ='${azkaban.flow.1.days.ago}')           \
+select   \
+diff,       \
+origin_type,       \
+device_os,       \
+origin,       \
+count(distinct a.user_id) ttl_user_cnt,       \
+sum(coalesce(amounts,0))amounts,       \
+sum(coalesce(talk_cnt,0))talk_cnt,       \
+count(distinct talk_user_id) talk_user_cnt,       \
+sum( coalesce(talk_days_cnt,0)) talk_days_cnt ,       \
+sum(coalesce(cnt_talk_character,0))cnt_talk_character,       \
+sum( coalesce(cnt_talk_ugc_character,0) )cnt_talk_ugc_character,       \
+count(distinct ugc_talk_user)   ugc_talk_user_cnt,       \
+sum( coalesce(cnt_talk_ogc_character ,0))cnt_talk_ogc_character,       \
+count(distinct ogc_talk_user)  ogc_talk_user_cnt     ,  \
+sum(cnt_talk_ugc) cnt_talk_ugc,  \
+sum(cnt_talk_ogc) cnt_talk_ogc ,  \
+sum(c.ogc_order_price) ogc_order_price,  \
+count(distinct case when c.ogc_order_price>0 then c.user_id end) ogc_order_user_cnt,  \
+sum(c.ugc_order_price) ugc_order_price,  \
+count(distinct case when c.ugc_order_price>0 then c.user_id end ) ugc_order_user_cnt  \
+  \
+from kpi_new_user_deatil      a  \
+  \
+left join   \
+(  \
+select user_id,  \
+sum(case when type=0 then order_price end) ogc_order_price,  \
+sum(case when type=1 then order_price end) ugc_order_price  \
+from vc.dwd_vc_ucr_order_amount_i_d  \
+where  dt>='${azkaban.flow.30.days.ago}'       \
+and dt<='${azkaban.flow.1.days.ago}'    \
+group by 1  \
+  \
+) c on a.user_id=c.user_id    \
+  \
+group by 1 ,2,3,4

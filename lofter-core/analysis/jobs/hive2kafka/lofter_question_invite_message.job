@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId, tag, questionId, type from lofter_dm.ads_question_invite_message_dd where dt = '${azkaban.flow.1.days.ago}'"
+params= --topic LOFTER.QUESTION.INVITE.MESSAGE --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

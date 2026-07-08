@@ -1,0 +1,531 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=100
+conf.spark.executor.cores=4
+conf.spark.sql.shuffle.partitions=800
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ecology_easy_fetch_creator_wide_table_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.blogId, \
+       t1.blogName, \
+       t1.isAuthenticated, \
+       t1.isValid, \
+       t1.blogNickname, \
+       t1.authDomainIds, \
+       t1.authDomainNames, \
+       t1.isTest, \
+       t1.createTime, \
+       t1.createDate, \
+       t1.isOfficial, \
+       t1.authTime, \
+       t1.authDate, \
+       t2.level, \
+       t2.blog_url, \
+       t2.is_cp, \
+       t2.is_imported, \
+       t2.import_platform_type, \
+       t2.is_in_contract, \
+       t2.post_count_std, \
+       t2.post_count_180d, \
+       t2.post_count_30d, \
+       t2.post_first_date, \
+       t2.post_last_date, \
+       t2.post_top_categories, \
+       t2.post_top_domains, \
+       t2.post_top_ips, \
+       t2.post_top_tags, \
+       t2.fans_std, \
+       t2.active_days_30d, \
+       t2.active_last_date, \
+       t2.gift_open_time, \
+       t2.fans_vip_open_time, \
+       t2.post_main_content_type, \
+       t2.gift_income_std, \
+       t2.post_count_365d, \
+       t2.rec_post_count_30d, \
+       t2.rec_post_count_365d, \
+       t2.post_count_7d, \
+       t2.post_count_90d, \
+       t2.rec_post_count_7d, \
+       t2.rec_post_count_90d, \
+       t2.fans_receive_hot_cnt_7d, \
+       t2.fans_receive_hot_cnt_30d, \
+       t2.fans_receive_hot_cnt_90d, \
+       t2.fans_hd_uv_7d, \
+       t2.fans_hd_uv_30d, \
+       t2.fans_hd_uv_90d, \
+       t2.post_receive_hot_cnt_7d, \
+       t2.post_receive_hot_cnt_30d, \
+       t2.post_receive_hot_cnt_90d, \
+       t2.post_hot_7d, \
+       t2.post_hot_30d, \
+       t2.post_hot_90d, \
+       t2.fans_real_browse_uv_7d, \
+       t2.fans_real_browse_uv_30d, \
+       t2.fans_real_browse_uv_90d, \
+       t2.discovery_click_pv_7d, \
+       t2.discovery_click_pv_30d, \
+       t2.discovery_click_pv_90d, \
+       t2.related_article_click_pv_7d, \
+       t2.related_article_click_pv_30d, \
+       t2.related_article_click_pv_90d, \
+       t2.tag_discovery_click_pv_7d, \
+       t2.tag_discovery_click_pv_30d, \
+       t2.tag_discovery_click_pv_90d, \
+       t2.tag_new_click_pv_7d, \
+       t2.tag_new_click_pv_30d, \
+       t2.tag_new_click_pv_90d, \
+       t2.tag_hot_click_pv_7d, \
+       t2.tag_hot_click_pv_30d, \
+       t2.tag_hot_click_pv_90d, \
+       t2.collection_click_pv_7d, \
+       t2.collection_click_pv_30d, \
+       t2.collection_click_pv_90d, \
+       t2.attention_click_pv_7d, \
+       t2.attention_click_pv_30d, \
+       t2.attention_click_pv_90d, \
+       t2.collection_subscribe_uv_7d, \
+       t2.collection_subscribe_uv_30d, \
+       t2.collection_subscribe_uv_90d, \
+       t2.collection_real_browse_uv_7d, \
+       t2.collection_real_browse_uv_30d, \
+       t2.collection_real_browse_uv_90d, \
+       t2.collection_real_hd_uv_7d, \
+       t2.collection_real_hd_uv_30d, \
+       t2.collection_real_hd_uv_90d, \
+       t2.fans_cnt_7d, \
+       t2.fans_cnt_30d, \
+       t2.fans_cnt_90d, \
+       t2.infringe_post_cnt_7d, \
+       t2.infringe_post_cnt_30d, \
+       t2.infringe_post_cnt_90d, \
+       t2.receive_hot_std, \
+       t2.receive_comment_cnt, \
+       t2.receive_comment_cnt_7d, \
+       t2.receive_comment_cnt_15d, \
+       t2.receive_comment_cnt_30d, \
+       t2.collection_subscribe_uv, \
+       t2.fans_cnt, \
+       t2.fans_cnt_365d, \
+       t2.hd_uv_7d, \
+       t2.hd_uv_30d, \
+       t2.hd_uv_90d, \
+       t2.click_pv_7d, \
+       t2.click_pv_30d, \
+       t2.click_pv_90d, \
+       t2.post_count_1d, \
+       t2.post_top10_ips, \
+       t2.post_top10_tags, \
+       t2.post_expose_uv_7d, \
+       t2.post_expose_uv_30d, \
+       t2.post_expose_uv_90d, \
+       t2.post_click_uv_7d, \
+       t2.post_click_uv_30d, \
+       t2.post_click_uv_90d, \
+       t2.post_real_browse_uv_7d, \
+       t2.post_real_browse_uv_30d, \
+       t2.post_real_browse_uv_90d, \
+       t2.post_support_induced_pv_7d, \
+       t2.post_support_induced_pv_30d, \
+       t2.post_support_induced_pv_90d, \
+       t3.receive_like_cnt, \
+       t3.receive_reproduce_cnt, \
+       t3.receive_recommend_cnt, \
+       t3.receive_collect_cnt, \
+       t3.hd_uv_std, \
+       t3.hd_uv_1d, \
+       t3.receive_like_cnt_7d, \
+       t3.receive_like_cnt_30d, \
+       t3.receive_reproduce_cnt_7d, \
+       t3.receive_reproduce_cnt_30d, \
+       t3.receive_recommend_cnt_7d, \
+       t3.receive_recommend_cnt_30d, \
+       t3.receive_collect_cnt_7d, \
+       t3.receive_collect_cnt_30d, \
+       t3.receive_like_uv_30d, \
+       t3.receive_recommend_uv_30d, \
+       t3.receive_reproduce_uv_30d, \
+       t3.receive_collect_uv_30d, \
+       t3.last_like_userid_180d, \
+       t3.receive_like_cnt_15d, \
+       t3.receive_reproduce_cnt_15d, \
+       t3.receive_recommend_cnt_15d, \
+       t3.receive_collect_cnt_15d, \
+       t4.post_count_15d, \
+       t4.new_post_browse_pv_7d, \
+       t4.new_post_browse_pv_15d, \
+       t4.new_post_browse_pv_30d, \
+       t4.browse_pv_7d, \
+       t4.browse_pv_15d, \
+       t4.browse_pv_30d, \
+       t5.post_count_video_7d, \
+       t5.post_count_video_15d, \
+       t5.post_count_video_30d, \
+       t5.post_count_video_90d, \
+       t5.post_count_video_180d, \
+       t5.post_count_video_365d, \
+       t5.post_count_video_std, \
+       t5.post_count_text_7d, \
+       t5.post_count_text_15d, \
+       t5.post_count_text_30d, \
+       t5.post_count_text_90d, \
+       t5.post_count_text_180d, \
+       t5.post_count_text_365d, \
+       t5.post_count_text_std, \
+       t5.post_count_photo_7d, \
+       t5.post_count_photo_15d, \
+       t5.post_count_photo_30d, \
+       t5.post_count_photo_90d, \
+       t5.post_count_photo_180d, \
+       t5.post_count_photo_365d, \
+       t5.post_count_photo_std, \
+       t6.post_count_recommend_pool_7d, \
+       t6.post_count_recommend_pool_30d, \
+       t6.post_count_recommend_pool_90d, \
+       t6.post_count_recommend_pool_180d, \
+       t6.post_count_recommend_pool, \
+       t6.post_count_recommend_pool_review_7d, \
+       t6.post_count_recommend_pool_review_30d, \
+       t6.post_count_recommend_pool_review_90d, \
+       t6.post_count_recommend_pool_review_180d, \
+       t6.post_count_recommend_pool_review, \
+       t7.securityReviewCountRecent10Post, \
+       t7.recommendReviewCountRecent10Post, \
+       t8.money, \
+       t8.money_1d, \
+       t8.money_7d, \
+       t8.money_15d, \
+       t8.money_30d, \
+       t8.money_90d, \
+       t9.postCount1wHot, \
+       t9.postCount1kHot, \
+       t9.postCount100Hot, \
+       t10.creatorStatus, \
+       t11.creatorPostStatus, \
+       t12.creatorPostStatusV2 \
+from ( \
+    select id as blogId, \
+           blogName, \
+           if(isAuthenticated, 1, 0) as isAuthenticated, \
+           if(isValid, 1, 0) as isValid, \
+           blogNickname, \
+           authDomainIds, \
+           authDomainNames, \
+           isTest, \
+           createTime, \
+           from_unixtime(cast(createTime / 1000 as bigint),'yyyy-MM-dd') as createDate, \
+           isOfficial, \
+           authTime, \
+           from_unixtime(cast(authTime / 1000 as bigint),'yyyy-MM-dd') as authDate \
+    from lofter.dim_blog \
+) t1 \
+left join ( \
+    select userId, \
+           level, \
+           blog_url, \
+           is_cp, \
+           is_imported, \
+           import_platform_type, \
+           is_in_contract, \
+           post_count_std, \
+           post_count_180d, \
+           post_count_30d, \
+           post_first_date, \
+           post_last_date, \
+           post_top_categories, \
+           post_top_domains, \
+           post_top_ips, \
+           post_top_tags, \
+           fans_std, \
+           active_days_30d, \
+           active_last_date, \
+           gift_open_time, \
+           fans_vip_open_time, \
+           post_main_content_type, \
+           gift_income_std, \
+           post_count_365d, \
+           rec_post_count_30d, \
+           rec_post_count_365d, \
+           post_count_7d, \
+           post_count_90d, \
+           rec_post_count_7d, \
+           rec_post_count_90d, \
+           fans_receive_hot_cnt_7d, \
+           fans_receive_hot_cnt_30d, \
+           fans_receive_hot_cnt_90d, \
+           fans_hd_uv_7d, \
+           fans_hd_uv_30d, \
+           fans_hd_uv_90d, \
+           post_receive_hot_cnt_7d, \
+           post_receive_hot_cnt_30d, \
+           post_receive_hot_cnt_90d, \
+           post_hot_7d, \
+           post_hot_30d, \
+           post_hot_90d, \
+           fans_real_browse_uv_7d, \
+           fans_real_browse_uv_30d, \
+           fans_real_browse_uv_90d, \
+           discovery_click_pv_7d, \
+           discovery_click_pv_30d, \
+           discovery_click_pv_90d, \
+           related_article_click_pv_7d, \
+           related_article_click_pv_30d, \
+           related_article_click_pv_90d, \
+           tag_discovery_click_pv_7d, \
+           tag_discovery_click_pv_30d, \
+           tag_discovery_click_pv_90d, \
+           tag_new_click_pv_7d, \
+           tag_new_click_pv_30d, \
+           tag_new_click_pv_90d, \
+           tag_hot_click_pv_7d, \
+           tag_hot_click_pv_30d, \
+           tag_hot_click_pv_90d, \
+           collection_click_pv_7d, \
+           collection_click_pv_30d, \
+           collection_click_pv_90d, \
+           attention_click_pv_7d, \
+           attention_click_pv_30d, \
+           attention_click_pv_90d, \
+           collection_subscribe_uv_7d, \
+           collection_subscribe_uv_30d, \
+           collection_subscribe_uv_90d, \
+           collection_real_browse_uv_7d, \
+           collection_real_browse_uv_30d, \
+           collection_real_browse_uv_90d, \
+           collection_real_hd_uv_7d, \
+           collection_real_hd_uv_30d, \
+           collection_real_hd_uv_90d, \
+           fans_cnt_7d, \
+           fans_cnt_30d, \
+           fans_cnt_90d, \
+           infringe_post_cnt_7d, \
+           infringe_post_cnt_30d, \
+           infringe_post_cnt_90d, \
+           receive_hot_std, \
+           receive_comment_cnt, \
+           receive_comment_cnt_7d, \
+           receive_comment_cnt_15d, \
+           receive_comment_cnt_30d, \
+           collection_subscribe_uv, \
+           fans_cnt, \
+           fans_cnt_365d, \
+           hd_uv_7d, \
+           hd_uv_30d, \
+           hd_uv_90d, \
+           click_pv_7d, \
+           click_pv_30d, \
+           click_pv_90d, \
+           post_count_1d, \
+           post_top10_ips, \
+           post_top10_tags, \
+           post_expose_uv_7d, \
+           post_expose_uv_30d, \
+           post_expose_uv_90d, \
+           post_click_uv_7d, \
+           post_click_uv_30d, \
+           post_click_uv_90d, \
+           post_real_browse_uv_7d, \
+           post_real_browse_uv_30d, \
+           post_real_browse_uv_90d, \
+           post_support_induced_pv_7d, \
+           post_support_induced_pv_30d, \
+           post_support_induced_pv_90d \
+    from lofter.dws_par_creator_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t2 \
+on t1.blogId = t2.userId \
+left join ( \
+    select userId, \
+           receive_like_cnt, \
+           receive_reproduce_cnt, \
+           receive_recommend_cnt, \
+           receive_collect_cnt, \
+           hd_uv_std, \
+           hd_uv_1d, \
+           receive_like_cnt_7d, \
+           receive_like_cnt_30d, \
+           receive_reproduce_cnt_7d, \
+           receive_reproduce_cnt_30d, \
+           receive_recommend_cnt_7d, \
+           receive_recommend_cnt_30d, \
+           receive_collect_cnt_7d, \
+           receive_collect_cnt_30d, \
+           receive_like_uv_30d, \
+           receive_recommend_uv_30d, \
+           receive_reproduce_uv_30d, \
+           receive_collect_uv_30d, \
+           last_like_userid_180d, \
+           receive_like_cnt_15d, \
+           receive_reproduce_cnt_15d, \
+           receive_recommend_cnt_15d, \
+           receive_collect_cnt_15d \
+    from lofter.dws_par_creator_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t3 \
+on t1.blogId = t3.userId \
+left join ( \
+    select userId, \
+           post_count_15d, \
+           new_post_browse_pv_7d, \
+           new_post_browse_pv_15d, \
+           new_post_browse_pv_30d, \
+           browse_pv_7d, \
+           browse_pv_15d, \
+           browse_pv_30d \
+    from lofter.dws_par_creator_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t4 \
+on t1.blogId = t4.userId \
+left join ( \
+    select blogId, \
+           post_count_video_7d, \
+           post_count_video_15d, \
+           post_count_video_30d, \
+           post_count_video_90d, \
+           post_count_video_180d, \
+           post_count_video_365d, \
+           post_count_video_std, \
+           post_count_text_7d, \
+           post_count_text_15d, \
+           post_count_text_30d, \
+           post_count_text_90d, \
+           post_count_text_180d, \
+           post_count_text_365d, \
+           post_count_text_std, \
+           post_count_photo_7d, \
+           post_count_photo_15d, \
+           post_count_photo_30d, \
+           post_count_photo_90d, \
+           post_count_photo_180d, \
+           post_count_photo_365d, \
+           post_count_photo_std \
+    from ( \
+        select blogId, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 7, id, null)) as post_count_video_7d, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 15, id, null)) as post_count_video_15d, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 30, id, null)) as post_count_video_30d, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, id, null)) as post_count_video_90d, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 180, id, null)) as post_count_video_180d, \
+               count(if(contentType = '视频' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 365, id, null)) as post_count_video_365d, \
+               count(if(contentType = '视频', id, null)) as post_count_video_std, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 7, id, null)) as post_count_text_7d, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 15, id, null)) as post_count_text_15d, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 30, id, null)) as post_count_text_30d, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, id, null)) as post_count_text_90d, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 180, id, null)) as post_count_text_180d, \
+               count(if(contentType = '文字' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 365, id, null)) as post_count_text_365d, \
+               count(if(contentType = '文字', id, null)) as post_count_text_std, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 7, id, null)) as post_count_photo_7d, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 15, id, null)) as post_count_photo_15d, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 30, id, null)) as post_count_photo_30d, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 90, id, null)) as post_count_photo_90d, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 180, id, null)) as post_count_photo_180d, \
+               count(if(contentType = '图片' and datediff('${azkaban.flow.1.days.ago}', publishDate) < 365, id, null)) as post_count_photo_365d, \
+               count(if(contentType = '图片', id, null)) as post_count_photo_std \
+        from lofter.dim_post_article \
+        where isPublished = true and isForbidden = false and isCitedPost = false and allowView = 0 and isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 and \
+            publishDate <= '${azkaban.flow.1.days.ago}' \
+        group by blogId \
+    ) t \
+) t5 \
+on t1.blogId = t5.blogId \
+left join ( \
+    select blogId, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7 and recomStatus = 1 then postId else null end) as post_count_recommend_pool_7d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 and recomStatus = 1 then postId else null end) as post_count_recommend_pool_30d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 90 and recomStatus = 1 then postId else null end) as post_count_recommend_pool_90d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 180 and recomStatus = 1 then postId else null end) as post_count_recommend_pool_180d, \
+           count(distinct case when recomStatus = 1 then postId else null end) as post_count_recommend_pool, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7 then postId else null end) as post_count_recommend_pool_review_7d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 then postId else null end) as post_count_recommend_pool_review_30d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 90 then postId else null end) as post_count_recommend_pool_review_90d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 180 then postId else null end) as post_count_recommend_pool_review_180d, \
+           count(distinct postId) as post_count_recommend_pool_review \
+    from lofter_db_dump.ods_db_recommend_review_post_nd \
+    group by blogId \
+) t6 \
+on t1.blogId = t6.blogId \
+left join ( \
+    select blogId, \
+           count(case when b.postId is not null then a.postId else null end) as securityReviewCountRecent10Post, \
+           count(case when c.postId is not null then a.postId else null end) as recommendReviewCountRecent10Post \
+    from ( \
+        select postId, \
+               blogId \
+        from ( \
+            select id as postId, \
+                   blogId, \
+                   row_number() over(partition by blogId order by publishDate desc) as rn \
+            from lofter.dim_post_article \
+            where isPublished = true and isForbidden = false and isCitedPost = false and allowView = 0 and isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 and \
+                publishDate <= '${azkaban.flow.1.days.ago}' \
+        ) t \
+        where rn <= 10 \
+    ) a \
+    left join ( \
+        select postId from lofter_db_dump.ods_db_post_personal_passed_nd where status = 0 \
+    ) b \
+    on a.postId = b.postId \
+    left join ( \
+        select postId from lofter_db_dump.ods_db_recommend_review_post_nd \
+    ) c \
+    on a.postId = c.postId \
+    group by blogId \
+) t7 \
+on t1.blogId = t7.blogId \
+left join ( \
+    select blogId, \
+           sum(money) as money, \
+           sum(if(pay_date = '${azkaban.flow.1.days.ago}', money, 0)) as money_1d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 7, money, 0)) as money_7d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 15, money, 0)) as money_15d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 30, money, 0)) as money_30d, \
+           sum(if(datediff('${azkaban.flow.1.days.ago}', pay_date) < 90, money, 0)) as money_90d \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) t8 \
+on t1.blogId = t8.blogId \
+left join ( \
+    select blogId, \
+           count(case when hot >= 10000 then postId else null end) as postCount1wHot, \
+           count(case when hot >= 1000 then postId else null end) as postCount1kHot, \
+           count(case when hot >= 100 then postId else null end) as postCount100Hot \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by blogId \
+) t9 \
+on t1.blogId = t9.blogId \
+left join ( \
+    select blogId, \
+           creatorStatus \
+    from lofter_dm.ads_creator_ecology_identity_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t10 \
+on t1.blogId = t10.blogId \
+left join ( \
+    select userId, \
+           case when is_first_publish > 0 then '首次发文用户' \
+                when is_first_publish = 0 and is_active_creator > 0 then '持续发文用户' \
+                when is_first_publish = 0 and is_active_creator = 0 then '回流发文用户' \
+           end as creatorPostStatus \
+    from ( \
+        select userId, \
+               max(is_first_publish) as is_first_publish, \
+               max(is_active_creator) as is_active_creator \
+        from lofter.dws_par_creator_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and post_count > 0 \
+        group by userId \
+    ) t \
+) t11 \
+on t1.blogId = t11.userId \
+left join ( \
+    select t1.userId, '回流创作者' as creatorPostStatusV2 \
+    from ( \
+        select userId from lofter.dwd_post_publish_di where dt = '${azkaban.flow.1.days.ago}' group by userId \
+    ) t1 \
+    join ( \
+        select userId, post_last_date from lofter.dws_par_creator_dd where dt = '${azkaban.flow.2.days.ago}' and datediff('${azkaban.flow.1.days.ago}', post_last_date) >= 179 \
+    ) t2 \
+    on t1.userId = t2.userId \
+) t12 \
+on t1.blogId = t12.userId
+hive.query.02=create or replace view lofter_dm.ads_ecology_easy_fetch_creator_wide_table_view as select * from lofter_dm.ads_ecology_easy_fetch_creator_wide_table_dd where dt = '${azkaban.flow.1.days.ago}';

@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_dau_retain_ratio_1d_report_di partition(dt='${azkaban.flow.1.days.ago}') \
+select  \
+dt as base_dt,device_type \
+,count(distinct a.deviceudid) as dau \
+,count( DISTINCT if ( period = 1 \
+AND is_retain > 0, a.deviceUdid, NULL ) ) / count(distinct if (period = 1, a.deviceUdid, null)) AS retain_ratio_1d \
+from (SELECT deviceUdid,period,is_retain \
+FROM lofter.device_retain \
+WHERE dt = '${azkaban.flow.1.days.ago}' AND period IN (1) \
+GROUP BY deviceUdid,period,is_retain \
+) a \
+left join \
+(select dt,deviceudid,device_type \
+from lofter.dws_device_growth_dau_stratify_di \
+where dt = '${azkaban.flow.2.days.ago}' \
+group by dt,deviceudid,device_type \
+) b \
+on a.deviceudid = b.deviceudid \
+group by dt,device_type \

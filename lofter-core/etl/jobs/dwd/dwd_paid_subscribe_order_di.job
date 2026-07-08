@@ -1,0 +1,113 @@
+type=sparksql
+hive.query.01=insert overwrite lofter.dwd_paid_subscribe_order_di partition(dt='${azkaban.flow.1.days.ago}') \
+select order_id, userId, blogId, postId, amount, payTime as pay_time, \
+       if(y.orderId is null and z.deviceUdid is null, x.deviceUdid, null) as deviceUdid, \
+       if(y.orderId is null and z.deviceUdid is null, customUuid, null) as customUuid, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd, null) as actpwd, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd_channel, null) as actpwd_channel, \
+       if(y.orderId is null and z.deviceUdid is null, actpwd_search_time, null) as actpwd_search_time, \
+       if(size(actpwd_search_list) > 0, actpwd_search_list, array(actpwd)) as actpwd_search_list, \
+       x.order_type, \
+       is_official, \
+       if((y.orderId is not null or z.deviceUdid is not null) and actpwd is not null, 2, is_internal_attribute_order) as is_internal_attribute_order, \
+       is_vip_fans, platform \
+from ( \
+    select id as order_id, userId, vipBlogId as blogId, postId, amount, payTime, \
+           if((is_official > 0 and is_internal_attribute_order = 0) or is_vip_fans > 0, deviceUdid, null) as deviceUdid, customUuid, \
+           if((is_official > 0 and is_internal_attribute_order = 0) or is_vip_fans > 0, actpwd, null) as actpwd, \
+           if((is_official > 0 and is_internal_attribute_order = 0) or is_vip_fans > 0, actpwd_channel, null) as actpwd_channel, \
+           if((is_official > 0 and is_internal_attribute_order = 0) or is_vip_fans > 0, actpwd_search_time, null) as actpwd_search_time, \
+           order_type, \
+           collect_set(actpwd_search) over (partition by id) as actpwd_search_list, \
+           row_number() over (partition by id order by actpwd_search_time desc) as rk, \
+           is_official, \
+           is_internal_attribute_order, \
+           is_vip_fans, \
+           platform \
+    from ( \
+        select t1.id, t1.amount, t1.customUuid, t1.vipBlogId, t1.userId, t1.postId, t1.payTime, \
+               if(t1.order_type in (3, 4) and t3.content_type = '单日志', t3.deviceUdid, if(t2.customUuid is not null, t2.deviceUdid, if(t4.customUuid is not null, t4.deviceUdid, if(t1.order_type = 2 and t5.blogId is not null, t3.deviceUdid, null)))) as deviceUdid, \
+               if(t1.order_type in (3, 4) and t3.content_type = '单日志', t3.actpwd, if(t2.customUuid is not null, t2.actpwd, if(t4.customUuid is not null, t4.actpwd, if(t1.order_type = 2 and t5.blogId is not null, t3.actpwd, null)))) as actpwd, \
+               if(t1.order_type in (3, 4) and t3.content_type = '单日志', t3.channel, if(t2.customUuid is not null, t2.channel, if(t4.customUuid is not null, t4.channel, if(t1.order_type = 2 and t5.blogId is not null, t3.channel, null)))) as actpwd_channel, \
+               if(t1.order_type in (3, 4) and t3.content_type = '单日志', t3.time, if(t2.customUuid is not null, t2.time, if(t4.customUuid is not null, t4.time, if(t1.order_type = 2 and t5.blogId is not null, t3.time, null)))) as actpwd_search_time, \
+               t2.actpwd as actpwd_search, t1.order_type, \
+               if(t1.order_type == 2 and t5.blogId is null, 0, 1) as is_official, \
+               if(t6.orderId is not null or t1.is_system_order > 0, 1, 0) as is_internal_attribute_order, \
+               if(if(t1.order_type in (3, 4) and t3.content_type = '单日志', t3.is_paid_subscribe, if(t2.customUuid is not null, t2.is_paid_subscribe, if(t4.customUuid is not null, t4.is_paid_subscribe, if(t1.order_type = 2 and t5.blogId is not null, t3.is_paid_subscribe, null)))) = 2, 1, 0) as is_vip_fans, \
+               t1.platform \
+        from ( \
+            select id,deviceId customUuid,finishTime payTime, postId, amount, vipBlogId, userId, 1 as order_type, 0 as is_system_order, platform \
+            from lofter_db_dump.ods_db_trade_blog_vip_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+            union all \
+            select id,deviceId customUuid,finishTime payTime, postId, amount, vipBlogId, userId, 2 as order_type, 0 as is_system_order, platform \
+            from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+            union all \
+            select id,deviceId customUuid,finishTime payTime, postId, amount, null as vipBlogId, userId, 3 as order_type, source as is_system_order, platform \
+            from lofter_db_dump.ods_db_trade_store_vip_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+            union all \
+            select id, cast(userId as string) as customUuid,finishTime payTime, postId, amount, null as vipBlogId, userId, 4 as order_type, source as is_system_order, platform \
+            from lofter_db_dump.ods_db_trade_mini_program_order_nd \
+            where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+        ) t1 \
+        left join ( \
+            select time,actpwd,channel, deviceUdid, customUuid, userid, itemId as postid, is_paid_subscribe \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  is_paid_subscribe > 0 and content_type = '单日志' \
+        ) t2 on t1.customUuid = t2.customUuid and t1.payTime >= t2.time and t1.payTime <= t2.time + 86400000 and t1.postId = t2.postid \
+        left join ( \
+            select time,actpwd,channel, deviceUdid, customUuid, userid, itemId as postid, content_type, is_paid_subscribe \
+            from lofter.dwd_growth_actpwd_access_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                  is_paid_subscribe > 0 \
+        ) t3 on t1.customUuid = t3.customUuid and t1.payTime >= t3.time and t1.payTime <= t3.time + 86400000 \
+        left join ( \
+                    select time, actpwd, channel, deviceUdid, customUuid, userid, link, \
+                           item_userId as blogid, is_paid_subscribe \
+                    from lofter.dwd_growth_actpwd_access_di \
+                    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.2.days.ago}' and \
+                          is_paid_subscribe > 0 \
+        ) t4 on t1.customUuid = t4.customUuid and t1.payTime >= t4.time and t1.payTime <= t4.time + 86400000 and t1.vipBlogId = t4.blogId \
+        left join ( \
+            select  cast(trim(blogId) as bigint) as blogId \
+            from lofter_db_dump.ods_db_admin_pub_data_nd \
+                 lateral view explode(split(content, ',')) as blogId \
+            where name in ('blogvip_ids', 'book_store_blogIds') and cast(trim(blogId) as bigint) > 0 \
+            group by 1 \
+        ) t5 on t1.vipBlogId = t5.blogId \
+        left join ( \
+          select a.orderId, 3 as order_type \
+          from ( \
+              select id as orderId, cast(couponid as bigint) user_couponid \
+              from lofter_db_dump.ods_db_trade_store_vip_order_nd \
+                   lateral view explode(split(couponids, ',')) as couponid \
+              where couponids != '0' \
+          ) a \
+          join lofter_db_dump.ods_db_trade_user_coupon_nd b on a.user_couponid = b.id \
+          join lofter_db_dump.ods_db_trade_coupon_nd c on b.couponId = c.id \
+          where c.belongToKol = 0 \
+          group by a.orderId \
+        ) t6 on t1.id = t6.orderId and t1.order_type = t6.order_type \
+    ) t \
+) x \
+left join ( \
+        select orderId, order_type \
+        from lofter.dwd_ad_growth_order_activate_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+) y on x.order_id = y.orderId and x.order_type = y.order_type \
+left join ( \
+    select deviceUdid \
+    from lofter.dwd_ad_growth_device_di \
+    where appid = 'lofter' and \
+          device_type = 'new' and \
+          dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+          media = '快手' and proxy = '芒果' \
+    group by 1 \
+) z on x.deviceUdid = z.deviceUdid \
+where x.rk = 1 \
+distribute by 1
+dependencies=dwd_growth_actpwd_access_di,dwd_ad_growth_order_activate_di,dwd_ad_growth_device_di

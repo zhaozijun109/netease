@@ -1,0 +1,383 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_premium_scoring_all_round_di partition(dt = '${azkaban.flow.1.days.ago}') \
+Select \
+  postid, \
+  blog_channel_flg, \
+  publishdate, \
+  publishdays, \
+  words_count, \
+  ai_results, \
+  blogid, \
+  ips, \
+  ispay_returngift, \
+  recomstatus, \
+  blogname, \
+  styouzhiflg, \
+  yinliuflg, \
+  collectionid, \
+  bg_flg, \
+  tags, \
+  review_status, \
+  exposureuv, \
+  qianbg_amount, \
+  liulan_fufei_rate, \
+  furate, \
+  zhenrate, \
+  text_length, \
+  level, \
+  shuareflg, \
+  liulanuv, \
+  zhengfankuiuv, \
+  fufankuiuv, \
+  dianzanuv, \
+  unlock_dianzanuv, \
+  unlock_hou_dianzanuv, \
+  recommenduv, \
+  unlock_recommenduv, \
+  unlock_hou_recommenduv, \
+  subscribecollectionuv, \
+  unlock_subscribecollectionuv, \
+  unlock_hou_subscribecollectionuv, \
+  followuv, \
+  unlock_followuv, \
+  unlock_hou_followuv, \
+  unlock_rate, \
+  zhengfankui_rate, \
+  fufankui_rate, \
+  dianzan_rate, \
+  recommend_rate, \
+  subscribe_rate, \
+  follow_rate, \
+  ln(unlock_rate * 100 * 10 + 1) as unlock_rate_ln, \
+  ln(zhengfankui_rate * 100 * 200 + 1) as zhengfankui_rate_ln, \
+  ln(fufankui_rate * 100 * 800 + 1) as fufankui_rate_ln, \
+  ln(dianzan_rate * 100 * 10 + 1) as dianzan_rate_ln, \
+  ln(recommend_rate * 100 * 40 + 1) as recommend_rate_ln, \
+  ln(subscribe_rate * 100 * 45 + 1) as subscribe_rate_ln, \
+  ln(follow_rate * 100 * 100 + 1) as follow_rate_ln, \
+  ln(unlock_rate * 100 * 10 + 1) + ln(zhengfankui_rate * 100 * 200 + 1) - ln(fufankui_rate * 100 * 800 + 1) +  \
+  ln(dianzan_rate * 100 * 10 + 1) + ln(recommend_rate * 100 * 40 + 1) + ln(subscribe_rate * 100 * 45 + 1) +  \
+  ln(follow_rate * 100 * 100 + 1)+ ln(response_rate * 100 * 80 + 1)-ln(black_rate * 100 * 200 + 1) as no_jiaquan_all_score, \
+  ln(unlock_rate * 100 * 10 + 1) * 0.1 + ln(zhengfankui_rate * 100 * 200 + 1) * 0.2 - ln(fufankui_rate * 100 * 800 + 1) * 0.15 +  \
+  ln(dianzan_rate * 100 * 10 + 1) * 0.25 + ln(recommend_rate * 100 * 40 + 1) * 0.30 + ln(subscribe_rate * 100 * 45 + 1) * 0.15 +  \
+  ln(follow_rate * 100 * 100 + 1) * 0.15 + ln(response_rate * 100 * 80 + 1)*0.25 -ln(black_rate * 100 * 200 + 1)*0.25  as jiaquan_all_score, \
+  post_content_type, \
+  responseuv, \
+  unlock_responseuv, \
+  unlock_hou_responseuv, \
+  blackuv, \
+  unlock_blackuv, \
+  unlock_hou_blackuv,  \
+  response_rate, \
+  black_rate, \
+  ln(response_rate * 100 * 80 + 1) as response_rate_ln, \
+  ln(black_rate * 100 * 200 + 1) as black_rate_ln \
+from \
+  ( \
+    select \
+      a.blog_channel_flg, \
+      a.postid, \
+      a.publishdate, \
+      a.publishdays, \
+      a.words_count, \
+      a.ai_results, \
+      a.blogid, \
+      a.ips, \
+      a.ispay_returngift, \
+      b.recomstatus, \
+      b.blogname, \
+      b.styouzhiflg, \
+      b.yinliuflg, \
+      b.collectionid, \
+      b.bg_flg, \
+      b.tags, \
+      a.review_status, \
+	  a.post_content_type, \
+      b.exposureuv, \
+      b.qianbg_amount, \
+      b.liulan_fufei_rate, \
+      b.furate, \
+      b.zhenrate, \
+      c.text_length, \
+      d.level, \
+      case when e.postid is null then 0 else 1 end as shuareflg, \
+      unlockuv, \
+      liulanuv, \
+      zhengfankuiuv, \
+      fufankuiuv, \
+      dianzanuv, \
+      unlock_dianzanuv, \
+      unlock_hou_dianzanuv, \
+      recommenduv, \
+      unlock_recommenduv, \
+      unlock_hou_recommenduv, \
+	  responseuv, \
+	  unlock_responseuv, \
+	  unlock_hou_responseuv, \
+      subscribecollectionuv, \
+      unlock_subscribecollectionuv, \
+      unlock_hou_subscribecollectionuv, \
+      followuv, \
+      unlock_followuv, \
+      unlock_hou_followuv, \
+	  blackuv, \
+      unlock_blackuv, \
+      unlock_hou_blackuv, \
+      unlockuv / liulanuv as unlock_rate, \
+      (zhengfankuiuv) / liulanuv as zhengfankui_rate, \
+      (fufankuiuv) / liulanuv as fufankui_rate, \
+      ( \
+        dianzanuv * 0.5 + unlock_dianzanuv + 1.5 * unlock_hou_dianzanuv \
+      ) / liulanuv as dianzan_rate, \
+      ( \
+        recommenduv * 0.8 + unlock_recommenduv + 1.3 * unlock_hou_recommenduv \
+      ) / liulanuv as recommend_rate, \
+	  ( \
+        responseuv * 0.9 + unlock_responseuv + 1.1 * unlock_hou_responseuv \
+      ) / liulanuv as response_rate, \
+      ( \
+        subscribecollectionuv * 0.3 + unlock_subscribecollectionuv + 1.8 * unlock_hou_subscribecollectionuv \
+      ) / liulanuv as subscribe_rate, \
+      ( \
+        followuv * 0.3 + unlock_followuv + 1.8 * unlock_hou_followuv \
+      ) / liulanuv as follow_rate, \
+	  ( \
+	     blackuv * 1.0 + 1.5*unlock_blackuv + 1.8 * unlock_hou_blackuv \
+      ) / liulanuv as black_rate  \
+    from \
+      ( \
+        select \
+          a.blog_channel_flg, \
+          a.postid, \
+          a.ips, \
+          a.ispay_returngift, \
+          a.publishdate, \
+          case \
+            when publishdate = '${azkaban.flow.1.days.ago}' then '当日' \
+            when publishdate between date_sub('${azkaban.flow.1.days.ago}', 6) \
+            and date_sub('${azkaban.flow.1.days.ago}', 1) then '2~7日' \
+            when publishdate between date_sub('${azkaban.flow.1.days.ago}', 14) \
+            and date_sub('${azkaban.flow.1.days.ago}', 7) then '8~15日' \
+            else '16~30日' \
+          end publishdays, \
+          a.words_count, \
+          a.ai_results, \
+          a.blogid, \
+          a.review_status, \
+		  a.post_content_type, \
+          sum(liulanuv) as liulanuv, \
+          sum(unlockuv) as unlockuv, \
+          sum(zhengfankuiuv) as zhengfankuiuv, \
+          sum(fufankuiuv) as fufankuiuv, \
+          sum(dianzanuv) dianzanuv, \
+          sum(unlock_dianzanuv) unlock_dianzanuv, \
+          sum(unlock_hou_dianzanuv) unlock_hou_dianzanuv, \
+          sum(recommenduv) recommenduv, \
+          sum(unlock_recommenduv) unlock_recommenduv, \
+          sum(unlock_hou_recommenduv) unlock_hou_recommenduv, \
+          sum(responseuv) responseuv, \
+          sum(unlock_responseuv) unlock_responseuv, \
+          sum(unlock_hou_responseuv) unlock_hou_responseuv, \
+          sum(subscribecollectionuv) subscribecollectionuv, \
+          sum(unlock_subscribecollectionuv) unlock_subscribecollectionuv, \
+          sum(unlock_hou_subscribecollectionuv) unlock_hou_subscribecollectionuv, \
+          sum(followuv) followuv, \
+          sum(unlock_followuv) unlock_followuv, \
+          sum(unlock_hou_followuv) unlock_hou_followuv, \
+          sum(blackuv) blackuv, \
+          sum(unlock_blackuv) unlock_blackuv, \
+          sum(unlock_hou_blackuv) unlock_hou_blackuv \
+        from \
+          ( \
+            select \
+              a.*, \
+              b.blog_channel_flg, \
+              b.ips, \
+              b.ispay_returngift, \
+              b.words_count, \
+              b.ai_results, \
+              b.publishdate, \
+              b.review_status, \
+              b.post_content_type \
+            from \
+              ( \
+                select \
+                  postid, \
+                  blogid, \
+                  liulanuv, \
+                  unlockuv, \
+                  zhengfankuiuv, \
+                  fufankuiuv, \
+                  dianzanuv, \
+                  unlock_dianzanuv, \
+                  unlock_hou_dianzanuv, \
+                  recommenduv, \
+                  unlock_recommenduv, \
+                  unlock_hou_recommenduv, \
+				  responseuv, \
+				  unlock_responseuv, \
+				  unlock_hou_responseuv, \
+                  subscribecollectionuv, \
+                  unlock_subscribecollectionuv, \
+                  unlock_hou_subscribecollectionuv, \
+                  followuv, \
+                  unlock_followuv, \
+                  unlock_hou_followuv, \
+				  blackuv, \
+                  unlock_blackuv, \
+                  unlock_hou_blackuv \
+                from \
+                  lofter_dm.ads_paid_post_premium_scoring_metrics_detail_di \
+                where \
+                  dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+                  and '${azkaban.flow.1.days.ago}' \
+                  and publishdate between date_sub('${azkaban.flow.1.days.ago}', 29) \
+                  and '${azkaban.flow.1.days.ago}' \
+                  and ispay_returngift in (0, 1) \
+				  and dt>=publishdate \
+              ) a \
+              join ( \
+                select \
+                  a.blog_channel_flg, \
+                  a.postid, \
+                  a.ips, \
+                  a.ispay_returngift, \
+                  a.publishdate, \
+                  a.words_count, \
+                  a.ai_results, \
+                  a.blogid, \
+                  a.review_status, \
+                  a.post_content_type \
+                from \
+                  ( \
+                    select \
+                      \
+                      blog_channel_flg, \
+                      postid, \
+                      ips, \
+                      ispay_returngift, \
+                      publishdate, \
+                      words_count, \
+                      ai_results, \
+                      blogid, \
+                      review_status, \
+                      post_content_type, \
+                      row_number() over( \
+                        partition by postid \
+                        order by \
+                         dt desc \
+                      ) as rk \
+                    from \
+                      lofter_dm.ads_paid_post_premium_scoring_metrics_detail_di \
+                    where \
+                      dt between date_sub('${azkaban.flow.1.days.ago}', 29) \
+                      and '${azkaban.flow.1.days.ago}' \
+                      and  \
+                      publishdate between date_sub('${azkaban.flow.1.days.ago}', 29) \
+                      and '${azkaban.flow.1.days.ago}' \
+                      and ispay_returngift in (0, 1) \
+					  and dt>=publishdate \
+                  ) a \
+               where \
+                 a.rk = 1 \
+              ) b on a.postid = b.postid \
+              and a.blogid = b.blogid \
+		 join  \
+			  (select \
+          postid \
+          from \
+          lofter.dim_gift_post_return \
+        where \
+		contenttype  in ('文字','图片') \
+		and  \
+          ispay_returngift in (0, 1) \
+		and  \
+           return_gift_plantype not in ('原图','表情包','装扮','图图有证') \
+        group by \
+          postid) c  \
+		  on a.postid = c.postid \
+          ) a \
+        group by \
+          blog_channel_flg, \
+          postid, \
+          ips, \
+          ispay_returngift, \
+          case \
+            when publishdate = '${azkaban.flow.1.days.ago}' then '当日' \
+            when publishdate between date_sub('${azkaban.flow.1.days.ago}', 6) \
+            and date_sub('${azkaban.flow.1.days.ago}', 1) then '2~7日' \
+            when publishdate between date_sub('${azkaban.flow.1.days.ago}', 14) \
+            and date_sub('${azkaban.flow.1.days.ago}', 7) then '8~15日' \
+            else '16~30日' \
+          end, \
+          words_count, \
+          ai_results, \
+          blogid, \
+          publishdate, \
+          review_status, \
+		  post_content_type \
+      ) a \
+      left join ( \
+        select \
+          postid, \
+          recomstatus, \
+          blogname, \
+          styouzhiflg, \
+          yinliuflg, \
+          publishdate, \
+          collectionid, \
+          bg_flg, \
+          tags, \
+          exposureuv, \
+          qianbg_amount, \
+          liulan_fufei_rate, \
+          furate, \
+          zhenrate \
+        from \
+          lofter.dws_gift_post_premium_scoring_v2_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+      ) b on a.postid = b.postid \
+      left join ( \
+        select \
+          postid, \
+          ispay_returngift, \
+          max(text_length) as text_length  \
+          from \
+          lofter.dim_gift_post_return \
+        where \
+          text_length > 0 \
+          and ispay_returngift in (0, 1) \
+        group by \
+          postid, \
+          ispay_returngift \
+      ) c on a.postid = c.postid \
+      and a.ispay_returngift = c.ispay_returngift \
+      left join ( \
+        select \
+          dt, \
+          userid as blogid, \
+          level \
+        from \
+          lofter.dws_par_creator_level_scoring_dd \
+        where \
+          dt = '${azkaban.flow.1.days.ago}' \
+        group by \
+          dt, \
+          userid, \
+          level \
+      ) d on a.blogid = d.blogid \
+      left join ( \
+select postid from  \
+lofter.dwd_risk_brush_hot_suspect_post_rank_ip_posts_di \
+group by postid \
+union \
+select postid from  \
+lofter.dwd_risk_brush_hot_suspect_post_rank_posts_di \
+group by postid \
+      ) e  \
+on a.postid=e.postid \
+  ) a \
+  where liulanuv>0 \
+
+dependencies=ads_paid_post_premium_scoring_metrics_detail_di

@@ -1,0 +1,22 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=5
+conf.spark.executor.cores=4
+hive.query.01= insert overwrite table lofter.dwd_userfolder_action_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.userId, a.deviceUdid, a.folderId, b.userId as folderUserId, \
+           a.occurTime, a.isExposure, a.isClick, a.isBrowse \
+    from ( \
+        select cast(itemId as bigint) as folderId, deviceUdid, userId, occurTime, \
+               if(eventId in ('t3-2', 'b5-24'), 1, 0) as isExposure, \
+               if(eventId in ('t3-3', 'b5-10'), 1, 0) as isClick, \
+              if(eventId = 't2-1', 1, 0) as isBrowse \
+        from lofter.ods_mda_app_partition_di \
+        where dt='${azkaban.flow.1.days.ago}' and \
+              actionType in ('page_view', 'cell_exposure', 'cell_click') and \
+               ((eventId = 't2-1' and params['isPublic'] = 1) or (eventid in ('t3-2','b5-24') and itemType = 'FAVORLIST') or (eventid in ('t3-3','b5-10') and itemType = 'FAVORLIST'))  and \
+              cast(itemId as bigint) > 0 \
+    ) a join lofter_db_dump.ods_db_user_subscribe_folder_nd b on a.folderId = b.id \
+    distribute by 1

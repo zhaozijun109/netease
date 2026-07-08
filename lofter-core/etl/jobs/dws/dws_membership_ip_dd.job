@@ -1,0 +1,41 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_membership_ip_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.ip, \
+       a.zone, \
+       count(distinct a.postId) post_count_std, \
+       count(distinct if(a.join_date >= '${azkaban.flow.7.days.ago}', a.postId, null)) post_count_7d, \
+       sum(b.hot) as hot, \
+       nvl(d.ip_type, 'ip') as ip_type \
+from ( \
+    select postId, 'vip' as zone, ip, join_date \
+    from lofter.dim_membership_post_vip_dd \
+        lateral view explode(ips) as ip \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select postId, 'pay' as zone, ip, join_date \
+    from lofter.dim_membership_post_dd \
+        lateral view explode(ips) as ip \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select postId, 'vip' as zone, '全部' as ip, join_date \
+    from lofter.dim_membership_post_vip_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+  union all \
+    select postId, 'pay' as zone, '全部' as ip, join_date \
+    from lofter.dim_membership_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select postId, hot_30d as hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId \
+left join ( \
+    select tagName as tag from lofter_db_dump.ods_db_recommend_tag_new_nd where blackTag > 0 \
+) c on a.ip = c.tag \
+left join ( \
+    select ip, ip_type from lofter.membership_ip_setting \
+) d on a.ip = d.ip \
+where c.tag is null and (d.ip is not null or a.ip = '全部') \
+group by a.ip, a.zone, nvl(d.ip_type, 'ip') \
+having post_count_std >= 100 or post_count_7d >= 50 \
+
+dependencies=dws_post_interaction_dd

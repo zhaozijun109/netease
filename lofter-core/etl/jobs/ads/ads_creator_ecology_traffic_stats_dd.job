@@ -1,0 +1,156 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_ecology_traffic_stats_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  blogId, \
+        sevenDayFlowRate, \
+        thirtyDayFlowRate, \
+        sevenDayDiscoveryPercent, \
+        sevenDayTagPercent, \
+        sevenDayCollectionPercent, \
+        round(1-sevenDayDiscoveryPercent-sevenDayTagPercent-sevenDayCollectionPercent,2) AS sevenDayOtherPercent, \
+        thirtyDayDiscoveryPercent, \
+        thirtyDayTagPercent, \
+        thirtyDayCollectionPercent, \
+        round(1-thirtyDayDiscoveryPercent-thirtyDayTagPercent-thirtyDayCollectionPercent,2) AS thirtyDayOtherPercent, \
+        flowSourceType, \
+        sevenDayNewFlowRate, \
+        sevenDayBackFlowRate, \
+        thirtyDayNewFlowRate, \
+        thirtyDayBackFlowRate \
+FROM ( \
+	SELECT  userId AS blogId, \
+	        nvl(extra_traffic_7d,0) AS sevenDayFlowRate, \
+	        nvl(extra_traffic_30d,0) AS thirtyDayFlowRate, \
+	        nvl(round(extra_traffic_7d/traffic_7d,2),0) AS sevenDayDiscoveryPercent, \
+	        nvl(round(tag_traffic_7d/traffic_7d,2),0) AS sevenDayTagPercent, \
+	        nvl(round(collection_traffic_7d/traffic_7d,2),0) AS sevenDayCollectionPercent, \
+	        nvl(round(extra_traffic_30d/traffic_30d,2),0) AS thirtyDayDiscoveryPercent, \
+	        nvl(round(tag_traffic_30d/traffic_30d,2),0) AS thirtyDayTagPercent, \
+	        nvl(round(collection_traffic_30d/traffic_30d,2),0) AS thirtyDayCollectionPercent, \
+	        concat_ws(',',if(source_type1 = 1,1,null),if(source_type2 = 1,2,null),if(source_type3 = 1,3,null),if(source_type5 = 1,5,null)) AS flowSourceType, \
+	        sevenDayNewFlowRate, \
+            sevenDayBackFlowRate, \
+            thirtyDayNewFlowRate, \
+            thirtyDayBackFlowRate \
+	FROM ( \
+		SELECT  t1.userId, \
+		        t1.extra_traffic_7d, \
+		        t1.extra_traffic_30d, \
+		        t1.tag_traffic_7d, \
+		        t1.tag_traffic_30d, \
+		        t1.collection_traffic_7d, \
+		        t1.collection_traffic_30d, \
+		        t1.traffic_7d, \
+		        t1.traffic_30d, \
+		        t1.source_type2, \
+		        t1.source_type3, \
+		        if(t2.userId is not null,1,0) AS source_type5, \
+		        if(t3.userId is not null,1,0) AS source_type1, \
+		        if(type = 1, post_support_induced_pv_7d, 0) as sevenDayNewFlowRate, \
+		        if(type = 1, post_support_induced_pv_30d, 0) as thirtyDayNewFlowRate, \
+		        if(type = 2, post_support_induced_pv_7d, 0) as sevenDayBackFlowRate, \
+                if(type = 2, post_support_induced_pv_30d, 0) as thirtyDayBackFlowRate \
+		FROM ( \
+           SELECT userId, \
+                  extra_traffic_7d, \
+                  extra_traffic_30d, \
+                  tag_traffic_7d, \
+                  tag_traffic_30d, \
+                  collection_traffic_7d, \
+                  collection_traffic_30d, \
+                  traffic_7d, \
+                  traffic_30d, \
+                  source_type2, \
+                  source_type3, \
+                  post_support_induced_pv_7d, \
+                  post_support_induced_pv_30d, \
+                  type \
+           FROM ( \
+                SELECT userId, \
+                       extra_traffic_7d, \
+                       extra_traffic_30d, \
+                       tag_traffic_7d, \
+                       tag_traffic_30d, \
+                       collection_traffic_7d, \
+                       collection_traffic_30d, \
+                       traffic_7d, \
+                       traffic_30d, \
+                       source_type2, \
+                       source_type3, \
+                       post_support_induced_pv_7d, \
+                       post_support_induced_pv_30d, \
+                       type, \
+                       ROW_NUMBER() OVER(PARTITION BY userId ORDER BY type DESC) AS rn \
+                FROM ( \
+                    SELECT  userId, \
+                            (related_article_click_pv_7d + discovery_click_pv_7d) AS extra_traffic_7d, \
+                            (related_article_click_pv_30d + discovery_click_pv_30d) AS extra_traffic_30d, \
+                            (tag_discovery_click_pv_7d + tag_new_click_pv_7d + tag_hot_click_pv_7d) AS tag_traffic_7d, \
+                            (tag_discovery_click_pv_30d + tag_new_click_pv_30d + tag_hot_click_pv_30d) AS tag_traffic_30d, \
+                            (collection_click_pv_7d + attention_click_pv_7d) AS collection_traffic_7d, \
+                            (collection_click_pv_30d + attention_click_pv_30d) AS collection_traffic_30d, \
+                            click_pv_7d                             AS traffic_7d, \
+                            click_pv_30d                            AS traffic_30d, \
+                            if(post_count_7d >= 2,1,0)              AS source_type2, \
+                            if(fans_hd_uv_30d/hd_uv_30d >= 0.3,1,0) AS source_type3, \
+                            post_support_induced_pv_7d, \
+                            post_support_induced_pv_30d, \
+                            0 AS type \
+                    FROM lofter.dws_par_creator_dd \
+                    WHERE dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1 and post_count_180d >= 2 \
+                    UNION ALL \
+                    SELECT userId, \
+                           extra_traffic_7d, \
+                           extra_traffic_30d, \
+                           tag_traffic_7d, \
+                           tag_traffic_30d, \
+                           collection_traffic_7d, \
+                           collection_traffic_30d, \
+                           traffic_7d, \
+                           traffic_30d, \
+                           source_type2, \
+                           source_type3, \
+                           post_support_induced_pv_7d, \
+                           post_support_induced_pv_30d, \
+                           type \
+                    FROM ( \
+                        SELECT userId, \
+                               (related_article_click_pv_7d + discovery_click_pv_7d) AS extra_traffic_7d, \
+                               (related_article_click_pv_30d + discovery_click_pv_30d) AS extra_traffic_30d, \
+                               (tag_discovery_click_pv_7d + tag_new_click_pv_7d + tag_hot_click_pv_7d) AS tag_traffic_7d, \
+                               (tag_discovery_click_pv_30d + tag_new_click_pv_30d + tag_hot_click_pv_30d) AS tag_traffic_30d, \
+                               (collection_click_pv_7d + attention_click_pv_7d) AS collection_traffic_7d, \
+                               (collection_click_pv_30d + attention_click_pv_30d) AS collection_traffic_30d, \
+                               click_pv_7d                             AS traffic_7d, \
+                               click_pv_30d                            AS traffic_30d, \
+                               if(post_count_7d >= 2,1,0)              AS source_type2, \
+                               if(fans_hd_uv_30d/hd_uv_30d >= 0.3,1,0) AS source_type3, \
+                               post_support_induced_pv_7d, \
+                               post_support_induced_pv_30d \
+                        FROM lofter.dws_par_creator_dd \
+                        WHERE dt = '${azkaban.flow.1.days.ago}' \
+                    ) t1 \
+                    JOIN ( \
+                        SELECT blogId, type FROM lofter_dm.ads_ecology_new_return_creator_di WHERE dt <= '${azkaban.flow.1.days.ago}' \
+                    ) t2 \
+                    ON t1.userId = t2.blogId \
+                ) t \
+            ) tt \
+            WHERE rn = 1 \
+		) t1 \
+		LEFT JOIN ( \
+			SELECT userId \
+			FROM lofter.dim_post \
+			WHERE DATEDIFF('${azkaban.flow.1.days.ago}', publishdate) < 7 AND allowview = 0 AND valid = 0 AND ispublished = true AND recomstatus = 1 \
+			GROUP BY userId \
+		) t2 \
+		ON t1.userId = t2.userId \
+		LEFT JOIN ( \
+			SELECT userId \
+			FROM lofter_db_dump.ods_db_act_lighthouse_user_v2_nd \
+			WHERE status = 1 and from_unixtime(cast(endtime/1000 as bigint),'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' \
+			GROUP BY userId \
+		) t3 \
+		ON t1.userId = t3.userId \
+	) tmp1 \
+) tmp2

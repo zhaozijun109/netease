@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_title_classify_2_element_blog_priority_all_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select nvl(a.blogid, b.blogid) as blogid , \
+nvl(a.flgs, b.flgs) as flgs  \
+ \
+from  \
+ \
+(select blogid,sort_array(collect_set(flg)) as flgs \
+from \
+(select a.blogid,flg \
+from  \
+(select blogid,flg,rank()over(partition by flg1,blogid order by mark desc ) as rk \
+from  \
+lofter_dm.ads_gift_post_title_classify_2_element_blog_dd \
+where   period = '60日' and  dt='${azkaban.flow.1.days.ago}' ) a \
+where rk=1) a \
+group by blogid) a \
+ \
+full outer join \
+ \
+ \
+(select blogid,sort_array(collect_set(flg)) as flgs \
+from \
+(select a.blogid,flg \
+from  \
+(select blogid,flg,rank()over(partition by flg1,blogid order by mark desc ) as rk \
+from  \
+lofter_dm.ads_gift_post_title_classify_2_element_blog_dd \
+where  period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+) a \
+where rk=1) a \
+group by blogid) b \
+ \
+on a.blogid=b.blogid \
+
+dependencies=ads_gift_post_title_classify_2_element_blog_dd
+

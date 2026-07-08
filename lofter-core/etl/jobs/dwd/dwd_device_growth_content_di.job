@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_device_growth_content_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceudid,device_type,origin_type,origin_channel,origin_actpwd,is_paid_subscribe, b.content_type_sub as  content_type,  itemid, blogId, publish_date, tags,ips,title,url ,is_book_store \
+from  \
+( \
+    select deviceudid,device_type,origin_type,origin_channel,origin_actpwd,is_paid_subscribe,land_nonrec_itemid,land_nonrec_content_type \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt='${azkaban.flow.1.days.ago}'  \
+    and land_nonrec_content_type in ('单日志','合集','粮单') \
+    and land_nonrec_itemid is not null \
+) a \
+left join  \
+(  \
+    select '单日志' as content_type,contentType as content_type_sub, id as itemid, blogId, publishDate as publish_date,concat_ws(',', tags) tags,concat_ws(',', ips) ips,title,concat('https://',blogname,'.lofter.com/post/',lower(conv(blogId, 10, 16)),'_',lower(conv(id, 10, 16))) as url,is_book_store  \
+    from lofter.dim_post  \
+    union all  \
+     \
+    select  content_type,content_type_sub,itemid, blogId, publish_date,tags,concat_ws(',',collect_set(t2.ip)) as ips,title,url,is_book_store \
+    from \
+    ( \
+        select '合集' as content_type, '合集' as content_type_sub, id as itemid, blogId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publish_date,tags,tag,name as title,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) url,0 as is_book_store \
+        from lofter_db_dump.ods_db_post_collection_nd  \
+        lateral view explode(split(tags,',')) t1 as tag \
+    ) t1 \
+    left join \
+    ( \
+        select tag,ip \
+        from lofter.dwd_tag_ip_mapping_nd \
+        group by tag,ip  \
+    ) t2 \
+    on t1.tag=t2.tag \
+    group by  content_type,content_type_sub,itemid, blogId, publish_date,tags,title,url,is_book_store \
+    union all  \
+    select  content_type,content_type_sub,itemid, blogId, publish_date,tags,concat_ws(',',collect_set(t2.ip)) as ips,title,url,is_book_store \
+    from \
+    ( \
+        select '粮单' as content_type, '粮单' as content_type_sub, id as itemid, userid as blogId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publish_date,cast(tags as string) tags,tag,name as title,concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) url,0 as is_book_store \
+        from lofter_db_dump.ods_db_grain_info_nd  \
+        lateral view explode(split(tags,',')) t1 as tag \
+    ) t1 \
+    left join \
+    ( \
+        select tag,ip \
+        from lofter.dwd_tag_ip_mapping_nd \
+        group by tag,ip  \
+    ) t2 \
+    on t1.tag=t2.tag \
+    group by  content_type,content_type_sub,itemid, blogId, publish_date,tags,title,url,is_book_store \
+) b  \
+on a.land_nonrec_content_type = b.content_type and a.land_nonrec_itemid = b.itemId
+dependencies=dwd_device_growth_attribution_di

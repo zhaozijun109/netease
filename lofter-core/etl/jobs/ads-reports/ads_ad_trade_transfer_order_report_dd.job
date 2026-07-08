@@ -1,0 +1,72 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_trade_transfer_order_report_dd partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  a.*, \
+  b.result \
+from \
+  ( \
+    select \
+      a.*, \
+      b.type, \
+      'lofter' as apptype \
+    from \
+      ( \
+        select \
+          id, \
+          bindid, \
+          userid, \
+          from_unixtime( \
+            cast(createtime / 1000 AS BIGINT), \
+            'yyyy-MM-dd HH:mm:ss' \
+          ) AS time, \
+           from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day, \
+          withdrawamount, \
+          state \
+        from \
+          lofter_db_dump.ods_db_trade_transfer_order_nd \
+        group by \
+          id, \
+          bindid, \
+          userid, \
+          from_unixtime( \
+            cast(createtime / 1000 AS BIGINT), \
+            'yyyy-MM-dd HH:mm:ss' \
+          ), \
+          from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'), \
+          withdrawamount, \
+          state \
+      ) a \
+      join ( \
+        select \
+          id, \
+          userid, \
+          type \
+        from \
+          lofter_db_dump.ods_db_trade_user_bind_nd \
+        group by \
+          id, \
+          userid, \
+          type \
+      ) b on a.bindId = b.id \
+  ) a \
+  left join ( \
+    select \
+      a.* \
+    from \
+      ( \
+        select \
+          id, \
+          orderid, \
+          get_json_object(content, '$.result') as result, \
+          createtime, \
+          row_number() over( \
+            partition by orderid \
+            order by \
+              createtime desc \
+          ) as rk \
+        from \
+          lofter_db_dump.ods_db_trade_transfer_order_log_nd \
+      ) a \
+    where \
+      rk = 1 \
+  ) b on a.id = b.orderid \

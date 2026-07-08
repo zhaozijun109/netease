@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 生命周期 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '生命周期' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (      select userId, '生命周期' as tag, life_cycle_type as grp \
+                                    from lofter.dws_user_life_circle_judge_dd \
+                                    where dt='${azkaban.flow.1.days.ago}' and life_cycle_type in ('导入期', '低价值', '成长期', '成熟期', '休眠期', '沉默期', '流失期')   ) "

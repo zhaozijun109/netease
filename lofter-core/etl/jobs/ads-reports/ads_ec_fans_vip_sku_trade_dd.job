@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_fans_vip_sku_trade_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+ amount  as  price,paytype,count(distinct userid) as uv,count(1) as num,sum(amount) as amount,sum(channeldivision) as channeldivision \
+ ,vipdays , '1日' As stat_period \
+from  \
+lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+where status=1 and  \
+from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd')  =  '${azkaban.flow.1.days.ago}' \
+group by  amount,vipdays ,paytype \
+grouping sets((amount,vipdays,paytype),(vipdays,paytype)) \
+ \
+union \
+ \
+select  \
+ amount  as  price,paytype,count(distinct userid) as uv,count(1) as num,sum(amount) as amount,sum(channeldivision) as channeldivision \
+ ,vipdays , '7日' As stat_period \
+from  \
+lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+where status=1 and  \
+from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd')  between  date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}'   \
+group by  amount,vipdays  ,paytype \
+grouping sets((amount,vipdays,paytype),(vipdays,paytype)) \
+ \
+union \
+ \
+select  \
+ amount  as  price,paytype,count(distinct userid) as uv,count(1) as num,sum(amount) as amount,sum(channeldivision) as channeldivision \
+ ,vipdays , '30日' As stat_period \
+from  \
+lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+where status=1 and  \
+from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd')  between  date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}'  \
+group by  amount,vipdays  ,paytype \
+grouping sets((amount,vipdays,paytype),(vipdays,paytype)) \

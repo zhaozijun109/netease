@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ue_user_base_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, edu_degree, profession \
+from lofter.dws_par_user_base_dd \
+where dt = '${azkaban.flow.1.days.ago}' and (edu_degree is not null or profession is not null) \

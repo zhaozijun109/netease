@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_trend_hot_tag_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.tag, joinedNum, post_count_90d \
+from ( \
+    select tagName as tag, joinedNum \
+    from lofter_db_dump.ods_db_tag_joined_nd \
+) a \
+left join ( \
+    select tag, count(distinct postId) post_count_90d \
+    from lofter.dwd_post_publish_di \
+         lateral view explode(post_tags) as tag \
+    where dt <= '${azkaban.flow.1.days.ago}' and \
+          dt > date_sub('${azkaban.flow.1.days.ago}', 90) \
+    group by 1 \
+) b on a.tag = b.tag \
+where joinedNum < 30000 and post_count_90d >= 5000 \

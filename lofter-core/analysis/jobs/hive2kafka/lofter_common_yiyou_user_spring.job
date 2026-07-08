@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select blogId as userId, 16 as messageType, null as postId \
+    from lofter_dm.ads_paid_post_blog_circle_protected_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and type1 in ('生态') \
+    group by 1 \
+  union all \
+    select blogId as userId, 17 as messageType, null as postId \
+    from lofter_dm.ads_paid_post_blog_circle_protected_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and type1 in ('优质付费古典向', '优质付费真人市场向') \
+    group by 1 \
+  union all \
+    select blogId as userId, 18 as messageType, null as postId \
+    from lofter_dm.ads_paid_post_blog_circle_protected_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and type1 in ('劣质风险向') \
+    group by 1 \
+"
+params= --topic lofter.common.yiyou.user --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_grade_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId as blogId, a1.blogNickName as blog_nickname, concat('https://', a1.blogName, '.lofter.com') as blog_url, \
+    case a.grade when 1 then '青铜' \
+                 when 2 then '黄金' \
+                 when 3 then '铂金' \
+                 when 4 then '钻石' \
+                 when 5 then '殿堂' \
+                 else '未知' end as grade, \
+        a.trend * a.trendCount as trend, \
+    b.warn_post_count, \
+    b.score, \
+    b.income_score, b.active_score, b.quality_score, \
+    b.income_avg_30d, c.top_money_avg_all as income_avg_30d_value, \
+    b.income_avg_top10, c.top_money_avg_10 as income_avg_top10_value, \
+    b.income_total_30d, c.gift_30_day_trade_money as income_total_30d_value, \
+    b.quality_score_avg_30d, c.all_quality_percent_avg as quality_score_avg_30d_value, \
+    b.quality_score_avg_top10, c.top_quality_percent_avg_10 as quality_score_avg_top10_value, \
+    b.active_gift_post_count_30d, c.quality_postnum as active_gift_post_count_30d_value, \
+    d.coupon_unlock_count, d.grain_ticket_unlock_count, d.coin_money, d.ad_unlock_count, e.membership_revenue \
+from lofter_db_dump.ods_db_trade_pay_grade_nd a \
+join lofter.dim_blog a1 on a.userId = a1.id \
+left join ( \
+    select * \
+    from lofter_dm.ads_paid_post_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.blogId \
+left join ( \
+    select * \
+    from lofter_dm.ads_paid_post_blog_level_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.userId = c.userId \
+left join ( \
+    select blogId, \
+        sum(if(unlock_method = '券包', 1, 0)) as coupon_unlock_count, \
+        sum(if(unlock_method = '粮票', 1, 0)) as grain_ticket_unlock_count, \
+        sum(coin) * 0.1 as coin_money, \
+        sum(if(unlock_method = '广告', 1, 0)) as ad_unlock_count \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+        from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.userId = d.blogId \
+left join ( \
+    select blogId, sum(revenue) as membership_revenue \
+    from lofter_dm.ads_membership_post_revenue_di \
+    where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.userId = e.blogId \

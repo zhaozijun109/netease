@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_ecology_content_consume_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select all_realbrowseplaypv,photo_realbrowseplaypv,text_realbrowseplaypv,video_realbrowseplaypv, \
+       collection_noncentralized_realbrowseplaypv,tag_noncentralized_realbrowseplaypv,else_noncentralized_realbrowseplaypv, \
+       all_realbrowseplaypv/dau avg_realbrowseplaypv, \
+       valid_comment_pv \
+from ( \
+    select dt,sum(real_browse_play_pv) as all_realbrowseplaypv, \
+    sum(case when post_content_type='图片' then real_browse_play_pv end) as photo_realbrowseplaypv, \
+    sum(case when post_content_type='文字' then real_browse_play_pv end) as text_realbrowseplaypv, \
+    sum(case when post_content_type='视频' then real_browse_play_pv end) as video_realbrowseplaypv, \
+    sum(case when scene in ('tag') then real_browse_play_pv end) tag_noncentralized_realbrowseplaypv, \
+    sum(case when scene in ('search','hotsearch','attention','my_attention','homepage','footmark','mylove','mycollect_post','account') then real_browse_play_pv end) else_noncentralized_realbrowseplaypv \
+    from lofter.dws_page_note_source_scene_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) a \
+left join ( \
+    select dt,sum(realbrowse_pv) collection_noncentralized_realbrowseplaypv \
+    from lofter.dws_collection_scene_agg_bm_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) b on a.dt=b.dt \
+left join ( \
+    select dt,sum(dau) dau \
+    from lofter_dm.ads_device_platform_di \
+    where dt ='${azkaban.flow.1.days.ago}' \
+    group by dt \
+) c on a.dt=c.dt \
+left join ( \
+    select dt,valid_comment_pv \
+    from lofter_dm.ads_user_interaction_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.dt=d.dt
+dependencies=ads_device_platform_di,ads_user_interaction_di
+

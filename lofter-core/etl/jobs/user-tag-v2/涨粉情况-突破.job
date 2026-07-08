@@ -1,0 +1,84 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 涨粉情况-突破 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '涨粉情况-突破'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '涨粉情况-突破' as tag, 'DAY_7' as cat, cast(break_through as string) as grp \
+                                  from lofter.dws_par_user_fans_dd \
+                                    lateral view explode(array( \
+                                       if(fans_total - fans_7d < 50 and fans_total >= 50, 50, 0), \
+                                       if(fans_total - fans_7d < 100 and fans_total >= 100, 100, 0), \
+                                       if(fans_total - fans_7d < 500 and fans_total >= 500, 500, 0), \
+                                       if(fans_total - fans_7d < 1000 and fans_total >= 1000, 1000, 0), \
+                                       if(fans_total - fans_7d < 5000 and fans_total >= 5000, 5000, 0), \
+                                       if(fans_total - fans_7d < 10000 and fans_total >= 10000, 10000, 0), \
+                                       if(fans_total - fans_7d < 100000 and fans_total >= 100000, 100000, 0) \
+                                    )) as break_through \
+                                  where dt = '${azkaban.flow.1.days.ago}' and fans_total > 0 and fans_7d > 0 and break_through > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '涨粉情况-突破' as tag, 'DAY_15' as cat, cast(break_through as string) as grp \
+                                  from lofter.dws_par_user_fans_dd \
+                                    lateral view explode(array( \
+                                       if(fans_total - fans_15d < 50 and fans_total >= 50, 50, 0), \
+                                       if(fans_total - fans_15d < 100 and fans_total >= 100, 100, 0), \
+                                       if(fans_total - fans_15d < 500 and fans_total >= 500, 500, 0), \
+                                       if(fans_total - fans_15d < 1000 and fans_total >= 1000, 1000, 0), \
+                                       if(fans_total - fans_15d < 5000 and fans_total >= 5000, 5000, 0), \
+                                       if(fans_total - fans_15d < 10000 and fans_total >= 10000, 10000, 0), \
+                                       if(fans_total - fans_15d < 100000 and fans_total >= 100000, 100000, 0) \
+                                    )) as break_through \
+                                  where dt = '${azkaban.flow.1.days.ago}' and fans_total > 0 and fans_15d > 0 and break_through > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '涨粉情况-突破' as tag, 'DAY_30' as cat, cast(break_through as string) as grp \
+                                  from lofter.dws_par_user_fans_dd \
+                                    lateral view explode(array( \
+                                       if(fans_total - fans_30d < 50 and fans_total >= 50, 50, 0), \
+                                       if(fans_total - fans_30d < 100 and fans_total >= 100, 100, 0), \
+                                       if(fans_total - fans_30d < 500 and fans_total >= 500, 500, 0), \
+                                       if(fans_total - fans_30d < 1000 and fans_total >= 1000, 1000, 0), \
+                                       if(fans_total - fans_30d < 5000 and fans_total >= 5000, 5000, 0), \
+                                       if(fans_total - fans_30d < 10000 and fans_total >= 10000, 10000, 0), \
+                                       if(fans_total - fans_30d < 100000 and fans_total >= 100000, 100000, 0) \
+                                    )) as break_through \
+                                  where dt = '${azkaban.flow.1.days.ago}' and fans_total > 0 and fans_30d > 0 and break_through > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '涨粉情况-突破' as tag, 'DAY_90' as cat, cast(break_through as string) as grp \
+                                  from lofter.dws_par_user_fans_dd \
+                                    lateral view explode(array( \
+                                       if(fans_total - fans_90d < 50 and fans_total >= 50, 50, 0), \
+                                       if(fans_total - fans_90d < 100 and fans_total >= 100, 100, 0), \
+                                       if(fans_total - fans_90d < 500 and fans_total >= 500, 500, 0), \
+                                       if(fans_total - fans_90d < 1000 and fans_total >= 1000, 1000, 0), \
+                                       if(fans_total - fans_90d < 5000 and fans_total >= 5000, 5000, 0), \
+                                       if(fans_total - fans_90d < 10000 and fans_total >= 10000, 10000, 0), \
+                                       if(fans_total - fans_90d < 100000 and fans_total >= 100000, 100000, 0) \
+                                    )) as break_through \
+                                  where dt = '${azkaban.flow.1.days.ago}' and fans_total > 0 and fans_90d > 0 and break_through > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '涨粉情况-突破' as tag, 'DAY_180' as cat, cast(break_through as string) as grp \
+                                  from lofter.dws_par_user_fans_dd \
+                                    lateral view explode(array( \
+                                       if(fans_total - fans_180d < 50 and fans_total >= 50, 50, 0), \
+                                       if(fans_total - fans_180d < 100 and fans_total >= 100, 100, 0), \
+                                       if(fans_total - fans_180d < 500 and fans_total >= 500, 500, 0), \
+                                       if(fans_total - fans_180d < 1000 and fans_total >= 1000, 1000, 0), \
+                                       if(fans_total - fans_180d < 5000 and fans_total >= 5000, 5000, 0), \
+                                       if(fans_total - fans_180d < 10000 and fans_total >= 10000, 10000, 0), \
+                                       if(fans_total - fans_180d < 100000 and fans_total >= 100000, 100000, 0) \
+                                    )) as break_through \
+                                  where dt = '${azkaban.flow.1.days.ago}' and fans_total > 0 and fans_180d > 0 and break_through > 0 ) "

@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter_dm.ads_ip_summary_di partition(dt='${azkaban.flow.1.days.ago}') \
+select interest_num, count(distinct userid) interest_realuv, \
+       sum(realPost) as realpost_avg, \
+       sum(realBrowsePlayPv) as realbrowseplayPv_avg, \
+       sum(realBrowsePlayUv) as realbrowseplayUv_avg \
+from ( \
+    select a.userId, b.interest_num, \
+           a.realBrowsePlayPv / 30 as realBrowsePlayPv, \
+           a.realBrowsePlayUv / 30 as realBrowsePlayUv, \
+           a.realPost / 30 as realPost \
+    from ( \
+        select userId, \
+               sum(browse_pv) as realBrowsePlayPv, \
+               count(if(browse_pv > 0, dt, null)) as realBrowsePlayUv, \
+               sum(browse_post_count) as realPost \
+        from lofter.dws_par_user_content_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+        group by userId \
+    ) a \
+    join ( \
+       select x.userId, count(distinct ip) as interest_num \
+       from ( \
+            select ip, userId, \
+                   post_30d as post \
+            from lofter.dws_ip_user_consume_dd \
+            where dt = '${azkaban.flow.1.days.ago}' \
+       ) x \
+       join ( \
+            select userId, bitmap_count(bitmap_union(browse_post_bitmap)) as total \
+            from lofter.dws_par_user_content_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+            group by userId \
+       ) y on x.userId = y.userId \
+       where total > 3 and post > 2 \
+       group by x.userId \
+    ) b on a.userId = b.userId \
+) m \
+group by interest_num \
+distribute by 1

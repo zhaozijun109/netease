@@ -1,0 +1,71 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_gift_post_return_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postid, \
+	a.blogid, \
+	a.return_gift_id, \
+	count(DISTINCT a.userid) AS jiesuo_uv, \
+	count(DISTINCT CASE  \
+			WHEN day1 IS NOT NULL \
+				THEN a.userid \
+			ELSE NULL \
+			END) AS zhengfankui_uv, \
+	count(DISTINCT CASE  \
+			WHEN day2 IS NOT NULL \
+				THEN a.userid \
+			ELSE NULL \
+			END) AS fufankui_uv, \
+	count(DISTINCT CASE  \
+			WHEN day =  '${azkaban.flow.1.days.ago}' \
+				THEN a.userid \
+			ELSE NULL \
+			END) AS jiesuo_uv_day, \
+	count(DISTINCT CASE  \
+			WHEN day1 =  '${azkaban.flow.1.days.ago}' \
+				THEN a.userid \
+			ELSE NULL \
+			END) AS zhengfankui_uv_day, \
+	count(DISTINCT CASE  \
+			WHEN day2 =  '${azkaban.flow.1.days.ago}' \
+				THEN a.userid \
+			ELSE NULL \
+			END) AS fufankui_uv_day, \
+    sum(jiesuo_pv) as jiesuo_pv, \
+    sum(jiesuo_money) as jiesuo_money \
+FROM ( \
+	SELECT postid, blogid, userid, return_gift_id, \
+	    count(1) as jiesuo_pv, \
+	    sum(money) as jiesuo_money, \
+		min(from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) AS day \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' and unlock_method <> '粮票' \
+	GROUP BY postid, blogid, userId, return_gift_id \
+	) a \
+JOIN ( \
+	SELECT id \
+	FROM lofter.dim_gift_post_return_dd \
+	WHERE dt =  '${azkaban.flow.1.days.ago}' \
+		AND plantype < 100001 \
+	) d ON a.return_gift_id = d.id \
+LEFT JOIN ( \
+	SELECT returngiftid \
+		,userid \
+		,min(from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS day1 \
+	FROM lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+	WHERE type = 0 \
+	GROUP BY returngiftid \
+		,userid \
+	) b ON a.return_gift_id = b.returngiftid \
+	AND a.userid = b.userid \
+LEFT JOIN ( \
+	SELECT returngiftid \
+		,userid \
+		,min(from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) AS day2 \
+	FROM lofter_db_dump.ods_db_trade_return_gift_feed_back_nd \
+	WHERE type = 1 \
+	GROUP BY returngiftid \
+		,userid \
+	) c ON a.return_gift_id = c.returngiftid \
+	AND a.userid = c.userid \
+GROUP BY a.postid \
+	,a.blogid \
+	,a.return_gift_id \

@@ -1,0 +1,74 @@
+type=sparksql
+hive.query.01=insert overwrite table vc_dm.ads_pve_app_chat_retain_data_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select base_date, \
+period, \
+COALESCE(new_chat_flag,2)  as new_chat_flag, \
+chat_uv, \
+chat_characters, \
+total_chat_rounds, \
+chat_uv_1d, \
+chat_uv_2d, \
+chat_uv_3d, \
+chat_uv_7d, \
+chat_uv_15d, \
+chat_uv_30d, \
+chat_characters_drop_duplicate \
+from \
+( \
+select a.dt as base_date,   \
+datediff('${azkaban.flow.1.days.ago}', a.dt) as period, \
+CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END AS new_chat_flag, \
+count(distinct a.user_id) as chat_uv,   \
+sum(a.chat_characters)  as chat_characters,   \
+sum(a.total_chat_rounds) as total_chat_rounds,   \
+count(distinct case when c.dt = date_add(a.dt,0) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (0) then c.user_id end) as chat_uv_1d, \
+count(distinct case when c.dt = date_add(a.dt,1) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (1) then c.user_id end) as chat_uv_2d, \
+count(distinct case when c.dt = date_add(a.dt,2) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (2) then c.user_id end) as chat_uv_3d, \
+count(distinct case when c.dt = date_add(a.dt,6) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (6) then c.user_id end) as chat_uv_7d, \
+count(distinct case when c.dt = date_add(a.dt,14) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (14) then c.user_id end) as chat_uv_15d, \
+count(distinct case when c.dt = date_add(a.dt,29) and datediff('${azkaban.flow.1.days.ago}',a.dt) in (29) then c.user_id end) as chat_uv_30d, \
+count(distinct d.character_id) as chat_characters_drop_duplicate \
+from \
+( \
+select from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+user_id, \
+count(distinct character_id) as chat_characters, \
+count(distinct message_id) as total_chat_rounds \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+group by from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd'), \
+user_id \
+)a \
+left join \
+( \
+select distinct from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+user_id, \
+character_id \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+)d on a.user_id=d.user_id and a.dt=d.dt \
+left join \
+( \
+select user_id, \
+min(from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as dt  \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+group by user_id \
+)b on a.user_id=b.user_id  \
+left join  \
+(select distinct from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, \
+user_id \
+from vc.ods_db_vc_user_message_record_nd \
+where sender=2 \
+and from_unixtime(cast(create_time / 1000 AS BIGINT), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+)c on a.user_id=c.user_id  \
+AND c.dt BETWEEN date_add(a.dt, 0) AND date_add(a.dt, 30) \
+WHERE datediff('${azkaban.flow.1.days.ago}', a.dt) IN (0, 1, 2, 6, 14, 29)  \
+group by a.dt, \
+datediff('${azkaban.flow.1.days.ago}', a.dt), \
+CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END \
+grouping sets((a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt)), \
+(a.dt,datediff('${azkaban.flow.1.days.ago}', a.dt),CASE WHEN a.dt>b.dt THEN 0 ELSE 1 END)) \
+) t \

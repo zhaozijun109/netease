@@ -1,0 +1,74 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_gift_tag_good_examples_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select postId, blogId, post_tag, \
+        case when fufei_rk <= 3 then  printf('礼物转化率%s%%', cast(liulan_fufei_rate* 100 as DECIMAL(4, 2))) \
+             when zhen_rk <= 3 then  printf('好评次数%d', cast(jiesuo_uv* zhenrate as bigint)) \
+             when realbrowse_rk = 1 then  printf('有效浏览率%s%%', cast(realbrowse_rate* 100 as DECIMAL(4, 2))) \
+             when hd_rk = 1 then  printf('互动率%s%%', cast(hd_rate* 100 as DECIMAL(4, 2))) \
+            else '' end as rec_reason, \
+        if(fufei_rk <= 3, fufei_rk, 3 + if(zhen_rk <= 3, zhen_rk, 3 + if(realbrowse_rk = 1, realbrowse_rk, 1 + if(hd_rk = 1, hd_rk, 1 + score_rk)))) as rk, \
+        post_score \
+    from ( \
+        select *, \
+            row_number() over (partition by post_tag, if(fufei_rk <=3 or zhen_rk <= 3 or realbrowse_rk = 1 or hd_rk = 1, 1, 0) order by post_score desc) as score_rk \
+        from ( \
+            select *, \
+                row_number() over (partition by post_tag, if(fufei_rk <=3 or zhen_rk <= 3 or realbrowse_rk = 1, 1, 0) order by hd_rate desc) hd_rk \
+            from ( \
+                select *, \
+                    row_number() over (partition by post_tag, if(fufei_rk <=3 or zhen_rk <= 3, 1, 0) order by realbrowse_rate desc) realbrowse_rk \
+                from ( \
+                    select *, \
+                        row_number() over (partition by post_tag, if(fufei_rk <=3, 1, 0) order by zhenrate desc) zhen_rk \
+                    from ( \
+                        select *, \
+                            row_number() over (partition by post_tag order by liulan_fufei_rate desc) fufei_rk \
+                        from ( \
+                            select a.postId, a.blogId, \
+                                (filter(c.post_top_tags, x -> array_contains(b.tags,x)))[0] as post_tag, \
+                                post_score, liulan_fufei_rate, zhenrate, realbrowse_rate, hd_rate,jiesuo_uv \
+                            from ( \
+                                select postId, blogId, \
+                                    post_score, liulan_fufei_rate, zhenrate, realbrowse_rate, hd_rate, jiesuo_uv \
+                                from lofter.dws_gift_post_premium_post_score_di \
+                                where dt = '${azkaban.flow.1.days.ago}' and post_score_type = 1 and jiesuo_money >= 50 \
+                            ) a \
+                            join lofter.dim_post b on a.postId = b.id \
+                            join ( \
+                                select blogId, \
+                                    transform(sort_array(collect_list(struct(rank, tag)), true), x -> x.tag) as post_top_tags \
+                                from ( \
+                                    select blogId, tag, row_number() over (partition by blogid order by postCount desc) rank \
+                                    from ( \
+                                        select blogId, tag, count(distinct id) postCount \
+                                        from lofter.dim_post \
+                                            lateral view explode(tags) t as tag \
+                                        where publishDate <= '${azkaban.flow.1.days.ago}' and \
+                                            publishDate >= '${azkaban.flow.30.days.ago}' and \
+                                            length(tag) > 0 and \
+                                            isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and \
+                                            isMoved = 0 and isActivityAutoPost=0 and isImported=0 and contentType in ("图片","文字","视频") \
+                                        group by blogId, tag \
+                                    ) tt \
+                                ) t \
+                                group by blogId \
+                            ) c on a.blogId = c.blogId \
+                            left join ( \
+                                select postId \
+                                from lofter_dm.ads_creator_gift_tag_good_examples_di \
+                                where dt < '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+                            ) d on a.postId = d.postId \
+                            where d.postId is null and \
+                                  b.publishDate >= '${azkaban.flow.7.days.ago}' and \
+                                  b.publishDate <= '${azkaban.flow.1.days.ago}' \
+                        ) t1 \
+                        where post_tag is not null \
+                    ) t2 \
+                ) t3 \
+            ) t4 \
+        ) t5 \
+    ) t6 \
+) t7 \
+where rk <= 10 \

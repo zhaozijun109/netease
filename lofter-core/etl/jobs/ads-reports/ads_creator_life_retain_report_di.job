@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_life_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+a.dt as base_dt,a.creator_life_cycle  \
+,count(DISTINCT a.userid) AS user_cnt \
+,count(DISTINCT CASE WHEN b.dt <= date_add(a.dt, 6) AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (6) THEN b.userid END) AS uv_7d \
+,count(DISTINCT CASE WHEN b.dt <= date_add(a.dt, 13) AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (13) THEN b.userid END) AS uv_14d \
+,count(DISTINCT CASE WHEN b.dt <= date_add(a.dt, 29) AND datediff('${azkaban.flow.1.days.ago}', a.dt) IN (29) THEN b.userid END) AS uv_30d \
+FROM (SELECT dt,userid, \
+CASE WHEN  is_first_publish > 0 THEN '首次发文用户' \
+WHEN  is_first_publish = 0 AND is_active_creator > 0 THEN '持续发文用户' \
+WHEN  is_first_publish = 0 AND is_active_creator = 0 THEN '回流发文用户' \
+END AS creator_life_cycle  \
+FROM lofter.dws_par_creator_di  \
+WHERE dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}' AND post_count>0  \
+group by 1,2,3) a \
+left JOIN (SELECT dt,userId AS userid \
+FROM lofter.dws_par_creator_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' AND post_count > 0) b \
+ON a.userid = b.userid AND b.dt BETWEEN date_add(a.dt, 1) AND date_add(a.dt, 29) \
+GROUP BY a.dt,a.creator_life_cycle  \

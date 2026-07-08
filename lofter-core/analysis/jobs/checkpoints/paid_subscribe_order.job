@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select orderId as order_id, userid, blogid, actpwd, actpwd_search_time, order_type, client_type, amount as order_price from lofter_dm.ads_kol_attribution_order_di where dt ='${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.KOL.attribution.order --withCount --meta _payload_type=paid_subscribe_order,_payload_date=${azkaban.flow.1.days.ago} --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092
+dependencies=lofter_growth_act_password_cvr

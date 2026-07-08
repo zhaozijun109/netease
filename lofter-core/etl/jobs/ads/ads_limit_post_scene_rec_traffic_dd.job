@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_limit_post_scene_rec_traffic_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select scene, algName, recId, blogId, postId, recstarttime \
+from( \
+    select scene, algName, cast(conv(split(a.itemId,'_')[0],16,10) as bigint) as blogid, cast(conv(split(a.itemId,'_')[1],16,10) as bigint) as postid, \
+        b.recId, b.recstarttime \
+    from( \
+        select lower(concat(conv(blogid, 10, 16), '_', conv(postid, 10, 16))) as itemId \
+        from lofter.ods_risk_limit_dd \
+        where dt = '${azkaban.flow.2.days.ago}' and type = 0 and status = 0 \
+        group by concat(conv(blogid, 10, 16), '_', conv(postid, 10, 16)) \
+    )a \
+    join( \
+        SELECT \
+            some_jsons.ii as itemId, \
+            GET_JSON_OBJECT(some_jsons.alg,'$.algName') as algName, \
+            req.sceneName as scene, \
+            recId, \
+            from_unixtime((cast(recstarttime as bigint))/1000,'yyyy-MM-dd HH:mm:ss')  as recstarttime \
+        FROM rec.ods_lofter_noblog_rec_di \
+        LATERAL VIEW explode(recitems) as some_jsons \
+        where day = '${azkaban.flow.1.days.ago}' \
+    )b on a.itemId = b.itemId \
+) \
+group by scene, algName, recId, blogId, postId, recstarttime

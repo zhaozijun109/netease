@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_risk_brush_hot_suspect_post_rank_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postId, a.blogId, c.userId, 3 as ruleId \
+from ( \
+    select * from lofter.dwd_risk_brush_hot_suspect_post_rank_posts_di where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+join ( \
+    select postId, blogId, userId, ip \
+    from ( \
+        select postId, blogId, userId, ip, opTime, \
+            row_number() over (partition by postId order by opTime desc) as rk, \
+            count(1) over (partition by postId) as hot_uv \
+        from ( \
+            select postId, blogId, publisheruserid as userId, opTime, ip, \
+                row_number() over (partition by postId, publisheruserid order by opTime) as rk \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        ) t \
+        where rk = 1 \
+    ) a \
+    where rk <= 100 \
+) b on a.postId = b.postId \
+join ( \
+    select * from lofter.dwd_risk_brush_hot_suspect_users_di where dt = '${azkaban.flow.1.days.ago}' \
+) c on b.userId = c.userId \
+
+dependencies=dwd_risk_brush_hot_suspect_post_rank_posts_di

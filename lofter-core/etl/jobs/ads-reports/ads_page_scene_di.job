@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_page_scene_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.scene,page_pv,expose_pv,expose_uv,click_pv,click_uv,real_browse_pv source_real_browse_pv,real_browse_uv source_real_browse_uv,praise_pv,praise_uv,recommend_pv,recommend_uv,subscribe_pv,subscribe_uv,reproduce_pv,reproduce_uv,response_pv,response_uv,share_pv,share_uv,follow_pv,follow_uv,interaction_uv,avg_duration_seconds, \
+source_expose_pv,source_expose_uv,source_click_pv,source_click_uv,source_praise_pv,source_praise_uv,source_recommend_pv,source_recommend_uv,source_subscribe_pv,source_subscribe_uv,source_reproduce_pv,source_reproduce_uv,source_response_pv,source_response_uv,source_share_pv,source_share_uv,source_follow_pv,source_follow_uv,source_interaction_uv \
+from \
+( \
+    select scene,page_pv,expose_pv,expose_uv,click_pv,click_uv,real_browse_pv,real_browse_uv,praise_pv,praise_uv,recommend_pv,recommend_uv,subscribe_pv,subscribe_uv,reproduce_pv,reproduce_uv,response_pv,response_uv,share_pv,share_uv,follow_pv,follow_uv,interaction_uv,avg_duration_seconds  \
+    from lofter.dws_page_scene_di  \
+    where dt='${azkaban.flow.1.days.ago}'  \
+    and scene <> 'other' and scene<>'' \
+    and (page_pv>1000 or real_browse_pv>1000 or expose_pv>1000) \
+) a \
+left join \
+( \
+    select scene,expose_pv source_expose_pv,expose_uv source_expose_uv,click_pv source_click_pv,click_uv source_click_uv,praise_pv source_praise_pv,praise_uv source_praise_uv,recommend_pv source_recommend_pv,recommend_uv source_recommend_uv,subscribe_pv source_subscribe_pv,subscribe_uv source_subscribe_uv,reproduce_pv source_reproduce_pv,reproduce_uv source_reproduce_uv,response_pv source_response_pv,response_uv source_response_uv,share_pv source_share_pv,share_uv source_share_uv,follow_pv source_follow_pv,follow_uv source_follow_uv,interaction_uv source_interaction_uv \
+    from lofter.dws_page_source_scene_di where dt='${azkaban.flow.1.days.ago}' \
+) b \
+on a.scene=b.scene \

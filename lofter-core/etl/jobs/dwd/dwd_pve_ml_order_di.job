@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01 = with pve_order as (select id as order_id, \
+                                          userid, \
+                                          platform, \
+                                          paytype, \
+                                          amount, \
+                                          deviceid, \
+                                          finishTime \
+                                   from lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+                                   where status = 1 \
+                                     and from_unixtime(cast(finishTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                                     and productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+                                   ), \
+                     actpwd as (select time, \
+                                       actpwd, \
+                                       channel, \
+                                       deviceUdid, \
+                                       customUuid, \
+                                       userid, \
+                                       itemId, \
+                                       content_type, \
+                                       is_paid_subscribe \
+                                from lofter.dwd_growth_actpwd_access_di \
+                                where dt between '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                                  and is_pve = 1) \
+                insert overwrite table lofter.dwd_pve_ml_order_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                select order_id, \
+                       userid, \
+                       amount, \
+                       customUuid, \
+                       payTime, \
+                       deviceUdid, \
+                       actpwd, \
+                       channel, \
+                       actpwd_search_time, \
+                       actpwd_search_list, \
+                       platform \
+                from (select x1.order_id, \
+                             x1.userid, \
+                             x1.amount, \
+                             x1.deviceid                                                        as customUuid, \
+                             x1.finishTime                                                      as payTime, \
+                             x2.deviceUdid, \
+                             x2.actpwd, \
+                             x2.channel, \
+                             x2.time                                                            as actpwd_search_time, \
+                             collect_set(x2.actpwd) over (partition by x1.order_id)             as actpwd_search_list, \
+                             row_number() over (partition by x1.order_id order by x2.time desc) as rk, \
+                             x1.platform \
+                      from pve_order x1 \
+                               left join actpwd x2 \
+                                         on x1.finishTime >= x2.time and x1.finishTime <= (x2.time + 86400000) and \
+                                            x1.deviceid = x2.customUuid) \
+                where rk = 1
+
+dependencies=dwd_growth_actpwd_access_di
+

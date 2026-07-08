@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=\
+with blog_trades as ( \
+    select blogId, '付费礼物' as revenue_module, money, \
+           from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as pay_date \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          money > 0 and blogId > 0 \
+  union all \
+      select blogId, revenue_module, money, pay_date \
+      from lofter.dwd_user_order_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' and \
+            blogId > 0 and \
+            is_post_pay = 1 and \
+            revenue_module in ('粉丝会员','官方账号') \
+) \
+insert overwrite table lofter_dm.ads_post_paid_creator_revenue_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, pay_type, period, \
+       case when period = 1 and money > 0 and money < 2 then 'level_1' \
+            when period = 1 and money >= 2 and money < 10 then 'level_2' \
+            when period = 1 and money >= 10 and money < 50 then 'level_3' \
+            when period = 1 and money >= 50 and money < 200 then 'level_4' \
+            when period = 1 and money >= 200 and money < 500 then 'level_5' \
+            when period = 1 and money >= 500 then 'level_6' \
+            when period = 1 then 'level_0' \
+            when period = 7 and money > 0 and money < 10 then 'level_1' \
+            when period = 7 and money >= 10 and money < 50 then 'level_2' \
+            when period = 7 and money >= 50 and money < 200 then 'level_3' \
+            when period = 7 and money >= 200 and money < 500 then 'level_4' \
+            when period = 7 and money >= 500 and money < 1000 then 'level_5' \
+            when period = 7 and money >= 1000 then 'level_6' \
+            when period = 7 then 'level_0' \
+            when money > 0 and money < 50 then 'level_1' \
+            when money >= 50 and money < 200 then 'level_2' \
+            when money >= 200 and money < 500 then 'level_3' \
+            when money >= 500 and money < 1000 then 'level_4' \
+            when money >= 1000 and money < 5000 then 'level_5' \
+            when money >= 5000 and money < 10000 then 'level_6' \
+            when money >= 10000 and money < 50000 then 'level_7' \
+            when money >= 50000 then 'level_8' \
+            else 'level_0' end as revenue_level, \
+       money as trade_money \
+from ( \
+    select a.blogId, \
+           b.period, \
+           nvl(a.revenue_module, 'all') as pay_type, \
+           sum(money) as money \
+    from blog_trades a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date and b.period in ('1', '7', '30', 'month', 'quarter', 'year') \
+    where b.calendar_date = '${azkaban.flow.1.days.ago}' \
+    group by a.blogId, b.period, a.revenue_module \
+    grouping sets((a.blogId, b.period, a.revenue_module),(a.blogId, b.period)) \
+  union all \
+    select a.blogId, \
+           'history' as period, \
+            nvl(a.revenue_module, 'all') as pay_type, \
+           sum(money) as trade_money \
+    from blog_trades a \
+    group by a.blogId,a.revenue_module \
+    grouping sets((a.blogId,a.revenue_module),(a.blogId)) \
+) t \

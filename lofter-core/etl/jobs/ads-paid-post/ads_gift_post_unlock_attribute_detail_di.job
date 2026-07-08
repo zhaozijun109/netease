@@ -1,0 +1,164 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_unlock_attribute_detail_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select \
+  a.*, \
+  publishdate, \
+  ip, \
+  NVL(classify, -999) as classify, \
+  NVL(result, '无ai打标结果') as result, \
+  NVL(category, '无一级类目') as category, \
+  NVL(category2, '无二级类目') as category2, \
+  NVL(category3, '无三级类目') as category3, \
+  NVL(domain, '无领域') as domain, \
+  NVL(post_gift_30day_money, 0) as post_gift_30day_money, \
+  NVL(post_gift_history_money, 0) as post_gift_history_money, \
+  NVL(blog_gift_30day_money, 0) as blog_gift_30day_money, \
+  NVL(blog_gift_history_money, 0) as blog_gift_history_money, \
+  NVL(user_gift_30day_money, 0) as user_gift_30day_money, \
+  NVL(user_gift_history_money, 0) as user_gift_history_money \
+from \
+  ( \
+    Select \
+      userid, \
+      postid, \
+      blogid, \
+      unlock_method, \
+      money, \
+      grain_tickets, \
+      unlock_time \
+    from \
+      lofter.dwd_gift_post_unlock_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+      and unlock_unit = '文章' \
+      And postid > 0 \
+      and blogid > 0 \
+      and content_type in ('文字', '图片') \
+  ) a \
+  join ( \
+    select \
+      id, \
+      ip, \
+      publishdate, \
+      blogid \
+    from \
+      lofter.dim_post LATERAL VIEW explode( \
+        case \
+          when size(ips) < 1 then array('无ip归属') \
+          else ips \
+        end \
+      ) t2 AS ip \
+    where \
+      contenttype in ('文字', '图片') \
+    group by \
+      id, \
+      ip, \
+      publishdate, \
+      blogid \
+  ) b on a.postid = b.id \
+  left join ( \
+    select \
+      post_id as postid, \
+      classify, \
+      result \
+    from \
+      rec.content_reg_payed_title_classify_output2 \
+    where \
+      classify in (1, 2) \
+      and probability > 0.6999 \
+      and result != '无题材' \
+    group by \
+      post_id, \
+      classify, \
+      result \
+  ) c on b.id = c.postid \
+  left join ( \
+    select \
+      postid, \
+      category, \
+      category2, \
+      category3, \
+      domain \
+    from \
+      lofter.dim_post_category_set_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+      postid, \
+      category, \
+      category2, \
+      category3, \
+      domain \
+  ) d on b.id = d.postid \
+  left join ( \
+    select \
+      postid, \
+      sum( \
+        case \
+          when period = '30' then trade_money \
+          else 0 \
+        end \
+      ) post_gift_30day_money, \
+      sum( \
+        case \
+          when period = 'history' then trade_money \
+          else 0 \
+        end \
+      ) post_gift_history_money \
+    from \
+      lofter_dm.ads_post_paid_post_revenue_detail_di \
+    where \
+      pay_type = '礼物解锁' \
+      and dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+    group by \
+      postid \
+  ) e on b.id = e.postid \
+  left join ( \
+    select \
+      blogid, \
+      sum( \
+        case \
+          when period = '30' then trade_money \
+          else 0 \
+        end \
+      ) blog_gift_30day_money, \
+      sum( \
+        case \
+          when period = 'history' then trade_money \
+          else 0 \
+        end \
+      ) blog_gift_history_money \
+    from \
+      lofter_dm.ads_post_paid_creator_revenue_detail_v2_di \
+    where \
+      pay_type = '礼物解锁' \
+      and dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+    group by \
+      blogid \
+  ) f on b.blogid = f.blogid \
+  left join ( \
+    select \
+      userid, \
+      sum( \
+        case \
+          when period = '30' then trade_money \
+          else 0 \
+        end \
+      ) user_gift_30day_money, \
+      sum( \
+        case \
+          when period = 'history' then trade_money \
+          else 0 \
+        end \
+      ) user_gift_history_money \
+    from \
+      lofter_dm.ads_post_paid_user_consume_detail_di \
+    where \
+      pay_type = '礼物解锁' \
+      and dt = date_sub('${azkaban.flow.1.days.ago}', 1) \
+    group by \
+      userid \
+  ) g on a.userid = g.userid \
+
+dependencies=ads_post_paid_creator_revenue_detail_v2_di,ads_post_paid_user_consume_detail_di

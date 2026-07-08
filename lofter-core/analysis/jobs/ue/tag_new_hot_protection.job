@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+    select null as userId, 15 as messageType, cast(conv(substring(item_id,instr(item_id,'_')+1) ,16,10) as bigint) as postId \
+    from rec.rec_data_item_set_not_quality_new_content_type_2service \
+    where day = '${azkaban.flow.1.days.ago}' and  \
+          cast(conv(substring(item_id,instr(item_id, '_')+1) ,16,10) as bigint) > 0 \
+    group by item_id \
+  union all \
+    select cast(user_id as bigint) as userId, 14 as messageType, null as postId \
+    from rec.rec_data_classic_user_set_2service \
+    where day = '${azkaban.flow.1.days.ago}' and cast(user_id as bigint) > 0 \
+    group by 1 \
+"
+params= --topic lofter.common.yiyou.user --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

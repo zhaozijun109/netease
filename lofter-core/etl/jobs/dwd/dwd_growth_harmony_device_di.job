@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_growth_harmony_device_di partition(dt='${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select deviceUdid, \
+           userId, \
+           0 as harmony \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId = 'a1-33' and lower(params['osVersion']) like '%harmony%' \
+    union all \
+    select deviceUdid, \
+           userId, \
+           1 as harmony \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId = 'a1-33' and params['installfrom'] like '%zhuoyi%' \
+) t \
+distribute by 1 \

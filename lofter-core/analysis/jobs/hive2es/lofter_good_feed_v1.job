@@ -1,0 +1,21 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select concat_ws('-', t1.tag, t1.postId) as id, \
+       t1.postId, \
+       t1.blogId, \
+       t1.tag as tagName, \
+       cast(t1.totalScore as bigint) as newTotalScore, \
+       case when t2.valid = 0 and t2.allowView = 0 then 1 else 0 end as isPublic \
+from ( \
+    select tag, postId, blogId, totalScore \
+    from lofter_dm.ads_ecology_premium_grain_list_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+    select id as postId, valid, allowView \
+    from lofter.dim_post \
+) t2 \
+on t1.postId = t2.postId \
+"
+params= --id id --dest lofter_good_feed_v1 --update --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 1

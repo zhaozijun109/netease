@@ -1,0 +1,104 @@
+type=sparksql
+hive.query.01=WITH param AS ( \
+  SELECT \
+    to_date('${azkaban.flow.1.days.ago}') AS run_date, \
+    CAST(regexp_replace(date_format(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 'yyyy-MM-dd'), '-', '') AS INT) AS start_day, \
+    CAST(regexp_replace(date_format(add_months(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 1), 'yyyy-MM-dd'), '-', '') AS INT) AS end_day, \
+    date_format(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 'yyyyMM') AS bill_month, \
+    unix_timestamp(date_format(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 'yyyy-MM-dd HH:mm:ss')) AS start_ts, \
+    unix_timestamp(date_format(add_months(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 1), 'yyyy-MM-dd HH:mm:ss')) AS end_ts, \
+    unix_timestamp(date_format(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 'yyyy-MM-dd HH:mm:ss')) * 1000 AS start_ms, \
+    unix_timestamp(date_format(add_months(trunc(to_date('${azkaban.flow.1.days.ago}'), 'MM'), 1), 'yyyy-MM-dd HH:mm:ss')) * 1000 AS end_ms \
+), \
+bill_base AS ( \
+  SELECT \
+    CAST(userid AS BIGINT) AS user_id, \
+    CAST(month AS STRING) AS bill_month, \
+    COALESCE(providertype, 0) AS provider_type, \
+    COALESCE(paygiftcoincount, 0) AS pay_gift_coin_cnt, \
+    COALESCE(paygiftincome, 0) AS pay_gift_income_fen, \
+    COALESCE(exchangecouponincome, 0) AS coupon_income_fen, \
+    COALESCE(membershipincome, 0) AS member_income_fen, \
+    COALESCE(prevbalance, 0) AS begin_balance_fen, \
+    COALESCE(balance, 0) AS end_balance_fen \
+  FROM lofter_db_dump.ods_db_money_lofter_creator_month_bill_nd \
+  WHERE month = CAST((SELECT bill_month FROM param) AS INT) \
+), \
+free_gift AS ( \
+  SELECT CAST(userid AS BIGINT) AS user_id, CAST(SUM(delta) AS DECIMAL(20,2)) AS free_gift_subsidy \
+  FROM lofter_db_dump.ods_db_trade_gift_money_balance_log_nd \
+  WHERE createtime >= (SELECT start_ms FROM param) AND createtime < (SELECT end_ms FROM param) AND type = 1 \
+  GROUP BY CAST(userid AS BIGINT) \
+), \
+fans_vip AS ( \
+  SELECT CAST(userid AS BIGINT) AS user_id, CAST(SUM(amount) AS DECIMAL(20,2)) AS fans_vip_share \
+  FROM lofter_db_dump.ods_db_trade_fans_vip_order_income_daily_nd \
+  WHERE daytime >= (SELECT start_day FROM param) AND daytime < (SELECT end_day FROM param) \
+  GROUP BY CAST(userid AS BIGINT) \
+), \
+image_shop AS ( \
+  SELECT CAST(userid AS BIGINT) AS user_id, CAST(SUM(share) / 100.0 AS DECIMAL(20,2)) AS image_shop_income \
+  FROM lofter_db_dump.ods_db_image_market_product_date_sell_nd \
+  WHERE date >= (SELECT start_day FROM param) AND date < (SELECT end_day FROM param) \
+  GROUP BY CAST(userid AS BIGINT) \
+), \
+inspire AS ( \
+  SELECT CAST(userid AS BIGINT) AS user_id, CAST(SUM(delta) AS DECIMAL(20,2)) AS inspire_income \
+  FROM lofter_db_dump.ods_db_trade_inspire_money_log_nd \
+  WHERE createtime >= (SELECT start_ms FROM param) AND createtime < (SELECT end_ms FROM param) AND type = 1 \
+  GROUP BY CAST(userid AS BIGINT) \
+), \
+withdraw_tax AS ( \
+  SELECT \
+    CAST(wo.userid AS BIGINT) AS user_id, \
+    CAST(SUM(wo.withdrawamount) AS DECIMAL(20,2)) AS withdraw_amount, \
+    CAST(SUM(wo.tax) AS DECIMAL(20,2)) AS withhold_tax, \
+    CAST(SUM(COALESCE(te.iitamount, 0)) AS DECIMAL(20,2)) AS withhold_iit, \
+    CAST(SUM(COALESCE(te.vatamount, 0)) AS DECIMAL(20,2)) AS withhold_vat, \
+    CAST(SUM(COALESCE(te.urtamount, 0)) AS DECIMAL(20,2)) AS withhold_urt, \
+    CAST(SUM(COALESCE(te.estamount, 0)) AS DECIMAL(20,2)) AS withhold_est, \
+    CAST(SUM(COALESCE(te.lestamount, 0)) AS DECIMAL(20,2)) AS withhold_lest \
+  FROM lofter_db_dump.ods_db_trade_withdraw_order_nd wo \
+  LEFT JOIN lofter_db_dump.ods_db_trade_tax_engine_data_nd te \
+    ON CAST(wo.userid AS BIGINT) = CAST(te.userid AS BIGINT) AND wo.id = te.traderewardorderid \
+  WHERE wo.type IN (150, 160) AND wo.status = 21 \
+    AND wo.finishtime >= (SELECT start_ts FROM param) AND wo.finishtime < (SELECT end_ts FROM param) \
+  GROUP BY CAST(wo.userid AS BIGINT) \
+), \
+blog_dim AS ( \
+  SELECT CAST(id AS BIGINT) AS user_id, blognickname AS blog_nickname, concat('https://', blogname, '.lofter.com') AS blog_url \
+  FROM lofter.dim_blog \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_month_bill_dd PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    bb.user_id, \
+    COALESCE(bd.blog_url, '') AS blog_url, \
+    COALESCE(bd.blog_nickname, '') AS blog_nickname, \
+    bb.bill_month, \
+    bb.pay_gift_coin_cnt, \
+    CAST(bb.pay_gift_income_fen / 100.0 AS DECIMAL(20,2)) AS pay_gift_income, \
+    COALESCE(fg.free_gift_subsidy, CAST(0 AS DECIMAL(20,2))) AS free_gift_subsidy, \
+    COALESCE(fv.fans_vip_share, CAST(0 AS DECIMAL(20,2))) AS fans_vip_share, \
+    CAST(FLOOR(COALESCE(fv.fans_vip_share, 0) / 0.7 * 100) / 100.0 AS DECIMAL(20,2)) AS fans_vip_revenue, \
+    CAST(bb.coupon_income_fen / 100.0 AS DECIMAL(20,2)) AS coupon_income, \
+    COALESCE(img.image_shop_income, CAST(0 AS DECIMAL(20,2))) AS image_shop_income, \
+    COALESCE(ins.inspire_income, CAST(0 AS DECIMAL(20,2))) AS inspire_income, \
+    CAST(bb.member_income_fen / 100.0 AS DECIMAL(20,2)) AS member_income, \
+    CAST(bb.begin_balance_fen / 100.0 AS DECIMAL(20,2)) AS begin_balance, \
+    CAST(bb.pay_gift_income_fen / 100.0 + COALESCE(fg.free_gift_subsidy, 0) + COALESCE(fv.fans_vip_share, 0) + bb.coupon_income_fen / 100.0 + COALESCE(img.image_shop_income, 0) + COALESCE(ins.inspire_income, 0) + bb.member_income_fen / 100.0 AS DECIMAL(20,2)) AS total_share, \
+    CAST(COALESCE(wt.withdraw_amount, 0) - COALESCE(wt.withhold_tax, 0) AS DECIMAL(20,2)) AS user_received, \
+    COALESCE(wt.withhold_tax, CAST(0 AS DECIMAL(20,2))) AS withhold_tax, \
+    COALESCE(wt.withhold_iit, CAST(0 AS DECIMAL(20,2))) AS withhold_iit, \
+    COALESCE(wt.withhold_vat, CAST(0 AS DECIMAL(20,2))) AS withhold_vat, \
+    COALESCE(wt.withhold_urt, CAST(0 AS DECIMAL(20,2))) AS withhold_urt, \
+    COALESCE(wt.withhold_est, CAST(0 AS DECIMAL(20,2))) AS withhold_est, \
+    COALESCE(wt.withhold_lest, CAST(0 AS DECIMAL(20,2))) AS withhold_lest, \
+    CAST(bb.end_balance_fen / 100.0 AS DECIMAL(20,2)) AS end_balance, \
+    CASE bb.provider_type WHEN 0 THEN '个人' ELSE '机构' END AS account_type \
+FROM bill_base bb \
+LEFT JOIN free_gift fg ON bb.user_id = fg.user_id \
+LEFT JOIN fans_vip fv ON bb.user_id = fv.user_id \
+LEFT JOIN image_shop img ON bb.user_id = img.user_id \
+LEFT JOIN inspire ins ON bb.user_id = ins.user_id \
+LEFT JOIN withdraw_tax wt ON bb.user_id = wt.user_id \
+LEFT JOIN blog_dim bd ON bb.user_id = bd.user_id; \

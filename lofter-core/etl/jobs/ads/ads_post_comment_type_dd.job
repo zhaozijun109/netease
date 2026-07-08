@@ -1,0 +1,231 @@
+type=sparksql
+hive.query.01=\
+with postCommentSource as ( \
+    select commentId, \
+           publisherUserId, \
+           postId, \
+           blogId, \
+           content, \
+           commentHot, \
+           pid \
+    from ( \
+        select id as commentId, \
+               publisherUserId, \
+               postId, \
+               blogId, \
+               regexp_replace(regexp_replace(regexp_replace(content, '^["“”]|["“”]$', ''),'\\\\[.*?\\\\]|哇|哈|啊|呦|哟|阿|h|w|手动狗头',''), '([！!？?，,。.；;：:“”"‘’\\\'])\\\\1+', '$1') as content, \
+               commentHot, \
+               pid \
+        from lofter_db_dump.ods_db_post_response_nd \
+        where commentHot >= 10 \
+    ) t \
+    where length(content) >= 5 \
+), \
+recContentUnderstandSource as ( \
+    select itemId as commentId, \
+           level2_tag \
+    from lofter.dwd_rec_content_understand_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and type = '评论体系分类' and level2_tag in ('剧情分析','角色代入') \
+) \
+insert overwrite table lofter_dm.ads_post_comment_type_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select commentId, \
+       publisherUserId, \
+       postId, \
+       blogId, \
+       content, \
+       commentHot, \
+       pid, \
+       type \
+from ( \
+    select commentId, \
+           publisherUserId, \
+           postId, \
+           blogId, \
+           content, \
+           commentHot, \
+           pid, \
+           type, \
+           row_number() over(partition by commentId order by type) as rn \
+    from ( \
+        select t1.commentId, \
+               t2.publisherUserId, \
+               t2.postId, \
+               t2.blogId, \
+               t2.content, \
+               t2.commentHot, \
+               t2.pid, \
+               0 as type \
+        from ( \
+            select commentId from recContentUnderstandSource where level2_tag = '剧情分析' \
+        ) t1 \
+        join ( \
+            select commentId, \
+                   publisherUserId, \
+                   postId, \
+                   blogId, \
+                   content, \
+                   commentHot, \
+                   pid \
+            from postCommentSource \
+            where length(content) >= 50 and commentHot >= 10 \
+        ) t2 \
+        on t1.commentId = t2.commentId \
+        union all \
+        select commentId, \
+               publisherUserId, \
+               postId, \
+               blogId, \
+               content, \
+               commentHot, \
+               pid, \
+               type \
+        from ( \
+            select t1.commentId, \
+                   t1.publisherUserId, \
+                   t1.postId, \
+                   t1.blogId, \
+                   t1.content, \
+                   t1.commentHot, \
+                   t1.pid, \
+                   t1.type, \
+                   row_number() over(partition by t1.postId order by t1.commentHot desc) as rn \
+            from ( \
+                select a.commentId, \
+                       b.publisherUserId, \
+                       b.postId, \
+                       b.blogId, \
+                       b.content, \
+                       b.commentHot, \
+                       b.pid, \
+                       1 as type \
+                from ( \
+                    select commentId from recContentUnderstandSource where level2_tag = '角色代入' \
+                ) a \
+                join ( \
+                    select commentId, \
+                           publisherUserId, \
+                           postId, \
+                           blogId, \
+                           content, \
+                           commentHot, \
+                           pid \
+                    from postCommentSource \
+                    where length(content) <= 20 and commentHot >= 200 \
+                ) b \
+                on a.commentId = b.commentId \
+                union all \
+                select commentId, \
+                       publisherUserId, \
+                       postId, \
+                       blogId, \
+                       content, \
+                       commentHot, \
+                       pid, \
+                       1 as type \
+                from postCommentSource \
+                where length(content) <= 20 and commentHot >= 500 \
+            ) t1 \
+            join ( \
+                select postId, \
+                       blogId \
+                from lofter.dws_post_interaction_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and hot >= 500 \
+            ) t2 \
+            on t1.postId = t2.postId and t1.blogId = t2.blogId \
+        ) t \
+        where rn <= 2 \
+        union all \
+        select commentId, \
+               publisherUserId, \
+               postId, \
+               blogId, \
+               content, \
+               commentHot, \
+               pid, \
+               2 as type \
+        from ( \
+            select t2.commentId, \
+                   t2.publisherUserId, \
+                   t2.postId, \
+                   t2.blogId, \
+                   t2.content, \
+                   t2.commentHot, \
+                   t2.pid, \
+                   row_number() over(partition by t2.postId, t2.blogId order by t2.commentHot desc) as rn \
+            from ( \
+                select postId, \
+                       blogId, \
+                       sum(underscore_comment_pv) as underscore_comment_pv \
+                from lofter.dws_post_highlight_comment_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+                group by postId, blogId \
+                having sum(underscore_comment_pv) >= 10 \
+            ) t1 \
+            join ( \
+                select commentId, \
+                       publisherUserId, \
+                       postId, \
+                       blogId, \
+                       content, \
+                       commentHot, \
+                       pid \
+                from postCommentSource \
+                where length(content) <= 20 and commentHot >= 50 \
+            ) t2 \
+            on t1.postId = t2.postId and t1.blogId = t2.blogId \
+        ) t \
+        where rn <= 2 \
+    ) t \
+) tt \
+where rn = 1 \
+union all \
+select commentId, \
+       publisherUserId, \
+       postId, \
+       blogId, \
+       content, \
+       commentHot, \
+       pid, \
+       3 as type \
+from ( \
+    select commentId, \
+           publisherUserId, \
+           postId, \
+           blogId, \
+           content, \
+           commentHot, \
+           pid, \
+           row_number() over(partition by postId order by underscore_comment_pv_7d desc) as rn2 \
+    from ( \
+        select t1.commentId, \
+               t1.publisherUserId, \
+               t1.postId, \
+               t1.blogId, \
+               t1.content, \
+               t1.commentHot, \
+               t1.pid, \
+               t3.underscore_comment_pv_7d, \
+               row_number() over(partition by t1.postId, t1.pid order by t1.commentHot desc) as rn1 \
+        from ( \
+            select commentId, \
+                   publisherUserId, \
+                   postId, \
+                   blogId, \
+                   content, \
+                   commentHot, \
+                   pid \
+            from postCommentSource \
+            where length(content) >= 50 and commentHot >= 50 \
+        ) t1 \
+        join ( \
+            select id as commentId, pid from lofter_db_dump.ods_db_post_response_nd where length(pid) > 0 \
+        ) t2 \
+        on t1.commentId = t2.commentId and t1.pid = t2.pid \
+        left join ( \
+            select postId, pid, underscore_comment_pv_7d from lofter.dws_post_highlight_comment_dd where dt = '${azkaban.flow.1.days.ago}' \
+        ) t3 \
+        on t1.postId = t3.postId and t1.pid = t3.pid \
+    ) t \
+    where rn1 <= 2 \
+) tt \
+where rn2 <= 5

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ES
+conf.spark.source.query="select user_id, user_code, simulator_id from vc_dm.ads_vc_data_user_plotsimulator_model_dd where dt = '${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest vc_data_user_plotsimulator_model --full --atom --id user_id --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG

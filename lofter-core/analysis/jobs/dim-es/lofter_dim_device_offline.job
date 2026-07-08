@@ -1,0 +1,9 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+select deviceUdid, dt as last_login_date \
+from lofter.ods_mda_app_raw_di \
+where dt = '${azkaban.flow.1.days.ago}' and length(deviceUdid) > 0 \
+group by 1, 2 \
+"
+params= --id deviceUdid --dest lofter_dim_device_offline --update

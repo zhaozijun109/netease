@@ -1,0 +1,37 @@
+type = sparksql
+hive.query.01 =    \
+with aa as (  \
+select   \
+from_unixtime(a.create_time / 1000, 'yyyy-MM-dd') create_date ,  \
+a.simulator_id,  \
+a.character_id,  \
+b.name,   \
+b.simulator_category,   \
+b.simulator_type ,  \
+category_label,  \
+public_scope,  \
+a.user_id   \
+FROM vc.ods_db_vc_user_simulator_init_info_nd a   \
+LEFT JOIN   \
+(  \
+SELECT   \
+simulator_id, category as simulator_category,   \
+case when category=1 then 'OGC'  \
+     WHEN category=2 then 'PUGC'  \
+     when category=3 then 'UGC'  \
+     END category_label,  \
+type  as simulator_type,  \
+name ,public_scope  \
+FROM vc.ods_db_vc_simulator_info_nd   \
+WHERE is_trial = 0 AND status = 3   \
+) b ON a.simulator_id = b.simulator_id   \
+where   from_unixtime(a.create_time / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+)   \
+  \
+insert overwrite table lofter_dm.ads_simulator_produce_detail_report_di partition (dt = '${azkaban.flow.1.days.ago}' )   \
+select create_date,public_scope,category_label,  \
+count(distinct simulator_id) simulator_cnt,  \
+count(distinct user_id) cnt_user,  \
+count(distinct character_id) role_cnt  \
+from aa   \
+group by 1,2 ,3  \

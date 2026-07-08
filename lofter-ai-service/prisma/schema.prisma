@@ -1,0 +1,142 @@
+// AI Foundation Service - Prisma Schema
+// 所有表使用 ai_ 前缀，通过 @@map 映射，避免与 frontend 库已有表冲突
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  developer
+  guest
+}
+
+enum ApiKeyType {
+  personal
+  service
+}
+
+/// 用户信息（管理员 & 普通用户）
+model User {
+  id        BigInt   @id @default(autoincrement())
+  email     String   @unique @db.VarChar(128)
+  name      String?  @db.VarChar(64)
+  role      UserRole @default(guest)
+  status    Int      @default(1) @db.TinyInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  apiKeys     ApiKey[]
+  skillTokens SkillToken[]
+
+  @@map("ai_users")
+}
+
+/// AIGW 应用凭证配置
+model App {
+  id              BigInt   @id @default(autoincrement())
+  appCode         String   @unique @map("app_code") @db.VarChar(64)
+  appId           String   @map("app_id") @db.VarChar(64)
+  appKey          String   @map("app_key") @db.VarChar(128)
+  name            String   @db.VarChar(128)
+  description     String?  @db.Text
+  requireUserCode Boolean  @default(true) @map("require_user_code")
+  status          Int      @default(1) @db.TinyInt
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  @@map("ai_apps")
+}
+
+/// 自发行 API Key（sk- 个人 / svc- 服务）
+model ApiKey {
+  id          BigInt     @id @default(autoincrement())
+  appId       BigInt     @map("app_id")
+  userId      BigInt?    @map("user_id")
+  type        ApiKeyType
+  apiKey      String     @unique @map("api_key") @db.VarChar(128)
+  name        String     @db.VarChar(128)
+  description   String?      @db.VarChar(512)
+  status        Int          @default(1) @db.TinyInt
+  createdBy     String?      @map("created_by") @db.VarChar(128)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  app         App        @relation(fields: [appId], references: [id])
+  user        User?      @relation(fields: [userId], references: [id])
+  requestLogs RequestLog[]
+
+  /// 个人 Key：一人一 App 一 Key（service Key 的 userId 为 NULL，不受此约束）
+  @@unique([userId, appId], map: "uq_api_keys_user_app")
+  @@index([appId], map: "idx_api_keys_app_id")
+  @@index([userId], map: "idx_api_keys_user_id")
+  @@index([type], map: "idx_api_keys_type")
+  @@map("ai_api_keys")
+}
+
+/// 请求日志（审计 + 用量统计）
+model RequestLog {
+  id         BigInt      @id @default(autoincrement())
+  apiKeyId   BigInt?     @map("api_key_id")
+  keyType    ApiKeyType? @map("key_type")
+  appCode    String      @map("app_code") @db.VarChar(64)
+  userCode   String?     @map("user_code") @db.VarChar(128)
+  path       String?     @db.VarChar(256)
+  model      String?     @db.VarChar(64)
+  statusCode Int?        @map("status_code")
+  latencyMs  Int?        @map("latency_ms")
+  meta       Json?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id])
+
+  @@index([appCode, createdAt], map: "idx_request_logs_app_code_created_at")
+  @@index([userCode, createdAt], map: "idx_request_logs_user_code_created_at")
+  @@index([createdAt], map: "idx_request_logs_created_at")
+  @@map("ai_request_logs")
+}
+
+/// Skill 侧鉴权 Token（skt- 前缀，独立于 AIGW ApiKey）
+model SkillToken {
+  id          BigInt    @id @default(autoincrement())
+  token       String    @unique @db.VarChar(128)
+  name        String    @db.VarChar(128)
+  userId      BigInt    @map("user_id")
+  permissions Json
+  status      Int       @default(1) @db.TinyInt
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_skill_tokens_user_id")
+  @@map("ai_skill_tokens")
+}
+
+/// 注册的后端服务端点（凭据字段直接内联，消除独立凭据表）
+model Service {
+  id                   BigInt    @id @default(autoincrement())
+  code                 String    @unique @db.VarChar(64)
+  name                 String    @db.VarChar(128)
+  type                 String    @db.VarChar(32)         // http_proxy | db_query
+  config               Json                              // 服务连接配置
+  credentialType       String?   @map("credential_type") @db.VarChar(32)  // auth_key | db_password | static_token
+  credentialConfig     Json?     @map("credential_config")                 // 凭据配置
+  cachedToken          String?   @map("cached_token") @db.Text
+  cachedTokenExpiresAt DateTime? @map("cached_token_expires_at")
+  status               Int       @default(1) @db.TinyInt
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("ai_services")
+}

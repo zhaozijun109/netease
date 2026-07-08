@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.ReaderDdbDbiDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.ReaderDdbDbiDO">
+    <id column="id" jdbcType="BIGINT" property="id" />
+    <result column="data_sources" jdbcType="OTHER" property="dataSources"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONArrayHandler"/>
+    <result column="conditions" jdbcType="VARCHAR" property="conditions" />
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime" />
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime" />
+    <result column="conf" jdbcType="VARCHAR" property="conf" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, data_sources, conditions, create_time, modify_time, conf
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from reader_ddb_dbi
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from reader_ddb_dbi
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.ReaderDdbDbiDO" useGeneratedKeys="true" keyProperty="id">
+    insert into reader_ddb_dbi (id, data_sources, conditions, 
+      create_time, modify_time, conf
+      )
+    values (#{id,jdbcType=BIGINT}, #{dataSources,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONArrayHandler}, #{conditions,jdbcType=VARCHAR},
+      #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP}, #{conf,jdbcType=VARCHAR}
+      )
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ReaderDdbDbiDO" useGeneratedKeys="true" keyProperty="id">
+    insert into reader_ddb_dbi
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="dataSources != null">
+        data_sources,
+      </if>
+      <if test="conditions != null">
+        conditions,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+      <if test="conf != null">
+        conf,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="dataSources != null">
+        #{dataSources,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONArrayHandler},
+      </if>
+      <if test="conditions != null">
+        #{conditions,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="conf != null">
+        #{conf,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.ReaderDdbDbiDO">
+    update reader_ddb_dbi
+    <set>
+      <if test="dataSources != null">
+        data_sources = #{dataSources,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONArrayHandler},
+      </if>
+      <if test="conditions != null">
+        conditions = #{conditions,jdbcType=VARCHAR},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="conf != null">
+        conf = #{conf,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.ReaderDdbDbiDO">
+    update reader_ddb_dbi
+    set data_sources = #{dataSources,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONArrayHandler},
+      conditions = #{conditions,jdbcType=VARCHAR},
+      create_time = #{createTime,jdbcType=TIMESTAMP},
+      modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      conf = #{conf,jdbcType=VARCHAR}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+</mapper>

@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_index_post_status_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select to_bitmap(a.postId) as gift_post_bitmap, \
+       to_bitmap(b.postId) as premium_post_bitmap \
+from ( \
+    select postId \
+    from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+    where status=1 and auditStatus=1 \
+) a \
+full outer join ( \
+  select postId \
+  from lofter.dws_post_premium_di \
+  where dt = '${azkaban.flow.1.days.ago}' and premium_date is not null \
+) b on a.postId = b.postId
+

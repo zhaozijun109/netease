@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_info_dd` PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  tmp1.columnId, \
+		NVL(tmp1.columnExposureCount, 0)   AS columnExposureCount, \
+		NVL(tmp1.columnClickCount, 0)	   AS columnClickCount, \
+		NVL(tmp1.columnClickRateCount, 0)  AS columnClickRateCount, \
+		NVL(tmp2.contentExposureCount, 0)  AS contentExposureCount, \
+		NVL(tmp2.contentClickCount, 0) 	   AS contentClickCount, \
+		NVL(tmp2.contentClickRateCount, 0) AS contentClickRateCount \
+FROM \
+( \
+        SELECT  columnId, \
+                SUM(exposureCount)  AS columnExposureCount, \
+                SUM(clickCount)     AS columnClickCount, \
+                NVL(SUM(clickCount)/SUM(exposureCount),0) AS columnClickRateCount \
+        FROM `lofter_dm`.`ads_column_delivery_task_info_total_dd` \
+        WHERE dt = '${azkaban.flow.1.days.ago}' \
+        GROUP BY  columnId \
+) tmp1 \
+LEFT JOIN \
+( \
+        SELECT  columnId, \
+                SUM(exposureCount)  AS contentExposureCount, \
+                SUM(clickCount)     AS contentClickCount, \
+                NVL(SUM(clickCount)/SUM(exposureCount),0) AS contentClickRateCount \
+        FROM \
+        ( \
+                SELECT  columnId, \
+                        exposureCount, \
+                        clickCount, \
+                        clickRateCount \
+                FROM `lofter_dm`.`ads_column_collection_content_info_total_dd` \
+                WHERE dt = '${azkaban.flow.1.days.ago}' \
+                UNION ALL \
+                SELECT  columnId, \
+                        exposureCount, \
+                        clickCount, \
+                        clickRateCount \
+                FROM `lofter_dm`.`ads_column_creator_content_info_total_dd` \
+                WHERE dt = '${azkaban.flow.1.days.ago}' \
+                UNION ALL \
+                SELECT  columnId, \
+                        exposureCount, \
+                        clickCount, \
+                        clickRateCount \
+                FROM `lofter_dm`.`ads_column_post_content_info_total_dd` \
+                WHERE dt = '${azkaban.flow.1.days.ago}' \
+        ) tmp1 \
+        GROUP BY columnId \
+) tmp2 \
+ON tmp1.columnId = tmp2.columnId
+dependencies=ads_column_delivery_task_info_total_dd,ads_column_collection_content_info_total_dd,ads_column_creator_content_info_total_dd,ads_column_post_content_info_total_dd

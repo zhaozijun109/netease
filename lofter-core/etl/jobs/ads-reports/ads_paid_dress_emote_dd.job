@@ -1,0 +1,75 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_dress_emote_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select  \
+a.dress_id,a.emote_package_id,a.giftname,a.return_gift_plantype \
+,b.blogname,b.blognickname,b.url, \
+count(distinct sender) as uv,sum(gift_num) as gift_num,sum(coin/10) as money,'day' as period \
+from  \
+ \
+(select id,postid,blogid,dress_id,emote_package_id,giftname,return_gift_plantype \
+from  \
+lofter.dim_gift_post_return_dd \
+where dt='${azkaban.flow.1.days.ago}' and  return_gift_plantype in ('装扮','表情包') \
+group by  id,postid,blogid,dress_id,emote_package_id,giftname,return_gift_plantype) a \
+ \
+join \
+ \
+(select id,blogname,blognickname,concat('https://',blogname,'.lofter.com') as url \
+from lofter.dim_blog) b \
+ \
+on a.blogid=b.id \
+ \
+ \
+join \
+ \
+(select sender,sum(gift_num) as gift_num ,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') as day,sum(coin) as coin,return_gift_id \
+ \
+from lofter.dwd_paid_post_detail_dd \
+where dt='${azkaban.flow.1.days.ago}' and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+group by sender,from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd'),return_gift_id) c \
+ \
+ \
+on a.id=c.return_gift_id \
+ \
+ \
+group by a.dress_id,a.emote_package_id,a.giftname,a.return_gift_plantype \
+,b.blogname,b.blognickname,b.url \
+ \
+ \
+ \
+union \
+ \
+select  \
+a.dress_id,a.emote_package_id,a.giftname,a.return_gift_plantype \
+,b.blogname,b.blognickname,b.url, \
+count(distinct sender) as uv,sum(gift_num) as gift_num,sum(coin/10) as money,'累计' as period \
+from  \
+ \
+(select id,postid,blogid,dress_id,emote_package_id,giftname,return_gift_plantype \
+from  \
+lofter.dim_gift_post_return_dd \
+where dt='${azkaban.flow.1.days.ago}' and  return_gift_plantype in ('装扮','表情包') \
+group by  id,postid,blogid,dress_id,emote_package_id,giftname,return_gift_plantype) a \
+ \
+join \
+ \
+(select id,blogname,blognickname,concat('https://',blogname,'.lofter.com') as url \
+from lofter.dim_blog) b \
+ \
+on a.blogid=b.id \
+ \
+ \
+join \
+ \
+(select sender,sum(gift_num) as gift_num ,sum(coin) as coin,return_gift_id \
+ \
+from lofter.dwd_paid_post_detail_dd \
+where dt='${azkaban.flow.1.days.ago}'  \
+group by sender,return_gift_id) c \
+ \
+ \
+on a.id=c.return_gift_id \
+ \
+ \
+group by a.dress_id,a.emote_package_id,a.giftname,a.return_gift_plantype \
+,b.blogname,b.blognickname,b.url \

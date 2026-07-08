@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.netease.lofter.tango.impl.mapper.clickhouse.ClickHousePostMapper">
+
+    <sql id="TAG_CONDITION_CLAUSE">
+        <if test="tags != null and tags.size &gt; 0">
+            and
+            <foreach collection="tags" item="tag" open="(" close=")" index="index">
+                tag = #{tag}
+                <if test="index &lt; (tags.size - 1)">
+                    or
+                </if>
+            </foreach>
+        </if>
+
+    </sql>
+
+    <sql id="MERGE_OP_CLAUSE">
+        <choose>
+            <when test="tagOr">
+                groupBitmapOrState(publish_post_bitmap)
+            </when>
+            <otherwise>
+                groupBitmapAndState(publish_post_bitmap)
+            </otherwise>
+        </choose>
+    </sql>
+
+    <sql id = "POST_FILTER_CLAUSE">
+        <if test="creatorLevel">
+            and level = #{creatorLevel}
+        </if>
+        <if test="contentType">
+            and content_type = #{contentType}
+        </if>
+        <if test="postMainContentType">
+            and post_main_content_type = #{postMainContentType}
+        </if>
+
+        <if test="daren">
+            and if(length(authenticate_names) &gt; 0, '1', '0') = #{daren}
+        </if>
+
+        <if test="premium">
+            and if(is_premium &gt; 0, '1', '0') = #{premium}
+        </if>
+
+        <if test="recStatus">
+            and if(recomStatus > 0, '人审通过', if(recomStatus &lt; 0, '人审不通过', '人审等待')) = #{recStatus}
+        </if>
+
+        <if test="fansRangeLower &gt; 0">
+            and fans_std &gt;= #{fansRangeLower}
+        </if>
+
+        <if test="fansRangeUpper  &gt; 0">
+            and fans_std &lt;= #{fansRangeUpper}
+        </if>
+
+        <if test="returnGiftPlanType" >
+            and locate(return_gift_plantype, #{returnGiftPlanType}) > 0
+        </if>
+
+        <if test="payStatus" >
+            and pay_status = #{payStatus}
+        </if>
+    </sql>
+
+    <sql id = "SQL_POSTS_CLAUSE">
+        select arrayJoin(bitmapToArray(groupBitmapAndState(posts))) as postId
+        from (
+            select bitmapBuild([number]) as posts from numbers(0)
+
+        <if test="tags != null and tags.size &gt; 0">
+            union all
+            select groupBitmapOrState(post_bitmap) as posts
+            from (
+            select action_date, <include refid="MERGE_OP_CLAUSE"/> as post_bitmap
+            from lofter.tag_fetch_tag_action_dd
+            where dt = #{yesterday}
+            <include refid="TAG_CONDITION_CLAUSE"/>
+            and action_date &gt;= #{startDate} and action_date &lt;= #{endDate}
+            group by action_date
+            ) t
+        </if>
+
+        <if test="postIdUrl">
+            union all
+            select groupBitmapState(postId) as posts from url(#{postIdUrl}, CSV, 'postId UInt64')
+        </if>
+
+        <if test="postLinkUrl">
+            union all
+            select groupBitmapState(reinterpretAsUInt64(reverse(unhex(substring(extract(path(postLink), '(?:_).*'), 2))))) as posts
+            from url(#{postLinkUrl}, CSV, 'postLink String')
+        </if>
+        <if test="blogIdUrl">
+            union all
+            select groupBitmapState(postId) as posts
+            from lofter.tag_fetch_post_dd
+            where dt = #{yesterday} and
+                  userId in (select userId from url(#{blogIdUrl}, CSV, 'userId UInt64')) and
+                  publish_date &gt;= #{startDate} and publish_date &lt;= #{endDate}
+        </if>
+        <if test="blogNickNameUrl">
+            union all
+            select groupBitmapState(postId) as posts
+            from lofter.tag_fetch_post_dd
+            where dt = #{yesterday} and
+                  blog_nickname in (select blogNickName from url(#{blogNickNameUrl}, CSV, 'blogNickName String')) and
+                  publish_date &gt;= #{startDate} and publish_date &lt;= #{endDate}
+        </if>
+
+        <if test="blogNameUrl">
+            union all
+            select groupBitmapState(postId) as posts
+            from lofter.tag_fetch_post_dd
+            where dt = #{yesterday} and
+                  blog_name in (select replace(domain(blogUrl), '.lofter.com', '') as blogName from url(#{blogNameUrl}, CSV, 'blogUrl String')) and
+                  publish_date &gt;= #{startDate} and publish_date &lt;= #{endDate}
+        </if>
+        ) t
+    </sql>
+
+    <sql id="SQL_SOURCE_CLAUSE">
+       with posts as (
+           <include refid="SQL_POSTS_CLAUSE"/>
+       ), (select groupBitmapOrState(forbid_post_bitmap) from lofter.tag_fetch_tag_status_dd where dt=#{yesterday} <include
+            refid="TAG_CONDITION_CLAUSE"/>) as forbid_post_bitmap,
+       (select groupBitmapOrState(gift_post_bitmap) from lofter.tag_fetch_post_status_dd where dt=#{yesterday}) as gift_post_bitmap,
+       post_period_data as (
+           select a.postId,
+               sum(shua_hot) shua_hot,
+               sum(commend_count) as commend_count, sum(hot) as hot, sum(praise_count) as praise_count, sum(reproduce_count) as reproduce_count,
+               sum(recommend_count) as recommend_count, sum(subscribe_count) as subscribe_count,
+               bitmapCardinality(groupBitmapOrState(free_gift_sender_bitmap)) as free_gift_uv,
+               bitmapCardinality(groupBitmapOrState(pay_gift_sender_bitmap)) as pay_gift_uv,
+               sum(free_gift_pv) as free_gift_pv, sum(pay_gift_money_amount) as pay_gift_money_amount,
+               sum(exposed_count) as exposed_count, sum(click_count) as click_count, sum(rec_exposed_count) as rec_exposed_count,
+               sum(feed_rec_exposed_count) as feed_rec_exposed_count, sum(tag_rec_exposed_count) as tag_rec_exposed_count,
+               sum(cold_start_rec_exposed_count) as cold_start_rec_exposed_count
+           from lofter.tag_fetch_post_di a join posts d on a.postId = d.postId
+           where dt &lt;= #{endDate} and dt &gt;= #{startDate}
+           group by a.postId
+       )
+
+   </sql>
+
+    <select id="listPost"
+            parameterType="map"
+            resultType="com.netease.lofter.tango.impl.web.vo.clickhouse.ClickhousePostVO">
+        <include refid="SQL_SOURCE_CLAUSE"/>
+        select x.postId as postId, x.userId as userId, publish_date as publishDate, concat('https://', url) as postUrl, authenticate_names as authenticateNames, blog_nickname as blogNickName, blog_name as blogName,
+            x.post_count_std as postNum, x.fans_std as beenFollowedUV, x.tags as tags, x.content_type as contentType, x.title as title, x.level as level,
+            if(bitmapContains(forbid_post_bitmap, x.postId), '是', '否') as tagForbid,
+            if(bitmapContains(gift_post_bitmap, x.postId), 1, 0) as returnGiftSet,
+            y.shua_hot as shuaHot, y.hot as hot, y.commend_count as commendCount, y.praise_count as praiseCount, y.reproduce_count as reproduceCount, recommend_count as recommendCount,
+            y.free_gift_uv as freeGiftUserCount, y.free_gift_pv as freeGiftCount, y.pay_gift_uv as payGiftUserCount, y.pay_gift_money_amount as payGiftAmount,
+            x.post_main_content_type as postMainContentType,
+            x.return_gift_plantype as returnGiftPlanType,
+            toString(toDateTime(x.publishTime/1000)) as publishTime,
+            if(x.recomStatus > 0, '人审通过', if(recomStatus &lt; 0, '人审不通过', '人审等待')) as recomStatus,
+            y.exposed_count as exposedCount,
+            y.click_count as clickCount,
+            (y.rec_exposed_count / y.exposed_count) as recTrafficRatio,
+            (y.feed_rec_exposed_count/y.exposed_count) as feedRecTrafficRatio,
+            (y.tag_rec_exposed_count/y.exposed_count) as tagRecTrafficRatio,
+            (y.cold_start_rec_exposed_count/y.exposed_count) as coldStartTrafficRatio,
+            if(x.is_premium > 0, '是', '否') as premium,
+            x.pay_status as payStatus
+        from (
+            select a.*
+            from (
+                select * from lofter.tag_fetch_post_dd
+                where dt = #{yesterday}
+                      <include refid="POST_FILTER_CLAUSE"/>
+            ) a join posts b on a.postId = b.postId
+        ) x
+        left join post_period_data y on x.postId = y.postId
+        <if test="sortField != null">
+            <choose>
+                <when test="sortField == 'level' ">
+                    order by multiIf(level = 'S', 'G', level = 'A', 'F', level = 'B', 'E', level = 'C', 'D', level = 'D', 'C', level = 'D*', 'B', 'A')
+                    ${sortOrder}
+                </when>
+                <otherwise>
+                    order by ${sortField} ${sortOrder}
+                </otherwise>
+            </choose>
+        </if>
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+
+    <select id="countPost" resultType="long">
+        <include refid="SQL_SOURCE_CLAUSE"/>
+        select count(*)
+        from (
+            select a.*
+            from (
+                select * from lofter.tag_fetch_post_dd
+                where dt = #{yesterday}
+                <include refid="POST_FILTER_CLAUSE"/>
+            ) a join posts b on a.postId = b.postId
+        ) x
+        left join post_period_data y on x.postId = y.postId
+    </select>
+
+</mapper>

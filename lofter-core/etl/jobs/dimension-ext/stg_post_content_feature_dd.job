@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.stg_post_content_feature_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select postId, blogId, pt_type, label \
+from ( \
+    select *, row_number() over (partition by postId order by dt desc) rnk \
+    from ( \
+        select conv(split(item_id, '_') [1], 16, 10) as postId, \
+               conv(split(item_id, '_') [0], 16, 10) as blogId, \
+               pt_type, label, \
+               pt_d as dt \
+        from rec.rec_features_post_content_learn_dump_res \
+        where pt_d = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId, blogId, pt_type, label, dt \
+        from lofter.stg_post_content_feature_dd \
+        where dt = '${azkaban.flow.2.days.ago}' \
+    ) t \
+) tt \
+where rnk = 1

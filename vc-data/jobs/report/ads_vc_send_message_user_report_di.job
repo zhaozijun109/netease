@@ -1,0 +1,136 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_send_message_user_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+WITH sms_click AS ( \
+select dt1 as dt, \
+'click_message' as source, \
+scene, \
+user_id \
+from vc.dwd_vc_pmessage_info_7d_a_d \
+where servise_source_code is not null \
+and dt1 = '${azkaban.flow.1.days.ago}' \
+group by 1,2,3,4 \
+), \
+sms_click_active_24h AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT a.user_id) AS active_uv_24h \
+FROM sms_click s \
+LEFT JOIN vc.dwd_vc_user_active_i_d a ON s.user_id = a.user_id  \
+AND a.dt BETWEEN s.dt AND DATE_ADD(s.dt, 1) \
+GROUP BY s.dt,s.scene \
+), \
+sms_click_chat_7d AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT c.user_id) AS chat_uv_7d, \
+SUM(c.talk_cnt) AS total_chats_7d \
+FROM sms_click s \
+LEFT JOIN vc.dws_vc_uc_talk_day_cnt_single_i_d c ON s.user_id = c.user_id  \
+AND c.dt BETWEEN s.dt AND DATE_ADD(s.dt, 7) \
+GROUP BY s.dt,s.scene \
+), \
+sms_click_paid_7d AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT o.user_id) AS paid_uv_7d, \
+SUM(o.order_price) AS total_amount_7d \
+FROM sms_click s \
+LEFT JOIN vc.dwd_vc_order_i_d o ON s.user_id = o.user_id  \
+AND o.dt BETWEEN s.dt AND DATE_ADD(s.dt, 7) \
+GROUP BY s.dt,s.scene \
+), \
+sms_send AS ( \
+select dt, \
+'send_message' as source, \
+scene, \
+user_id \
+from vc.dwd_vc_daily_message_users_i_d \
+where dt = '${azkaban.flow.1.days.ago}' \
+and is_anonymous='N' \
+group by 1,2,3,4 \
+), \
+sms_send_active_24h AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT a.user_id) AS active_uv_24h \
+FROM sms_send s \
+LEFT JOIN vc.dwd_vc_user_active_i_d a ON s.user_id = a.user_id  \
+AND a.dt BETWEEN s.dt AND DATE_ADD(s.dt, 1) \
+GROUP BY s.dt,s.scene \
+), \
+sms_send_chat_7d AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT c.user_id) AS chat_uv_7d, \
+SUM(c.talk_cnt) AS total_chats_7d \
+FROM sms_send s \
+LEFT JOIN vc.dws_vc_uc_talk_day_cnt_single_i_d c ON s.user_id = c.user_id  \
+AND c.dt BETWEEN s.dt AND DATE_ADD(s.dt, 7) \
+GROUP BY s.dt,s.scene \
+), \
+sms_send_paid_7d AS ( \
+SELECT  \
+s.dt, \
+s.scene, \
+COUNT(DISTINCT o.user_id) AS paid_uv_7d, \
+SUM(o.order_price) AS total_amount_7d \
+FROM sms_send s \
+LEFT JOIN vc.dwd_vc_order_i_d o ON s.user_id = o.user_id  \
+AND o.dt BETWEEN s.dt AND DATE_ADD(s.dt, 7) \
+GROUP BY s.dt,s.scene \
+) \
+ \
+SELECT  \
+s.dt as send_dt, \
+s.source, \
+COUNT(DISTINCT s.user_id) AS send_users, \
+COALESCE(a.active_uv_24h, 0) AS active_uv_24h, \
+COALESCE(c.chat_uv_7d, 0) AS chat_uv_7d, \
+COALESCE(c.total_chats_7d, 0) AS total_chats_7d, \
+COALESCE(p.paid_uv_7d, 0) AS paid_uv_7d, \
+COALESCE(p.total_amount_7d, 0) AS total_amount_7d, \
+s.scene \
+FROM sms_click s \
+LEFT JOIN sms_click_active_24h a ON s.dt = a.dt and s.scene = a.scene \
+LEFT JOIN sms_click_chat_7d c ON s.dt = c.dt and s.scene = c.scene \
+LEFT JOIN sms_click_paid_7d p ON s.dt = p.dt and s.scene = p.scene \
+GROUP BY  \
+s.dt, \
+s.source, \
+s.scene, \
+a.active_uv_24h, \
+c.chat_uv_7d, \
+c.total_chats_7d, \
+p.paid_uv_7d, \
+p.total_amount_7d \
+ \
+union all  \
+ \
+SELECT  \
+s.dt as send_dt, \
+s.source, \
+COUNT(DISTINCT s.user_id) AS send_users, \
+COALESCE(a.active_uv_24h, 0) AS active_uv_24h, \
+COALESCE(c.chat_uv_7d, 0) AS chat_uv_7d, \
+COALESCE(c.total_chats_7d, 0) AS total_chats_7d, \
+COALESCE(p.paid_uv_7d, 0) AS paid_uv_7d, \
+COALESCE(p.total_amount_7d, 0) AS total_amount_7d, \
+s.scene \
+FROM sms_send s \
+LEFT JOIN sms_send_active_24h a ON s.dt = a.dt and s.scene = a.scene \
+LEFT JOIN sms_send_chat_7d c ON s.dt = c.dt and s.scene = c.scene \
+LEFT JOIN sms_send_paid_7d p ON s.dt = p.dt and s.scene = p.scene \
+GROUP BY  \
+s.dt, \
+s.source, \
+s.scene, \
+a.active_uv_24h, \
+c.chat_uv_7d, \
+c.total_chats_7d, \
+p.paid_uv_7d, \
+p.total_amount_7d \

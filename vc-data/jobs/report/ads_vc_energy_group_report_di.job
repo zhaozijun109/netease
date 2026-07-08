@@ -1,0 +1,21 @@
+type = sparksql
+hive.query.01=insert overwrite table vc_dm.ads_vc_energy_group_report_di partition(dt ='${azkaban.flow.1.days.ago}')  \
+select '功能消耗' label,scene_desc,sum(total_consume)-SUM(lofter_nums) total_consume_except_lofter,count(distinct user_id) ttl_cnt_user \
+from  vc.dwd_vc_asset_consume_info_i_d \
+where dt='${azkaban.flow.1.days.ago}'  \
+and asset_type_desc='能量' \
+group  by  scene_desc \
+union all  \
+select '过期','过期',sum(expired_energy),count(distinct user_id) ttl_cnt_user \
+from vc.dws_vc_user_behavior_info_a_d b \
+where dt='${azkaban.flow.1.days.ago}'  \
+and is_anonymity='N' \
+AND is_test_user='N' \
+union  all  \
+select '免费能量发放',activity_name,sum(amount) ,count(distinct user_id) \
+ FROM vc.dwd_vc_user_income_record_i_d t1  \
+   WHERE t1.reward_type=1  \
+     and reward_id=1 \
+     AND t1.dt ='${azkaban.flow.1.days.ago}'   \
+     and scene in  (1,5)  \
+group by activity_name  \

@@ -1,0 +1,76 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_share_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select a.postId as itemId,contenttype,title as name,concat_ws(',',tags) as tags,publishdate,url,category,    \
+                     b.blogid,b.blognickname,level,category_r1,share_count_1d,share_count_7d,share_count_30d,hot,ljfans,blogUrl    \
+              from    \
+              (    \
+              select postId, \
+                    sum(case when dt = '${azkaban.flow.1.days.ago}' then sharepv else 0 end) as share_count_1d,    \
+                    sum(case when dt between '${azkaban.flow.7.days.ago}' and  '${azkaban.flow.1.days.ago}' then sharepv else 0 end)  as share_count_7d,  \
+                    sum(sharepv) as share_count_30d    \
+              from lofter.dws_post_base_stats_di    \
+              where dt between '${azkaban.flow.30.days.ago}' and  '${azkaban.flow.1.days.ago}'   \
+              group by postId    \
+              having share_count_1d >=5    \
+              ) a    \
+              left join     \
+              (    \
+              select id,contenttype,title,tags,publishdate,blogid,blognickname,concat(blogname,'.lofter.com/post/',conv(blogid, 10, 16),'_',conv(id, 10, 16)) url    \
+              from lofter.dim_post    \
+              )b    \
+              on a.postId=b.id    \
+              left join    \
+              (    \
+              select  postid,category    \
+              from  lofter.dim_post_category_dd      \
+              where dt='${azkaban.flow.1.days.ago}'    \
+              group by  postid,category    \
+              )c    \
+              on a.postId=c.postid    \
+              left join     \
+              (    \
+              select  blogid,postid,count(1) hot    \
+              from lofter_db_dump.ods_db_post_hot_nd    \
+              group by blogid,postid    \
+              )d    \
+              on b.blogid=d.blogid and b.id=d.postid    \
+              left join     \
+              (    \
+              select userId as blogId, blog_url as blogurl, blog_nickname as blognickname, dt, level, fans_std as ljfans, element_at(post_top_categories,1) as category_r1 \
+              from lofter.dws_par_creator_dd    \
+              where dt='${azkaban.flow.1.days.ago}'    \
+              ) e    \
+              on b.blogid=e.blogid    \
+              union all         \
+              select a.id as itemId, contenttype,name,concat_ws(',',tags) as tags,publishdate,  \
+                     url, category,    \
+                     a.blogid,blognickname,level,category_r1,share_count_1d,share_count_7d,share_count_30d,hot,ljfans,blogUrl    \
+              from              \
+              (select id,'collection' as contenttype,blogId,name,tags,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publishdate,       \
+                     postcollectionhot as hot,collectiontype as category,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) as url        \
+              from lofter_db_dump.ods_db_post_collection_nd         \
+              union all         \
+              select id,'grain' as contenttype,userId as blogId,name,tags,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publishdate,       \
+                     subscribedcount as hot,sourcetype as category, concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) as url             \
+              from lofter_db_dump.ods_db_grain_info_nd              \
+              ) a      \
+              join                                             \
+              (select postId as itemId,                                       \
+                      sum(case when dt = '${azkaban.flow.1.days.ago}' then 1 else 0 end) as share_count_1d,    \
+                      sum(case when dt between '${azkaban.flow.7.days.ago}' and  '${azkaban.flow.1.days.ago}' then 1 else 0 end)  as share_count_7d,  \
+                      count(1) as share_count_30d    \
+               from lofter.dwd_post_share_di \
+               where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+               group by postId \
+               having share_count_1d >=5    \
+               ) b           \
+               on a.id=b.itemId             \
+               left join                    \
+               (    \
+               select userId, blog_url as blogurl, blog_nickname as blognickname, dt, level, fans_std as ljfans, element_at(post_top_categories,1) as category_r1 \
+               from lofter.dws_par_creator_dd    \
+               where dt='${azkaban.flow.1.days.ago}'    \
+               ) c    \
+               on a.blogId=c.userId     \
+              distribute by itemId % 10;
+dependencies=

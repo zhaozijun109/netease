@@ -1,0 +1,53 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=100
+conf.spark.executor.cores=4
+hive.query.01=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.02= insert overwrite TABLE `lofter_dm`.`ads_ad_dsp_revenue_di` partition(dt = '${azkaban.flow.1.days.ago}')  \
+               select  \
+               -2, \
+               dspid, \
+               case  \
+                   when category = 'STARTUP' then 1 \
+                   when category = 'EXPLOREFEEDNATIVE' then 2 \
+                   when category = 'FEEDS' then 3 \
+                   when category = 'VIDEOINTERVAL' then 4 \
+                   when category = 'REWARDVIDEO' then 5 \
+                   when category = 'EXPLOREBANNER' then 6 \
+                   when category = 'SINGLEPOSTPAGE' then 7 \
+                   when category = 'TAGNATIVE' then 8 \
+                   when category = 'TAGNEW' then 8 \
+                   when category = 'TAGHOT' then 8 \
+                   when category = 'SEARCHNATIVE' then 9 \
+                   else -1 \
+               end, \
+               0, \
+               case \
+                   when os = 'android' then 1 \
+                   when os = 'ios' then 2 \
+                   else -1 \
+               end, \
+               sum(requestCount) requestnum, \
+               sum(fillCount) fillnum, \
+               sum(bgPv) shownum, \
+               sum(clickPv) clicknum, \
+               sum(bid_amount), \
+               to_json(map('slotId', a.slotId)) as extJson, \
+               1  as rebate , \
+               appid, \
+               b.category \
+               from lofter_dm.ads_ad_dsp_di a \
+               join ( \
+                   select positionId, category \
+                   from lofter_db_dump.ods_db_act_adspace_snapshot_nd \
+                   where date = from_unixtime(unix_timestamp('${azkaban.flow.1.days.ago}', 'yyyy-MM-dd'), 'yyyyMMdd') \
+                   group by 1, 2 \
+               ) b on a.positionid = b.positionid \
+               where a.dt = '${azkaban.flow.1.days.ago}' \
+               and a.dspid in (1002,1030,1039,1041,1043) \
+               group by appid,os,dspid,dt,b.category,a.slotId;
+
+dependencies=adx_dsp

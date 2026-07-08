@@ -1,0 +1,59 @@
+type=sparksql
+hive.query.01 = with charater_tags as (select character_id, \
+                                                split(front_tags, ',')   as front_tags_list, \
+                                                split(backend_tags, ',') as backend_tags_list, \
+                                                split(category, ',')     as category_list, \
+                                                character_type, \
+                                                pack_id \
+                                        from (select character_id, \
+                                                    front_tags, \
+                                                    backend_tags, \
+                                                    category, \
+                                                    character_type, \
+                                                    pack_id, \
+                                                    row_number() over (partition by character_id order by rk desc) as rk \
+                                                from (select id                                                         as character_id, \
+                                                            front_tags, \
+                                                            backend_tags, \
+                                                            category, \
+                                                            case when type = 0 then 'ogc' when type in (1,2) then 'ugc' end as character_type, \
+                                                            pack_id, \
+                                                            1                                                          as rk \
+                                                    from vc.ods_db_vc_character_nd \
+                                                    where public_scope = 1 \
+                                                        and status = 1 \
+                                                    union all \
+                                                    select character_id, front_tags, backend_tags, category, character_type, pack_id, 2 as rk \
+                                                    from (select id as character_id, \
+                                                                front_tags, \
+                                                                backend_tags, \
+                                                                category, \
+                                                                case when type = 0 then 'ogc' when type in (1,2) then 'ugc' end as character_type, \
+                                                                public_scope, \
+                                                                status, \
+                                                                pack_id, \
+                                                                row_number() over (partition by id order by _bin_op_seqno desc,_bin_op_time desc) as rk \
+                                                            from vc.ods_binlog_vc_character_di \
+                                                            where dt = '${azkaban.flow.current.date}') \
+                                                    where rk = 1 \
+                                                        and public_scope = 1 \
+                                                        and status = 1)) \
+                                        where rk = 1), \
+                        character_tabulate as (select * from vc.dws_vc_character_tabulate_data_view), \
+                        character_tags_v2 as (select * from vc.dwd_vc_character_tags_v2_dd) \
+                insert overwrite table vc.dwd_vc_character_tags_1h_a_d PARTITION (dt='${azkaban.flow.current.date}', h='${azkaban.flow.start.hour}') \
+                select x1.character_id, \
+                        x1.front_tags_list, \
+                        x1.backend_tags_list, \
+                        x1.category_list, \
+                        x1.character_type, \
+                        x2.character_name, \
+                        x2.total_talk_cnt, \
+                        x2.total_peoples, \
+                        x1.pack_id, \
+                        x3.l2_name_set_str \
+                from charater_tags x1 \
+                            left join character_tabulate x2 on x1.character_id = x2.character_id \
+                            left join character_tags_v2 x3 on x1.character_id = x3.character_id
+
+dependencies=dwd_vc_character_tags_v2_dd

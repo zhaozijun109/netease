@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select post_id as postId from rec.rec_lofter_high_quality_recommend_item_v1_export where day='${azkaban.flow.1.days.ago}'"
+params= --topic LOFTER.POPUP.high_recom_posts --servers　lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

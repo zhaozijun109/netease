@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="select user_id, user_code , user_type, last_talk_date, last_active_date \
+                         from vc.ads_pv_user_behavior_dd \
+                         where dt = '${azkaban.flow.1.days.ago}' \
+                           and (last_talk_date is not null or last_active_date is not null)"
+
+params= --parallel 8 --index both_user_behavior_data --id user_code --update --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG

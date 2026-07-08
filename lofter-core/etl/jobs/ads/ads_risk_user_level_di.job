@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_user_level_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.blogId,score,forbiddenType, \
+           if(b.blogId is not null, 3, a.grade) as grade, \
+           details \
+    from ( \
+        select * from lofter.dws_user_security_level_di where dt='${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+       select blogId from lofter_dm.ads_high_security_user_di \
+       where dt='${azkaban.flow.1.days.ago}' \
+    ) b on a.blogId=b.blogId \
+    distribute by 1
+dependencies=ads_high_security_user_di

@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_dispose_dd partition(dt='${azkaban.flow.1.days.ago}')  \
+              select a.*,shuahot,hishot,dailyshuahot,dailyhot,url,tags,comment_cnt,comment_cnt_1d,creator_level,fans  \
+              from   \
+              (select  dt as day,postid, blogid,case when type=0 then '处置刷热文章' else '处置用户新发文' end  as op_type  \
+              from lofter.ods_log_antispam_brush_dispose_di  \
+              where status=1 and datediff('${azkaban.flow.1.days.ago}',dt)<=90  \
+              group by dt,postid, blogid,case when type=0 then '处置刷热文章' else '处置用户新发文' end  \
+              union  \
+              select min(dt)  as dt,postid,blogid,'刷热模型命中文章' as op_type  from lofter_dm.ads_risk_shuare_model_backend_di  \
+              where datediff('${azkaban.flow.1.days.ago}',dt)<=90  \
+              group by blogid,postid  \
+              union  \
+              select b.publishdate as day , b.id as postid,a.blogid,'用户新发文章' as op_type  \
+              from  \
+              (select blogid,dt  from lofter_dm.ads_risk_shuare_model_backend_di   \
+              where datediff('${azkaban.flow.1.days.ago}',dt)<=90   \
+              group by blogid,dt) a  \
+              join  \
+              (select id,blogid,publishdate from lofter.dim_post where datediff('${azkaban.flow.1.days.ago}',publishdate)<=90 and valid=0 and allowview=0) b  \
+              on a.blogid=b.blogid and publishdate between a.dt and date_add(a.dt,7)  \
+              group by b.publishdate, b.id ,a.blogid) a  \
+              left  join  \
+              (select dt,postid,blogid,shuahot,hishot,dailyshuahot,dailyhot,url,tags,comment_cnt,comment_cnt_1d,creator_level,fans  \
+              from lofter_dm.ads_risk_shuare_model_stat_di where datediff('${azkaban.flow.1.days.ago}',dt)<=90  \
+              group by dt,postid,blogid,shuahot,hishot,dailyshuahot,dailyhot,url,tags,comment_cnt,comment_cnt_1d,creator_level,fans) b  \
+              on a.day=b.dt and a.postid=b.postid and a.blogid=b.blogid  \
+              distribute by 1
+dependencies=ads_risk_shuare_model_backend_di,ads_risk_shuare_model_stat_di

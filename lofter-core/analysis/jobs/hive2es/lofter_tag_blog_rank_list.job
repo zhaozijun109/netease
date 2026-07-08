@@ -1,0 +1,16 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query=" \
+select a.*, if(b.id is null, 2, 0) as icon \
+from ( \
+    select concat(tag, '-', blogId) as id, tag as ipName, blogid as userId, rank as sortNo, \
+           cast(rank_score * 10000 as bigint) as score, rank_type as rankType, hot_std as ipHot, \
+           post_count_std as ipPostCount, post_ids_std as postId,first_publish_time as ipFirstPublishTime, dt \
+    from lofter_dm.ads_tag_blog_rank_moderated_di where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select concat(tag, '-', blogId) as id \
+    from lofter_dm.ads_tag_blog_rank_moderated_di \
+    where dt = '${azkaban.flow.2.days.ago}' \
+) b on a.id = b.id "
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_ip_blog_rank_list --full --atom

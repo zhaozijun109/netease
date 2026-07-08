@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01= \
+INSERT OVERWRITE TABLE lofter.dwd_home_top_resource_visit_di \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT userid, \
+       deviceudid, \
+       eventid, \
+       case when eventid = 'a1-37' then 'expose' \
+            when eventid = 'a1-36' then 'click' \
+       end as action_type, \
+       case when url_lower like '%reward-center%' then 'reward_center' \
+            when url_lower like '%pve-boyfriends%' then 'pve_boyfriends' \
+       end as resource_type, \
+       url, \
+       occurtime \
+FROM ( \
+    SELECT userid, \
+           deviceudid, \
+           eventid, \
+           occurtime, \
+           nvl(params['URL'], params['url']) as url, \
+           lower(nvl(params['URL'], params['url'])) as url_lower \
+    FROM lofter.ods_mda_app_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+      AND eventid in ('a1-37', 'a1-36') \
+      AND userid > 0 \
+) t \
+WHERE url_lower like '%reward-center%' or url_lower like '%pve-boyfriends%' \
+distribute by 1

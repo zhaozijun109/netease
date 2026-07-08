@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userId, roleIds, type from lofter_dm.ads_pve_user_role_sort_list_dd where dt = '${azkaban.flow.1.days.ago}' "
+params= --topic LOFTER.PVEMAN.userRoles --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092 --parallel 1

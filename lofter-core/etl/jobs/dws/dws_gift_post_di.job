@@ -1,0 +1,28 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter.dws_gift_post_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.postid,a.title,a.tags, a.url,a.contenttype,a.publishdate,a.userid,a.accept_gift_flag,a.agree_day,a.blogname,a.blognickname, \
+      a.return_gift_ids,a.cp_type,a.platform_type,a.is_pay_return_gift, \
+      b.clickPv,b.clickUv,b.exposurePv,b.exposureUv,b.posHotPv,b.posHotUv,b.hdPv,b.hdUv, \
+      c.coin_num,c.gift_uv,c.num,c.new_sender_coin_num,c.return_gift_coin_num,c.new_sender_uv,c.return_gift_uv \
+from lofter.dim_gift_post a \
+join ( \
+    select dt, postid, \
+        clickPv,clickUv,exposurePv,exposureUv,posHotPv,posHotUv,hdPv,hdUv \
+    from lofter.dws_post_base_stats_di \
+    where dt = '${azkaban.flow.1.days.ago}' and contentType not in ('视频','音乐') \
+) b on a.postid = b.postid \
+left join ( \
+    select from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt, postid, \
+        sum(coin) as coin_num , count(distinct sender) as gift_uv,count(1) as num, \
+        sum(case when is_first_pay='首次付费' then coin else 0 end ) as new_sender_coin_num , \
+        sum(case when return_gift_type='回礼' then coin else 0 end) as return_gift_coin_num, \
+        count(distinct case when is_first_pay='首次付费' then sender else null end ) as new_sender_uv, \
+        count(distinct case when return_gift_type='回礼' then sender else null end ) as return_gift_uv \
+    from lofter.dwd_gift_post_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) c on a.postid= c.postid and b.dt = c.dt \
+where a.agree_day <= '${azkaban.flow.1.days.ago}'
+dependencies=dws_post_base_stats_di

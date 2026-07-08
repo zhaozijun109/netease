@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_monitor_wi \
+select all_writers, new_writers, firstwrite_writers, activewrite_writers, returnwrite_writers, write_daren, active_daren, reward_writers, revenue, \
+       dt \
+from ( \
+    select date_sub('${azkaban.flow.1.days.ago}', if(dayofweek('${azkaban.flow.1.days.ago}') == 1, 7, dayofweek('${azkaban.flow.1.days.ago}') - 1) - 1) as dt, \
+           count(distinct if(post_count > 0, userId, null)) as all_writers, \
+           count(distinct if(post_count > 0 and is_new_user > 0, userId, null)) new_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish > 0, userId, null)) as firstwrite_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish = 0 and is_active_creator > 0, userId, null)) as activewrite_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish = 0 and is_active_creator = 0, userId, null)) as returnwrite_writers, \
+           count(distinct if(post_count > 0 and is_daren > 0, userId, null)) as write_daren, \
+           count(distinct if(is_app_active > 0 and is_daren > 0, userId, null)) as active_daren, \
+           count(distinct if(revenue > 0, userId, null)) as reward_writers, \
+           sum(revenue) as revenue \
+    from ( \
+       select userId, \
+              sum(post_count) as post_count, \
+              sum(if(is_new_user > 0 and post_count > 0, 1, 0)) as is_new_user, \
+              sum(is_first_publish) as is_first_publish, \
+              sum(is_active_creator) as is_active_creator, \
+              sum(is_app_active) as is_app_active, \
+              sum(is_daren) as is_daren, \
+              sum(revenue) as revenue \
+       from lofter.dws_par_creator_di \
+       where dt <='${azkaban.flow.1.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', if(dayofweek('${azkaban.flow.1.days.ago}') == 1, 7, dayofweek('${azkaban.flow.1.days.ago}') - 1)) \
+       group by userId \
+    ) tt \
+) t \
+distribute by 1

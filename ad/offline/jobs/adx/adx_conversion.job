@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.sql.shuffle.partitions=200
+class=com.netease.wm.ad.AdxConversionFunnel
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=adx_actoin

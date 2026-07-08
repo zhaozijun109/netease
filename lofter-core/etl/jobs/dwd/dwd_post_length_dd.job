@@ -1,0 +1,24 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=20
+conf.spark.executor.cores=4
+hive.query.01=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.02=create temporary function html_text_length as 'com.netease.wm.udf.HtmlTextLength';
+hive.query.03= insert overwrite table lofter.dwd_post_length_dd partition(dt='${azkaban.flow.1.days.ago}') \
+          select a.id as postId,words as words_count, photo_count, link as contain_link, text as contain_text, image as contain_image \
+              from  \
+              (select id, html_text_length(longinfo) words, if(longinfo like '%<a%', 1, 0) link, if(longinfo like '%<img%', 1, 0) image, if(longinfo like '%<p%', 1, 0) text from lofter_db_dump.ods_db_long_post_nd  \
+              union all \
+              select id, html_text_length(caption) words, if(Caption like '%<a%', 1, 0) link, if(Caption like '%<img%', 1, 0) image, if(Caption like '%<p%', 1, 0) text from lofter_db_dump.ods_db_photo_post_nd   \
+              union all \
+              select id, html_text_length(content) words, if(Content like '%<a%', 1, 0) link, if(Content like '%<img%', 1, 0) image, if(Content like '%<p%', 1, 0) text from lofter_db_dump.ods_db_text_post_nd    \
+              union all \
+              select id, html_text_length(caption) words, if(Caption like '%<a%', 1, 0) link, if(Caption like '%<img%', 1, 0) image, if(Caption like '%<p%', 1, 0) text from lofter_db_dump.ods_db_music_post_nd    \
+              union all \
+              select id, html_text_length(caption) words, if(Caption like '%<a%', 1, 0) link, if(Caption like '%<img%', 1, 0) image, if(Caption like '%<p%', 1, 0) text from lofter_db_dump.ods_db_video_post_nd) a    \
+              left join     \
+              (select id as postId,size(parse_array(photoLinks)) as photo_count from lofter_db_dump.ods_db_photo_post_nd ) b \
+              on a.id=b.postId  \
+          distribute by postId % 10

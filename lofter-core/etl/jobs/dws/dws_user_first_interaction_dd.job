@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_user_first_interaction_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, opTime, opDate, opType, postId, blogId \
+from \
+(select publisherUserId as userId, opTime, from_unixtime(cast(optime/1000 as bigint),'yyyy-MM-dd') as opDate, `type` as opType, postId, blogId, \
+        row_number() over(partition by publisherUserId order by opTime) as rk \
+from lofter_db_dump.ods_db_post_hot_nd \
+union all \
+select publisherUserId as userId, publishTime as opTime, from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd') as opDate, 10 as opType, postId, blogId, \
+        row_number() over(partition by publisherUserId order by publishTime) as rk \
+from lofter_db_dump.ods_db_post_response_nd) a \
+where rk=1 \
+distribute by userId % 10

@@ -1,0 +1,15 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 订阅标签 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '订阅标签' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '订阅标签' as tag, subscribe_tag as grp \
+                                  from lofter.dws_par_user_base_dd lateral view explode(subscribe_tags) t as subscribe_tag \
+                                  where dt = '${azkaban.flow.1.days.ago}' and size(subscribe_tags) > 0   ) "

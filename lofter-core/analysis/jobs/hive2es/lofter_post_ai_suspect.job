@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select postId, blogId, title, 3 as reportType, ai_suspect_comment_pv as reportCount, dt from lofter_dm.ads_risk_post_ai_suspect_di where dt = '${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id postId --dest lofter_post_ai_suspect --atom
+dependencies=

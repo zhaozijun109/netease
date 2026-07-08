@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_gift_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select id, name, if(id in (3001, 120000, 120001, 120003), 0, type) as is_pay, coin, price \
+from lofter_db_dump.ods_db_trade_gift_info_nd \
+
+hive.query.02=create or replace view lofter.dim_gift as select * from lofter.dim_gift_dd where dt = '${azkaban.flow.1.days.ago}';

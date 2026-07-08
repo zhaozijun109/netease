@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.02=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.03=insert overwrite table lofter_dm.ads_ip_user_top_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select userId, ip, rk \
+from ( \
+  select a.userId, a.ip, row_number() over (partition by a.userId order by a.post_30d desc) as rk \
+  from ( \
+     select userId, ip, post_30d \
+     from lofter.dws_ip_user_consume_dd \
+     where dt = '${azkaban.flow.1.days.ago}' \
+  ) a join ( \
+    select userId, bitmap_count(bitmap_union(browse_post_bitmap)) as user_total_post_30d \
+    from lofter.dws_par_user_content_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+    group by userId \
+  ) b on a.userId = b.userId \
+  where b.user_total_post_30d > 3 and a.post_30d > 2 \
+) t \
+where rk <= 5

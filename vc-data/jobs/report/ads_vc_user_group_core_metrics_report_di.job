@@ -1,0 +1,128 @@
+type=sparksql
+conf.spark.hadoop.hive.exec.dynamic.partition=true
+conf.spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict
+hive.query.01= \
+INSERT OVERWRITE TABLE vc_dm.ads_vc_user_group_core_metrics_report_di PARTITION(dt) \
+WITH \
+date_range AS ( \
+    SELECT \
+        DATE_SUB('${azkaban.flow.1.days.ago}', 6) AS start_date, \
+        '${azkaban.flow.1.days.ago}' AS end_date \
+), \
+date_user_base_enriched AS ( \
+    SELECT DISTINCT \
+        a.dt, a.user_id, \
+        CASE WHEN TO_DATE(u.register_date) = TO_DATE(a.dt) THEN '新用户' ELSE '老用户' END AS user_new_old, \
+        CASE  \
+            WHEN u.is_lofter = 'Y' AND u.is_pve = 'Y' THEN 'LOFTER PVE' \
+            WHEN u.is_lofter = 'Y' AND u.is_pve = 'N' THEN 'LOFTER 非 PVE' \
+            ELSE '非 LOFTER' \
+        END AS lofter_origin_type, \
+        IF(r1.user_id IS NOT NULL, 1, 0) AS is_active_t1, \
+        IF(r6.user_id IS NOT NULL, 1, 0) AS is_active_t6 \
+    FROM vc.dwd_vc_user_active_i_d a \
+    LEFT JOIN vc.dws_vc_user_behavior_info_a_d u ON a.user_id = u.user_id AND a.dt = u.dt \
+    LEFT JOIN vc.dwd_vc_user_active_i_d r1 ON a.user_id = r1.user_id AND r1.dt = DATE_ADD(a.dt, 1) \
+    LEFT JOIN vc.dwd_vc_user_active_i_d r6 ON a.user_id = r6.user_id AND r6.dt = DATE_ADD(a.dt, 6) \
+    WHERE a.dt BETWEEN (SELECT start_date FROM date_range) AND (SELECT end_date FROM date_range) \
+), \
+user_chat_sums_14d AS ( \
+    SELECT \
+        b.dt AS report_dt, b.user_id, c.chat_type, \
+        SUM(COALESCE(c.talk_cnt, 0)) AS total_rounds_14d \
+    FROM date_user_base_enriched b \
+    LEFT JOIN vc.dws_vc_user_ugc_type_talk_cnt_di c ON b.user_id = c.user_id AND c.dt BETWEEN DATE_SUB(b.dt, 13) AND DATE_SUB(b.dt, 0) \
+    GROUP BY b.dt, b.user_id, c.chat_type \
+), \
+user_segment_daily AS ( \
+    SELECT s.report_dt AS dt, s.user_id, s.chat_type AS content_segment \
+    FROM user_chat_sums_14d s WHERE s.total_rounds_14d > 5 AND s.chat_type IS NOT NULL \
+    UNION ALL \
+    SELECT b.dt, b.user_id, '其他' AS content_segment \
+    FROM date_user_base_enriched b \
+    LEFT ANTI JOIN (SELECT DISTINCT q.report_dt, q.user_id FROM user_chat_sums_14d q WHERE q.total_rounds_14d > 5) qualified_users ON b.dt = qualified_users.report_dt AND b.user_id = qualified_users.user_id \
+), \
+vc_app_daily_metrics AS ( \
+    SELECT t.dt, t.user_id, \
+        COUNT(1) AS vc_daily_chats, \
+        COUNT(CASE WHEN t.character_type = 0 THEN 1 END) AS vc_daily_ogc_chats, \
+        COUNT(CASE WHEN t.character_type != 0 THEN 1 END) AS vc_daily_ugc_chats \
+    FROM vc.dwd_vc_uc_talk_info_i_d t WHERE t.dt BETWEEN (SELECT start_date FROM date_range) AND (SELECT end_date FROM date_range) GROUP BY t.dt, t.user_id \
+), \
+vc_app_daily_pay AS ( \
+    SELECT o.dt, o.user_id, SUM(o.order_price) AS vc_daily_amount \
+    FROM vc.dwd_vc_ucr_order_amount_i_d o WHERE o.dt BETWEEN (SELECT start_date FROM date_range) AND (SELECT end_date FROM date_range) GROUP BY o.dt, o.user_id \
+), \
+full_wide_table AS ( \
+    SELECT \
+        base.dt, base.user_id, base.user_new_old, base.lofter_origin_type, \
+        base.is_active_t1, base.is_active_t6, \
+        seg.content_segment, \
+        COALESCE(m.vc_daily_chats, 0) AS vc_daily_chats, \
+        COALESCE(m.vc_daily_ogc_chats, 0) AS vc_daily_ogc_chats, \
+        COALESCE(m.vc_daily_ugc_chats, 0) AS vc_daily_ugc_chats, \
+        COALESCE(p.vc_daily_amount, 0) AS vc_daily_amount \
+    FROM date_user_base_enriched base \
+    JOIN user_segment_daily seg ON base.dt = seg.dt AND base.user_id = seg.user_id \
+    LEFT JOIN vc_app_daily_metrics m ON base.dt = m.dt AND base.user_id = m.user_id \
+    LEFT JOIN vc_app_daily_pay p ON base.dt = p.dt AND base.user_id = p.user_id \
+) \
+SELECT \
+    a.dt AS stat_date, \
+    a.content_segment AS content_segment, \
+    COALESCE(a.user_new_old, '汇总') AS user_type, \
+    COALESCE(a.lofter_origin_type, '汇总') AS lofter_origin_type, \
+    COUNT(DISTINCT a.user_id) AS active_users, \
+    COUNT(DISTINCT CASE WHEN a.is_active_t1 = 1 THEN a.user_id END) AS next_day_active_users, \
+    COUNT(DISTINCT CASE WHEN a.is_active_t6 = 1 THEN a.user_id END) AS t6_day_active_users, \
+    COUNT(DISTINCT CASE WHEN a.vc_daily_chats > 0 THEN a.user_id END) AS chat_users, \
+    CAST(COUNT(DISTINCT CASE WHEN a.vc_daily_chats > 0 THEN a.user_id END) AS DECIMAL(20,4)) / COUNT(DISTINCT a.user_id) AS chat_participation_rate, \
+    SUM(a.vc_daily_chats) AS total_chats, \
+    SUM(a.vc_daily_chats) / NULLIF(COUNT(DISTINCT CASE WHEN a.vc_daily_chats > 0 THEN a.user_id END), 0) AS avg_chats_per_chat_user, \
+    SUM(a.vc_daily_ogc_chats) AS ogc_chats, \
+    SUM(a.vc_daily_ugc_chats) AS ugc_chats, \
+    CAST(SUM(a.vc_daily_ugc_chats) AS DECIMAL(20,4)) / NULLIF(SUM(a.vc_daily_chats), 0) AS ugc_chat_ratio, \
+    SUM(a.vc_daily_amount) AS total_payment_amount, \
+    COUNT(DISTINCT CASE WHEN a.vc_daily_amount > 0 THEN a.user_id END) AS paying_users, \
+    CAST(COUNT(DISTINCT CASE WHEN a.vc_daily_amount > 0 THEN a.user_id END) AS DECIMAL(20,4)) / COUNT(DISTINCT a.user_id) AS payment_rate, \
+    SUM(a.vc_daily_amount) / COUNT(DISTINCT a.user_id) AS arpu, \
+    SUM(a.vc_daily_amount) / NULLIF(COUNT(DISTINCT CASE WHEN a.vc_daily_amount > 0 THEN a.user_id END), 0) AS arppu, \
+    a.dt \
+FROM full_wide_table a \
+GROUP BY GROUPING SETS ( \
+    (a.dt, a.content_segment, a.user_new_old, a.lofter_origin_type), \
+    (a.dt, a.content_segment, a.user_new_old), \
+    (a.dt, a.content_segment, a.lofter_origin_type), \
+    (a.dt, a.content_segment) \
+) \
+UNION ALL \
+SELECT \
+    base.dt AS stat_date, \
+    '大盘汇总' AS content_segment, \
+    COALESCE(base.user_new_old, '汇总') AS user_type, \
+    COALESCE(base.lofter_origin_type, '汇总') AS lofter_origin_type, \
+    COUNT(DISTINCT base.user_id) AS active_users, \
+    COUNT(DISTINCT CASE WHEN base.is_active_t1 = 1 THEN base.user_id END) AS next_day_active_users, \
+    COUNT(DISTINCT CASE WHEN base.is_active_t6 = 1 THEN base.user_id END) AS t6_day_active_users, \
+    COUNT(DISTINCT CASE WHEN m.vc_daily_chats > 0 THEN base.user_id END) AS chat_users, \
+    CAST(COUNT(DISTINCT CASE WHEN m.vc_daily_chats > 0 THEN base.user_id END) AS DECIMAL(20,4)) / COUNT(DISTINCT base.user_id) AS chat_participation_rate, \
+    SUM(m.vc_daily_chats) AS total_chats, \
+    SUM(m.vc_daily_chats) / NULLIF(COUNT(DISTINCT CASE WHEN m.vc_daily_chats > 0 THEN base.user_id END), 0) AS avg_chats_per_chat_user, \
+    SUM(m.vc_daily_ogc_chats) AS ogc_chats, \
+    SUM(m.vc_daily_ugc_chats) AS ugc_chats, \
+    CAST(SUM(m.vc_daily_ugc_chats) AS DECIMAL(20,4)) / NULLIF(SUM(m.vc_daily_chats), 0) AS ugc_chat_ratio, \
+    SUM(p.vc_daily_amount) AS total_payment_amount, \
+    COUNT(DISTINCT CASE WHEN p.vc_daily_amount > 0 THEN base.user_id END) AS paying_users, \
+    CAST(COUNT(DISTINCT CASE WHEN p.vc_daily_amount > 0 THEN base.user_id END) AS DECIMAL(20,4)) / COUNT(DISTINCT base.user_id) AS payment_rate, \
+    SUM(p.vc_daily_amount) / COUNT(DISTINCT base.user_id) AS arpu, \
+    SUM(p.vc_daily_amount) / NULLIF(COUNT(DISTINCT CASE WHEN p.vc_daily_amount > 0 THEN base.user_id END), 0) AS arppu, \
+    base.dt \
+FROM date_user_base_enriched base \
+LEFT JOIN vc_app_daily_metrics m ON base.dt = m.dt AND base.user_id = m.user_id \
+LEFT JOIN vc_app_daily_pay p ON base.dt = p.dt AND base.user_id = p.user_id \
+GROUP BY GROUPING SETS ( \
+    (base.dt, base.user_new_old, base.lofter_origin_type), \
+    (base.dt, base.user_new_old), \
+    (base.dt, base.lofter_origin_type), \
+    (base.dt) \
+); 

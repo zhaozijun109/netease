@@ -1,0 +1,16 @@
+type=sparksql
+conf.spark.sql.hive.convertMetastoreParquet=false
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_login_hourly_info_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select concat(userId, '_', actionTime) as id, userId, actionTime, ip, userRemotePort, clientType, appVersion, deviceUdid \
+    from ( \
+      select *, row_number() over (partition by userId, ip, hour order by actionTime) as rk \
+      from ( \
+        select accountId as userId, \
+               from_unixtime(cast(actionTime/1000 as bigint),"yyyyMMddHH") as hour, \
+               ip,actionTime,userRemotePort,clientType,appVersion,deviceUdid \
+        from lofter.dwd_evt_user_login_di \
+        where dt = '${azkaban.flow.1.days.ago}' and accountId > 0 and actionType='login' and \
+              ip rlike '^(\\\\d{1,2}|1\\\\d\\\\d|2[0-4]\\\\d|25[0-5])\\\\.(\\\\d{1,2}|1\\\\d\\\\d|2[0-4]\\\\d|25[0-5])\\\\.(\\\\d{1,2}|1\\\\d\\\\d|2[0-4]\\\\d|25[0-5])\\\\.(\\\\d{1,2}|1\\\\d\\\\d|2[0-4]\\\\d|25[0-5])$$' \
+      ) a \
+    ) b \
+    where rk=1 distribute by 1

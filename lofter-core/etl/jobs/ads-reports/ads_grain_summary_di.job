@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_summary_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select  a.graincount as grain_pv,a.grainuser as grain_uv,followerpv as follow_pv, \
+                    postcount as post_pv,exposurepv as exposure_pv,percent_pv as  exposure_pv_ratio,exposure_uv  \
+              from  \
+              (select dt,count(distinct id)graincount ,count(distinct userid) grainuser     \
+              from  \
+                    (   \
+                    select  id ,userid,from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') dt   \
+                    from lofter_db_dump.ods_db_grain_info_nd    \
+                    where status=0 and  from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'    \
+                    group by  1,2,3     \
+                    )a  \
+                    left  join  \
+                    (   \
+                    select  grainid     \
+                    from lofter_db_dump.ods_db_user_subscribe_folder_nd     \
+                    group by grainid    \
+                    )b  \
+                    on a.id=b.grainid   \
+              where b.grainid is null   \
+              group by dt   \
+              )a    \
+              left join \
+              ( \
+              select  from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') dt,count(userid) followerpv   \
+              from lofter_db_dump.ods_db_grain_follower_nd  \
+              where status=0 and from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'   \
+              group by  1   \
+              )b    \
+              on a.dt=b.dt  \
+              left join     \
+              ( \
+              select from_unixtime(cast(createtime/1000 as bigint) ,'yyyy-MM-dd') dt,count(postid) postcount    \
+              from lofter_db_dump.ods_db_grain_post_nd  \
+              where from_unixtime(cast(createtime/1000 as bigint) ,'yyyy-MM-dd')='${azkaban.flow.1.days.ago}'   \
+              group by 1    \
+              )c    \
+              on a.dt=c.dt  \
+              left join     \
+              (     \
+              select dt,count(deviceudid)  exposurepv,count(distinct deviceudid) exposure_uv,count(deviceudid)/count(distinct deviceudid) percent_pv   \
+              from lofter.ods_mda_app_partition_di    \
+              where dt='${azkaban.flow.1.days.ago}' and actionType = 'page_view' and eventId='t2-1' and scene='foodlist'   \
+              group by dt   \
+              )d    \
+              on a.dt=d.dt  \
+              distribute by 1

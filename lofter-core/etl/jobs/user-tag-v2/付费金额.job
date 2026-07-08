@@ -1,0 +1,94 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt '${azkaban.flow.1.days.ago}' --tag 付费金额
+retries=0
+conf.spark.execute.sql="select userId, \
+                               '付费金额'                as tag_name, \
+                               cat                                  as dim1, \
+                               ''                                   as dim2, \
+                               ''                                   as dim3, \
+                               ''                                   as dim4, \
+                               ''                                   as dim5, \
+                               value \
+                        from ( select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_7' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_7d, 0) + nvl(fans_consume_7d,0) + nvl(coupon_consume_7d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_1' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_1d, 0) + nvl(fans_consume_1d,0) + nvl(coupon_consume_1d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                                \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_15' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_15d, 0) + nvl(fans_consume_15d,0) + nvl(coupon_consume_15d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                                \
+                                \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_30' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_consume_30d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                                \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_90' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_90d, 0) + nvl(fans_consume_90d,0) + nvl(coupon_consume_90d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                                \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_180' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_180d, 0) + nvl(fans_consume_180d,0) + nvl(coupon_consume_180d,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0 \
+                                \
+                               UNION ALL \
+                               select userId, \
+                                      '付费金额' as tag, \
+                                      'DAY_ALL' as cat, \
+                                      money as value \
+                               from ( \
+                                   select userId, (nvl(coin_consume_std, 0) + nvl(fans_consume_std,0) + nvl(coupon_consume_std,0)) as money \
+                                   from lofter.dws_par_user_pay_dd \
+                                   where dt='${azkaban.flow.1.days.ago}' \
+                               ) t \
+                               where money > 0  ) "

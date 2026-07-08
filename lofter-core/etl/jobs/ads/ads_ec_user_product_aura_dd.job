@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_ec_user_product_aura_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       productId, \
+       cardActivityCode, \
+       type, \
+       max(auraType) as auraType \
+from ( \
+    select userId, \
+           if(type=0,cast(relaId as bigint),null) as productId, \
+	       if(type=1,relaId,null) as cardActivityCode, \
+           type, \
+           0 as auraType \
+    from lofter_db_dump.ods_db_user_product_history_nd \
+    where from_unixtime(cast(lastViewTime / 1000 as bigint), 'yyyy-MM-dd') <='${azkaban.flow.1.days.ago}' and from_unixtime(cast(lastViewTime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' and status = 0 \
+    union all \
+    select userId, \
+           productId, \
+           null as cardActivityCode, \
+           0 as type, \
+           1 as auraType \
+    from lofter.dwd_ec_add_cart_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and productId is not null \
+    union all \
+    select userId, \
+           null as productid, \
+           cardActivityCode, \
+           1 as type, \
+           2 as auraType \
+    from lofter.dwd_benefit_product_trade_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and productType = 5 and cardActivityCode is not null \
+) t1 \
+group by userId, \
+         productId, \
+         cardActivityCode, \
+         type

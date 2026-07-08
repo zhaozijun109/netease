@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_group_post_detail_di \
+select b.* \
+from ( \
+    select postId \
+    from lofter.dwd_post_group_post_list_di \
+    where dt = '${azkaban.flow.2.days.ago}' \
+    group by postId \
+) a \
+join ( \
+    select * \
+    from lofter_dm.ads_post_group_observe_base_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.postId = b.postId
+dependencies=ads_post_group_observe_base_di

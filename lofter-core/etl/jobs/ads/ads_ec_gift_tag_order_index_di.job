@@ -1,0 +1,33 @@
+type=sparksql
+hive.query.01=insert overwrite lofter_dm.ads_ec_gift_tag_order_index_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.tag, \
+       nvl(sum(b.order_count),0) as order_count, \
+       nvl(sum(b.order_coins),0) as order_coins, \
+       nvl(sum(b.order_count_7d),0) as order_count_7d, \
+       nvl(sum(b.order_coins_7d),0) as order_coins_7d \
+from ( \
+    select suitId as itemId, '装扮' as itemType, tag \
+    from lofter_db_dump.ods_db_dressing_tag_resource_nd \
+    group by 1, 2, 3 \
+  union all \
+    select packageId as itemId, '表情包' as itemType, tag \
+    from lofter_db_dump.ods_db_emote_tag_resource_nd \
+    group by 1, 2, 3 \
+) a \
+left join ( \
+    select itemId, itemType, \
+           count(1) order_count, sum(coin) as order_coins, \
+           sum(if(from_unixtime(cast(x.createTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}',1,0)) as order_count_7d, \
+           sum(if(from_unixtime(cast(x.createTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}',coin,0)) as order_coins_7d \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd x \
+    join ( \
+       select id, if(emote_package_id > 0, emote_package_id, dress_id) as itemId, return_gift_plantype as itemType \
+       from lofter.dim_gift_post_return_dd \
+       where dt = '${azkaban.flow.1.days.ago}' and return_gift_plantype in ('表情包', '装扮') and \
+             nvl(emote_package_id, dress_id) > 0 \
+       group by 1, 2, 3 \
+    ) y on x.returnGiftId = y.id \
+    where from_unixtime(cast(x.createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) b on a.itemId = b.itemId and a.itemType = b.itemType \
+group by 1

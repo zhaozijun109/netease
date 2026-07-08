@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_blog_circle_protected_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogid,type1,type2, dt as last_update_dt \
+from ( \
+    select *, dense_rank() over (partition by blogId order by dt desc, priority) as dt_rank \
+    from ( \
+        select *, \
+               case  \
+			    when type2 = '豁免' then 0 \
+				when type2 = '人工审核ai' then 1 \
+			    when type2 = '嫌疑ai' then 2 \
+			    when type2 = 'ai判断被处置' then 3 \
+			    when type2 = '高拉黑' then 4 \
+			    when type2 = '人工审核降权' then 5 \
+			    when type2 = 'ai高频投诉' then 6 \
+                when type2 = '真人' then 7 \
+                when type2 = '精选用户人工维' then 8 \
+                when type2 = '生态sab' then 9 \
+                when type2 = '市场' then 10 \
+                when type2 = '古典' then 11 \
+				when type2 = 'ai低频投诉' then 12 \
+                when type2 = '低质付费' then 13 \
+                when type2 = '生态' then 14 \
+                else 15 \
+               end as priority \
+        from lofter_dm.ads_paid_post_blog_circle_protected_di \
+        where dt <= '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+) t \
+where dt_rank = 1 \
+
+dependencies=ads_paid_post_blog_circle_protected_di

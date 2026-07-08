@@ -1,0 +1,128 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_pve_easy_fetch_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.userId, \
+       t1.import_flg, \
+       t2.userTradeType, \
+       t2.tradeActiveDays, \
+       t3.chats_role_def, \
+       t3.1d_total_chats, \
+       t3.2d_total_chats, \
+       t3.3d_total_chats, \
+       t3.7d_total_chats, \
+       t3.1d_chats_roles, \
+       t3.2d_chats_roles, \
+       t3.3d_chats_roles, \
+       t3.7d_chats_roles, \
+       t3.15d_chats_roles, \
+       t3.30d_chats_roles, \
+       t3.total_chats_roles, \
+       t4.activeType, \
+       t4.3d_active_days, \
+       t4.7d_active_days, \
+       t4.15d_active_days, \
+       t4.30d_active_days, \
+       t4.total_active_days, \
+       t5.amount_role_def, \
+       t5.1d_total_amount, \
+       t5.2d_total_amount, \
+       t5.3d_total_amount, \
+       t5.5d_total_amount, \
+       t5.7d_total_amount, \
+       t5.15d_total_amount, \
+       t5.30d_total_amount, \
+       t5.total_amount, \
+       t3.5d_chats_roles, \
+       t3.5d_total_chats, \
+       t3.15d_total_chats, \
+       t3.30d_total_chats, \
+       t4.5d_active_days \
+from ( \
+    select userId, \
+           import_flg \
+    from lofter_dm.ads_pve_user_interview_import_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+    select userId, \
+           case when first_interview_date < '${azkaban.flow.1.days.ago}' and first_trade_date < '${azkaban.flow.1.days.ago}' then '已付费老用户' \
+                when first_interview_date < '${azkaban.flow.1.days.ago}' and first_trade_date is null then '未付费老用户' \
+                when first_interview_date < '${azkaban.flow.1.days.ago}' and first_trade_date = '${azkaban.flow.1.days.ago}' then '新付费老用户' \
+                when first_interview_date = '${azkaban.flow.1.days.ago}' and first_trade_date is null then '未付费新用户' \
+                when first_interview_date = '${azkaban.flow.1.days.ago}' and first_trade_date = '${azkaban.flow.1.days.ago}' then '新付费新用户' \
+           end as userTradeType, \
+           if(first_trade_date is not null, datediff(first_trade_date,first_interview_date), null) as tradeActiveDays \
+    from lofter.dim_pve_user \
+) t2 \
+on t1.userId = t2.userId \
+left join ( \
+    select userId, \
+           case when roleDef in ('ogc','hc') then 'ogc' \
+                else 'ugc' \
+           end as chats_role_def, \
+           sum(case when dt = '${azkaban.flow.1.days.ago}' then total_chats else 0 end) as 1d_total_chats, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 2 then total_chats else 0 end) as 2d_total_chats, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then total_chats else 0 end) as 3d_total_chats, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then total_chats else 0 end) as 7d_total_chats, \
+           count(distinct case when dt = '${azkaban.flow.1.days.ago}' then roleId else null end) as 1d_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 2 then roleId else null end) as 2d_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then roleId else null end) as 3d_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then roleId else null end) as 7d_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then roleId else null end) as 15d_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then roleId else null end) as 30d_chats_roles, \
+           count(distinct case when dt <= '${azkaban.flow.1.days.ago}' then roleId else null end) as total_chats_roles, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 5 then roleId else null end) as 5d_chats_roles, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 5 then total_chats else 0 end) as 5d_total_chats, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then total_chats else 0 end) as 15d_total_chats, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then total_chats else 0 end) as 30d_total_chats \
+    from lofter.dws_pve_user_role_chats_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId, \
+             case when roleDef in ('ogc','hc') then 'ogc' else 'ugc' end \
+) t3 \
+on t1.userId = t3.userId \
+left join ( \
+    select userId, \
+           '聊天活跃' as activeType, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then dt else null end) as 3d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then dt else null end) as 7d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then dt else null end) as 15d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then dt else null end) as 30d_active_days, \
+           count(distinct case when dt <= '${azkaban.flow.1.days.ago}' then dt else null end) as total_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then dt else null end) as 5d_active_days \
+    from lofter.dwd_pve_user_chats_active_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+    union all \
+    select userId, \
+           '访问活跃' as activeType, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then dt else null end) as 3d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then dt else null end) as 7d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then dt else null end) as 15d_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then dt else null end) as 30d_active_days, \
+           count(distinct case when dt <= '${azkaban.flow.1.days.ago}' then dt else null end) as total_active_days, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) < 5 then dt else null end) as 5d_active_days \
+    from lofter.dwd_pve_user_interview_active_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId \
+) t4 \
+on t1.userId = t4.userId \
+left join ( \
+    select userId, \
+           case when roleDef in ('ogc','hc') then 'ogc' \
+                else 'ugc' \
+           end as amount_role_def, \
+           sum(case when dt = '${azkaban.flow.1.days.ago}' then total_amount else 0 end) as 1d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 2 then total_amount else 0 end) as 2d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 3 then total_amount else 0 end) as 3d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 5 then total_amount else 0 end) as 5d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 7 then total_amount else 0 end) as 7d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 15 then total_amount else 0 end) as 15d_total_amount, \
+           sum(case when datediff('${azkaban.flow.1.days.ago}', dt) < 30 then total_amount else 0 end) as 30d_total_amount, \
+           sum(case when dt <= '${azkaban.flow.1.days.ago}' then total_amount else 0 end) as total_amount \
+    from lofter.dws_pve_user_role_amount_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by userId, \
+             case when roleDef in ('ogc','hc') then 'ogc' else 'ugc' end \
+) t5 \
+on t1.userId = t5.userId \

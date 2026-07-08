@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table vc.dwd_vc_unregistered_deviceid_userid_mapping_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select device_udid,abs(cast(hash(device_udid) as bigint)) as hash_userid \
+from vc.dwd_vc_device_user_correlation_a_d \
+where dt = '${azkaban.flow.1.days.ago}' and user_id is null
+dependencies=dwd_vc_device_user_correlation_a_d

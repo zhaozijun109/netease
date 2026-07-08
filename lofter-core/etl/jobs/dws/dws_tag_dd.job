@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_tag_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select a.tag, \
+       b.post_1k_hot_count, b.post_1w_hot_count, \
+       c.joinedNum as post_std, d.post_count_7d, \
+       c.totalViewNum as view_pv_std \
+from lofter.dim_tag a \
+left join ( \
+     select b.tag, \
+        count(distinct a.postId) as post_1k_hot_count, \
+        count(distinct if(a.is_1w_hot > 0, a.postId, null)) as post_1w_hot_count \
+    from ( \
+        select postId, if(hot >= 10000, 1, 0) as is_1w_hot, 1 as is_1k_hot \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and hot >= 1000 \
+    ) a \
+    join ( \
+        select id as postId, tag \
+        from lofter.dim_post_article \
+            lateral view explode(tags) t as tag \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) b on a.tag = b.tag \
+left join lofter_db_dump.ods_db_tag_joined_nd c on a.tag = c.tagName \
+left join ( \
+    select tag, count(distinct postId) post_count_7d \
+    from lofter.dwd_post_publish_di \
+        lateral view explode(post_tags) as tag \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+    group by 1 \
+) d on a.tag = d.tag
+dependencies=dws_post_interaction_dd

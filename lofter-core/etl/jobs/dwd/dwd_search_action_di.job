@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_search_action_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select deviceUdid, userId, appVersion, occurTime, \
+           case when eventId in ('b5-13') then nvl(params['queryname'], params['text']) \
+                when eventId in ('b5-12') and params['queryname']  is not null and \
+                     ((itemType is not null or params['ruletype'] is not null) or (itemType is  null and params['ruletype'] is  null) ) then params['text'] \
+                when eventId in ('b5-24') and params['QueryName'] is not null  and params['tab']='all' then params['QueryName'] \
+                when eventId in ('b5-27','b5-28') and params['QueryName']  is not null then params['QueryName'] \
+                else nvl(params['text'], nvl(params['queryname'], nvl(params['QueryName'], nvl(params['QUERYNAME'], params['queryName'])))) end as search_query, \
+           eventId, itemid, itemType, params['tab'] as tab, deviceOs, ip \
+    from lofter.ods_mda_app_partition_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          actionType in ('search', 'cell_click', 'cell_exposure', 'other') and \
+          (actionType = 'search' or eventId in ('b5-10', 'b5-24', 'b5-27', 'b5-28', 'k1-12', 'k1-13', 'k1-14')) \
+) t \
+where length(search_query) > 0 \
+distribute by userId % 10

@@ -1,0 +1,109 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_tag_fetch_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.tag, a.ips, \
+    b.post_count, b.post_uv, b.free_post_count, b.free_photo_post_count, b.free_text_post_count, b.free_video_post_count, \
+    b.photo_post_count, b.text_post_count, b.video_post_count, \
+    b.photo_post_uv, b.text_post_uv, b.video_post_uv, \
+    b.level_s_post_count, b.level_a_post_count, b.level_b_post_count, b.level_c_post_count,b.level_d_post_count,b.level_d_star_post_count, b.level_none_post_count, \
+    b.level_s_post_uv, b.level_a_post_uv, b.level_b_post_uv, b.level_c_post_uv,b.level_d_post_uv,b.level_d_star_post_uv, b.level_none_post_uv, \
+    c.hot, c.recommend_count, c.photo_hot, c.text_hot, c.video_hot, \
+    c.photo_recommend_count, c.text_recommend_count, c.video_recommend_count, \
+    d.expose_pv, d.real_browse_pv, e.premium_post_count, \
+    e.photo_premium_post_count, e.text_premium_post_count, e.video_premium_post_count \
+from ( \
+    select tag, split(ips, ',') as ips \
+    from lofter.dim_tag_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select tag, \
+        count(distinct x.postId) as post_count, \
+        count(distinct x.userId) as post_uv, \
+        count(distinct if(y.postId is null, x.postId, null)) as free_post_count, \
+        count(distinct if(y.postId is null and x.post_content_type = '图片', x.postId, null)) as free_photo_post_count, \
+        count(distinct if(y.postId is null and x.post_content_type = '文字', x.postId, null)) as free_text_post_count, \
+        count(distinct if(y.postId is null and x.post_content_type = '视频', x.postId, null)) as free_video_post_count, \
+        count(distinct if(x.post_content_type = '图片', x.postId, null)) as photo_post_count, \
+        count(distinct if(x.post_content_type = '文字', x.postId, null)) as text_post_count, \
+        count(distinct if(x.post_content_type = '视频', x.postId, null)) as video_post_count, \
+        count(distinct if(x.post_content_type = '图片', x.userId, null)) as photo_post_uv, \
+        count(distinct if(x.post_content_type = '文字', x.userId, null)) as text_post_uv, \
+        count(distinct if(x.post_content_type = '视频', x.userId, null)) as video_post_uv, \
+        count(distinct if(z.level = 'S', x.postId, null)) as level_s_post_count, \
+        count(distinct if(z.level = 'A', x.postId, null)) as level_a_post_count, \
+        count(distinct if(z.level = 'B', x.postId, null)) as level_b_post_count, \
+        count(distinct if(z.level = 'C', x.postId, null)) as level_c_post_count, \
+        count(distinct if(z.level = 'D', x.postId, null)) as level_d_post_count, \
+        count(distinct if(z.level = 'D*', x.postId, null)) as level_d_star_post_count, \
+        count(distinct if(z.level is null, x.postId, null)) as level_none_post_count, \
+        count(distinct if(z.level = 'S', x.userId, null)) as level_s_post_uv, \
+        count(distinct if(z.level = 'A', x.userId, null)) as level_a_post_uv, \
+        count(distinct if(z.level = 'B', x.userId, null)) as level_b_post_uv, \
+        count(distinct if(z.level = 'C', x.userId, null)) as level_c_post_uv, \
+        count(distinct if(z.level = 'D', x.userId, null)) as level_d_post_uv, \
+        count(distinct if(z.level = 'D*', x.userId, null)) as level_d_star_post_uv, \
+        count(distinct if(z.level is null, x.userId, null)) as level_none_post_uv \
+    from ( \
+       select tag, a.id as postId, a.userId, a.contentType as post_content_type \
+       from lofter.dim_post a \
+            join lofter.dim_blog b on a.blogId = b.id \
+            lateral view explode(a.tags) as tag \
+       where a.publishDate = '${azkaban.flow.1.days.ago}' and \
+             a.isPublished = true and \
+             a.isCitedPost = false and \
+             a.isForbidden=false and \
+             a.allowView = 0 and \
+             a.valid in (0,12,15,16) and \
+             b.isValid = true \
+    ) x \
+    left join ( \
+        select postId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 1) \
+        group by 1 \
+    ) y on x.postId = y.postId \
+    left join ( \
+        select userId, level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) z on x.userId = z.userId \
+    group by 1 \
+) b on a.tag = b.tag \
+left join ( \
+    select tag, \
+        sum(1) as hot, \
+        sum(if(opType='recommend', 1, 0)) as recommend_count, \
+        sum(if(post_content_type = '图片', 1, 0)) as photo_hot, \
+        sum(if(post_content_type = '文字', 1, 0)) as text_hot, \
+        sum(if(post_content_type = '视频', 1, 0)) as video_hot, \
+        sum(if(post_content_type = '图片' and opType='recommend', 1, 0)) as photo_recommend_count, \
+        sum(if(post_content_type = '文字' and opType='recommend', 1, 0)) as text_recommend_count, \
+        sum(if(post_content_type = '视频' and opType='recommend', 1, 0)) as video_recommend_count \
+    from lofter.dwd_post_hot_di \
+        lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) c on a.tag = c.tag \
+left join ( \
+    select tag, \
+        sum(expose_pv) as expose_pv, sum(real_browse_pv) as real_browse_pv \
+    from lofter.dws_post_traffic_di \
+        lateral view explode(post_tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.tag = d.tag \
+left join ( \
+    select tag, \
+        count(distinct postId) as premium_post_count, \
+        count(distinct if(content_type = '图片', postId, null)) as photo_premium_post_count, \
+        count(distinct if(content_type = '视频', postId, null)) as video_premium_post_count, \
+        count(distinct if(content_type = '文字', postId, null)) as text_premium_post_count \
+    from lofter.dws_post_premium_di \
+        lateral view explode(tags) as tag \
+    where dt = '${azkaban.flow.1.days.ago}' and premium_date = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) e on a.tag = e.tag \
+where nvl(b.tag, nvl(c.tag, nvl(d.tag, e.tag))) is not null \
+distribute by 1 \
+
+dependencies=dws_par_creator_level_scoring_dd,dws_post_traffic_di,dws_post_premium_di

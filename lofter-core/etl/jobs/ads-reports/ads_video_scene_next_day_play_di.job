@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_scene_next_day_play_di partition(dt = '${azkaban.flow.1.days.ago}', period=1) \
+select a.dt as baseDate, a.scene, count(distinct b.deviceUdid) as nextday_playuv \
+from ( \
+  select dt, scene, deviceUdid \
+  from lofter.dwd_post_browse_di \
+  where dt='${azkaban.flow.2.days.ago}' and post_content_type = '视频' and is_real > 0 \
+  group by 1,2,3 \
+) a \
+left join ( \
+  select dt, scene, deviceUdid \
+  from lofter.dwd_post_browse_di \
+  where dt='${azkaban.flow.1.days.ago}' and post_content_type = '视频' and is_real > 0 \
+  group by 1,2,3 \
+) b on a.scene = b.scene and a.deviceUdid = b.deviceUdid \
+group by a.dt, a.scene

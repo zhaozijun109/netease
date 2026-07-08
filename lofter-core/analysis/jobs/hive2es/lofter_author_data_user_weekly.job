@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cast(replace(dt, '-') as int) as dt, id, userId, favoriteCount, favoriteRank, recommendCount, recommendRank,reblogCount, reblogRank, subscribeCount, subscribeRank, commentCount, commentRank, postCount, postRank, hot, newPostHot, fansCount, hotTag, hotTagRank from lofter_dm.ads_par_creator_rank_wd where dt='${azkaban.flow.7.days.ago}' "
+params= --partition ${azkaban.flow.7.days.ago} --dest lofter_author_data_user_weekly --atom

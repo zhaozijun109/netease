@@ -1,0 +1,7 @@
+type = sparksql
+hive.query.01 =insert overwrite table vc_dm.ads_vc_event_info_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select type, \
+count(*) \
+from vc.ods_db_vc_event_info_nd t1 \
+where FROM_UNIXTIME(trigger_time,'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+group by type \

@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_rec_post_review_di  \
+select a.postid,a.blog_id as blogid,a.contenttype,a.is_today_publish \
+	,case when c.postid is not null then 1 else 0 end as is_pay_gift \
+	,case when humanRw = 1 or (recomstatus = 0 and humanRw = 0) then 1  \
+		  when rulePass = 1 and trypushstate = 1 then 2	 \
+		  when rulePass = 0 and humanRw = 0 and recomstatus = -1 then 3  \
+		  when rulePass = 1 and humanRw = 0 and recomstatus = -1 and trypushstate = -1 and aistate not in (-2,-20) then 4 \
+		  when rulePass = 1 and humanRw = 0 and recomstatus = -1 and trypushstate not in (1,-1) and aistate in (-2,-20) then 5  \
+		  when rulePass = 1 and humanRw = 0 and recomstatus = -1 and trypushstate = -1 and aistate in (-2,-20) then 6 \
+	end as machine_state  \
+	,case when humanRw = 1 and humanrwstate = 1 then 1  \
+		  when humanRw = 1 and humanrwstate = -1 then 2 \
+		  when recomstatus = 0 and humanRw = 0 then 3 \
+		  else null \
+	end as human_state,a.dt \
+from \
+    (select a1.dt,a1.postid,blog_id,is_today_publish \
+		,case when article_type = 1 then '文字' \
+			  when article_type = 2 then '图片' \
+			  when article_type = 4 then '视频' end as contenttype \
+	from  \
+		(select day as dt,conv(split(item_id, '_')[1], 16, 10) as postid,blog_id,article_type \
+			,case when from_unixtime(cast(publish_time / 1000 as int), 'yyyy-MM-dd') = day then 1 else 0 end as is_today_publish \
+		from rec.rec_lofter_features_article_meta_v2   \
+		where day between '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}' and article_type in(1,2,4)   \
+		and  (from_unixtime(cast(publish_time / 1000 as int), 'yyyy-MM-dd') = day or from_unixtime(cast(modify_time / 1000 as int), 'yyyy-MM-dd') = day) \
+		) a1 \
+		inner join  \
+		(select id as postid  \
+		from lofter.dim_post \
+		where ispublished=true and contenttype in ("图片","文字","视频") \
+		and isactivityautopost=0 and isimported=0 and ismoved=0 and is_book_store = 0 and isCitedPost = false \
+		group by id) a2 \
+		on a1.postid = a2.postid \
+    )a   \
+	inner join  \
+    (select from_unixtime(cast(updatetime / 1000 as int), 'yyyy-MM-dd') dt \
+	,postid,rulePass,trypushstate,aistate,humanrw,humanrwstate,recomstatus \
+	from lofter_db_dump.ods_db_recommend_review_post_nd \
+	where from_unixtime(cast(updatetime / 1000 as int), 'yyyy-MM-dd') between '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}' \
+	and oldflow = 0 \
+	)b \
+	on a.postid = b.postid 			 \
+	left join  \
+	(select dt,postid  \
+    from lofter.dim_gift_post_return_dd   \
+    where dt between '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}' and ispay_returngift in (0,1)  \
+    group by dt,postid \
+	)c  \
+	on a.postid = c.postid and a.dt = c.dt \
+
+dependencies=

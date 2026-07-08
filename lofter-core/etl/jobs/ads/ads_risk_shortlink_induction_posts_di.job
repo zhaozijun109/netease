@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=create temporary function html_links as 'com.netease.wm.udf.HtmlLinks';
+hive.query.02=insert overwrite table lofter_dm.ads_risk_shortlink_induction_posts_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select blogId, postId \
+from ( \
+    select postId, blogId, html_links(content) as links \
+    from ( \
+        select dt, id as commentId, postId, blogId, content, _bin_op, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_post_response_di \
+        where dt = '${azkaban.flow.1.days.ago}' and publisherUserid = blogId and \
+              from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rk = 1 and _bin_op != 1 \
+  union all \
+    select id as postId, blogId, html_links(content) as links \
+    from ( \
+        select dt, id, blogId, content, _bin_op, row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) as rk \
+        from lofter.ods_binlog_text_post_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t \
+    where rk = 1 and _bin_op != 1 \
+) a \
+lateral view explode(links) as link \
+where link like '%s.lofter.com/upup/%' or link like '%lofter.com/front/tagChat/detail/%' \
+group by 1, 2 \

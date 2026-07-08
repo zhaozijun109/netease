@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=create temporary function html_links as 'com.netease.wm.udf.HtmlLinks';
+hive.query.02=insert overwrite table lofter.dim_game_post_dd partition (dt = '${azkaban.flow.1.days.ago}') \
+select distinct a.id as postId,a.blogId,publishDate,tags,title,url as post_url,urls as hyperlink_urls, \
+        if(array_contains(urls,'https://avg.163.com/home') or \
+           arrays_overlap(c.gameIds, regexp_extract_all(concat_ws(',',urls),'https://avg.163.com/game/detail/([0-9]+)', 1)), 1, 0) as isCoop \
+from ( \
+    select id,blogid,html_links(content) urls from lofter_db_dump.ods_db_text_post_nd where content like '%avg.163.com%' \
+  union all \
+    select id,blogid,html_links(caption) urls from lofter_db_dump.ods_db_photo_post_nd where caption like '%avg.163.com%' \
+) a \
+join ( \
+   select id,blogid,publishDate,title,url,concat_ws(',',tags) as tags \
+   from lofter.dim_post \
+   where publishDate >= '2023-03-20' and contentType in('文字','图片') and valid=0 and allowview=0 \
+) b on a.id = b.id and a.blogid = b.blogid \
+cross join ( \
+    select collect_set(cast(gameId as string)) as gameIds from lofter.zq_lofter_avg_game \
+) c \
+where cast(a.urls as string) like '%avg.163.com%' \
+distribute by 1

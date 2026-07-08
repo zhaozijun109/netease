@@ -1,0 +1,63 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select all_writers, new_writers, firstwrite_writers, activewrite_writers, returnwrite_writers, all_daren, write_daren, active_daren, reward_writers, revenue, \
+    month_2posts_writers, month_4posts_writers, add_kfans, add_wfans, writers_1w, writers_1w_prev, all_posts \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(distinct if(post_count > 0, userId, null)) as all_writers, \
+           count(distinct if(post_count > 0 and is_new_user > 0, userId, null)) new_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish > 0, userId, null)) as firstwrite_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish = 0 and is_active_creator > 0, userId, null)) as activewrite_writers, \
+           count(distinct if(post_count > 0 and is_new_user = 0 and is_first_publish = 0 and is_active_creator = 0, userId, null)) as returnwrite_writers, \
+           count(distinct if(is_daren > 0, userId, null)) as all_daren, \
+           count(distinct if(post_count > 0 and is_daren > 0, userId, null)) as write_daren, \
+           count(distinct if(is_app_active > 0 and is_daren > 0, userId, null)) as active_daren, \
+           count(distinct if(revenue > 0, userId, null)) as reward_writers, \
+           sum(revenue) as revenue \
+    from lofter.dws_par_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+            count(distinct if(post_count_1m >= 2, userId, null)) as month_2posts_writers, \
+            count(distinct if(post_count_1m >= 4, userId, null)) as month_4posts_writers, \
+            count(distinct if(post_count_2w > 0, userId, null)) as  writers_1w_prev, \
+            count(distinct if(post_count_1w > 0, userId, null)) as  writers_1w \
+    from ( \
+        select userId, sum(post_count) as post_count_1m, \
+               sum(if(dt >= '${azkaban.flow.7.days.ago}', post_count, 0)) as post_count_1w, \
+               sum(if(dt < '${azkaban.flow.7.days.ago}' and dt > date_sub('${azkaban.flow.1.days.ago}', 14), post_count, 0)) as post_count_2w \
+        from lofter.dws_par_creator_di \
+        where dt <='${azkaban.flow.1.days.ago}' and dt > '${azkaban.flow.30.days.ago}' \
+        group by userId \
+    ) t  \
+) b on a.dt = b.dt \
+  left join ( \
+        select '${azkaban.flow.1.days.ago}' as dt, \
+               count(distinct if(fans1kdt = '${azkaban.flow.1.days.ago}', blogId,null)) as add_kfans, \
+               count(distinct if(fans1wdt = '${azkaban.flow.1.days.ago}', blogId,null)) as add_wfans \
+        from ( \
+             select blogId, \
+                   first_value(if(currentFans >= 1000 and prevFans < 1000, dt, null), true) as fans1kdt, \
+                   first_value(if(currentFans >= 5000 and prevFans < 5000, dt, null), true) as fans5kdt, \
+                   first_value(if(currentFans >= 10000 and prevFans < 10000, dt, null), true) as fans1wdt \
+            from ( \
+              select blogId, dt, \
+                     sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as currentFans, \
+                     nvl(sum(fans) over (partition by blogId order by dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) as prevFans \
+              from ( \
+                select blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') as dt, count(distinct userId) fans \
+                from lofter_db_dump.ods_db_user_following_nd \
+                where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                group by blogId, from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') \
+              ) tt \
+            ) t \
+            where currentFans >= 1000 \
+            group by blogId \
+        ) tt \
+  ) c on a.dt = c.dt \
+  left join ( \
+          select '${azkaban.flow.1.days.ago}' as dt, count(distinct postId) as all_posts \
+          from lofter.dwd_post_publish_di \
+          where dt = '${azkaban.flow.1.days.ago}' \
+  ) d on a.dt = d.dt \
+  distribute by 1

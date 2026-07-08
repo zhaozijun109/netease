@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_creator_gift_level_internship_task_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select *, least(t1_status, t2_status, t3_status, t4_status) as status \
+from ( \
+    select a.userId as blogId, \
+        t1_gift_post_count, t2_avg_positive_feedback_percentile, nvl(t2_avg_positive_feedback_rate,0) as t2_avg_positive_feedback_rate, t3_total_income, t3_avg_new_post_income, t4_warn_post_count, \
+        if(t1_gift_post_count >= 3, 1, 0) t1_status, \
+        if(t2_avg_positive_feedback_percentile >= 120 or t2_avg_positive_feedback_rate > 0.06, 1, 0) as t2_status, \
+        if(t3_total_income >= 100 or t3_avg_new_post_income >= 20, 1, 0) as t3_status, \
+        if(nvl(t4_warn_post_count,0) <= 2, 1, 0) as t4_status \
+    from ( \
+        select userId, \
+            nvl(paid_postnum,0) as t1_gift_post_count, \
+            nvl(post_all_quality_percent_avg_score,0) as t2_avg_positive_feedback_percentile, \
+            nvl(top_money_avg_all,0) as t3_avg_new_post_income, \
+            nvl(low_postnum,0) as t4_warn_post_count \
+        from lofter_dm.ads_paid_post_blog_level_detail_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select blogId, nvl(avg(zhenrate),0) as t2_avg_positive_feedback_rate \
+        from lofter_dm.ads_paid_post_premium_scoring_all_round_di \
+        where dt = '${azkaban.flow.1.days.ago}' and publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.userId = b.blogId \
+    join lofter_db_dump.ods_db_trade_pay_grade_nd c on a.userId = c.userId and c.grade = 1 \
+    left join ( \
+        select blogId, count(distinct postId, userId) as t3_total_income \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        group by blogId \
+    ) d on a.userId = d.blogId \
+) t \
+
+dependencies=ads_paid_post_blog_level_detail_di,ads_paid_post_premium_scoring_all_round_di

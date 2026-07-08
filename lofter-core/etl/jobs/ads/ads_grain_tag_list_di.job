@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_grain_tag_list_di partition(dt='${azkaban.flow.1.days.ago}') \
+select grainId, tag, 'hot' as list_type, subscribe_users as index_value, rnk   \
+from ( \
+    select a.tag, a.grainId, a.grain_owner, b.subscribe_users, \
+           row_number() over (partition by a.tag order by b.subscribe_users desc) as rnk, \
+           count(1) over (partition by tag) as grain_count \
+    from ( \
+        select id as grainId, userId as grain_owner, tag, postCount as post_count \
+        from lofter_db_dump.ods_db_grain_info_nd \
+            lateral view explode(split(tags, ',')) as tag \
+        where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              length(tag) > 0 \
+    ) a \
+    join ( \
+        select grainId, createUserid as grain_owner, count(distinct userId) as subscribe_users \
+        from lofter_db_dump.ods_db_grain_follower_nd \
+        where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+              from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+        group by 1, 2 \
+    ) b on a.grainId = b.grainId and a.grain_owner = b.grain_owner \
+    where a.post_count >= 3 and b.subscribe_users > 5 \
+) t \
+where rnk <= 10 and grain_count >= 3 \
+union all \
+select grainId, tag, 'rec' as list_type, score as index_value, row_number() over (partition by tag order by score desc) as rnk \
+from rec.rec_data_tr_grain_info \

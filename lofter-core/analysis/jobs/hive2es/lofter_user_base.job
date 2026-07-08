@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select a.*, nvl(b.send_like_cnt, 0) as like_count, nvl(b.send_collect_cnt, 0) as subscribe_count from ( select userId,if(size(subscribe_tags) > 0, size(subscribe_tags), 0) as subscribe_tag_count,if(size(subscribe_collections) > 0, size(subscribe_collections), 0) as subscribe_collection_count,nvl(subscribe_grains,0) as subscribe_grain_count,nvl(main_blog_fans,0) as fans,nvl(post_count_std,0) as post_count,if(size(follow_blogs) > 0, size(follow_blogs),0) as follow_blog_count from lofter.dws_par_user_base_dd where dt='${azkaban.flow.1.days.ago}') a left join (select userId, send_like_cnt, send_collect_cnt from lofter.dws_par_user_interaction_dd where dt='${azkaban.flow.1.days.ago}' and (send_like_cnt > 0 or send_collect_cnt > 0)) b on a.userId = b.userId"
+params= --partition ${azkaban.flow.1.days.ago} --id userId --dest lofter_user_base --full --atom --parallel 10

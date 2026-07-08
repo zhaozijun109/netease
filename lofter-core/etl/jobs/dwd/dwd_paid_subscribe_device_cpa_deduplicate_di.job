@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_paid_subscribe_device_cpa_deduplicate_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.* \
+from ( \
+    select a.deviceUdid, a.actpwd, a.actpwd_channel \
+    from ( \
+        select deviceUdid, origin_actpwd as actpwd, origin_channel as actpwd_channel \
+        from lofter.dwd_device_growth_attribution_di \
+        where dt = '${azkaban.flow.1.days.ago}' and device_type = 'new' and length(origin_actpwd) > 0 \
+    ) a \
+    join (select * from lofter.dim_actpwd_dd where dt = '${azkaban.flow.1.days.ago}' and settlement_type = 'CPA') b on a.actpwd = b.actpwd \
+) x \
+join ( \
+    select a.deviceUdid \
+    from ( \
+        select deviceUdid, actpwd \
+        from lofter.dwd_paid_subscribe_order_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actpwd_channel like '米良[%' \
+    ) a \
+    join (select * from lofter.dim_actpwd_dd where dt = '${azkaban.flow.1.days.ago}' and settlement_type = 'CPS' ) b on a.actpwd = b.actpwd \
+    group by 1 \
+) y on x.deviceUdid = y.deviceUdid \
+
+dependencies=dwd_device_growth_attribution_di,dwd_paid_subscribe_order_di

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>easyml</artifactId>
+        <groupId>com.netease.easyml</groupId>
+        <version>1.0.3-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>easyml-mllib</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-3rd</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.netease.easyml</groupId>
+            <artifactId>easyml-mllib-local</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ml.dmlc</groupId>
+            <artifactId>xgboost4j_${scala.binary.version}</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ml.dmlc</groupId>
+            <artifactId>xgboost4j-spark_${scala.binary.version}</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.azure</groupId>
+            <artifactId>synapseml-lightgbm_${scala.binary.version}</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.binary.version}</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.holdenkarau</groupId>
+            <artifactId>spark-testing-base_${scala.binary.version}</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+        </dependency>
+
+<!--        <dependency>-->
+<!--            <groupId>com.intel.analytics.zoo</groupId>-->
+<!--            <artifactId>analytics-zoo-bigdl_${bigdl.version}-spark_${bigdl.spark.version}</artifactId>-->
+<!--        </dependency>-->
+
+        <dependency>
+            <groupId>com.tencent</groupId>
+            <artifactId>miaobinlp</artifactId>
+<!--            <optional>true</optional>-->
+        </dependency>
+        <dependency>
+            <groupId>org.torch</groupId>
+            <artifactId>libtorch_jni</artifactId>
+<!--            <optional>true</optional>-->
+        </dependency>
+        <dependency>
+            <groupId>org.torch</groupId>
+            <artifactId>libtorch</artifactId>
+<!--            <optional>true</optional>-->
+        </dependency>
+
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-tools</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-psf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-mllib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>angel-ps-graph</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>spark-on-angel-mllib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.angel</groupId>
+            <artifactId>spark-on-angel-graph</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.linkedin</groupId>
+            <artifactId>nn</artifactId>
+            <version>${scanns.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.faiss</groupId>
+            <artifactId>libfaiss</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.faiss</groupId>
+            <artifactId>libfaiss_jni</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.linkedin.sparktfrecord</groupId>
+            <artifactId>spark-tfrecord_${scala.binary.version}</artifactId>
+        </dependency>
+
+<!--        <dependency>-->
+<!--            <groupId>com.redislabs</groupId>-->
+<!--            <artifactId>spark-redis_${scala.binary.version}</artifactId>-->
+<!--            <optional>true</optional>-->
+<!--        </dependency>-->
+
+        <dependency>
+            <groupId>org.tensorflow</groupId>
+            <artifactId>tensorflow-core-platform-mkl</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+</project>

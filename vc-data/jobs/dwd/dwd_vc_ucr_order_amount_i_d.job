@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.dwd_vc_ucr_order_amount_i_d PARTITION (dt='${azkaban.flow.1.days.ago}')  \
+select a.user_id, \
+       a.character_id, \
+       a.character_name, \
+       a.order_id, \
+       a.order_price, \
+       b.type, \
+       b.status, \
+       b.audience_type, \
+       b.audit_status \
+from (select a.user_id, \
+             a.order_id, \
+             a.order_price, \
+             b.character_id, \
+             b.character_name, \
+             order_time, \
+             message_send_time, \
+             (ABS(unix_timestamp(order_time) - unix_timestamp(message_send_time))) / 60      as minutes, \
+             row_number() over (PARTITION by a.user_id,order_time order by \
+                 (ABS(unix_timestamp(order_time) - unix_timestamp(message_send_time))) / 60) as rk \
+      from (select user_id, order_id, order_time, order_price \
+            from vc.dwd_vc_order_i_d \
+            where dt = '${azkaban.flow.1.days.ago}' \
+              and is_test_user = 'N') a \
+               left join \
+           (select user_id, character_id, character_name, message_send_time \
+            from vc.dwd_vc_uc_talk_info_i_d \
+            where dt BETWEEN '${azkaban.flow.2.days.ago}' and '${azkaban.flow.1.days.ago}') b \
+           on a.user_id = b.user_id and \
+              (ABS(unix_timestamp(order_time) - unix_timestamp(message_send_time))) / 60 <= 10) a \
+         left join (select character_id, type, status, audience_type, audit_status \
+                    from vc.dim_vc_character_info_a_d \
+                    where dt = '${azkaban.flow.1.days.ago}') b on a.character_id = b.character_id \
+where rk = 1;
+
+dependencies=dwd_vc_uc_talk_info_i_d,dwd_vc_order_i_d

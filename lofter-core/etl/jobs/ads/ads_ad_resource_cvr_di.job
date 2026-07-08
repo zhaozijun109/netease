@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_cvr_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.positionId, a.dsp_channel, a.rta_sponsorId, a.os, b.contentType as content_type, \
+       count(distinct c.postId, c.userId) as ad_post_browse_pv, \
+       sum(a.is_bg) as bg_pv, \
+       sum(a.is_click) as click_pv, \
+       sum(if(a.is_bg > 0 or a.is_click > 0, a.bid_amount, 0)) / 1000 as amount \
+from ( \
+    select if(dspId = 5002, '麦穗', '如愿sdk') as dsp_channel, * \
+    from lofter.dwd_ad_actions_v2_di \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+      positionId = 147004 and postId > 0 \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select postId, userId \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_real > 0 \
+    group by 1,2 \
+) c on a.postId = c.postId and a.userId = c.userId \
+group by 1, 2, 3, 4, 5 \

@@ -1,0 +1,189 @@
+type=sparksql
+hive.query.01=\
+WITH \
+    creators AS ( \
+                SELECT userid AS creator_userid \
+                FROM lofter.dws_par_creator_dd \
+                WHERE dt = '${azkaban.flow.1.days.ago}' \
+                  AND COALESCE(post_count_365d, 0) > 0 \
+                GROUP BY userid \
+    ), \
+    follow_rel AS ( \
+                SELECT \
+                    f.blogid AS creator_userid, \
+                    f.userid AS fan_userid \
+                FROM lofter_db_dump.ods_db_user_following_nd f \
+                     JOIN creators c \
+                          ON f.blogid = c.creator_userid \
+                WHERE from_unixtime(cast(f.followtime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                GROUP BY f.blogid, f.userid \
+    ), \
+    user_base AS ( \
+                SELECT \
+                    userid, \
+                    edu_degree, \
+                    profession, \
+                    birth_year, \
+                    gender, \
+                    last_login_platform, \
+                    last_login_time, \
+                    total_reward_gift_amount \
+                FROM lofter.dws_par_user_base_dd \
+                WHERE dt = '${azkaban.flow.1.days.ago}' \
+    ) \
+INSERT OVERWRITE TABLE lofter_dm.ads_cp_data_fans_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    c.creator_userid AS blogid, \
+    NVL(af.active_fans_yesterday, 0) AS active_cnt, \
+    NVL(pf.pay_fans_cnt, 0) AS pay_fans_cnt, \
+    ed.edu_degree_kv, \
+    pr.profession_kv, \
+    ag.age_kv, \
+    ge.gender_kv, \
+    dv.device_kv \
+FROM creators c \
+     LEFT JOIN ( \
+               SELECT \
+                   creator_userid, \
+                   concat_ws(',', collect_list(concat(edu_degree, ':', cast(cnt AS string)))) AS edu_degree_kv \
+               FROM ( \
+                    SELECT \
+                        f.creator_userid, \
+                        COALESCE(u.edu_degree, '未知') AS edu_degree, \
+                        COUNT(1) AS cnt \
+                    FROM follow_rel f \
+                         LEFT JOIN user_base u \
+                                   ON f.fan_userid = u.userid \
+                    GROUP BY \
+                        f.creator_userid, \
+                        COALESCE(u.edu_degree, '未知') \
+                    ) t \
+               GROUP BY creator_userid \
+) ed ON c.creator_userid = ed.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   creator_userid, \
+                   concat_ws(',', collect_list(concat(profession, ':', cast(cnt AS string)))) AS profession_kv \
+               FROM ( \
+                    SELECT \
+                        f.creator_userid, \
+                        COALESCE(u.profession, '未知') AS profession, \
+                        COUNT(1) AS cnt \
+                    FROM follow_rel f \
+                         LEFT JOIN user_base u \
+                                   ON f.fan_userid = u.userid \
+                    GROUP BY \
+                        f.creator_userid, \
+                        COALESCE(u.profession, '未知') \
+                    ) t \
+               GROUP BY creator_userid \
+) pr ON c.creator_userid = pr.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   creator_userid, \
+                   concat_ws(',', collect_list(concat(age_bucket, ':', cast(cnt AS string)))) AS age_kv \
+               FROM ( \
+                    SELECT \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.birth_year IS NULL OR u.birth_year <= 0 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) < 0 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) > 120 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 0 AND 14 THEN '0-14' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 15 AND 19 THEN '15-19' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 20 AND 24 THEN '20-24' \
+                            ELSE '25+' \
+                            END AS age_bucket, \
+                        COUNT(1) AS cnt \
+                    FROM follow_rel f \
+                         LEFT JOIN user_base u \
+                                   ON f.fan_userid = u.userid \
+                    GROUP BY \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.birth_year IS NULL OR u.birth_year <= 0 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) < 0 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) > 120 THEN '未知' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 0 AND 14 THEN '0-14' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 15 AND 19 THEN '15-19' \
+                            WHEN (year(to_date('${azkaban.flow.1.days.ago}')) - cast(u.birth_year AS int)) BETWEEN 20 AND 24 THEN '20-24' \
+                            ELSE '25+' \
+                            END \
+                    ) t \
+               GROUP BY creator_userid \
+) ag ON c.creator_userid = ag.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   creator_userid, \
+                   concat_ws(',', collect_list(concat(gender, ':', cast(cnt AS string)))) AS gender_kv \
+               FROM ( \
+                    SELECT \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.gender = 1 THEN '男' \
+                            WHEN u.gender = 2 THEN '女' \
+                            WHEN u.gender = 3 THEN '保密' \
+                            ELSE '未知' \
+                            END AS gender, \
+                        COUNT(1) AS cnt \
+                    FROM follow_rel f \
+                         LEFT JOIN user_base u \
+                                   ON f.fan_userid = u.userid \
+                    GROUP BY \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.gender = 1 THEN '男' \
+                            WHEN u.gender = 2 THEN '女' \
+                            WHEN u.gender = 3 THEN '保密' \
+                            ELSE '未知' \
+                            END \
+                    ) t \
+               GROUP BY creator_userid \
+) ge ON c.creator_userid = ge.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   creator_userid, \
+                   concat_ws(',', collect_list(concat(device, ':', cast(cnt AS string)))) AS device_kv \
+               FROM ( \
+                    SELECT \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.last_login_platform IS NULL OR trim(u.last_login_platform) = '' THEN '未知' \
+                            ELSE u.last_login_platform \
+                            END AS device, \
+                        COUNT(1) AS cnt \
+                    FROM follow_rel f \
+                         LEFT JOIN user_base u \
+                                   ON f.fan_userid = u.userid \
+                    GROUP BY \
+                        f.creator_userid, \
+                        CASE \
+                            WHEN u.last_login_platform IS NULL OR trim(u.last_login_platform) = '' THEN '未知' \
+                            ELSE u.last_login_platform \
+                            END \
+                    ) t \
+               GROUP BY creator_userid \
+) dv ON c.creator_userid = dv.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   f.creator_userid, \
+                   COUNT(1) AS active_fans_yesterday \
+               FROM follow_rel f \
+                    JOIN user_base u \
+                         ON f.fan_userid = u.userid \
+               WHERE u.last_login_time IS NOT NULL \
+                 AND u.last_login_time >= unix_timestamp('${azkaban.flow.1.days.ago} 00:00:00', 'yyyy-MM-dd HH:mm:ss') * 1000 \
+                 AND u.last_login_time < (unix_timestamp('${azkaban.flow.1.days.ago} 00:00:00', 'yyyy-MM-dd HH:mm:ss') + 86400) * 1000 \
+               GROUP BY f.creator_userid \
+) af ON c.creator_userid = af.creator_userid \
+     LEFT JOIN ( \
+               SELECT \
+                   f.creator_userid, \
+                   COUNT(1) AS pay_fans_cnt \
+               FROM follow_rel f \
+                    JOIN user_base u \
+                         ON f.fan_userid = u.userid \
+               WHERE u.total_reward_gift_amount IS NOT NULL \
+                 AND u.total_reward_gift_amount > 0 \
+               GROUP BY f.creator_userid \
+) pf ON c.creator_userid = pf.creator_userid; \

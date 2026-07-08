@@ -1,0 +1,37 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_user_consume_period_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+              select user_id, nvl(pay_item_code,'ALL') as pay_item_code, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_1' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt = '${azkaban.flow.1.days.ago}' \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) \
+              union all \
+              select user_id, nvl(pay_item_code,'ALL') as item_id, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_7' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt > DATE_SUB('${azkaban.flow.1.days.ago}', 7) \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) \
+              union all \
+              select user_id, nvl(pay_item_code,'ALL') as item_id, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_15' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt > DATE_SUB('${azkaban.flow.1.days.ago}', 15) \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) \
+              union all \
+              select user_id, nvl(pay_item_code,'ALL') as item_id, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_30' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt > DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) \
+              union all \
+              select user_id, nvl(pay_item_code,'ALL') as item_id, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_90' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt > DATE_SUB('${azkaban.flow.1.days.ago}', 90) \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) \
+              union all \
+              select user_id, nvl(pay_item_code,'ALL') as item_id, count(DISTINCT order_id) as order_cnt, sum(order_price) as amount,'DAY_180' as statistical_period \
+              from vc.dwd_vc_order_i_d \
+              where dt > DATE_SUB('${azkaban.flow.1.days.ago}', 180) \
+                and is_test_user = 'N' \
+              group by grouping sets ((user_id), (user_id, pay_item_code)) ;

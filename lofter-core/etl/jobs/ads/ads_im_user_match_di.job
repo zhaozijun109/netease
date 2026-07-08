@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_im_user_match_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId as userId \
+from ( \
+    select userId \
+    from lofter.dws_par_user_fans_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and fans_total >= 10000 \
+  union \
+    select userId \
+    from ( \
+        select a.blogId as userId, count(distinct b.userId) as active_fans_30d \
+        from lofter_db_dump.ods_db_user_following_nd a \
+        join ( \
+            select userId from lofter.dws_par_user_active_dd where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0 \
+        ) b on a.userId = b.userId \
+        group by 1 \
+        having active_fans_30d >= 5000 \
+    ) t \
+  union \
+    select userId \
+    from ( \
+        select blogId as userId, count(distinct userId) as uv \
+        from ( \
+            select post_userid as blogId, userId, count(distinct postId) post_count \
+            from lofter.dwd_post_browse_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+                  is_real > 0 and userId > 0 and postId > 0 \
+            group by 1, 2 \
+            having post_count >= 3 \
+        ) t \
+        group by 1 \
+        having uv >= 3000 \
+    ) t \
+) a \
+join lofter_db_dump.ods_db_user_real_info_nd a1 on a.userId = a1.userId \
+left join ( \
+    select userId \
+    from lofter_dm.ads_im_user_match_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) b on a.userId = b.userId \
+where b.userId is null \

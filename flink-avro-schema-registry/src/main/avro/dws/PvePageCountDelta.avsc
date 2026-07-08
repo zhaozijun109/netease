@@ -1,0 +1,12 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "PvePageCountDelta",
+  "fields": [
+    {"name": "roleId", "type": "long"},
+    {"name": "delta", "type": "long"},
+    {"name": "msgId", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "hostname", "type": "string"}
+  ]
+}

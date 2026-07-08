@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_hot_behavior_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select a.blogId,response_count,favorite_count,reblog_count,share_count,subscribe_count,       \
+                     nvl(b.fans_count,0) as fans_count,nvl(ask_answer_favorite_count,0) as ask_answer_favorite_count from \
+              (select a.blogId,sum(responsecount) as response_count,sum(favoritecount) as favorite_count,sum(reblogcount) as reblog_count,  \
+               	   sum(sharecount) as share_count,sum(subscribecount) as subscribe_count,   \
+               	   sum(case when b.blogId is not null and b.id is not null then favoritecount else 0 end) as ask_answer_favorite_count  \
+               from lofter_db_dump.ods_db_post_count_nd a left join  lofter_db_dump.ods_db_ask_answer_post_nd b   \
+               on a.postid=b.id and a.blogid=b.blogid  \
+               group by a.blogId) a   \
+              left join     \
+              (select userId,fans_total as fans_count from lofter.dws_par_user_fans_dd where dt='${azkaban.flow.1.days.ago}') b \
+              on a.blogId=b.userId \
+              distribute by 1

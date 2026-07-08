@@ -1,0 +1,217 @@
+type=sparksql
+init.history.sql=INSERT OVERWRITE TABLE `lofter`.`dwd_post_status_dd` PARTITION(`dt`='2024-03-31') \
+                 SELECT \
+                 	  tmp.`id` AS `postid`, \
+                 	  tmp.`blogid` AS `blogid`, \
+                 	  tmp.`ispublished` AS `ispublished`, \
+                 	  tmp.`allowview` AS `allowview`, \
+                 	  tmp.`valid` AS `valid`, \
+                 	  CASE WHEN tmp.`allowview` = 50 AND tmp.`valid` = 25 AND tmp.`ispublished` = true THEN '审核不通过' \
+                 	  WHEN tmp.`allowview` = 50 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '审核中' \
+                 	  WHEN tmp.`allowview` = 0 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '公开' \
+                 	  WHEN tmp.`allowview` = 100 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '仅自己可见' \
+                 	  WHEN tmp.`allowview` = 0 AND tmp.`valid` = 25 AND tmp.`ispublished` = true THEN '屏蔽' \
+                 	  WHEN tmp.`allowview` = 0 AND tmp.`valid` = 0 AND tmp.`ispublished` = false THEN '草稿' \
+                 	  ELSE '其他' END AS `post_status`, \
+                 	  tmp.`create_time` AS `create_time`, \
+                 	  tmp.`publishtime` AS `publish_time`, \
+                 	  tmp.`start_date` AS `start_date`, \
+                 	  tmp.`end_date` AS `end_date` \
+                 FROM ( \
+                 	  SELECT \
+                 	  	   tmp3.`id`, \
+                 	  	   tmp3.`blogid`, \
+                 	  	   tmp3.`ispublished`, \
+                 	  	   tmp3.`allowview`, \
+                 	  	   tmp3.`valid`, \
+                 	  	   tmp4.`create_time`, \
+                 	  	   tmp3.`publishtime`, \
+                 	  	   tmp3.`start_date`, \
+                 	  	   tmp3.`end_date` \
+                 	  FROM ( \
+                 	  	   SELECT \
+                 	  	   	    `id`, \
+                 	  	   	    `blogid`, \
+                 	  	   	    `ispublished`, \
+                 	  	   	    `allowview`, \
+                 	  	   	    `valid`, \
+                 	  	   	    `publishtime`, \
+                 	  	   	    `start_date`, \
+                 	  	   	    `end_date` \
+                 	  	   FROM ( \
+                 	  	   	    SELECT \
+                 	  	   	    	 tmp1.`id` AS `id`, \
+                 	  	   	    	 tmp1.`blogid` AS `blogid`, \
+                 	  	   	    	 tmp1.`ispublished` AS `ispublished`, \
+                 	  	   	    	 tmp1.`allowview` AS `allowview`, \
+                 	  	   	    	 tmp1.`valid` AS `valid`, \
+                 	  	   	    	 tmp1.`publishtime` AS `publishtime`, \
+                 	  	   	    	 FROM_UNIXTIME(CAST(tmp1.`_bin_op_time`/1000 AS BIGINT),'yyyy-MM-dd') AS `start_date`, \
+                 	  	   	    	 LEAD(FROM_UNIXTIME(CAST(tmp1.`_bin_op_time`/1000 AS BIGINT),'yyyy-MM-dd'), 1, '9999-12-31') OVER(PARTITION BY tmp1.`id`,tmp1.`blogid` ORDER BY tmp1.`_bin_op_time`,tmp1.`_bin_op_seqno`) AS `end_date` \
+                 	  	   	    FROM ( \
+                 	  	   	    	 SELECT \
+                 	  	   	    	 	  `id`, \
+                 	  	   	    	 	  `blogid`, \
+                 	  	   	    	 	  `ispublished`, \
+                 	  	   	    	 	  `allowview`, \
+                 	  	   	    	 	  `valid`, \
+                 	  	   	    	 	  `publishtime`, \
+                 	  	   	    	 	  `_bin_op`, \
+                 	  	   	    	 	  `_bin_op_time`, \
+                 	  	   	    	 	  `_bin_op_seqno` \
+                 	  	   	    	 FROM \
+                 	  	   	    	 	  `lofter`.`ods_binlog_post_di` \
+                 	  	   	    	 WHERE `dt` <= '2024-03-31' AND (_bin_old["ispublished"] IS NOT NULL OR _bin_old["allowview"] IS NOT NULL OR _bin_old["valid"] IS NOT NULL) \
+                 	  	   	    	 GROUP BY \
+                 	  	   	    	 	   `id`, \
+                 	  	   	    	 	   `blogid`, \
+                 	  	   	    	 	   `ispublished`, \
+                 	  	   	    	 	   `allowview`, \
+                 	  	   	    	 	   `valid`, \
+                 	  	   	    	 	   `publishtime`, \
+                 	  	   	    	 	   `_bin_op`, \
+                 	  	   	    	 	   `_bin_op_time`, \
+                 	  	   	    	 	   `_bin_op_seqno` \
+                 	  	   	    ) tmp1 \
+                 	  	   ) \
+                 	  	   GROUP BY `id`,`blogid`,`ispublished`,`allowview`,`valid`,`publishtime`,`start_date`,`end_date` \
+                 	  ) tmp3 \
+                 	  JOIN ( \
+                 	  	   SELECT \
+                 	  	   	    `id`, \
+                 	  	   	    `blogid`, \
+                 	  	   	    `create_time` \
+                 	  	   FROM ( \
+                 	  	   	    SELECT \
+                 	  	   	    	 tmp2.`id`, \
+                 	  	   	    	 tmp2.`blogid`, \
+                 	  	   	    	 tmp2.`_bin_op_time` AS `create_time`, \
+                 	  	   	    	 ROW_NUMBER() OVER(PARTITION BY tmp2.`id`,tmp2.`blogid` ORDER BY tmp2.`_bin_op_time`,tmp2.`_bin_op_seqno`) AS `rn` \
+                 	  	   	    FROM ( \
+                 	  	   	    	 SELECT \
+                 	  	   	    	 	  `id`, \
+                 	  	   	    	 	  `blogid`, \
+                 	  	   	    	 	  `_bin_op_time`, \
+                 	  	   	    	 	  `_bin_op_seqno` \
+                 	  	   	    	 FROM \
+                 	  	   	    	 	  `lofter`.`ods_binlog_post_di` \
+                 	  	   	    	 WHERE `dt` <= '2024-03-31' \
+                 	  	   	    	 GROUP BY \
+                 	  	   	    	 	   `id`, \
+                 	  	   	    	 	   `blogid`, \
+                 	  	   	    	 	   `_bin_op_time`, \
+                 	  	   	    	 	   `_bin_op_seqno` \
+                 	  	   	    ) tmp2 \
+                 	  	   ) \
+                 	  	   WHERE `rn` = 1 \
+                 	  ) tmp4 \
+                 	  ON tmp3.`id` = tmp4.`id` AND tmp3.`blogid` = tmp4.`blogid` \
+                 	  UNION \
+                 	  SELECT \
+                 	  	   a.`id`, \
+                 	  	   a.`blogid`, \
+                 	  	   a.`ispublished`, \
+                 	  	   a.`allowview`, \
+                 	  	   a.`valid`, \
+                 	  	   a.`publishtime` AS `create_time`, \
+                 	  	   a.`publishtime`, \
+                 	  	   FROM_UNIXTIME(CAST(a.`publishtime`/1000 AS BIGINT),'yyyy-MM-dd') AS `start_date`, \
+                 	  	   LEAD(FROM_UNIXTIME(CAST(a.`publishtime`/1000 AS BIGINT),'yyyy-MM-dd'), 1, '9999-12-31') OVER(PARTITION BY a.`id`,a.`blogid` ORDER BY a.`publishtime`) AS `end_date` \
+                 	  FROM (SELECT \
+                 	             `id`, \
+                 	             `blogid`, \
+                 	             `ispublished`, \
+                 	             `allowview`, \
+                 	             `valid`, \
+                 	             `publishtime` \
+                 	        FROM \
+                 	             `lofter_db_dump`.`ods_db_post_nd` \
+                 	        WHERE \
+                 	             FROM_UNIXTIME(CAST(`publishtime`/1000 AS BIGINT),'yyyy-MM-dd') <= '2024-03-31' \
+                 	        GROUP BY `id`,`blogid`,`ispublished`,`allowview`,`valid`,`publishtime` \
+                 	  ) AS a \
+                 	  LEFT JOIN (SELECT \
+                 	                  `id`, \
+                 	                  `blogid` \
+                 	             FROM \
+                 	                  `lofter`.`ods_binlog_post_di` \
+                 	             WHERE \
+                 	                  `dt` <= '2024-03-31' AND (_bin_old["ispublished"] IS NOT NULL OR _bin_old["allowview"] IS NOT NULL OR _bin_old["valid"] IS NOT NULL) \
+                 	  ) AS b \
+                 	  ON a.`id` = b.`id` AND a.`blogid` = b.`blogid` \
+                 	  WHERE b.`id` IS NULL AND b.`blogid` IS NULL \
+                 ) tmp
+hive.query.01=INSERT OVERWRITE TABLE  `lofter`.`dwd_post_status_dd` PARTITION(`dt`='${azkaban.flow.1.days.ago}') \
+              SELECT \
+              	   tmp.`postid` AS `postid`, \
+              	   tmp.`blogid` AS `blogid`, \
+              	   tmp.`ispublished` AS `ispublished`, \
+              	   tmp.`allowview` AS `allowview`, \
+              	   tmp.`valid` AS `valid`, \
+              	   CASE WHEN tmp.`allowview` = 50 AND tmp.`valid` = 25 AND tmp.`ispublished` = true THEN '审核不通过' \
+              	   WHEN tmp.`allowview` = 50 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '审核中' \
+              	   WHEN tmp.`allowview` = 0 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '公开' \
+              	   WHEN tmp.`allowview` = 100 AND tmp.`valid` = 0 AND tmp.`ispublished` = true THEN '仅自己可见' \
+              	   WHEN tmp.`allowview` = 0 AND tmp.`valid` = 25 AND tmp.`ispublished` = true THEN '屏蔽' \
+              	   WHEN tmp.`allowview` = 0 AND tmp.`valid` = 0 AND tmp.`ispublished` = false THEN '草稿' \
+              	   ELSE '其他' END AS `post_status`, \
+              	   tmp.`create_time` AS `create_time`, \
+              	   tmp.`publish_time` AS `publish_time`, \
+              	   tmp.`start_date` AS `start_date`, \
+              	   tmp.`end_date` AS `end_date` \
+              FROM ( \
+              	   SELECT \
+              	   	    a.`postid`, \
+              	   	    a.`blogid`, \
+              	   	    a.`ispublished`, \
+              	   	    a.`allowview`, \
+              	   	    a.`valid`, \
+              	   	    a.`create_time`, \
+              	   	    a.`publish_time`, \
+              	   	    a.`start_date`, \
+              	   	    IF(a.`end_date` = '9999-12-31' AND b.`postid` IS NOT NULL AND b.`blogid` IS NOT NULL,'${azkaban.flow.2.days.ago}',a.`end_date`) AS `end_date` \
+              	   FROM (SELECT \
+              	   		      `postid`, \
+              	   		      `blogid`, \
+              	   		      `ispublished`, \
+              	   		      `allowview`, \
+              	   		      `valid`, \
+              	   		      `create_time`, \
+              	   		      `publish_time`, \
+              	   		      `start_date`, \
+              	   		      `end_date` \
+              	   		FROM \
+              	   			  `lofter`.`dwd_post_status_dd` \
+              	   		WHERE `dt` = '${azkaban.flow.2.days.ago}' \
+              	   ) AS a \
+              	   LEFT JOIN (SELECT \
+                                   `id` as `postid`, \
+                                   `blogid` \
+                              FROM \
+                                   `lofter`.`ods_binlog_post_di` \
+                              WHERE \
+                                   `dt` = '${azkaban.flow.1.days.ago}' AND (_bin_old["ispublished"] IS NOT NULL OR _bin_old["allowview"] IS NOT NULL OR _bin_old["valid"] IS NOT NULL) \
+                              GROUP BY `postid`, `blogid` \
+                   ) AS b \
+              	   ON a.`postid` = b.`postid` AND a.`blogid` = b.`blogid` \
+              	   UNION \
+              	   SELECT \
+              	   	    `id` as `postid`, \
+              	   	    `blogid`, \
+              	   	    `ispublished`, \
+              	   	    `allowview`, \
+              	   	    `valid`, \
+              	   	    `_bin_op_time` AS `create_time`, \
+              	   	    `publishtime` AS `publish_time`, \
+              	   	    '${azkaban.flow.1.days.ago}' AS `start_date`, \
+              	   	    LEAD('${azkaban.flow.1.days.ago}', 1, '9999-12-31') OVER(PARTITION BY `id`,`blogid` ORDER BY `_bin_op_time`,`_bin_op_seqno`) AS `end_date` \
+              	   FROM \
+              	   	    `lofter`.`ods_binlog_post_di` \
+              	   WHERE \
+              	   	    `dt` = '${azkaban.flow.1.days.ago}' AND (_bin_old["ispublished"] IS NOT NULL OR _bin_old["allowview"] IS NOT NULL OR _bin_old["valid"] IS NOT NULL) \
+              ) tmp \
+              JOIN ( \
+                   SELECT id from lofter.dim_post_article \
+              ) tmp2 \
+              ON tmp.postId = tmp2.id
+hive.query.02=CREATE OR REPLACE VIEW `lofter`.`dwd_post_status` AS SELECT * FROM `lofter`.`dwd_post_status_dd` WHERE `dt` = '${azkaban.flow.1.days.ago}'

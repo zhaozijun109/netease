@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="\
+select date_sub('${azkaban.flow.3.days.ago}', 6) as dt, blogId as userId, sum(follow_net_uv) as newFans, sum(praise_net_count) as newLikes \
+from lofter_dm.ads_ad_content_unlock_effect_di \
+where dt <= '${azkaban.flow.3.days.ago}' and dt >= date_sub('${azkaban.flow.3.days.ago}', 6) \
+      and module = '激励广告' \
+      and (follow_net_uv > 0 or praise_net_uv > 0) \
+group by 1, 2 \
+"
+params= --topic LOFTER.TRADE.AD_UNLOCK_TASK_STAT --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

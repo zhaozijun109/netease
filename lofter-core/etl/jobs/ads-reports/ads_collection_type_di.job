@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_type_di partition(dt = '${azkaban.flow.1.days.ago}') \
+             select a.collectiontype as collection_type, \
+                     sum(if(from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as new_collections, \
+                     sum(b.visit_pv) as visit_pv, sum(b.visit_uv) as visit_uv, \
+                     sum(c.invitations) as invitations, \
+                     sum(c.success_invitations) as success_invitations, \
+                     sum(d.subscribes) as subscribes \
+              from lofter_db_dump.ods_db_post_collection_nd a \
+                  left join ( \
+                      select collectionid, count(1) visit_pv, count(distinct deviceudid) as visit_uv \
+                      from lofter.dwd_collection_detail_di \
+                      where dt='${azkaban.flow.1.days.ago}' \
+                      group by 1 \
+                  ) b on a.id = b.collectionid \
+                  left join ( \
+                      select collectionid, count(1) as invitations, \
+                             count(case when invitationStatus=2 then id else null end) success_invitations \
+                      from lofter_db_dump.ods_db_collection_invitation_nd \
+                      where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+                      group by collectionid \
+                  ) c on a.id = c.collectionid \
+                  left join ( \
+                      select cast(collectionid as bigint) as collectionid, count(1) subscribes \
+                      from lofter.ods_log_subscribecollection_di \
+                      where dt = '${azkaban.flow.1.days.ago}' \
+                      group by cast(collectionid as bigint) \
+                  ) d on a.id = d.collectionid \
+              group by a.collectiontype \
+              distribute by 1

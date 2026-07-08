@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_dsp_win_fill_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select positionId, os, userid, req_id as requestId, dspId, \
+       bid_amount as client_win_price, \
+       requestTime as request_time, \
+       responseTime as response_time, \
+       deviceUdid \
+from ( \
+	select req_id,userid,os,client_win_price,positionId,dspid,uuid,deviceUdid, bid_amount \
+	from lofter.dwd_ad_actions_di \
+	where dt = '${azkaban.flow.1.days.ago}' \
+) b \
+left join ( \
+	select blogid,price,uuid,bidfactor,requesttime,responsetime \
+	from lofter.ods_log_ad_dsp_di \
+	where dt = '${azkaban.flow.1.days.ago}' \
+) a on b.uuid = a.uuid \
+where client_win_price > 0 \

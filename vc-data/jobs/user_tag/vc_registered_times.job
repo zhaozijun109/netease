@@ -1,0 +1,49 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_registered_times --bitmap
+retries=0
+conf.spark.execute.sql="select dim.user_code as userId, \
+       '注册时间' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       tag \
+from ( \
+    select user_id, 'vc_registered_times' as tag, 'DAY_1' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days = 1 \
+    union all \
+    select user_id, 'vc_registered_times' as tag, 'DAY_7' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days <= 7 \
+    union all \
+    select user_id, 'vc_registered_times' as tag, 'DAY_15' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days <= 15 \
+    union all \
+    select user_id, 'vc_registered_times' as tag, 'DAY_30' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days <= 30 \
+    union all \
+    select user_id, 'vc_registered_times' as tag, 'DAY_90' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days <= 90 \
+    union all \
+    select user_id, 'vc_registered_times' as tag, 'DAY_180' as grp \
+    from vc.dws_vc_user_behavior_info_a_d \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and register_days <= 180 \
+) t \
+join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+) dim \
+on t.user_id = dim.id ;"

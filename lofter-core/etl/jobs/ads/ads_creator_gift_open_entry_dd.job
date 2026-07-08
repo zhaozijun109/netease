@@ -1,0 +1,164 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=\
+with low_bar as ( \
+    select m.userId, max(m.is_public) as is_public \
+    from ( \
+            select x.userId as userId, 1 as is_public \
+            from ( \
+                select a.blogId as userId, \
+                    count(distinct if(a.hot_30d >= 100, a.postId, null)) as hot_post_count \
+                from ( \
+                    select postId, blogId, hot_30d \
+                    from lofter.dws_post_interaction_dd \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                ) a \
+                join ( \
+                    select id, publishDate, contentType \
+                    from lofter.dim_post \
+                    where isPublished=true and isForbidden=false and isCitedPost = false and allowView=0 and valid = 0 and \
+                            contentType in ("图片","文字","视频") and \
+                            isMoved = 0 and isActivityAutoPost=0 and isImported=0 and is_book_store = 0 and \
+                            publishDate <= '${azkaban.flow.1.days.ago}' and \
+                            publishDate >= '${azkaban.flow.30.days.ago}' \
+                ) b on a.postId = b.id \
+                group by a.blogId \
+            ) x \
+            left join ( \
+                select blogId as userId, count(distinct userId) as unlock_uv \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt='${azkaban.flow.1.days.ago}' and \
+                    from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                    from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+                group by 1 \
+            ) y on x.userId = y.userId \
+            left join ( \
+                select blogId as userId, count(distinct postId) as grain_post_count \
+                from lofter.dim_gift_post_return_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and \
+                      createDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+                      publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and \
+                      status = 1 and auditStatus = 1 and (giftName = '粮票' or unlockType = 2) \
+                group by 1 \
+            ) z on x.userId = z.userId \
+            where (x.hot_post_count >= 3 or (y.unlock_uv >= 100 and z.grain_post_count >= 5)) \
+        union all \
+            select x.userId as userId, 0 as is_public \
+            from ( \
+                select blogId as userId, \
+                    count(distinct userId) as uv, \
+                    count(distinct if(post_count >= 15, userId, null)) as three_post_uv \
+                from ( \
+                    select blogId, userId, count(distinct postId) as post_count \
+                    from ( \
+                        select post_userid as blogId, postId, userId \
+                        from lofter.dwd_post_browse_di \
+                        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+                            is_real > 0 \
+                    ) t \
+                    group by 1, 2 \
+                ) tt \
+                group by 1 \
+                having uv >= 500 and three_post_uv >= uv * 0.6 \
+            ) x \
+            join ( \
+                select userId \
+                from lofter.dws_par_creator_dd \
+                where dt='${azkaban.flow.1.days.ago}' and \
+                    post_count_30d >= 4 \
+            ) x1 on x.userId = x1.userId \
+        union all \
+            select userId, 0 as is_public \
+            from lofter.dws_par_creator_level_scoring_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and level in ('S', 'A', 'B') \
+        union all \
+            select blogId as userId, 0 as is_public \
+            from ( \
+                select blogId, count(distinct content_id) as sab_post_count \
+                from lofter_dm.ads_growth_content_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and grade in ('S', 'A', 'B') and \
+                      content_type in ('图片', '文字', '视频') \
+                group by 1 \
+                having sab_post_count >= 1 \
+            ) t \
+        union all \
+            select a.blogId as userId, 0 as is_public \
+            from ( \
+                select a.blogId, sum(quality_comment_30d) as quality_comment_30d \
+                from lofter.dim_post a \
+                join ( \
+                    select postId, quality_comment_30d \
+                    from lofter.dws_post_misc_dd \
+                    where dt = '${azkaban.flow.1.days.ago}' \
+                ) b on a.id = b.postId \
+                group by 1 \
+                having quality_comment_30d >= 3 \
+            ) a \
+            join ( \
+                select userId \
+                from lofter.dws_par_creator_level_scoring_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and level in ('S', 'A', 'B', 'C') \
+            ) b on a.blogId = b.userId \
+        union all \
+            select userId, 0 as is_public \
+            from lofter_dm.ads_paid_post_ip_deep_creator_di \
+            where dt = '${azkaban.flow.1.days.ago}' and ip_post_cnt_std >= 20 and ip_hot_percentile < 0.2 \
+    ) m \
+    left join ( \
+        select userId, fans_std \
+        from lofter.dws_par_creator_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) n on m.userId = n.userId \
+    join (select id as userId, createDate from lofter.dim_user) p on m.userId = p.userId \
+    where n.fans_std >= if(m.is_public = 0, 5, 100) and \
+          p.createDate <= date_sub('${azkaban.flow.1.days.ago}', 90) \
+    group by 1 \
+) \
+insert overwrite table lofter_dm.ads_creator_gift_open_entry_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.* \
+from ( \
+    select userId, \
+           0 as is_high_bar, \
+           is_public as is_public \
+    from low_bar \
+) x \
+left join ( \
+   select userId, max(openFrom) as openFrom \
+   from ( \
+       select userId, openFrom \
+       from lofter_db_dump.ods_db_trade_gift_account_nd \
+       where status = 2 \
+     union \
+       select userId, openFrom \
+       from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+       where status = 2 \
+   ) t \
+   group by 1 \
+) y on x.userId = y.userId \
+left join ( \
+    select userId, max(is_high_bar) as is_high_bar \
+    from lofter_dm.ads_creator_gift_open_entry_dd \
+    where dt < '${azkaban.flow.1.days.ago}' and \
+          dt >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) z on x.userId = z.userId \
+left join ( \
+    select userId \
+    from lofter_db_dump.ods_db_trade_black_home_post_nd \
+    where punishStatus = 1 and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) z1 on x.userId = z1.userId \
+left join ( \
+    select userId, grade as online_grade \
+    from lofter_db_dump.ods_db_trade_pay_grade_nd \
+) z2 on x.userId = z2.userId \
+where z1.userId is null and \
+     ((z.userId is null and \
+       (y.userId is null or \
+       (x.is_high_bar > 0 and y.openFrom in ('PAY_GRADE_TYPE_BASE', 'PAY_GRADE_TYPE_BHIDE') and nvl(z2.online_grade,1) < 2))) \
+      or (z.is_high_bar = 0 and x.is_high_bar > 0 and nvl(z2.online_grade,1) < 2)) \
+
+dependencies=ads_creator_ecology_identity_dd,ads_growth_content_di
+

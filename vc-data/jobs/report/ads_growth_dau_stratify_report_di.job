@@ -1,0 +1,42 @@
+type = sparksql
+hive.query.01 = insert overwrite table vc_dm.ads_growth_dau_stratify_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select count(distinct device_udid) dau,  \
+    count(distinct if(device_type='近30日新增', device_udid, null)) new_active,  \
+    count(distinct if(device_type='近30日回流', device_udid, null)) return_active,  \
+    count(distinct if(device_type='近30日新增' and origin_type='广告', device_udid, null)) new_channel_active,  \
+    count(distinct if(device_type='近30日新增' and origin_type='自然', device_udid, null)) new_natural_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='广告', device_udid, null)) return_channel_active,  \
+    count(distinct if(device_type='近30日回流' and origin_type='自然', device_udid, null)) return_natural_active,     \
+    count(distinct if(device_type='持续活跃', device_udid, null)) old_active,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 1, device_udid,null)) old_1d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 2, device_udid,null)) old_2d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 3, device_udid,null)) old_3d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 4, device_udid,null)) old_4d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 5, device_udid,null)) old_5d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 6, device_udid,null)) old_6d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 7, device_udid,null)) old_7d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 8, device_udid,null)) old_8d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 9, device_udid,null)) old_9d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 10,device_udid,null)) old_10d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 11, device_udid,null)) old_11d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 12, device_udid,null)) old_12d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 13, device_udid,null)) old_13d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 14, device_udid,null)) old_14d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 15, device_udid,null)) old_15d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 16, device_udid,null)) old_16d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 17, device_udid,null)) old_17d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 18, device_udid,null)) old_18d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 19, device_udid,null)) old_19d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 20, device_udid,null)) old_20d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 21, device_udid,null)) old_21d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 22, device_udid,null)) old_22d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 23, device_udid,null)) old_23d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 24, device_udid,null)) old_24d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 25, device_udid,null)) old_25d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 26, device_udid,null)) old_26d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 27, device_udid,null)) old_27d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 28, device_udid,null)) old_28d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 29, device_udid,null)) old_29d_device,  \
+    count(distinct if(device_type='持续活跃' and active_days_30d = 30, device_udid,null)) old_30d_device \
+from vc.dws_vc_device_growth_dau_stratify_i_d \
+where dt='${azkaban.flow.1.days.ago}' ;

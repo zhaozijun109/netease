@@ -1,0 +1,351 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=200
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=create temporary function html_paragraph as 'com.netease.wm.udf.HtmlParagraph';
+hive.query.02=\
+with post_source as ( \
+    select t1.postId, \
+           t1.blogId, \
+           t1.contentType, \
+           t1.tags \
+    from ( \
+        select id as postId, \
+               blogId, \
+               contentType, \
+               tags \
+        from lofter.dim_post_article \
+        where publishDate <= '${azkaban.flow.1.days.ago}' and contentType in ("图片","文字") and isPublished = true \
+        and valid = 0 and allowView = 0 and isForbidden = false and isCitedPost = false and isActivityAutoPost = 0 \
+        and isImported = 0 and isMoved = 0 \
+    ) t1 \
+    left join ( \
+        select postId from lofter_db_dump.ods_db_invalid_nos_image_nd \
+    ) t2 \
+    on t1.postId = t2.postId \
+    left join ( \
+        select postId from lofter_db_dump.ods_db_risk_antispam_fake_pass_post_nd where status = 0 \
+    ) t3 \
+    on t1.postId = t3.postId \
+    where t2.postId is null and t3.postId is null \
+), \
+column_content_source as ( \
+    select r2.postId, \
+           r2.blogId, \
+           r2.tag, \
+           r2.priorityType, \
+           r4.hot, \
+           r5.content, \
+           r6.pid, \
+           r6.opType, \
+           r7.top2HotComments, \
+           r8.recReason \
+    from ( \
+        select tag from lofter_dm.ads_rec_auto_column_premium_tag_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) r1 \
+    join ( \
+        select t1.postId, \
+               t1.blogId, \
+               t1.tag, \
+               t2.priorityType \
+        from ( \
+            select postId, \
+                   blogId, \
+                   tag \
+            from post_source lateral view explode(tags) as tag \
+        ) t1 \
+        join ( \
+            select postId, \
+                   priorityType \
+            from ( \
+                select postId, \
+                       priorityType, \
+                       row_number() over(partition by postId order by priorityType desc) as rn \
+                from ( \
+                    select postId, \
+                           0 as priorityType \
+                    from ( \
+                        select t1.postId, \
+                               t1.collectionId, \
+                               row_number() over(partition by t1.collectionId order by t1.createTime) as rn \
+                        from ( \
+                            select postId, \
+                                   collectionId, \
+                                   createTime \
+                            from lofter_db_dump.ods_db_post_collection_record_nd \
+                            where status = 0 \
+                        ) t1 \
+                        join ( \
+                            select collectionId \
+                            from ( \
+                                select collectionId, \
+                                       row_number() over(order by subscribe_uv_acc desc) as rn \
+                                from lofter.dws_collection_dd \
+                                where dt = '${azkaban.flow.1.days.ago}' \
+                            ) a \
+                            where rn <= 10 \
+                        ) t2 \
+                        on t1.collectionId = t2.collectionId \
+                    ) t3 \
+                    where rn = 1 \
+                    union all \
+                    select postId, \
+                           0 as priorityType \
+                    from ( \
+                        select postId, \
+                               blogId, \
+                               contentType, \
+                               row_number() over(partition by blogId,flag,contentType order by hot desc) as rn \
+                        from ( \
+                            select t1.postId, \
+                                   t1.blogId, \
+                                   t1.hot, \
+                                   nvl(t2.flag,0) as flag, \
+                                   nvl(t3.contentType,'') as contentType \
+                            from ( \
+                                select postId, \
+                                       blogId, \
+                                       hot \
+                                from lofter.dws_post_interaction_dd \
+                                where dt = '${azkaban.flow.1.days.ago}' and hot >= 10000 \
+                            ) t1 \
+                            left join ( \
+                                select userId, \
+                                       1 as flag \
+                                from lofter.dws_par_creator_dd \
+                                where dt = '${azkaban.flow.1.days.ago}' and level in ('S','A') \
+                            ) t2 \
+                            on t1.blogId = t2.userId \
+                            left join ( \
+                                select postId, contentType from post_source \
+                            ) t3 \
+                            on t1.postId = t3.postId \
+                        ) t4 \
+                    ) t5 \
+                    where (rn <= 4 and contentType = '图片') or (rn <= 6 and contentType = '文字') \
+                    union all \
+                    select postId, \
+                           1 as priorityType \
+                    from lofter_db_dump.ods_db_deity_recommend_nd \
+                    where type = 0 and status = 0 \
+                    union all \
+                    select postId, \
+                           2 as priorityType \
+                    from lofter_dm.ads_post_trend_grade_di where dt = '${azkaban.flow.1.days.ago}' and grade = 'S' \
+                    union all \
+                    select t1.postId, \
+                           2 as priorityType \
+                    from ( \
+                        select postId from lofter.dws_post_premium_di \
+                        where dt between date_sub('${azkaban.flow.1.days.ago}', 6) and '${azkaban.flow.1.days.ago}' \
+                        group by postId \
+                    ) t1 \
+                    join ( \
+                        select postId from lofter.dws_post_interaction_dd \
+                        where dt = '${azkaban.flow.1.days.ago}' and (hot >= 1000 or valid_comment_cnt >= 50) \
+                    ) t2 \
+                    on t1.postId = t2.postId \
+                ) t \
+            ) tt \
+            where rn = 1 \
+        ) t2 \
+        on t1.postId = t2.postId \
+    ) r2 \
+    on r1.tag = r2.tag \
+    left join ( \
+        select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) r3 \
+    on r2.postId = r3.postId \
+    left join ( \
+        select postId, hot from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) r4 \
+    on r2.postId = r4.postId \
+    left join ( \
+        select id as postId, \
+               content \
+        from lofter_db_dump.ods_db_text_post_nd \
+    ) r5 \
+    on r2.postId = r5.postId \
+    left join ( \
+        select postId, \
+               pid, \
+               1 as opType \
+        from ( \
+            select postId, \
+                   blogId, \
+                   pid, \
+                   row_number() over(partition by postId order by mark_uv desc) as rn \
+            from ( \
+                select postId, \
+                       blogId, \
+                       pid, \
+                       sweet_uv + bitter_uv as mark_uv \
+                from ( \
+                    select postId, \
+                           blogId, \
+                           pid, \
+                           count(distinct if(opType = 1, userId, null)) as sweet_uv, \
+                           count(distinct if(opType = 2, userId, null)) as bitter_uv \
+                    from lofter_db_dump.ods_db_p_comment_user_mark_nd \
+                    where opType in (1,2) and length(pid) > 0 and userid <> 1283394892 \
+                    group by postId, blogId, pid \
+                ) t1 \
+                where sweet_uv > 5 and sweet_uv > bitter_uv \
+            ) t2 \
+        ) t3 \
+        where rn = 1 \
+        union all \
+        select postId, \
+               pid, \
+               2 as opType \
+        from ( \
+            select postId, \
+                   blogId, \
+                   pid, \
+                   row_number() over(partition by postId order by mark_uv desc) as rn \
+            from ( \
+                select postId, \
+                       blogId, \
+                       pid, \
+                       sweet_uv + bitter_uv as mark_uv \
+                from ( \
+                    select postId, \
+                           blogId, \
+                           pid, \
+                           count(distinct if(opType = 1, userId, null)) as sweet_uv, \
+                           count(distinct if(opType = 2, userId, null)) as bitter_uv \
+                    from lofter_db_dump.ods_db_p_comment_user_mark_nd \
+                    where opType in (1,2) and length(pid) > 0 and userid <> 1283394892 \
+                    group by postId, blogId, pid \
+                ) t1 \
+                where bitter_uv > 5 and bitter_uv > sweet_uv \
+            ) t2 \
+        ) t3 \
+        where rn = 1 \
+    ) r6 \
+    on r2.postId = r6.postId \
+    left join ( \
+        select postId, \
+               pid, \
+               transform(sort_array(collect_list(struct(rank, commentId, userId, commentContent)), true), x -> struct(x.commentId, x.userId, x.commentContent)) as top2HotComments \
+        from ( \
+            select commentId, \
+                   postId, \
+                   userId, \
+                   commentContent, \
+                   pid, \
+                   rank \
+            from ( \
+                select commentId, \
+                       postId, \
+                       userId, \
+                       commentContent, \
+                       pid, \
+                       row_number() over(partition by postId, pid order by commentHot desc) as rank \
+                from ( \
+                    select id as commentId, \
+                           postId, \
+                           publisherUserId as userId, \
+                           content as commentContent, \
+                           commentHot, \
+                           pid \
+                    from lofter_db_dump.ods_db_post_response_nd \
+                    where content not rlike '^(.)\\1+$' and content not like '%屏蔽%' and content not like '%原图%' \
+                    and content not like '%催更%' and content not like '%.lofter.com/post/%' and pid is not null \
+                ) t1 \
+            ) t2 \
+            where rank <= 2 \
+        ) t3 \
+        group by postId, pid \
+    ) r7 \
+    on r6.postId = r7.postId and r6.pid = r7.pid \
+    left join ( \
+        select postId, recReason \
+        from lofter_dm.ads_rec_content_rec_reason_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) r8 \
+    on r2.postId = r8.postId \
+    where r3.postId is null \
+) \
+insert overwrite table lofter_dm.ads_rec_auto_column_content_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select tag, \
+       0 as rankType, \
+       '普通' as rankName, \
+       cast(to_json(transform(sort_array(collect_list(struct(rank, postId, blogId, recReason)), true), x -> struct(x.postId, x.blogId, x.recReason))) as string) as tagContentReasons \
+from ( \
+    select postId, \
+           blogId, \
+           tag, \
+           recReason, \
+           row_number() over(partition by tag order by priorityType desc, hot desc) as rank \
+    from ( \
+         select postId, \
+                blogId, \
+                tag, \
+                priorityType, \
+                hot, \
+                recReason \
+         from column_content_source \
+         where pid is null \
+    ) tmp1 \
+) tmp2 \
+where rank <= 40 \
+group by tag \
+union all \
+select tag, \
+       1 as rankType, \
+       '高光甜' as rankName, \
+       cast(to_json(transform(sort_array(collect_list(struct(rank, postId, blogId, recReason, highlightParagraph)), true), x -> struct(x.postId, x.blogId, x.recReason, x.highlightParagraph))) as string) as tagContentReasons \
+from ( \
+    select postId, \
+           blogId, \
+           tag, \
+           struct(pid, highlightParagraphContent, top2HotComments) as highlightParagraph, \
+           recReason, \
+           row_number() over(partition by tag order by priorityType desc, hot desc) as rank \
+    from ( \
+         select postId, \
+                blogId, \
+                tag, \
+                priorityType, \
+                hot, \
+                pid, \
+                top2HotComments, \
+                recReason, \
+                html_paragraph(content, pid) as highlightParagraphContent \
+         from column_content_source \
+         where pid is not null and opType = 1 \
+    ) tmp1 \
+    where highlightParagraphContent is not null and highlightParagraphContent <> '' \
+) tmp2 \
+where rank <= 40 \
+group by tag \
+union all \
+select tag, \
+       2 as rankType, \
+       '高光虐' as rankName, \
+       cast(to_json(transform(sort_array(collect_list(struct(rank, postId, blogId, recReason, highlightParagraph)), true), x -> struct(x.postId, x.blogId, x.recReason, x.highlightParagraph))) as string) as tagContentReasons \
+from ( \
+    select postId, \
+           blogId, \
+           tag, \
+           struct(pid, highlightParagraphContent, top2HotComments) as highlightParagraph, \
+           recReason, \
+           row_number() over(partition by tag order by priorityType desc, hot desc) as rank \
+    from ( \
+         select postId, \
+                blogId, \
+                tag, \
+                priorityType, \
+                hot, \
+                pid, \
+                top2HotComments, \
+                recReason, \
+                html_paragraph(content, pid) as highlightParagraphContent \
+         from column_content_source \
+         where pid is not null and opType = 2 \
+    ) tmp1 \
+    where highlightParagraphContent is not null and highlightParagraphContent <> '' \
+) tmp2 \
+where rank <= 40 \
+group by tag
+dependencies=ads_rec_auto_column_premium_tag_di,ads_rec_content_rec_reason_di,ads_post_trend_grade_di

@@ -1,0 +1,102 @@
+type=sparksql
+hive.query.01=\
+with tag_source as( \
+    SELECT tag, type \
+    FROM lofter_db_dump.ods_db_challenge_tag_nd \
+    where type = 1 and status = 1 \
+    group by tag, type \
+    union ALL  \
+    SELECT tag, type \
+    FROM lofter_db_dump.ods_db_challenge_tag_nd \
+    where type = 2 and status = 1 \
+    group by tag, type \
+    union all \
+    select tagname as tag, 2 as type \
+    from lofter_db_dump.ods_db_tag_resource_nd \
+    where tagname in('公嬷挑战','互相禁用绘画功能挑战','“你”的构成','小猫影子','奶龙气球','网恋奔现','限制100笔绘画挑战','剪衣挑战','流泪问卷','4杯咖啡5个领导','哭哭眼镜','互相禁用写作功能挑战','CP差异问卷','网恋奔现','我不是天才吗','我的生活组成') and movefrom like '内部打标:Cmb%' \
+    group by 1 \
+), \
+user_tag as( \
+    SELECT t2.blogId, t2.postId, role_tag, challenge_tag, showChallengeTag \
+    from( \
+        select blogId, postId, role_tag \
+        from( \
+            select tag as role_tag from tag_source where type = 1 \
+        )a \
+        join ( \
+            SELECT tag, blogId, id as postId \
+            from lofter.dim_post \
+            lateral view explode(tags) as tag \
+            where valid = 0 AND contenttype in ('图片','视频') \
+            group by 1,2,3 \
+        ) b \
+        on a.role_tag = b.tag \
+        group by 1,2,3 \
+    )t1 \
+    join( \
+        SELECT t1.blogId, t1.postId, challenge_tag, showChallengeTag \
+        from( \
+            select blogId, postId, challenge_tag \
+            from( \
+                select tag as challenge_tag from tag_source where type = 2 \
+            )a \
+            join ( \
+                SELECT tag, blogId, id as postId \
+                from lofter.dim_post \
+                lateral view explode(tags) as tag \
+                where valid = 0 AND contenttype in ('图片','视频') \
+                group by 1,2,3 \
+            ) b \
+            on a.challenge_tag = b.tag \
+            group by 1,2,3 \
+        )t1 \
+        join( \
+            select blogId, postId, collect_set(challenge_tag)[0] AS showChallengeTag \
+            from( \
+                select tag as challenge_tag from tag_source where type = 2 \
+            )a \
+            join ( \
+                SELECT tag, blogId, id as postId \
+                from lofter.dim_post \
+                lateral view explode(tags) as tag \
+                where valid = 0 AND contenttype in ('图片','视频') \
+                group by 1,2,3 \
+            ) b \
+            on a.challenge_tag = b.tag \
+            group by 1,2 \
+        )t2 on t1.postId = t2.postId and t1.blogId = t2.blogId \
+    )t2 \
+    on t1.postId = t2.postId and t1.blogId = t2.blogId \
+) \
+insert overwrite table lofter_dm.ads_summer_act_challenge_hot_post_list_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select role_tag, challenge_tag, postId, blogId, hot_24h as incrementHot, cast(REPLACE('${azkaban.flow.1.days.ago}','-','') as int) as `date`, rn as rank, showChallengeTag \
+from( \
+    select postId, blogId, role_tag, challenge_tag, dt, hot_24h, row_number() over(partition by role_tag, challenge_tag order by hot_24h desc) as rn, showChallengeTag \
+    from ( \
+        select a.postId, a.blogId, role_tag, challenge_tag as showChallengeTag, challenge_tag, dt, nvl(hot_24h,0) hot_24h \
+        from user_tag a \
+        left join( \
+            select postId, blogId, count(1) as hot_24h, dt \
+            from lofter.dwd_post_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and userId <> blogId \
+            group by postId, blogId, dt \
+        )b \
+        on a.postId = b.postId and a.blogId = b.blogId \
+        group by a.postId, a.blogId, role_tag, dt, hot_24h ,challenge_tag, showChallengeTag \
+    ) \
+    union ALL \
+    select postId, blogId, role_tag, challenge_tag, dt, hot_24h, row_number() over(partition by role_tag order by hot_24h desc) as rn, showChallengeTag \
+    from( \
+        select a.postId, a.blogId, role_tag, showChallengeTag, '' as challenge_tag, dt, nvl(hot_24h,0) hot_24h \
+        from user_tag a \
+        left join( \
+            select postId, blogId, count(1) as hot_24h, dt \
+            from lofter.dwd_post_hot_di \
+            where dt = '${azkaban.flow.1.days.ago}' and userId <> blogId \
+            group by postId, blogId, dt \
+        )b \
+        on a.postId = b.postId and a.blogId = b.blogId \
+        group by a.postId, a.blogId, role_tag, dt, hot_24h, showChallengeTag \
+    ) \
+) \
+where rn <= 500

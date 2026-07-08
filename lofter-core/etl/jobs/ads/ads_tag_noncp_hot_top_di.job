@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_tag_noncp_hot_top_di partition(dt='${azkaban.flow.1.days.ago}') \
+         select row_number() over (order by hot desc) as id, tag, hot \
+         from ( \
+           select tag, max(hot) as hot \
+           from lofter_dm.ads_tag_general_di \
+           where dt = '${azkaban.flow.1.days.ago}' and length(tag) > 0 and \
+                 tag not like '%同人%' and tag not like '%耽美%' \
+           group by tag \
+           order by hot desc \
+           limit 500 \
+         ) a
+dependencies=ads_tag_general_di

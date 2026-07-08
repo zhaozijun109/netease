@@ -1,0 +1,11 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="\
+    select concat_ws('_',listSource,listType,listName,listRank) as id, listSource, listType, listName, listRank, \
+           postId, blogId, nvl(indexValue,0) as indexValue, distinctId, uniqId, dt, \
+           periodType \
+    from lofter_dm.ads_grain_auto_generate_list_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago}  --dest lofter_rec_hot_list_v2 --postfixsep --full --atom
+dependencies=ads_grain_auto_generate_list_di

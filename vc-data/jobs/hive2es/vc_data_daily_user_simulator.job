@@ -1,0 +1,19 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ES
+conf.spark.source.query="\
+select concat_ws('_', source, user_id, simulator_id) as docId, \
+       user_id, \
+       simulator_id, \
+       source, \
+       simulator_chats_1d as day1_talkcount, \
+       simulator_chats_3d as day3_talkcount, \
+       simulator_chats_5d as day5_talkcount, \
+       simulator_chats_7d as day7_talkcount, \
+       simulator_chats_15d as day15_talkcount, \
+       simulator_chats_30d as day30_talkcount, \
+       type \
+from vc_dm.ads_vc_daily_user_simulator_dd \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --partition ${azkaban.flow.1.days.ago} --dest vc_data_user_simulator_idx --full --atom --id docId --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG
+

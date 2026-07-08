@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_post_paid_blog_comment_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, sum(commentHot) as commentHot \
+from ( \
+    select id as commentId, blogId, postId, commentHot \
+    from lofter_db_dump.ods_db_post_response_nd \
+    where commentHot >= 100 and blogId <> publisherUserId and length(regexp_replace(content,'\\\\[.*?\\\\]','')) >= 5 \
+) t1 \
+join ( \
+    select id \
+    from lofter.dim_post_article \
+    where isPublished = true and isForbidden = false and isCitedPost = false and allowView = 0 and valid = 0 \
+    and isMoved = 0 and isActivityAutoPost = 0 and isImported = 0 and contentType in ("图片","文字","视频") \
+) t2 \
+on t1.postId = t2.id \
+group by blogId

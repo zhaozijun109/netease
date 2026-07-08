@@ -1,0 +1,78 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=insert overwrite table lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, b.blogId, \
+       a.shuare_uv as brush_hot_uv, a.shuare_hot as brush_hot, d.hot as hot_1d, \
+       a.shuare_hot * 1.0 / d.hot as brush_hot_ratio, \
+       if(e.postId is not null, 1, 0) as is_pay_post, \
+       f.post_income, \
+       a.rule \
+from ( \
+    SELECT x.postId as postId, x.shuare_hot, x.shuare_uv, x.rule \
+    from ( \
+        SELECT a.postId, \
+               count(distinct a.userId) as shuare_uv, sum(c.hot) as shuare_hot, \
+               concat_ws(',', collect_set(a.rule)) as rule \
+        from ( \
+            select postId, userId, \
+                   case ruleId when 0 then '同ip操作占比≥20%' \
+                               when 1 then '注册ip城市占比≥30%' \
+                               when 2 then '操作ip城市占比≥30%' else '其他ip嫌疑规则' end as rule \
+            from lofter.dwd_risk_brush_hot_suspect_post_rank_ip_users_di where dt = '${azkaban.flow.1.days.ago}' \
+          union \
+            select postId, userId, '嫌疑用户占比≥35%' as rule \
+            from lofter.dwd_risk_brush_hot_suspect_post_rank_users_di where dt = '${azkaban.flow.1.days.ago}' \
+        ) a \
+        join ( \
+           select postId \
+           from ( \
+                select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                from lofter_db_dump.ods_db_tag_resource_nd \
+                where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+            union all \
+                select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                from lofter_db_dump.ods_db_tag_resource_nd \
+                where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+            union all \
+                select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+                from lofter_db_dump.ods_db_tag_resource_nd \
+                where from_unixtime(cast(publishTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            ) t \
+            where rk <= 100 \
+            group by 1 \
+        ) b on a.postId = b.postId \
+        left join ( \
+            SELECT userId, postId, count(1) as hot \
+            from lofter.dwd_post_hot_di \
+            where dt >= '${azkaban.flow.30.days.ago}' and dt <= '${azkaban.flow.1.days.ago}' \
+            group by 1, 2 \
+        ) c on a.userId = c.userId and a.postId = c.postId \
+        group by 1 \
+    ) x \
+    left join ( \
+        select postId, hot_pv as hot from lofter.dws_post_interaction_di where dt = '${azkaban.flow.1.days.ago}' \
+    ) y on x.postId = y.postId \
+    where x.shuare_uv >= 20 \
+) a \
+join lofter.dim_post b on a.postId = b.id \
+left join ( \
+    select * \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+) c on a.postId = c.postId \
+left join ( \
+    select postId, hot_pv as hot from lofter.dws_post_interaction_di where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.postId = d.postId \
+left join ( \
+    select postId \
+    from lofter.dim_gift_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_pay_return_gift not in ('0', '1') \
+    group by 1 \
+) e on a.postId = e.postId \
+left join ( \
+    select postId, sum(money) as post_income \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and is_post_pay = 1 \
+    group by 1 \
+) f on a.postId = f.postId \
+where b.publishDate >= '2025-08-14' and c.postId is null \

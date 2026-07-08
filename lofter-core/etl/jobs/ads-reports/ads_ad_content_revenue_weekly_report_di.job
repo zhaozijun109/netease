@@ -1,0 +1,50 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_content_revenue_weekly_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  pge_post_money, \
+  ad_post_money, \
+  grain_post_money, \
+  commercial_post_money \
+from \
+  ( \
+    select \
+      sum( \
+        case \
+          when module = '激励广告' then bid_amount \
+          else 0 \
+        end \
+      ) as pge_post_money, \
+      sum( \
+        case \
+          when module = '广告文' then bid_amount \
+          else 0 \
+        end \
+      ) as ad_post_money \
+    FROM \
+      lofter_dm.ads_ad_content_revenue_di \
+    where \
+      dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+  ) a \
+  full outer join ( \
+    select \
+      sum( \
+        case \
+          when positionname rlike '激励视频-单日志|激励视频-礼物背包' then money \
+          else 0 \
+        end \
+      ) as grain_post_money \
+    from \
+      lofter_dm.ads_ad_trade_equity_center_income_di \
+    where \
+      dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+  ) b \
+  full outer join ( \
+    select \
+      sum(amount) as commercial_post_money \
+    from \
+      lofter_dm.ads_tp_total_indicator_report_di \
+    where \
+      dt between date_sub('${azkaban.flow.1.days.ago}',6) and '${azkaban.flow.1.days.ago}' \
+  ) c \
+
+dependencies=ads_ad_trade_equity_center_income_di,ads_tp_total_indicator_report_di

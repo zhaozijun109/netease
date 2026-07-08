@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ue_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT kafkaTime,DATE(FROM_UNIXTIME(kafkaTime div 1000))as date,params['reportId'] as reportId, \
+       params['reportType'] as reportType,userid, \
+       cast(params['blogId'] as bigint) as blogid, \
+       cast(params['postId'] as bigint) as postid \
+from lofter.ods_mda_app_di \
+where eventId = 'ka1-15' and dt = '${azkaban.flow.1.days.ago}' \

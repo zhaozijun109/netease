@@ -1,0 +1,35 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_membership_vip_post_browse_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.* \
+from ( \
+    select postId, post_userid as blogId, userId, \
+           from_unixtime(cast(min(occurTime)/1000 as bigint), 'yyyy-MM-dd') start_date, \
+           from_unixtime(cast(max(occurTime)/1000 as bigint), 'yyyy-MM-dd') end_date, \
+           sum(duration) / 1000 as duration_seconds \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2, 3 \
+    having duration_seconds >= 30 \
+) a \
+join ( \
+    select postId \
+    from ( \
+        select postId from lofter.dim_membership_post_vip_dd where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select postId \
+        from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+    ) t \
+    group by 1 \
+) b on a.postId = b.postId \
+join ( \
+    select userId, \
+           from_unixtime(cast(startTime/1000 as bigint), 'yyyy-MM-dd') as start_date, \
+           from_unixtime(cast(endTime/1000 as bigint), 'yyyy-MM-dd') as end_date \
+    from lofter_db_dump.ods_db_membership_entitlement_nd \
+    where status in (1,2) \
+) c on a.userId = c.userId \
+where ((a.start_date between c.start_date and c.end_date) or \
+      (a.end_date between c.start_date and c.end_date)) \
+
+dependencies=dwd_post_browse_di

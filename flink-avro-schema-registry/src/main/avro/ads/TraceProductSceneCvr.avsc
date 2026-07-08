@@ -1,0 +1,23 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "TraceProductSceneCvr",
+  "fields": [
+    {"name": "scene", "type": "string"},
+    {"name": "productType", "type": "int"},
+    {"name": "dh", "type": "long"},
+    {"name": "exposure_pv", "type": "long"},
+    {"name": "exposure_uv", "type": "long"},
+    {"name": "click_pv", "type": "long"},
+    {"name": "click_uv", "type": "long"},
+    {"name": "browse_pv", "type": "long"},
+    {"name": "brose_uv", "type": "long"},
+    {"name": "pay_pv", "type": "long"},
+    {"name": "pay_uv", "type": "long"},
+    {"name": "pay_amount", "type": "double"},
+    {"name": "pay_first_uv", "type": "long"},
+    {"name": "pay_first_amount", "type": "double"},
+    {"name": "pay_double_uv", "type": "long"},
+    {"name": "pay_double_amount", "type": "double"}
+  ]
+}

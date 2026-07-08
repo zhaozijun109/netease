@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_gr_blog_ia_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select a.userId as blogId, nvl(post_count_std,0) as post_count_std, nvl(send_comment_cnt_std,0) as comment_count_std, fans, blog_subscribes \
+from ( \
+    select userId, post_count_std, main_blog_fans as fans, size(follow_blogs) as blog_subscribes \
+    from lofter.dws_par_user_base_dd \
+    where dt='${azkaban.flow.1.days.ago}' and (main_blog_fans >= 100 or size(follow_blogs) > 100) \
+) a \
+left join ( \
+    select userId, send_comment_cnt_std \
+    from lofter.dws_par_user_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \

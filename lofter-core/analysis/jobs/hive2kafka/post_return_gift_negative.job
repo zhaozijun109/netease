@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="select return_gift_id as giftId, postId, blogId, cast(current_timestamp() as bigint) * 1000 as eventTime, printf('负反馈人数: %d, 负反馈率: %s%%', fufankui_uv, cast((fufankui_uv/jiesuo_uv) * 100 as DECIMAL(4, 2))) as negativeSource from lofter_dm.ads_paid_post_return_gift_feed_back_dd where dt = '${azkaban.flow.1.days.ago}' and (fufankui_uv>=5  or (fufankui_uv between 2 and 4 and fufankui_uv/jiesuo_uv>=0.1)) "
+params= --messageType 79 --topic RISK.COMMON.DISPATCHER --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092,lofter-kafka-bi-risk4.gy.ntes:9092,lofter-kafka-bi-risk5.gy.ntes:9092,lofter-kafka-bi-risk6.gy.ntes:9092,lofter-kafka-bi-risk7.gy.ntes:9092,lofter-kafka-bi-risk8.gy.ntes:9092
+
+
+
+

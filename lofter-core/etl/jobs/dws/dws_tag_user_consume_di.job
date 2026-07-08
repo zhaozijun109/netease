@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter.dws_tag_user_consume_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, if(b.userId is not null, 1, 0) as is_favorite_tag \
+from ( \
+    select tag, userId, count(1) as pv, count(distinct postId) as post_count, \
+           to_bitmap(postId) as post_bitmap \
+    from lofter.dwd_post_browse_di \
+          lateral view explode(post_tags) tg as tag \
+    where userId > 0 and postId > 0 and is_real > 0 and \
+          dt = '${azkaban.flow.1.days.ago}' \
+    group by tag, userId \
+) a left join lofter_db_dump.ods_db_favorite_tag_nd b on a.userId = b.userId and a.tag = b.tagName

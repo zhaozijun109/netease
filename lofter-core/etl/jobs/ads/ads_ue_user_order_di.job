@@ -1,0 +1,7 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ue_user_order_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT '0' as type , pay_time,actpwd,postid,userid,amount,DATE(FROM_UNIXTIME(pay_time div 1000))as `date`, blogId, actpwd_channel,actpwd_search_time, activity_name from lofter.dwd_coupon_order_di where dt = '${azkaban.flow.1.days.ago}' \
+UNION  ALL  \
+SELECT '1' as type , pay_time,actpwd,postid,userid,amount,DATE(FROM_UNIXTIME(pay_time div 1000))as `date`, blogId, actpwd_channel,actpwd_search_time, null as activity_name from lofter.dwd_paid_subscribe_order_di where order_type = 3 and dt = '${azkaban.flow.1.days.ago}' \
+UNION ALL \
+SELECT '2' as type , pay_time,actpwd,postid,userid,amount,DATE(FROM_UNIXTIME(pay_time div 1000))as `date`, blogId, actpwd_channel,actpwd_search_time, null as activity_name from lofter.dwd_membership_order_di where dt = '${azkaban.flow.1.days.ago}' \

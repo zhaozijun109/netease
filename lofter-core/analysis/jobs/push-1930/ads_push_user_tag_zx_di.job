@@ -1,0 +1,21 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_user_tag_zx_di partition(dt = '${azkaban.flow.current.date}') \
+select a.* \
+from ( \
+    select userId, blogId, postId, content \
+    from lofter_dm.ads_push_user_tag_source_di \
+    where dt = '${azkaban.flow.current.date}' and userType = '新用户' \
+) a \
+left join ( \
+    select userId, postId from lofter_dm.ads_push_user_tag_tx_di where dt < '${azkaban.flow.current.date}' \
+    union all \
+    select userId, postId from lofter_dm.ads_push_user_tag_tx_di where dt <= '${azkaban.flow.current.date}' \
+    union all \
+    select userId, postId from lofter_dm.ads_push_user_tag_tc_di where dt <= '${azkaban.flow.current.date}' \
+    union all \
+    select userId, postId from lofter_dm.ads_push_tag_golden_active_di where dt <= '${azkaban.flow.current.date}' \
+    union all \
+    select userId, postId from lofter_dm.ads_push_hot_comment_active_di where dt <= '${azkaban.flow.current.date}' \
+) b on a.userId = b.userId and a.postId = b.postId \
+where b.postId is null \
+

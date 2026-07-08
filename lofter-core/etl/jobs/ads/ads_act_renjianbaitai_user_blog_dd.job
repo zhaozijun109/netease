@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_act_renjianbaitai_user_blog_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       collect_set(blogId) as nominatedBlogIdList \
+from ( \
+    select id as subQuestionId, cast(question as bigint) as blogId \
+    from lofter_db_dump.ods_db_ask_question_nd \
+    where cosplay = 5 and parentQuestionId = 85753866 \
+) a \
+join ( \
+    select questionId,userid \
+    from lofter_db_dump.ods_db_ask_user_item_score_nd \
+) b \
+on a.subQuestionId = b.questionId \
+group by userId

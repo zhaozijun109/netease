@@ -1,0 +1,68 @@
+type=sparksql
+deploy-mode=cluster
+driver-memory=2048m
+executor-memory=10240m
+conf.spark.dynamicAllocation.maxExecutors=10
+conf.spark.sql.shuffle.partitions=40
+conf.spark.executor.cores=4
+hive.query.01=insert overwrite table lofter.dws_par_creator_interaction_di partition(dt='${azkaban.flow.1.days.ago}') \
+select u.id as userId, \
+       h.text_receive_like_cnt, h.photo_receive_like_cnt, h.video_receive_like_cnt, h.article_receive_like_cnt, h.music_receive_like_cnt, h.question_receive_like_cnt, \
+       h.text_receive_reproduce_cnt, h.photo_receive_reproduce_cnt, h.video_receive_reproduce_cnt, h.article_receive_reproduce_cnt, h.music_receive_reproduce_cnt, h.question_receive_reproduce_cnt, \
+       h.text_receive_recommend_cnt, h.photo_receive_recommend_cnt, h.video_receive_recommend_cnt, h.article_receive_recommend_cnt, h.music_receive_recommend_cnt, h.question_receive_recommend_cnt, \
+       h.text_receive_collect_cnt, h.photo_receive_collect_cnt, h.video_receive_collect_cnt, h.article_receive_collect_cnt, h.music_receive_collect_cnt, h.question_receive_collect_cnt, \
+       j.text_receive_comment_cnt, j.photo_receive_comment_cnt, j.video_receive_comment_cnt, j.article_receive_comment_cnt, j.music_receive_comment_cnt, j.question_receive_comment_cnt, \
+       h.receive_hot, h.receive_like_cnt, h.receive_reproduce_cnt, h.receive_recommend_cnt, h.receive_collect_cnt, j.receive_comment_cnt \
+from lofter.dim_user u \
+  left join ( \
+       select post_userid as userId, \
+              count(if(post_content_type = '文字' and opType = 'praise', postId, null)) as text_receive_like_cnt, \
+              count(if(post_content_type = '图片' and opType = 'praise', postId, null)) as photo_receive_like_cnt, \
+              count(if(post_content_type = '视频' and opType = 'praise', postId, null)) as video_receive_like_cnt, \
+              count(if(post_content_type = '长文章' and opType = 'praise', postId, null)) as article_receive_like_cnt, \
+              count(if(post_content_type = '音乐' and opType = 'praise', postId, null)) as music_receive_like_cnt, \
+              count(if(post_content_type = '问答' and opType = 'praise', postId, null)) as question_receive_like_cnt, \
+              count(if(post_content_type = '文字' and opType = 'reproduce', postId, null)) as text_receive_reproduce_cnt, \
+              count(if(post_content_type = '图片' and opType = 'reproduce', postId, null)) as photo_receive_reproduce_cnt, \
+              count(if(post_content_type = '视频' and opType = 'reproduce', postId, null)) as video_receive_reproduce_cnt, \
+              count(if(post_content_type = '长文章' and opType = 'reproduce', postId, null)) as article_receive_reproduce_cnt, \
+              count(if(post_content_type = '音乐' and opType = 'reproduce', postId, null)) as music_receive_reproduce_cnt, \
+              count(if(post_content_type = '问答' and opType = 'reproduce', postId, null)) as question_receive_reproduce_cnt, \
+              count(if(post_content_type = '文字' and opType = 'recommend', postId, null)) as text_receive_recommend_cnt, \
+              count(if(post_content_type = '图片' and opType = 'recommend', postId, null)) as photo_receive_recommend_cnt, \
+              count(if(post_content_type = '视频' and opType = 'recommend', postId, null)) as video_receive_recommend_cnt, \
+              count(if(post_content_type = '长文章' and opType = 'recommend', postId, null)) as article_receive_recommend_cnt, \
+              count(if(post_content_type = '音乐' and opType = 'recommend', postId, null)) as music_receive_recommend_cnt, \
+              count(if(post_content_type = '问答' and opType = 'recommend', postId, null)) as question_receive_recommend_cnt, \
+              count(if(post_content_type = '文字' and opType = 'subscribe', postId, null)) as text_receive_collect_cnt, \
+              count(if(post_content_type = '图片' and opType = 'subscribe', postId, null)) as photo_receive_collect_cnt, \
+              count(if(post_content_type = '视频' and opType = 'subscribe', postId, null)) as video_receive_collect_cnt, \
+              count(if(post_content_type = '长文章' and opType = 'subscribe', postId, null)) as article_receive_collect_cnt, \
+              count(if(post_content_type = '音乐' and opType = 'subscribe', postId, null)) as music_receive_collect_cnt, \
+              count(if(post_content_type = '问答' and opType = 'subscribe', postId, null)) as question_receive_collect_cnt, \
+              count(1) as receive_hot, \
+              count(if(opType = 'praise', postId, null)) as receive_like_cnt, \
+              count(if(opType = 'reproduce', postId, null)) as receive_reproduce_cnt, \
+              count(if(opType = 'recommend', postId, null)) as receive_recommend_cnt, \
+              count(if(opType = 'subscribe', postId, null)) as receive_collect_cnt \
+       from lofter.dwd_post_hot_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+       group by post_userid \
+  ) h on u.id = h.userId \
+  left join ( \
+       select post_userid as userId, \
+              sum(if(post_content_type = '文字', 1, 0)) as text_receive_comment_cnt, \
+              sum(if(post_content_type = '图片', 1, 0)) as photo_receive_comment_cnt, \
+              sum(if(post_content_type = '视频', 1, 0)) as video_receive_comment_cnt, \
+              sum(if(post_content_type = '长文章', 1, 0)) as article_receive_comment_cnt, \
+              sum(if(post_content_type = '音乐', 1, 0)) as music_receive_comment_cnt, \
+              sum(if(post_content_type = '问答', 1, 0)) as question_receive_comment_cnt, \
+              count(1) as receive_comment_cnt \
+       from lofter.dwd_post_response_di \
+       where dt = '${azkaban.flow.1.days.ago}' \
+       group by post_userid \
+  ) j on u.id = j.userId \
+where u.isanonymous = 0 and \
+      nvl(h.userId, j.userId) is not null \
+      distribute by 1
+dependencies=

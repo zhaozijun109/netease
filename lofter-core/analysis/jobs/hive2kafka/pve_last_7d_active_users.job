@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select userid,dt from lofter_dm.ads_pve_user_active_7d_dd where dt = '${azkaban.flow.1.days.ago}'"
+params= --topic LOFTER.PVEMAN.user.activeuser --meta _payload_type=7d_active_users,_payload_date=${azkaban.flow.1.days.ago} --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092

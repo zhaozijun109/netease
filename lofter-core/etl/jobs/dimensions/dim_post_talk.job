@@ -1,0 +1,170 @@
+type=sparksql
+hive.query.01=create temporary function resolve_tag_ip as 'com.netease.wm.udf.ResolveTagIp';
+hive.query.02=\
+with score_question_source as ( \
+     select parentQuestionId as questionId, \
+            count(1) as scoreCount \
+     from ( \
+         select parentQuestionId, \
+                id as subQuestionId \
+         from lofter_db_dump.ods_db_ask_question_nd \
+         where parentQuestionId <> 0 and cosplay = 3 \
+     ) a \
+     join ( \
+         select questionId \
+         from lofter_db_dump.ods_db_ask_user_item_score_nd \
+         where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+     ) b \
+     on a.subQuestionId = b.questionId \
+     group by parentQuestionId \
+ ) \
+insert overwrite table lofter.dim_post_talk \
+select concat_ws('_',talkId,talkType) as id, \
+       talkId, \
+       talkType, \
+       blogId, \
+       questionId, \
+       questionUserId, \
+       talkContent, \
+       nvl(t2.recomStatus,0) as recomStatus, \
+       forbidStatus, \
+       valid, \
+       allowView, \
+       null as status, \
+       null as auditStatus, \
+       createTime, \
+       from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as createDate, \
+       tags, \
+       null as questionType, \
+       resolve_tag_ip(tags) as ips, \
+       ext, \
+       null as discussCount, \
+       null as scoreCount, \
+       null as parentQuestionId, \
+       null as answerCount, \
+       null as cosplay, \
+       answerType, \
+       relatedBlogId, \
+       relatedPostId, \
+       contentType, \
+       null as topicChat, \
+       null as topicId, \
+       null as is_fans_question \
+from ( \
+    select id as talkId, \
+           blogId, \
+           questionId, \
+           answer as talkContent, \
+           createTime, \
+           case when valid is not null and valid=25 then 1 else 0 end as forbidStatus, \
+           valid, \
+           allowView, \
+           questionUserId, \
+           answerType, \
+           case when answerType = 0 then 'ANSWER' \
+                when answerType = 1 then 'COS_ANSWER' \
+                when answerType = 2 then 'NORMAL_COMMENT_ANSWER' \
+                when answerType = 3 then 'LINE_COMMENT_ANSWER' \
+                when answerType = 4 then 'PHOTO_COMMENT_ANSWER' \
+                when answerType = 5 then 'JOIN_NOMINATESIGN_ANSWER' \
+                when answerType = 6 then 'JOIN_SCORE_ANSWER' \
+                when answerType = 7 then 'JOIN_NOMINATE_IMPRESSION_ANSWER' \
+                when answerType = 8 then 'PostAnswer' \
+                when answerType = 9 then 'PostAnswer' \
+                when answerType = 10 then 'PVE_PHOTO' \
+                when answerType = 11 then 'QUESTION_POST' \
+           end as talkType, \
+           case when length(trim(tag))>0 then split(lower(trim(tag)),",") else null end as tags, \
+           ext, \
+           case when answerType = 5 and ext is not null then get_json_object(ext,'$.relatedBlogId') \
+                when answerType in (8, 9, 11) and ext is not null then get_json_object(ext,'$.blogId') \
+                else null \
+           end as relatedBlogId, \
+           case when answerType = 5 and ext is not null then get_json_object(ext,'$.relatedPostId') \
+                when answerType in (8, 9, 11) and ext is not null then get_json_object(ext,'$.postId') \
+                else null \
+           end as relatedPostId \
+    from lofter_db_dump.ods_db_ask_answer_post_nd \
+) t1 \
+left join ( \
+    select postId,recomStatus from lofter_db_dump.ods_db_recommend_review_post_nd \
+) t2 \
+on t1.talkId = t2.postId \
+left join ( \
+    select id, contentType from lofter.dim_post_article \
+) t3 \
+on t1.relatedPostId = t3.id \
+union all \
+select concat_ws('_',talkId,talkType) as id, \
+       talkId, \
+       talkType, \
+       blogId, \
+       t1.questionId, \
+       questionUserId, \
+       talkContent, \
+       nvl(t2.recomStatus,0) as recomStatus, \
+       forbidStatus, \
+       null as valid, \
+       null as allowView, \
+       status, \
+       auditStatus, \
+       createTime, \
+       from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') as createDate, \
+       tags, \
+       type as questionType, \
+       resolve_tag_ip(tags) as ips, \
+       ext, \
+       discussCount, \
+       nvl(t3.scoreCount, t1.scoreCount) as scoreCount, \
+       parentQuestionId, \
+       answerCount, \
+       cosplay, \
+       null as answerType, \
+       null as relatedBlogId, \
+       null as relatedPostId, \
+       null as contentType, \
+       topicChat, \
+       topicId, \
+       if(t4.questionId is null, 0, 1) as is_fans_question \
+from ( \
+    select id as talkId, \
+           userId as blogId, \
+           null as questionId, \
+           null as questionUserId, \
+           question as talkContent, \
+           case when length(trim(tags))>0 then split(lower(trim(tags)),",") else null end as tags, \
+           type, \
+           status, \
+           createTime, \
+           auditStatus, \
+           forbidStatus, \
+           cosplay, \
+           case when cosplay = 0 then 'QUESTION' \
+                when cosplay = 1 then 'COS_QUESTION' \
+                when cosplay = 2 then 'SCORE_QUESTION' \
+                when cosplay = 3 then 'NOMINATESIGN_QUESTION' \
+                when cosplay = 4 then 'IMPRESSION_QUESTION' \
+                when cosplay = 5 then 'IMPRESSION_NOMINATE_QUESTION' \
+                when cosplay = 6 then 'CHALLENGE_QUESTION' \
+           end as talkType, \
+           ext, \
+           answerCount, \
+           discussCount, \
+           scoreCount, \
+           parentQuestionId, \
+           topicChat, \
+           topicId \
+    from lofter_db_dump.ods_db_ask_question_nd \
+) t1 \
+left join ( \
+    select questionId,recomStatus from lofter_db_dump.ods_db_recommend_review_question_nd \
+) t2 \
+on t1.talkId = t2.questionId \
+left join ( \
+    select questionId,scoreCount from score_question_source \
+) t3 \
+on t1.talkId = t3.questionId \
+left join ( \
+    select questionId from lofter_db_dump.ods_db_ask_fans_question_nd \
+) t4 \
+on t1.talkId = t4.questionId

@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_user_life_cycle_uv_dd partition(dt='${azkaban.flow.1.days.ago}') \
+              select life_cycle_type, \
+              	  count(distinct userId) as uv \
+              from  \
+              lofter.dws_user_life_circle_judge_dd  \
+              where dt = '${azkaban.flow.1.days.ago}'  \
+              group by life_cycle_type \
+              distribute by 1

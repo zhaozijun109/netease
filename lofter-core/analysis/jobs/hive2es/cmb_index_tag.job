@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select cmb_tag_id as id, hot7d, pv7d, uv7d, subscribe7d, post7d from lofter_dm.ads_cmb_tag_di where dt='${azkaban.flow.1.days.ago}'"
+params= --dest cmb_index_tag --update

@@ -1,0 +1,275 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_tag_ship_push_result_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+SELECT \
+    r.userid, \
+    r.tag, \
+    r.type, \
+    r.reach_gift_cnt, \
+    r.claimed_gift_cnt, \
+    r.unclaimed_gift_cnt, \
+    r.pushgroup \
+FROM ( \
+     SELECT \
+         b.userid, \
+         b.tag, \
+         1 AS type, \
+         b.reach_gift_cnt, \
+         b.claimed_gift_cnt, \
+         b.unclaimed_gift_cnt, \
+         'TagShipPush_1' AS pushgroup \
+     FROM ( \
+          SELECT \
+              u.userid, \
+              u.tag, \
+              COALESCE(rt.reach_gift_cnt, 0) AS reach_gift_cnt, \
+              COALESCE(c.claimed_gift_cnt, 0) AS claimed_gift_cnt, \
+              GREATEST(COALESCE(rt.reach_gift_cnt, 0) - COALESCE(c.claimed_gift_cnt, 0), 0) AS unclaimed_gift_cnt, \
+              COALESCE(y.is_yday_inc_1, 0) AS is_yday_inc_1, \
+              COALESCE(d.send_cnt_3, 0) AS send_cnt_3, \
+              COALESCE(d.click_hit_3, 0) AS click_hit_3 \
+          FROM ( \
+               SELECT \
+                   s.userid, \
+                   s.tag \
+               FROM lofter.dws_act_tag_ship_score_di s \
+               WHERE s.dt <= '${azkaban.flow.1.days.ago}' \
+                 AND s.tag IN ('第五人格') \
+               GROUP BY s.userid, s.tag \
+               ) u \
+               LEFT JOIN ( \
+                         SELECT \
+                             t.userid, \
+                             t.tag, \
+                             CASE \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 2 AND t.score_count < 5 THEN 1 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 5 AND t.score_count < 8 THEN 2 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 8 AND t.score_count < 10 THEN 3 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 10 THEN 4 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 7 AND t.score_count < 15 THEN 1 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 15 AND t.score_count < 25 THEN 2 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 25 AND t.score_count < 28 THEN 3 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 28 THEN 4 \
+                                 ELSE 0 \
+                             END AS reach_gift_cnt \
+                         FROM ( \
+                              SELECT \
+                                  s.userid, \
+                                  s.tag, \
+                                  COUNT(1) AS score_count \
+                              FROM lofter.dws_act_tag_ship_score_di s \
+                              WHERE s.dt <= '${azkaban.flow.1.days.ago}' \
+                                AND s.tag IN ('第五人格') \
+                              GROUP BY s.userid, s.tag \
+                              ) t \
+          ) rt \
+                         ON u.userid = rt.userid \
+                             AND u.tag = rt.tag \
+               LEFT JOIN ( \
+                         SELECT \
+                             x.userid, \
+                             x.tag, \
+                             COUNT(1) AS claimed_gift_cnt \
+                         FROM ( \
+                              SELECT \
+                                  r.userid, \
+                                  r.tag \
+                              FROM lofter_db_dump.ods_db_act_tag_ship_user_reward_nd r \
+                              WHERE r.tag IN ('第五人格') \
+                                AND r.status = 1 \
+                              GROUP BY r.userid, r.tag \
+                              ) x \
+                         GROUP BY x.userid, x.tag \
+          ) c \
+                         ON u.userid = c.userid \
+                             AND u.tag = c.tag \
+               LEFT JOIN ( \
+                         SELECT \
+                             s.userid, \
+                             s.tag, \
+                             MAX(CASE WHEN s.cnt = 1 THEN 1 ELSE 0 END) AS is_yday_inc_1 \
+                         FROM lofter.dws_act_tag_ship_score_di s \
+                         WHERE s.dt = '${azkaban.flow.1.days.ago}' \
+                           AND s.tag IN ('第五人格') \
+                         GROUP BY s.userid, s.tag \
+          ) y \
+                         ON u.userid = y.userid \
+                             AND u.tag = y.tag \
+               LEFT JOIN ( \
+                         SELECT \
+                             ls.userid, \
+                             ls.tag, \
+                             COUNT(1) AS send_cnt_3, \
+                             SUM(CASE WHEN COALESCE(k.click_cnt, 0) > 0 THEN 1 ELSE 0 END) AS click_hit_3 \
+                         FROM ( \
+                              SELECT \
+                                  z.userid, \
+                                  z.tag, \
+                                  z.pushgroup \
+                              FROM ( \
+                                   SELECT \
+                                       t.userid, \
+                                       t.tag, \
+                                       t.pushgroup, \
+                                       t.dt, \
+                                       ROW_NUMBER() OVER ( \
+                                           PARTITION BY t.userid, t.tag \
+                                           ORDER BY t.dt DESC \
+                                       ) AS rn \
+                                   FROM ( \
+                                        SELECT \
+                                            c.userid, \
+                                            CASE \
+                                                WHEN c.pushgroup IN ('TagShipPush_1', 'TagShipPush_如鸢_1') THEN '如鸢' \
+                                                 WHEN c.pushgroup = 'TagShipPush_第五人格_1' THEN '第五人格' \
+                                                END AS tag, \
+                                            'TagShipPush_1' AS pushgroup, \
+                                            c.dt \
+                                        FROM lofter.dwd_push_action_di c \
+                                        WHERE c.dt <= '${azkaban.flow.1.days.ago}' \
+                                          AND c.dt >= '2026-03-26' \
+                                          AND c.action = 2 \
+                                          AND c.pushgroup IN ('TagShipPush_1', 'TagShipPush_如鸢_1', 'TagShipPush_第五人格_1') \
+                                        ) t \
+                                   WHERE t.tag IS NOT NULL \
+                                   ) z \
+                              WHERE z.rn <= 3 \
+                              ) ls \
+                              LEFT JOIN ( \
+                                        SELECT \
+                                            c.userid, \
+                                            CASE \
+                                                WHEN c.pushgroup IN ('TagShipPush_1', 'TagShipPush_如鸢_1') THEN '如鸢' \
+                                                 WHEN c.pushgroup = 'TagShipPush_第五人格_1' THEN '第五人格' \
+                                                END AS tag, \
+                                            'TagShipPush_1' AS pushgroup, \
+                                            COUNT(1) AS click_cnt \
+                                        FROM lofter.dwd_push_action_di c \
+                                        WHERE c.dt >= '2026-03-26' \
+                                          AND c.dt <= '${azkaban.flow.1.days.ago}' \
+                                          AND c.action = 3 \
+                                          AND c.pushgroup IN ('TagShipPush_1', 'TagShipPush_如鸢_1', 'TagShipPush_第五人格_1') \
+                                        GROUP BY \
+                                            c.userid, \
+                                            CASE \
+                                                WHEN c.pushgroup IN ('TagShipPush_1', 'TagShipPush_如鸢_1') THEN '如鸢' \
+                                                 WHEN c.pushgroup = 'TagShipPush_第五人格_1' THEN '第五人格' \
+                                                END \
+                         ) k \
+                                        ON ls.userid = k.userid \
+                                            AND ls.tag = k.tag \
+                                            AND ls.pushgroup = k.pushgroup \
+                         GROUP BY ls.userid, ls.tag \
+          ) d \
+                         ON u.userid = d.userid \
+                             AND u.tag = d.tag \
+          ) b \
+     WHERE b.is_yday_inc_1 = 1 \
+       AND b.unclaimed_gift_cnt > 0 \
+       AND NOT (b.send_cnt_3 = 3 AND b.click_hit_3 = 0) \
+ \
+     UNION ALL \
+ \
+     SELECT \
+     b.userid, \
+     b.tag, \
+     2 AS type, \
+     b.reach_gift_cnt, \
+     b.claimed_gift_cnt, \
+     b.unclaimed_gift_cnt, \
+     'TagShipPush_2' AS pushgroup \
+     FROM ( \
+     SELECT \
+         u.userid, \
+         u.tag, \
+         COALESCE(rt.reach_gift_cnt, 0) AS reach_gift_cnt, \
+         COALESCE(ry.reach_gift_cnt_yday, 0) AS reach_gift_cnt_yday, \
+         COALESCE(c.claimed_gift_cnt, 0) AS claimed_gift_cnt, \
+         GREATEST(COALESCE(rt.reach_gift_cnt, 0) - COALESCE(c.claimed_gift_cnt, 0), 0) AS unclaimed_gift_cnt \
+     FROM ( \
+          SELECT \
+              s.userid, \
+              s.tag \
+          FROM lofter.dws_act_tag_ship_score_di s \
+          WHERE s.dt <= '${azkaban.flow.1.days.ago}' \
+            AND s.tag IN ('第五人格') \
+          GROUP BY s.userid, s.tag \
+          ) u \
+          LEFT JOIN ( \
+                    SELECT \
+                        t.userid, \
+                        t.tag, \
+                        CASE \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 2 AND t.score_count < 5 THEN 1 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 5 AND t.score_count < 8 THEN 2 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 8 AND t.score_count < 10 THEN 3 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 10 THEN 4 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 7 AND t.score_count < 15 THEN 1 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 15 AND t.score_count < 25 THEN 2 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 25 AND t.score_count < 28 THEN 3 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 28 THEN 4 \
+                                 ELSE 0 \
+                             END AS reach_gift_cnt \
+                    FROM ( \
+                         SELECT \
+                             s.userid, \
+                             s.tag, \
+                             COUNT(1) AS score_count \
+                         FROM lofter.dws_act_tag_ship_score_di s \
+                         WHERE s.dt <= '${azkaban.flow.1.days.ago}' \
+                           AND s.tag IN ('第五人格') \
+                         GROUP BY s.userid, s.tag \
+                         ) t \
+     ) rt \
+                    ON u.userid = rt.userid \
+                        AND u.tag = rt.tag \
+          LEFT JOIN ( \
+                    SELECT \
+                        t.userid, \
+                        t.tag, \
+                        CASE \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 2 AND t.score_count < 5 THEN 1 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 5 AND t.score_count < 8 THEN 2 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 8 AND t.score_count < 10 THEN 3 \
+                                 WHEN t.tag = '如鸢' AND t.score_count >= 10 THEN 4 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 7 AND t.score_count < 15 THEN 1 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 15 AND t.score_count < 25 THEN 2 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 25 AND t.score_count < 28 THEN 3 \
+                                 WHEN t.tag = '第五人格' AND t.score_count >= 28 THEN 4 \
+                                 ELSE 0 \
+                             END AS reach_gift_cnt_yday \
+                    FROM ( \
+                         SELECT \
+                             s.userid, \
+                             s.tag, \
+                             COUNT(1) AS score_count \
+                         FROM lofter.dws_act_tag_ship_score_di s \
+                         WHERE s.dt <= date_sub('${azkaban.flow.1.days.ago}', 1) \
+                           AND s.tag IN ('第五人格') \
+                         GROUP BY s.userid, s.tag \
+                         ) t \
+     ) ry \
+                    ON u.userid = ry.userid \
+                        AND u.tag = ry.tag \
+          LEFT JOIN ( \
+                    SELECT \
+                        x.userid, \
+                        x.tag, \
+                        COUNT(1) AS claimed_gift_cnt \
+                    FROM ( \
+                         SELECT \
+                             r.userid, \
+                             r.tag \
+                         FROM lofter_db_dump.ods_db_act_tag_ship_user_reward_nd r \
+                         WHERE r.tag IN ('第五人格') \
+                                AND r.status = 1 \
+                         GROUP BY r.userid, r.tag \
+                         ) x \
+                    GROUP BY x.userid, x.tag \
+     ) c \
+                    ON u.userid = c.userid \
+                        AND u.tag = c.tag \
+     ) b \
+     WHERE b.reach_gift_cnt > b.reach_gift_cnt_yday \
+       AND b.unclaimed_gift_cnt > 0 \
+     ) r

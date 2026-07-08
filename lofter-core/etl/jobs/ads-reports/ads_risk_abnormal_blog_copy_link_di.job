@@ -1,0 +1,20 @@
+type=sparksql
+dependencies=abnormal_behavior_user_stats
+hive.query.01=insert overwrite table lofter_dm.ads_risk_abnormal_blog_copy_link_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select concat_ws('-',flag,postId) as id, \
+         a.flag,b.id as postId,b.blogId \
+    from  \
+         (select dt,userId, \
+                case when allNum>10 then '高' \
+                    when allNum<=10 and  allNum>5  then '中' \
+                else '低' end as flag, \
+         target as postid \
+         from lofter_dm.ads_abnormal_behavior_user_detail_stats_di \
+         where  type='复制链接' and dt='${azkaban.flow.1.days.ago}' \
+         group by 1,2,3,4) a \
+    join (select id,blogid from lofter.dim_post) b \
+        on a.postid=b.id \
+    left join (select  blogid from lofter.zq_lofter_xuncha_blogid_zeppelin) c \
+        on a.userId=c.blogid \
+    where c.blogid is null \
+    distribute by 1

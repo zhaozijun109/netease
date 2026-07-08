@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_card_ip_gmv_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select n.ip, sum(m.amount) as gmv_30d \
+from ( \
+    select buyerId as userId, cardActivityCode, createTime as orderTime, \
+                 storePrice * productNum - newCouponPreferential as amount \
+    from lofter_db_dump.ods_db_benefit_order_product_nd \
+    where from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+          status in (1, 4) and type = 5 \
+) m join ( \
+    select a.ip, a.cardActivityId, b.code as cardActivityCode \
+    from ( \
+        select productId as cardActivityId, cmbIpName as ip \
+        from lofter_db_dump.ods_db_benefit_product_cmb_ip_relation_nd \
+        where status = 0 and `type`=1 \
+    ) a join lofter_db_dump.ods_db_benefit_card_activity_nd b on a.cardActivityId = b.id \
+) n on m.cardActivityCode = n.cardActivityCode \
+group by n.ip \
+distribute by 1

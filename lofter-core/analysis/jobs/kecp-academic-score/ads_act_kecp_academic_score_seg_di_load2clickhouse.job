@@ -1,0 +1,6 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt, activityName,score_seg,uv from lofter_dm.ads_act_kecp_academic_score_seg_di where dt = '${azkaban.flow.current.date}' "
+params=--dest hive.ads_act_kecp_academic_score_seg_di --partition '${azkaban.flow.current.date}'
+retries=0
+dependencies=ads_act_kecp_academic_score_seg_di

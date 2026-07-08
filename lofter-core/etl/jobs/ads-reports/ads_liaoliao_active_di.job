@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=INSERT OVERWRITE TABLE lofter_dm.ads_liaoliao_active_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+              SELECT COUNT(distinct deviceUdid) AS uv \
+              FROM lofter.dwd_liaoliao_mda_base \
+              WHERE dt = '${azkaban.flow.1.days.ago}'

@@ -1,0 +1,28 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE `lofter_dm`.`ads_column_delivery_task_info_dd` partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  colTaskId, \
+        columnId, \
+        scene, \
+        SUM(exposureCount) AS exposureCount, \
+        SUM(clickCount) AS clickCount, \
+        NVL(SUM(clickCount)/SUM(exposureCount),0) AS clickRateCount \
+FROM ( \
+      SELECT  colTaskId, \
+              columnId, \
+              scene, \
+              exposureCount, \
+              clickCount \
+      FROM `lofter_dm`.`ads_column_delivery_task_info_di` WHERE dt = '${azkaban.flow.1.days.ago}' \
+      UNION ALL \
+      SELECT  colTaskId, \
+              columnId, \
+              scene, \
+              NVL(exposureCount, 0) AS exposureCount, \
+              NVL(clickCount, 0) AS clickCount \
+      FROM `lofter_dm`.`ads_column_delivery_task_info_dd` WHERE dt = '${azkaban.flow.2.days.ago}' \
+) tmp1 \
+GROUP BY colTaskId, \
+         columnId, \
+         scene
+dependencies=ads_column_delivery_task_info_di

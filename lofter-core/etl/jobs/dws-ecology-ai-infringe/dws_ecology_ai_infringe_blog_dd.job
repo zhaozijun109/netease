@@ -1,0 +1,121 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_ecology_ai_infringe_blog_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+       sum(complaint_uv) as complaint_uv, \
+       sum(complaint_user_uv) as complaint_user_uv, \
+       sum(complaint_partner_uv) as complaint_partner_uv, \
+       sum(complaint_uv_1d) as complaint_uv_1d, \
+       sum(complaint_uv_3d) as complaint_uv_3d, \
+       sum(complaint_uv_5d) as complaint_uv_5d, \
+       sum(complaint_uv_7d) as complaint_uv_7d, \
+       sum(complaint_uv_15d) as complaint_uv_15d, \
+       sum(complaint_uv_30d) as complaint_uv_30d, \
+       sum(complaint_uv_60d) as complaint_uv_60d, \
+       sum(complaint_uv_90d) as complaint_uv_90d, \
+       sum(complaint_user_uv_1d) as complaint_user_uv_1d, \
+       sum(complaint_user_uv_3d) as complaint_user_uv_3d, \
+       sum(complaint_user_uv_5d) as complaint_user_uv_5d, \
+       sum(complaint_user_uv_7d) as complaint_user_uv_7d, \
+       sum(complaint_user_uv_15d) as complaint_user_uv_15d, \
+       sum(complaint_user_uv_30d) as complaint_user_uv_30d, \
+       sum(complaint_user_uv_60d) as complaint_user_uv_60d, \
+       sum(complaint_user_uv_90d) as complaint_user_uv_90d, \
+       sum(complaint_partner_uv_1d) as complaint_partner_uv_1d, \
+       sum(complaint_partner_uv_3d) as complaint_partner_uv_3d, \
+       sum(complaint_partner_uv_5d) as complaint_partner_uv_5d, \
+       sum(complaint_partner_uv_7d) as complaint_partner_uv_7d, \
+       sum(complaint_partner_uv_15d) as complaint_partner_uv_15d, \
+       sum(complaint_partner_uv_30d) as complaint_partner_uv_30d, \
+       sum(complaint_partner_uv_60d) as complaint_partner_uv_60d, \
+       sum(complaint_partner_uv_90d) as complaint_partner_uv_90d, \
+       min(first_complaint_date) as first_complaint_date, \
+       max(last_complaint_date) as last_complaint_date, \
+       sum(rec_ai_recognition_cnt) as rec_ai_recognition_cnt, \
+       sum(partner_judge_cnt) as partner_judge_cnt \
+from ( \
+    select blogId, \
+           count(distinct t1.userId) as complaint_uv, \
+           count(distinct case when t2.userId is null then t1.userId end) as complaint_user_uv, \
+           count(distinct case when t2.userId is not null then t1.userId end) as complaint_partner_uv, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 1 then t1.userId end) as complaint_uv_1d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 3 then t1.userId end) as complaint_uv_3d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 5 then t1.userId end) as complaint_uv_5d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 7 then t1.userId end) as complaint_uv_7d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 15 then t1.userId end) as complaint_uv_15d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 30 then t1.userId end) as complaint_uv_30d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 60 then t1.userId end) as complaint_uv_60d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 90 then t1.userId end) as complaint_uv_90d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 1 then t1.userId end) as complaint_user_uv_1d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 3 then t1.userId end) as complaint_user_uv_3d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 5 then t1.userId end) as complaint_user_uv_5d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 7 then t1.userId end) as complaint_user_uv_7d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 15 then t1.userId end) as complaint_user_uv_15d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 30 then t1.userId end) as complaint_user_uv_30d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 60 then t1.userId end) as complaint_user_uv_60d, \
+           count(distinct case when t2.userId is null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 90 then t1.userId end) as complaint_user_uv_90d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 1 then t1.userId end) as complaint_partner_uv_1d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 3 then t1.userId end) as complaint_partner_uv_3d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 5 then t1.userId end) as complaint_partner_uv_5d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 7 then t1.userId end) as complaint_partner_uv_7d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 15 then t1.userId end) as complaint_partner_uv_15d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 30 then t1.userId end) as complaint_partner_uv_30d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 60 then t1.userId end) as complaint_partner_uv_60d, \
+           count(distinct case when t2.userId is not null and datediff('${azkaban.flow.1.days.ago}', t1.createDate) < 90 then t1.userId end) as complaint_partner_uv_90d, \
+           min(t1.createDate) as first_complaint_date, \
+           max(t1.createDate) as last_complaint_date, \
+           0 as rec_ai_recognition_cnt, \
+           0 as partner_judge_cnt \
+    from ( \
+        select postId, blogId, userId, createDate \
+        from lofter.dwd_ecology_ai_infringe_post_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and source in (1, 2) \
+    ) t1 \
+    left join ( \
+        select blogId as userId \
+        from lofter_db_dump.ods_db_partner_apply_job_nd \
+        where partnerType = 5 and status = 0 and from_unixtime(cast(endTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.1.days.ago}' \
+        group by blogId \
+    ) t2 \
+    on t1.userId = t2.userId \
+    group by blogId \
+\
+    union all \
+\
+    select blogId, \
+           0 as complaint_uv, \
+           0 as complaint_user_uv, \
+           0 as complaint_partner_uv, \
+           0 as complaint_uv_1d, \
+           0 as complaint_uv_3d, \
+           0 as complaint_uv_5d, \
+           0 as complaint_uv_7d, \
+           0 as complaint_uv_15d, \
+           0 as complaint_uv_30d, \
+           0 as complaint_uv_60d, \
+           0 as complaint_uv_90d, \
+           0 as complaint_user_uv_1d, \
+           0 as complaint_user_uv_3d, \
+           0 as complaint_user_uv_5d, \
+           0 as complaint_user_uv_7d, \
+           0 as complaint_user_uv_15d, \
+           0 as complaint_user_uv_30d, \
+           0 as complaint_user_uv_60d, \
+           0 as complaint_user_uv_90d, \
+           0 as complaint_partner_uv_1d, \
+           0 as complaint_partner_uv_3d, \
+           0 as complaint_partner_uv_5d, \
+           0 as complaint_partner_uv_7d, \
+           0 as complaint_partner_uv_15d, \
+           0 as complaint_partner_uv_30d, \
+           0 as complaint_partner_uv_60d, \
+           0 as complaint_partner_uv_90d, \
+           cast(null as string) as first_complaint_date, \
+           cast(null as string) as last_complaint_date, \
+           count(distinct case when source = 3 then postId end) as rec_ai_recognition_cnt, \
+           count(distinct case when source = 4 then postId end) as partner_judge_cnt \
+    from lofter.dwd_ecology_ai_infringe_post_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and source in (3, 4) \
+    group by blogId \
+) merged \
+group by blogId

@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_hot_list_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select collectionId, tag, 'hot' as list_type, subscribe_uv_7d as index_value, rk   \
+from ( \
+    select collectionId,tag,subscribe_uv_7d, \
+           case when rk = first_prior_rk then 1 \
+                when rk = if(first_prior_rk == second_prior_rk1, second_prior_rk2, second_prior_rk1) then 2 \
+                else rk + 2 end as rk \
+    from ( \
+        select collectionId,tag,subscribe_uv_7d, hot_7d, rk, \
+               max(if(is_recommend = 1 and recommend_rk = 1 and rk <= 20, rk, 0)) over (partition by tag order by recommend_rk) as first_prior_rk, \
+               max(if(is_recommend = 1 and hot_trend_rk = 1 and rk <= 20, rk, 0)) over (partition by tag order by hot_trend_rk) as second_prior_rk1, \
+               max(if(is_recommend = 1 and hot_trend_rk = 2 and rk <= 20, rk, 0)) over (partition by tag order by hot_trend_rk) as second_prior_rk2 \
+        from ( \
+            select a.collectionId,tag,subscribe_uv_7d, hot_7d, \
+                   is_recommend, \
+                   row_number() over(partition by tag order by subscribe_uv_7d desc,lastPublishTime desc) as rk, \
+                   row_number() over(partition by tag order by is_recommend desc, subscribe_uv_7d desc, lastPublishTime desc) as recommend_rk, \
+                   row_number() over(partition by tag order by is_recommend desc, hot_7d desc, lastPublishTime desc) as hot_trend_rk \
+            from ( \
+                select * from lofter.dws_collection_dd \
+                where dt = '${azkaban.flow.1.days.ago}' and postCount > 3 and status = 0 and subscribe_uv_7d > 0 and \
+                      datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(lastPublishTime/1000 as bigint),'yyyy-MM-dd')) < 7  \
+            ) a lateral view explode(split(tags, ',')) t1 as tag \
+        ) t \
+    ) tt \
+) where rk <= 12 and length(tag) > 0 \
+union all \
+select collectionId, tag, 'rec' as list_type, weight_hot as index_value, rk \
+from ( \
+    select a.collectionId,tag,weight_hot, \
+           is_recommend, \
+           row_number() over(partition by tag order by weight_hot desc, lastPublishTime desc) as rk \
+    from ( \
+        select *, \
+               case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 and postCount > 3 then postCollectionHot * 5 \
+                    when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(lastPublishTime/1000 as bigint),'yyyy-MM-dd')) < 30 then postCollectionHot*3 \
+                    else postCollectionHot end as weight_hot \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and postCount > 0 and postCollectionHot > 5 and status = 0 and \
+              from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') >='2022-01-01' \
+    ) a lateral view explode(split(tags,',')) t1 as tag \
+) where rk <= 2000 and length(tag) > 0 \
+distribute by 1

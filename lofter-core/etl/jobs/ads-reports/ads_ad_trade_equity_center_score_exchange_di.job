@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_trade_equity_center_score_exchange_di partition(dt='${azkaban.flow.1.days.ago}') \
+select count(distinct userid) as uv,sum(count) as count,name,category,subCategory,sum(a.delta) as delta \
+from  \
+(select a.*,name,category,subCategory,count \
+from  \
+(Select id,userid,delta,refid \
+from \
+lofter_db_dump.ods_db_reward_user_score_log_nd \
+where action=-1 and  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}') a \
+ \
+join \
+ \
+(select id,get_json_object(ref, '$.name') as name, \
+get_json_object(ref, '$.category') as category, \
+get_json_object(ref, '$.subCategory') as subCategory, \
+get_json_object(ref, '$.count') as count \
+from lofter_db_dump.ods_db_reward_exchange_record_nd) b \
+ \
+on a.refid=b.id ) a \
+group by category,subCategory,name \
+grouping sets( \
+(category,subCategory,name),(category),(category,subCategory) \
+) \

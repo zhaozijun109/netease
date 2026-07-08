@@ -1,0 +1,91 @@
+type=sparksql
+hive.query.01=\
+with exp_users as( \
+    select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id \
+    from lofter.dwd_ab_platform_exp_user_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 , 2, 3, 4, 5, 6 \
+), \
+beginner_guide_metric as( \
+    select a.*, \
+        if(nvl(click_choose_category_cnt,0) > 0, 1, 0) as choose_category_uv, \
+        if(nvl(click_choose_ip_cnt,0) > 0 or nvl(click_choose_tag_cnt,0) > 0, 1, 0) as choose_ip_tag_uv, \
+        if(nvl(click_choose_category_cnt,0) > 0 or nvl(click_choose_ip_cnt,0) > 0 or nvl(click_choose_tag_cnt,0) > 0, 1, 0) as click_choose_uv, \
+        if(nvl(click_skip_cnt,0) > 0, 1, 0) as click_skip_uv, \
+        nvl(app_backend2front_cnts, 0) + nvl(power_on_cnts, 0) as open_app_cnts, \
+        nvl(slide_left_cnts, 0) as slide_left_cnts, \
+        if(slide_left_cnts > 0, 1, 0) as slide_left_uv, \
+        nvl(exposed_comment_cnts, 0) as exposed_comment_cnts, \
+        nvl(underscore_window_exposed_cnt, 0) as underscore_window_exposed_cnt, \
+        nvl(article_post_cover_exposed_cnt, 0) as article_post_cover_exposed_cnt, \
+        if(nvl(article_post_cover_exposed_cnt, 0) > 0, 1, 0) as article_post_cover_exposed_uv, \
+        nvl(article_post_cover_clicked_cnt, 0) as article_post_cover_clicked_cnt, \
+        if(nvl(article_post_cover_clicked_cnt, 0) > 0, 1, 0) as article_post_cover_clicked_uv, \
+        nvl(watch_later_func_usage_cnt, 0) as watch_later_func_usage_cnt, \
+        if(nvl(watch_later_func_usage_cnt, 0) > 0, 1, 0) as watch_later_func_usage_uv, \
+        nvl(discover_refresh_tip_exposed_cnt, 0) as discover_refresh_tip_exposed_cnt, \
+        if(nvl(discover_refresh_tip_exposed_cnt, 0) > 0, 1, 0) as discover_refresh_tip_exposed_uv, \
+        nvl(discover_refresh_tip_click_cnt, 0) as discover_refresh_tip_click_cnt, \
+        if(nvl(discover_refresh_tip_click_cnt, 0) > 0, 1, 0) as discover_refresh_tip_click_uv \
+    from exp_users a \
+    left join( \
+        select userId, \
+            sum(click_choose_category_cnt) click_choose_category_cnt, \
+            sum(click_choose_ip_cnt) click_choose_ip_cnt, \
+            sum(click_choose_tag_cnt) click_choose_tag_cnt, \
+            sum(click_skip_cnt) click_skip_cnt, \
+            sum(app_backend2front_cnts) as app_backend2front_cnts, \
+            sum(slide_left_cnts) as slide_left_cnts, \
+            sum(slide_right_cnts) as slide_right_cnts, \
+            sum(case when \
+                cast(split(appversion,'\\\\.')[0] as int) > 8  \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) > 2)  \
+                or (cast(split(appversion,'\\\\.')[0] as int) = 8 and cast(split(appversion,'\\\\.')[1] as int) = 2 and cast(split(appversion,'\\\\.')[2] as int) >= 35 ) \
+                then exposed_comment_cnts end \
+            ) as exposed_comment_cnts, \
+            sum(underscore_window_exposed_cnt) as underscore_window_exposed_cnt, \
+            sum(article_post_cover_exposed_cnt) as article_post_cover_exposed_cnt, \
+            sum(article_post_cover_clicked_cnt) as article_post_cover_clicked_cnt, \
+            sum(watch_later_func_usage_cnt) as watch_later_func_usage_cnt, \
+            sum(discover_refresh_tip_exposed_cnt) as discover_refresh_tip_exposed_cnt, \
+            sum(discover_refresh_tip_click_cnt) as discover_refresh_tip_click_cnt \
+        from lofter.dwd_beginner_guide_page_events_di \
+        where dt = '${azkaban.flow.1.days.ago}' and userId > 0 \
+        group by userId \
+    )b \
+    on a.userId = b.userId \
+    left join( \
+        select blogId, count(distinct reqid) as power_on_cnts \
+        from lofter.ods_log_ad_dsp_di \
+        where dt = '${azkaban.flow.1.days.ago}' and blogId > 0 and positionid = '1000' and success = 1 \
+        group by blogId \
+    )c \
+    on a.userId = c.blogId \
+) \
+insert overwrite table lofter.dws_ab_platform_client_metric_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select exp_id, bucket_id, exp_date as basedate, '全部' as dimnesion, userId, metric_info.metric, metric_info.metric_value, 'ALL' as dimension_value \
+from beginner_guide_metric a \
+lateral view explode( \
+    ARRAY( \
+        struct('choose_category_uv' as metric, cast(choose_category_uv as double) as metric_value), \
+        struct('choose_ip_tag_uv' as metric, cast(choose_ip_tag_uv as double) as metric_value), \
+        struct('click_choose_uv' as metric, cast(click_choose_uv as double) as metric_value), \
+        struct('click_skip_uv' as metric, cast(click_skip_uv as double) as metric_value), \
+        struct('open_app_cnts' as metric, cast(open_app_cnts as double) as metric_value), \
+        struct('slide_left_cnts' as metric, cast(slide_left_cnts as double) as metric_value), \
+        struct('slide_left_uv' as metric, cast(slide_left_uv as double) as metric_value), \
+        struct('exposed_comment_cnts' as metric, cast(exposed_comment_cnts as double) as metric_value), \
+        struct('underscore_window_exposed_cnt' as metric, cast(underscore_window_exposed_cnt as double) as metric_value), \
+        struct('article_post_cover_exposed_cnt' as metric, cast(article_post_cover_exposed_cnt as double) as metric_value), \
+        struct('article_post_cover_exposed_uv' as metric, cast(article_post_cover_exposed_uv as double) as metric_value), \
+        struct('article_post_cover_clicked_cnt' as metric, cast(article_post_cover_clicked_cnt as double) as metric_value), \
+        struct('article_post_cover_clicked_uv' as metric, cast(article_post_cover_clicked_uv as double) as metric_value), \
+        struct('watch_later_func_usage_cnt' as metric, cast(watch_later_func_usage_cnt as double) as metric_value), \
+        struct('watch_later_func_usage_uv' as metric, cast(watch_later_func_usage_uv as double) as metric_value), \
+        struct('discover_refresh_tip_exposed_cnt' as metric, cast(discover_refresh_tip_exposed_cnt as double) as metric_value), \
+        struct('discover_refresh_tip_exposed_uv' as metric, cast(discover_refresh_tip_exposed_uv as double) as metric_value), \
+        struct('discover_refresh_tip_click_cnt' as metric, cast(discover_refresh_tip_click_cnt as double) as metric_value), \
+        struct('discover_refresh_tip_click_uv' as metric, cast(discover_refresh_tip_click_uv as double) as metric_value) \
+    ) \
+)metrics as metric_info
+dependencies=dwd_ab_platform_exp_user_di

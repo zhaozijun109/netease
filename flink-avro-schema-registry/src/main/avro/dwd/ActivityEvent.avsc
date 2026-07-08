@@ -1,0 +1,28 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "ActivityEvent",
+  "fields": [
+    {"name": "platform", "type": "string"},
+    {"name": "dataType", "type": "string"},
+    {"name": "appKey", "type": "string"},
+    {"name": "deviceUdid", "type": "string"},
+    {"name": "devicePlatform", "type": "string"},
+    {"name": "deviceOs", "type": "string"},
+    {"name": "eventId", "type": "string"},
+    {"name": "currentUrl", "type": "string"},
+    {"name": "ip", "type": "string"},
+    {"name": "userId", "type": "long"},
+    {"name": "occurTime", "type": "long"},
+    {"name": "costTime", "type": "long"},
+    {"name": "kafkaTime", "type": "long"},
+    {"name": "activityId", "type": "string"},
+    {"name": "channel", "type": "string", "doc": "mapping attributes.channel"},
+    {"name": "value", "type": "long", "doc": "mapping attributes.value"},
+    {"name": "attributes", "type": "string"},
+    {"name": "deviceId", "type": "long"},
+    {"name": "profileCreateTime", "type": "long"},
+    {"name": "profileCreateFrom", "type": "string"},
+    {"name": "clientHubbleDeviceId", "type": "string"}
+  ]
+}

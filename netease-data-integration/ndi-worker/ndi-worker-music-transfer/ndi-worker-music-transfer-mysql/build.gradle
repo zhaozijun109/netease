@@ -1,0 +1,16 @@
+dependencies {
+  compileOnlyPackages.each { packageName ->
+    compileOnly packageName
+  }
+  compileOnly project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-common")
+  implementation project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-jdbc")
+  implementation packages.mysqlConnector
+  testImplementation packages.junit
+}
+
+task createPackageDir(type: Copy) {
+  dependsOn "build"
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/")
+}

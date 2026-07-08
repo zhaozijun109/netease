@@ -1,0 +1,65 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+raw_events AS ( \
+    SELECT \
+        monotonically_increasing_id() AS event_id,  \
+        t.userid, \
+        t.duration, \
+        t.post_ips \
+    FROM \
+        lofter.dwd_post_browse_di t \
+    WHERE \
+        t.dt BETWEEN date_sub('${azkaban.flow.1.days.ago}', 13) AND '${azkaban.flow.1.days.ago}' \
+        AND t.is_real = 1 \
+        AND t.action_type = 'page_duration' \
+        AND t.userid IS NOT NULL \
+        AND t.duration > 0 \
+        AND t.post_ips IS NOT NULL AND size(t.post_ips) > 0 \
+), \
+ip_category_mapping AS ( \
+    SELECT \
+        ip, \
+        category_res AS vertical_category \
+    FROM \
+        lofter.dim_seven_group_ip_category_res_dd \
+    WHERE \
+        dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY \
+        ip, category_res \
+), \
+event_to_unique_categories AS ( \
+    SELECT \
+        t_exploded.event_id, \
+        t_exploded.userid, \
+        t_exploded.duration, \
+        t_mapping.vertical_category \
+    FROM ( \
+        SELECT \
+            event_id, \
+            userid, \
+            duration, \
+            ip_exploded.ip \
+        FROM \
+            raw_events \
+        LATERAL VIEW explode(post_ips) ip_exploded AS ip \
+    ) t_exploded \
+    JOIN \
+        ip_category_mapping t_mapping ON t_exploded.ip = t_mapping.ip \
+    GROUP BY \
+        t_exploded.event_id, \
+        t_exploded.userid, \
+        t_exploded.duration, \
+        t_mapping.vertical_category \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_user_vertical_category_14d_report_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    t.userid, \
+    t.vertical_category, \
+    CAST(SUM(t.duration) / 1000 AS BIGINT) AS total_valid_duration_seconds_14d, \
+    COUNT(t.event_id) AS total_valid_pv_14d \
+FROM \
+    event_to_unique_categories t \
+GROUP BY \
+    t.userid, \
+    t.vertical_category

@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_trade_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT b.period as stat_period \
+	,'all' AS business_type \
+	,sum(money) AS MONEY \
+	,count(1) AS trade_num \
+	,sum(product_num) AS product_num \
+	,count(distinct userid) AS uv \
+FROM ( \
+      select userId, revenue_module, order_type, orderId, money, product_num, pay_date \
+      from lofter.dwd_user_order_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' and \
+            order_type = 'benefit' \
+ ) a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+WHERE b.calendar_date = '${azkaban.flow.1.days.ago}' \
+GROUP BY 1, 2 \
+UNION ALL \
+SELECT b.period as stat_period \
+	,revenue_module as business_type \
+	,sum(money) AS MONEY \
+	,count(1) AS trade_num \
+	,sum(product_num) AS product_num \
+	,count(distinct userid) AS uv \
+FROM ( \
+      select userId, revenue_module, order_type, orderId, money, product_num, pay_date \
+      from lofter.dwd_user_order_dd \
+      where dt = '${azkaban.flow.1.days.ago}' and pay_date <= '${azkaban.flow.1.days.ago}' and \
+            order_type = 'benefit' \
+ ) a join lofter.bridge_calendar_date b on a.pay_date = b.relate_date \
+WHERE b.calendar_date = '${azkaban.flow.1.days.ago}' \
+GROUP BY 1, 2
+

@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_gift_gain_users_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.id as userId \
+    from ( \
+        select id \
+        from lofter.dim_user \
+        where isanonymous=0 and istest=0 and \
+              from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd') < '${azkaban.flow.7.days.ago}' \
+    ) a \
+    join ( \
+      select blogid, count(if(hot>=100, postid, null)) hot100Posts, sum(hot) totalHot \
+      from ( \
+        select a.blogid,a.postid,count(1) hot \
+        from lofter_db_dump.ods_db_post_hot_nd a join lofter.dim_post b on a.postid=b.id \
+        where datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(a.optime/1000 as bigint),'yyyy-MM-dd')) between 0 and 90 \
+        and a.type=1  and b.valid=0 and b.allowview=0  and b.iscitedpost=false \
+        and a.publisheruserid<>a.blogid \
+        and b.contenttype<>'问答' \
+        group by a.blogid,a.postid \
+      ) t \
+      group by blogid \
+      having totalHot > 5000 and hot100Posts >= 2 \
+    ) b on a.id = b.blogid \
+    left join  lofter_db_dump.ods_db_trade_gift_account_nd c \
+    on a.id = c.userId \
+    where c.userId is null distribute by 1

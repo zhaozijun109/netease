@@ -1,0 +1,39 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_shuare_model_backend_di partition(dt='${azkaban.flow.1.days.ago}') \
+              select a.postId,a.blogId from   \
+              (select postId,blogId	 \
+              from lofter_dm.ads_risk_shuare_model_stat_di 	 \
+              where dt='${azkaban.flow.1.days.ago}'  and     \
+              ( dailyshuahot>=250 or (dailyshuahot between 100 and 249 and comment_cnt<=6 and comment_cnt_1d<=2 ) or \
+              (dailyshuahot between 150 and 249 and (dailyshuahot/dailyhot)>=0.4) or   \
+              (dailyshuahot between 100 and 149 and (dailyshuahot/dailyhot)>=0.5) or   \
+              (dailyshuahot between 50 and 99 and (dailyshuahot/dailyhot)>=0.8)  )   \
+              union	 \
+              select a.postId,a.blogId	 \
+              from 	 \
+              (select a.postId,a.blogId,sum(b.num) as num	 \
+              from 	 \
+              (select postId,blogId ,publisheruserid	 \
+              from lofter.dwd_suspect_shuare_model_di	 \
+              where dt between date_sub('${azkaban.flow.1.days.ago}',29) and '${azkaban.flow.1.days.ago}'	 \
+              group by postId,blogId ,publisheruserid) a	 \
+              join	 \
+              (select count(1) as num ,postId,publisheruserid from lofter_db_dump.ods_db_post_hot_nd 	 \
+              where type in (1,2,3,4) and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(optime / 1000 AS BIGINT), 'yyyy-MM-dd'))<30	 \
+              group by postId,publisheruserid ) b	 \
+              on a.publisheruserid=b.publisheruserid and a.postId=b.postId	 \
+              group by 1,2) a	 \
+              where a.num>=900) a	 \
+              left join             \
+              (select id from lofter.zq_lofter_shuaretag_white where type='post') b     \
+              on a.postid=b.id      \
+              left join             \
+              (select id from lofter.zq_lofter_shuaretag_white where type='blog') c     \
+              on a.blogid=c.id      \
+              left join             \
+              (select userId as blogid from lofter.dws_par_creator_dd                 \
+              where dt='${azkaban.flow.1.days.ago}' and level in ('S','A') group by userId ) d      \
+              on a.blogid=d.blogid      \
+              where b.id is null and c.id is null  and d.blogid is null    \
+              distribute by 1
+dependencies=ads_risk_shuare_model_stat_di

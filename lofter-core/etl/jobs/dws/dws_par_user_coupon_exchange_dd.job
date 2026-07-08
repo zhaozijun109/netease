@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_coupon_exchange_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, \
+       sum(if(dt = '${azkaban.flow.1.days.ago}', 1,0)) as coupon_count_1d, \
+       sum(if(dt >= '${azkaban.flow.7.days.ago}', 1,0)) as coupon_count_7d, \
+       sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}',14), 1,0)) as coupon_count_15d, \
+       sum(if(dt >= '${azkaban.flow.30.days.ago}', 1,0)) as coupon_count_30d, \
+       sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}',89), 1,0)) as coupon_count_90d, \
+       sum(if(dt >= date_sub('${azkaban.flow.1.days.ago}',179), 1,0)) as coupon_count_180d, \
+       count(1) as coupon_std \
+from ( \
+    select userId, from_unixtime(cast(exchangeTime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt \
+    from lofter_db_dump.ods_db_trade_return_gift_exchange_record_nd \
+    where from_unixtime(cast(exchangeTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) t \
+group by userId \

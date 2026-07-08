@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 付费文章曝光篇数 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '付费文章曝光篇数'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '付费文章曝光篇数' as tag, 'DAY_30' as cat, \
+                                         case when paid_post_expose_count_30d < 50 then '1-50' \
+                                              else '50+' end as grp \
+                                  from lofter.dws_par_user_traffic_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and paid_post_expose_count_30d > 0 ) "

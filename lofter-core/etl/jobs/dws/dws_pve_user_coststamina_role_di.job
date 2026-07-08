@@ -1,0 +1,62 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dws_pve_user_coststamina_role_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT t1.userId, \
+       t1.roleId, \
+       t1.roleName, \
+       t1.roleDef, \
+       sum(costStamina) AS total_costStamina \
+FROM ( \
+    SELECT  userId, \
+            (stamina / delta * grassDelta) as costStamina, \
+            roleId, \
+            roleName, \
+            CASE WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 0 THEN 'ogc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 10 THEN 'hc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 20 THEN 'pc' \
+                 WHEN roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4 THEN 'ugc' \
+                 ELSE '未知' \
+            END AS roleDef \
+    FROM lofter.dwd_pve_user_grass_stamina_log_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    UNION ALL \
+    SELECT  userId, \
+            -1 * costStamina as costStamina, \
+            roleId, \
+            roleName, \
+            CASE WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 0 THEN 'ogc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 10 THEN 'hc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 20 THEN 'pc' \
+                 WHEN roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4 THEN 'ugc' \
+                 ELSE '未知' \
+            END AS roleDef \
+    FROM lofter.dwd_pve_user_props_stamina_log_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    UNION ALL \
+    SELECT  userId, \
+            -1 * (stamina / sweetCnt) as costStamina, \
+            roleId, \
+            roleName, \
+            CASE WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 0 THEN 'ogc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 10 THEN 'hc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 20 THEN 'pc' \
+                 WHEN roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4 THEN 'ugc' \
+                 ELSE '未知' \
+            END AS roleDef \
+    FROM lofter.dwd_pve_user_sweet_stamina_log_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    UNION ALL \
+    SELECT  userId, \
+            delta as costStamina, \
+            roleId, \
+            roleName, \
+            CASE WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 0 THEN 'ogc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 10 THEN 'hc' \
+                 WHEN roleStatus = 1 AND rolePublicView = 1 AND roleType = 20 THEN 'pc' \
+                 WHEN roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4 THEN 'ugc' \
+                 ELSE '未知' \
+            END AS roleDef \
+    FROM lofter.dwd_pve_user_stamina_log_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' AND type NOT IN (1,2,3,4,13,14,10) \
+) t1 \
+GROUP BY t1.userId, t1.roleId, t1.roleName, t1.roleDef

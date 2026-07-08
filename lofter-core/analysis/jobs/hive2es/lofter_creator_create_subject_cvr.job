@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select dt, subject_id, nvl(expose_uv,0) as expose_pv, nvl(if(expose_uv = 0, 0, click_uv / expose_uv), 0.0) as click_cvr, nvl(if(click_uv = 0, 0, post_uv / click_uv), .0) as post_cvr from lofter_dm.ads_creator_create_subject_dd where dt='${azkaban.flow.1.days.ago}' "
+params= --partition ${azkaban.flow.1.days.ago} --id subject_id --dest lofter_creator_create_subject_cvr --atom

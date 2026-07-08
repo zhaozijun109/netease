@@ -1,0 +1,7 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="select character_id,gmv,channel from vc.ads_pv_character_gmv_dd where dt = '${azkaban.flow.1.days.ago}'"
+
+params= --index vc_data_pv_characters_behavior --id character_id --savemode overwrite --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG
+
+dependencies=ads_pv_character_gmv_dd

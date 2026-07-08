@@ -1,0 +1,392 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_title_classify_2_element_blog_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select *,'60日' as period \
+from  \
+( \
+select  blogid, '追妻' as flg ,'元素标' as type,  1 as mark, '追妻' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhuiqi_postnum>=5 and zhuiqi_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}'  \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '追妻意愿' as flg ,'元素标' as type,  0 as mark, '追妻' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhuiqi_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+select  blogid, '病弱' as flg ,'元素标' as type, 1 as mark, '病弱' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where binruo_postnum>=5 and binruo_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '病弱意愿' as flg ,'元素标' as type, 0 as mark , '病弱' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where binruo_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+union \
+ \
+ \
+select  blogid, '穿综' as flg ,'元素标' as type, 1 as mark , '穿综' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chuanzong_postnum>=5 and chuanzong_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '穿综意愿' as flg ,'元素标' as type, 0 as mark , '穿综' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chuanzong_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+ \
+ \
+select  blogid, 'if线' as flg ,'元素标' as type, 1 as mark , 'if线' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where ifxian_postnum>=5 and ifxian_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, 'if线意愿' as flg ,'元素标' as type, 0 as mark , 'if线' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where ifxian_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+ \
+union \
+ \
+ \
+select  blogid, '生怀' as flg ,'元素标' as type,  1 as mark , '生怀' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shenghuai_postnum>=5 and shenghuai_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '生怀意愿' as flg ,'元素标' as type, 0 as mark , '生怀' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shenghuai_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+ \
+select  blogid, '甜文' as flg ,'元素标' as type, 1 as mark , '甜文' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where tianwen_postnum>=5 and tianwen_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '甜文意愿' as flg ,'元素标' as type, 0 as mark , '甜文' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where tianwen_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+ \
+select  blogid, '吃醋' as flg ,'元素标' as type, 1 as mark  , '吃醋' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where chicu_postnum>=5 and chicu_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '吃醋意愿' as flg ,'元素标' as type, 0 as mark , '吃醋' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where chicu_postnum>=3  and chicu_postnum/postnum >=0.2 and period = '60日'  and  dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '失忆' as flg ,'元素标' as type, 1 as mark , '失忆' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where shiyi_postnum>=5 and shiyi_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '失忆意愿' as flg ,'元素标' as type, 0 as mark , '失忆' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shiyi_postnum>=3  and shenghuai_postnum/postnum >=0.2  and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+select  blogid, '直播采访' as flg ,'元素标' as type,  1 as mark , '直播采访' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhibocaifang_postnum>=5 and zhibocaifang_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '直播采访意愿' as flg ,'元素标' as type, 0 as mark , '直播采访' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhibocaifang_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+ \
+union \
+ \
+select  blogid, '掉马' as flg ,'元素标' as type, 1 as mark , '掉马' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where diaoma_postnum>=5 and diaoma_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '掉马意愿' as flg ,'元素标' as type, 0 as mark , '掉马' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where diaoma_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+select  blogid, '团宠' as flg ,'元素标' as type,  1 as mark , '团宠' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where tuanchong_postnum>=5 and tuanchong_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '团宠意愿' as flg ,'元素标' as type, 0 as mark , '团宠' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where tuanchong_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+union \
+ \
+select  blogid, '产乳' as flg ,'元素标' as type, 1 as mark  , '产乳' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chanru_postnum>=5 and chanru_postnum/postnum >=0.5 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '产乳意愿' as flg ,'元素标' as type, 0 as mark  , '产乳' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chanru_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '60日'   and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+) a \
+ \
+ \
+UNION \
+ \
+select *,'120日' as period \
+from  \
+( \
+select  blogid, '追妻' as flg ,'元素标' as type,  1 as mark, '追妻' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhuiqi_postnum>=5 and zhuiqi_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '追妻意愿' as flg ,'元素标' as type,  0 as mark, '追妻' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhuiqi_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+select  blogid, '病弱' as flg ,'元素标' as type, 1 as mark, '病弱' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where binruo_postnum>=5 and binruo_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '病弱意愿' as flg ,'元素标' as type, 0 as mark , '病弱' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where binruo_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+union \
+ \
+ \
+select  blogid, '穿综' as flg ,'元素标' as type, 1 as mark , '穿综' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chuanzong_postnum>=5 and chuanzong_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '穿综意愿' as flg ,'元素标' as type, 0 as mark , '穿综' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chuanzong_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+ \
+ \
+select  blogid, 'if线' as flg ,'元素标' as type, 1 as mark , 'if线' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where ifxian_postnum>=5 and ifxian_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, 'if线意愿' as flg ,'元素标' as type, 0 as mark , 'if线' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where ifxian_postnum>=3   and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+ \
+union \
+ \
+ \
+select  blogid, '生怀' as flg ,'元素标' as type,  1 as mark , '生怀' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shenghuai_postnum>=5 and shenghuai_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '生怀意愿' as flg ,'元素标' as type, 0 as mark , '生怀' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shenghuai_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+ \
+select  blogid, '甜文' as flg ,'元素标' as type, 1 as mark , '甜文' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where tianwen_postnum>=5 and tianwen_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '甜文意愿' as flg ,'元素标' as type, 0 as mark , '甜文' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where tianwen_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+ \
+ \
+select  blogid, '吃醋' as flg ,'元素标' as type, 1 as mark  , '吃醋' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where chicu_postnum>=5 and chicu_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '吃醋意愿' as flg ,'元素标' as type, 0 as mark , '吃醋' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where chicu_postnum>=3  and chicu_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '失忆' as flg ,'元素标' as type, 1 as mark , '失忆' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd  \
+where shiyi_postnum>=5 and shiyi_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '失忆意愿' as flg ,'元素标' as type, 0 as mark , '失忆' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where shiyi_postnum>=3  and shenghuai_postnum/postnum >=0.2  and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+select  blogid, '直播采访' as flg ,'元素标' as type,  1 as mark , '直播采访' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhibocaifang_postnum>=5 and zhibocaifang_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '直播采访意愿' as flg ,'元素标' as type, 0 as mark , '直播采访' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where zhibocaifang_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+ \
+union \
+ \
+select  blogid, '掉马' as flg ,'元素标' as type, 1 as mark , '掉马' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where diaoma_postnum>=5 and diaoma_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '掉马意愿' as flg ,'元素标' as type, 0 as mark , '掉马' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where diaoma_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+union \
+ \
+select  blogid, '团宠' as flg ,'元素标' as type,  1 as mark , '团宠' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where tuanchong_postnum>=5 and tuanchong_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '团宠意愿' as flg ,'元素标' as type, 0 as mark , '团宠' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where tuanchong_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+ \
+ \
+union \
+ \
+select  blogid, '产乳' as flg ,'元素标' as type, 1 as mark  , '产乳' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chanru_postnum>=5 and chanru_postnum/postnum >=0.5 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+union \
+ \
+select  blogid, '产乳意愿' as flg ,'元素标' as type, 0 as mark  , '产乳' as  flg1 \
+from  lofter_dm.ads_gift_post_title_classify_blog_dd \
+where chanru_postnum>=3  and shenghuai_postnum/postnum >=0.2 and period = '120日' and dt='${azkaban.flow.1.days.ago}' \
+group by blogid \
+ \
+) a \
+
+dependencies=ads_gift_post_title_classify_blog_dd

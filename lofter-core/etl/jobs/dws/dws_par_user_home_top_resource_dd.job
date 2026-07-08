@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_par_user_home_top_resource_dd \
+PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.userId, \
+       nvl(u.isanonymous, 0) as is_anonymous, \
+       \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and dt = '${azkaban.flow.1.days.ago}', dt, null)) as rc_expose_days_1d, \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and dt >= '${azkaban.flow.7.days.ago}', dt, null)) as rc_expose_days_7d, \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as rc_expose_days_15d, \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and dt >= '${azkaban.flow.30.days.ago}', dt, null)) as rc_expose_days_30d, \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as rc_expose_days_90d, \
+       count(distinct if(resource_type='reward_center' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, dt, null)) as rc_expose_days_180d, \
+       \
+       count(if(resource_type='reward_center' and action_type='click' and dt = '${azkaban.flow.1.days.ago}', 1, null)) as rc_click_count_1d, \
+       count(if(resource_type='reward_center' and action_type='click' and dt >= '${azkaban.flow.7.days.ago}', 1, null)) as rc_click_count_7d, \
+       count(if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, null)) as rc_click_count_15d, \
+       count(if(resource_type='reward_center' and action_type='click' and dt >= '${azkaban.flow.30.days.ago}', 1, null)) as rc_click_count_30d, \
+       count(if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, 1, null)) as rc_click_count_90d, \
+       count(if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, 1, null)) as rc_click_count_180d, \
+       \
+       count(distinct if(resource_type='reward_center' and action_type='click' and dt = '${azkaban.flow.1.days.ago}', dt, null)) as rc_click_days_1d, \
+       count(distinct if(resource_type='reward_center' and action_type='click' and dt >= '${azkaban.flow.7.days.ago}', dt, null)) as rc_click_days_7d, \
+       count(distinct if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as rc_click_days_15d, \
+       count(distinct if(resource_type='reward_center' and action_type='click' and dt >= '${azkaban.flow.30.days.ago}', dt, null)) as rc_click_days_30d, \
+       count(distinct if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as rc_click_days_90d, \
+       count(distinct if(resource_type='reward_center' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, dt, null)) as rc_click_days_180d, \
+       \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and dt = '${azkaban.flow.1.days.ago}', dt, null)) as pve_expose_days_1d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and dt >= '${azkaban.flow.7.days.ago}', dt, null)) as pve_expose_days_7d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as pve_expose_days_15d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and dt >= '${azkaban.flow.30.days.ago}', dt, null)) as pve_expose_days_30d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as pve_expose_days_90d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='expose' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, dt, null)) as pve_expose_days_180d, \
+       \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and dt = '${azkaban.flow.1.days.ago}', 1, null)) as pve_click_count_1d, \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and dt >= '${azkaban.flow.7.days.ago}', 1, null)) as pve_click_count_7d, \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, 1, null)) as pve_click_count_15d, \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and dt >= '${azkaban.flow.30.days.ago}', 1, null)) as pve_click_count_30d, \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, 1, null)) as pve_click_count_90d, \
+       count(if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, 1, null)) as pve_click_count_180d, \
+       \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and dt = '${azkaban.flow.1.days.ago}', dt, null)) as pve_click_days_1d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and dt >= '${azkaban.flow.7.days.ago}', dt, null)) as pve_click_days_7d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, dt, null)) as pve_click_days_15d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and dt >= '${azkaban.flow.30.days.ago}', dt, null)) as pve_click_days_30d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 90, dt, null)) as pve_click_days_90d, \
+       count(distinct if(resource_type='pve_boyfriends' and action_type='click' and datediff('${azkaban.flow.1.days.ago}', dt) < 180, dt, null)) as pve_click_days_180d \
+FROM ( \
+    SELECT userid as userId, dt, resource_type, action_type \
+    FROM lofter.dwd_home_top_resource_visit_di \
+    WHERE dt <= '${azkaban.flow.1.days.ago}' \
+      AND dt > date_sub('${azkaban.flow.1.days.ago}', 180) \
+      AND userid > 0 \
+      AND resource_type is not null \
+      AND action_type is not null \
+) a \
+LEFT JOIN lofter.dim_user u ON a.userId = u.id \
+GROUP BY a.userId, u.isanonymous \
+DISTRIBUTE BY 1

@@ -1,0 +1,46 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_post_publish_di partition(dt='${azkaban.flow.1.days.ago}') \
+select post_content_type,nvl(b.level, if(b.is_new > 0, 'new_no', 'old_no')) as creator_level,creator_creative_life_cycle,count(distinct a.postid) post_cnt,to_bitmap(a.userid) creator_userid_bitmap,is_pay_gift \
+from  \
+( \
+    select post_publish_date,post_content_type,postid,userid,is_pay_gift \
+    from lofter.dwd_post_publish_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join \
+( \
+    select userId, level, score, if(datediff(dt, post_first_date) <= 30, 1, 0) as is_new \
+    from lofter.dws_par_creator_level_scoring_dd  \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) b \
+on a.userid=b.userid \
+left join \
+( \
+    select userid,case when is_new_user > 0 then '新注册发文用户' when is_new_user = 0 and is_first_publish > 0 then '首次发文老用户' when is_new_user = 0 and is_first_publish = 0 and is_active_creator > 0 then '持续发文用户' when is_new_user = 0 and is_first_publish = 0 and is_active_creator = 0 then '回流发文用户' end as creator_creative_life_cycle \
+    from lofter.dws_par_creator_di \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+    and post_count>0 \
+) c \
+on a.userid=c.userid \
+left join ( \
+    select blogId \
+    from lofter.ods_risk_limit \
+    where type = 1 and status = 0 \
+  union all \
+    select blogId \
+    from lofter_dm.ads_risk_induction_block_blogs_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.userId = d.blogId \
+left join ( \
+    select postId \
+    from lofter.ods_risk_limit \
+    where type = 0 and status = 0 \
+  union all \
+    select postId \
+    from lofter_dm.ads_risk_induction_block_posts_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) e on a.postid = e.postId \
+where d.blogId is null and e.postId is null \
+group by post_content_type,creator_level,creator_creative_life_cycle,is_pay_gift
+dependencies=ads_risk_induction_block_posts_di,ads_risk_induction_block_blogs_di

@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01= \
+with base_data as ( \
+    SELECT dt, \
+           userid, \
+           '原创' AS type \
+    FROM lofter.dwd_post_publish_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    and post_content_type ='文字' \
+    AND exists(post_tags,   x -> x RLIKE '(原创|短篇小说|bg|言情|gb|四爱|女攻男受|gl|百合|bl)') \
+    AND NOT exists( post_tags,  x -> x RLIKE '同人') \
+) \
+,post_data as ( \
+    select blogid as userid,dt  \
+    from lofter.dwd_par_creator_first_publish_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    and valid = 0 \
+    group by 1,2 \
+) \
+insert overwrite table lofter_dm.ads_original_creator_new_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select type,count(distinct a.userid) as cnt_creator  \
+from base_data a  \
+join post_data b on a.dt= b.dt and a.userid = b.userid  \
+group by 1

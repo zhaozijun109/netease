@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_alg_data_user_item_agg_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select day, \
+       scene, \
+       userId, \
+       cast(to_json(transform(sort_array(collect_set(struct(recStartTime, recId)), true), x -> struct(x.recId, x.recStartTime))) as string) as recListJson, \
+       count(1) as postCount, \
+       sum(isPay) as paidPostCount, \
+       sum(clickCount) as clickCount \
+from lofter_dm.ads_alg_data_user_item_di \
+where day = '${azkaban.flow.1.days.ago}' \
+group by day, scene, userId
+dependencies=ads_alg_data_user_item_di
+

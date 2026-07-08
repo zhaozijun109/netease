@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_creator_gift_level_scoring_detail_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogid, blackrank, nvl(c.flg, '画手') as flg, \
+    sum(case when type='优质' then 1.5*zonghe_score else 0 end ) as youzhi_score, \
+    sum(case when type='其他' and  ((a.contentType='文字' and a.qianbg_amount_ln>=1) or (a.contentType='图片' and a.qianbg_amount_ln>=0.05)) then 0.5*zonghe_score else 0 end ) as qita_score, \
+    count(distinct case when type='低质' then a.postid else null end  ) as dizhi_num, \
+    count(distinct case when type='优质' then a.postid else null end  ) as youzhi_num, \
+    count(distinct case when type='其他' then a.postid else null end  ) as qita_num, \
+    count(distinct case when ((a.contentType='文字' and a.furate_ln>=1.5) or (a.contentType='图片' and a.furate_ln>=2.0)) then a.postid else null end ) as fufankui_num, \
+    count(distinct case when ((a.contentType='文字' and a.zhenrate_ln>=1.5) or (a.contentType='图片' and a.zhenrate_ln>=2.0)) then a.postid else null end ) as zhenfankui_num, \
+    count(distinct case when d.postid is not null  then d.postid else null end ) as feijieduan_num \
+from ( \
+    select postid,blogid,publishdate,zonghe_score,type,contenttype,qianbg_amount_ln,furate_ln,zhenrate_ln \
+    from lofter.dws_gift_post_premium_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+        and blog_channel=0 \
+        and publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+        and contentType in ('图片','文字') \
+) a \
+left join ( \
+    select postid \
+    from lofter.dim_gift_post_return_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and array_contains(mark_tags,'非截断') \
+    group by postid \
+) d on a.postid=d.postid \
+left join ( \
+    select userid, blackRank from lofter_db_dump.ods_db_trade_user_black_home_nd \
+) b on a.blogid=b.userid \
+left join ( \
+    select a.blogid, \
+           case when textNum / allNum >= 0.5 then '文手' else '画手' end as flg \
+    from ( \
+        select blogid, \
+             count(distinct case when contentType='文字' then postid else null end) as textNum, \
+             count(distinct postid) as allNum \
+        from lofter.dws_gift_post_premium_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and blog_channel=0 and contentType in ('文字','图片') and \
+              datediff('${azkaban.flow.1.days.ago}', publishdate) between 0 and 89 \
+        group by blogid \
+    ) a \
+    group by 1, 2 \
+) c on a.blogid=c.blogid \
+group by 1, 2, 3 \
+
+dependencies=dws_gift_post_premium_scoring_dd

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.ads.UserTag2GamePrometheus
+params= --date ${azkaban.flow.1.days.ago}
+conf.spark.dynamicAllocation.maxExecutors=25

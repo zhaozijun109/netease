@@ -1,0 +1,117 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc_dm.ads_vc_chat_project_report_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+with user_stats as  \
+( \
+SELECT dt, \
+user_id, \
+n, \
+active_days, \
+CASE  \
+WHEN uc_cnt < 30 THEN '0-29' \
+WHEN uc_cnt < 60 THEN '30-59' \
+WHEN uc_cnt < 90 THEN '60-89' \
+WHEN uc_cnt < 120 THEN '90-119' \
+WHEN uc_cnt < 150 THEN '120-149' \
+WHEN uc_cnt < 200 THEN '150-199' \
+WHEN uc_cnt < 250 THEN '200-249' \
+WHEN uc_cnt < 300 THEN '250-299' \
+WHEN uc_cnt < 350 THEN '300-349' \
+WHEN uc_cnt < 400 THEN '350-399' \
+WHEN uc_cnt < 450 THEN '400-449' \
+WHEN uc_cnt < 500 THEN '450-499' \
+WHEN uc_cnt < 1000 THEN '500-999' \
+WHEN uc_cnt < 2000 THEN '1000-1999' \
+WHEN uc_cnt < 5000 THEN '2000-4999' \
+WHEN uc_cnt < 10000 THEN '5000-9999' \
+WHEN uc_cnt < 20000 THEN '1W-1.9W' \
+WHEN uc_cnt < 50000 THEN '2W-4.9W' \
+WHEN uc_cnt < 100000 THEN '5W-9.9W' \
+ELSE '10W+' \
+END as chat_level \
+FROM ( \
+SELECT user_id, 1 as n, a.active_days_1d as active_days, a.uc_cnt_1d as uc_cnt, \
+dt   \
+FROM vc.ads_vc_user_period_data_summary_dd a \
+where is_anonymity = 'N'  \
+and dt = '${azkaban.flow.1.days.ago}' \
+and uc_cnt_1d >0 \
+ \
+UNION ALL \
+SELECT user_id, 3 as n, a.active_days_3d as active_days, a.uc_cnt_3d as uc_cnt, \
+dt \
+FROM vc.ads_vc_user_period_data_summary_dd a \
+where is_anonymity = 'N'  \
+and dt = '${azkaban.flow.1.days.ago}' \
+and uc_cnt_1d >0 \
+ \
+UNION ALL \
+SELECT user_id, 7 as n, a.active_days_7d as active_days, a.uc_cnt_7d as uc_cnt, \
+dt    \
+FROM vc.ads_vc_user_period_data_summary_dd a \
+where is_anonymity = 'N'  \
+and dt = '${azkaban.flow.1.days.ago}' \
+and uc_cnt_1d >0 \
+ \
+UNION ALL \
+SELECT user_id, 15 as n, a.active_days_15d as active_days, a.uc_cnt_15d as uc_cnt, \
+dt  \
+FROM vc.ads_vc_user_period_data_summary_dd a \
+where is_anonymity = 'N'  \
+and dt = '${azkaban.flow.1.days.ago}' \
+and uc_cnt_1d >0 \
+ \
+UNION ALL \
+SELECT user_id, 30 as n, a.active_days_30d as active_days, a.uc_cnt_30d as uc_cnt, \
+dt  \
+FROM vc.ads_vc_user_period_data_summary_dd a \
+where is_anonymity = 'N'  \
+and dt = '${azkaban.flow.1.days.ago}' \
+and uc_cnt_1d >0 \
+ \
+) t \
+ORDER BY user_id, n \
+), \
+user_base_data as  \
+( \
+select user_id, \
+register_date, \
+is_anonymity, \
+origin_type, \
+device_os, \
+nvl(last_consecutive_days,1) as last_consecutive_days, \
+is_pve \
+from vc.dws_vc_user_behavior_info_a_d \
+where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d) \
+and is_anonymity != 'Y' \
+group by user_id, \
+register_date, \
+is_anonymity, \
+origin_type, \
+device_os, \
+nvl(last_consecutive_days,1), \
+is_pve \
+) \
+ \
+ \
+ \
+ \
+select  \
+a.n, \
+a.active_days, \
+a.chat_level, \
+case when a.dt = b.register_date then 1 else 0 end   AS new_register_flag, \
+b.origin_type, \
+b.last_consecutive_days, \
+b.device_os, \
+b.is_pve, \
+count(distinct a.user_id) as uv \
+FROM user_stats a \
+left JOIN user_base_data b ON a.user_id = b.user_id  \
+group by a.n, \
+a.active_days, \
+a.chat_level, \
+case when a.dt = b.register_date then 1 else 0 end, \
+b.origin_type, \
+b.last_consecutive_days, \
+b.device_os, \
+b.is_pve \

@@ -1,0 +1,213 @@
+type=sparksql
+hive.query.01=\
+WITH base_today AS ( \
+                   SELECT \
+                       blogid, \
+                       blog_url, \
+                       blog_nickname, \
+                       level, \
+                       post_last_date \
+                   FROM \
+                       lofter_dm.ads_blog_score_di \
+                   WHERE \
+                       dt = '${azkaban.flow.1.days.ago}' \
+), \
+     exclude_blog AS ( \
+                   SELECT \
+                       id AS blogId \
+                   FROM \
+                       lofter.dim_blog \
+                   WHERE \
+                       isofficial = 1 \
+                   UNION ALL \
+                   SELECT \
+                       CAST(TRIM(blogId) AS BIGINT) AS blogId \
+                   FROM \
+                       lofter_db_dump.ods_db_admin_pub_data_nd \
+                           LATERAL VIEW explode(split(content, ',')) AS blogId \
+                   WHERE name IN ('blogvip_ids', 'book_store_blogIds') \
+                        AND CAST(TRIM(blogId) AS BIGINT) > 0 \
+                   GROUP BY 1 \
+                   UNION ALL \
+                   SELECT \
+                        blogId \
+                   FROM lofter.dim_miniprogram_post_dd \
+                   WHERE dt = '${azkaban.flow.1.days.ago}' \
+                   GROUP BY blogId \
+     ) \
+insert overwrite table lofter_dm.ads_cp_creator_warn_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userid, a.postid, blog_url, blog_nickname, a.warn_type, a.warn_info \
+from ( \
+     select userid, \
+            null    as postid, \
+            1       as warn_type, \
+            CASE \
+                WHEN creatornewstatus - creatoroldstatus < 0 \
+                    THEN '等级下降（鸽）' \
+                WHEN creatornewstatus - creatoroldstatus > 0 \
+                    THEN '等级上升（鸽）' \
+                END as warn_info \
+     from lofter_dm.ads_creator_ecology_identity_change_dd \
+     where dt = '${azkaban.flow.1.days.ago}' \
+       and creatornewstatus <> creatoroldstatus \
+     union ALL \
+     SELECT blogid, \
+            postid, \
+            2 as warn_type, \
+            CONCAT('创作者新发文#', postid) as warn_info \
+     FROM lofter.dwd_par_creator_first_publish_di \
+     WHERE dt = '${azkaban.flow.1.days.ago}' \
+        AND valid = 0 \
+        AND isforbidden = false \
+     union ALL \
+     SELECT userid, \
+            null                           as postid, \
+            3                              as warn_type, \
+            '创作者180天未发文，现重新发文' as warn_info \
+     FROM lofter.dws_par_user_post_dd \
+     where dt = '${azkaban.flow.1.days.ago}' \
+       and post_count_std > post_count_1d \
+       and post_count_180d = post_count_1d \
+       and post_count_1d > 0 \
+     union ALL \
+     select blogid, \
+            null    as postid, \
+            4       as warn_type, \
+            CASE disposetype \
+                WHEN 0 THEN '账号被禁言' \
+                WHEN 1 THEN '账号被封禁' \
+                WHEN 2 THEN '账号被注销' \
+                end as warn_info \
+     from lofter_db_dump.ods_db_risk_blog_dispose_nd \
+     where FROM_UNIXTIME(cast(starttime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+     UNION ALL \
+     select userid, \
+            null           as postid, \
+            5              as warn_type, \
+            '付费等级下降' as warn_info \
+     from lofter_db_dump.ods_db_trade_pay_grade_nd \
+     where FROM_UNIXTIME(cast(updatetime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+       and trend = -1 \
+     UNION ALL \
+     SELECT userid, \
+            null as postid, \
+            6 as warn_type, \
+            '作者30天未发付费内容' as warn_info \
+     FROM( \
+        select a.userid \
+        from ( \
+            select userid \
+            from lofter.dws_par_creator_dd \
+            WHERE post_count_365d IS NOT NULL \
+                AND post_count_365d > 0 \
+                AND dt = '${azkaban.flow.1.days.ago}') a \
+            LEFT join( \
+                   select blogid, max(publishdate) as last_publish_date \
+                   from lofter.dim_gift_post_return_dd \
+                   where dt = '${azkaban.flow.1.days.ago}' \
+                     and publishdate >= DATE_SUB('${azkaban.flow.1.days.ago}', 30) \
+                     and publishdate <= '${azkaban.flow.1.days.ago}' \
+                     and contenttype in ('文字', '图片') \
+                     AND status = 1 \
+                     AND auditstatus = 1 \
+                   group by blogid) b \
+                   on a.userid = b.blogid \
+        where b.last_publish_date = DATE_SUB('${azkaban.flow.1.days.ago}', 30)) \
+     UNION ALL \
+     SELECT userid, \
+            null    as postid, \
+            7       as warn_type, \
+            CASE \
+                WHEN status = 10 THEN '付费回礼权限被停用' \
+                WHEN status = 11 THEN '付费回礼权限被封禁' \
+                END AS warn_info \
+     FROM lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+     WHERE status IN (10, 11) \
+       and FROM_UNIXTIME(dbupdatetime, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+     UNION ALL \
+     select blogid, \
+            postid, \
+            8                                       as warn_type, \
+            CONCAT('创作者发文审核不通过#', postid) as warn_info \
+     from lofter.dwd_post_status_dd \
+     where start_date = '${azkaban.flow.1.days.ago}' \
+       and end_date = '9999-12-31' \
+       and post_status = '审核不通过') a \
+     join ( \
+          select userid, blog_url, blog_nickname \
+          FROM lofter.dws_par_creator_dd \
+          WHERE post_count_365d IS NOT NULL \
+            AND post_count_365d > 0 \
+            AND dt = '${azkaban.flow.1.days.ago}') b on a.userid = b.userid \
+UNION ALL \
+SELECT r.blogId, \
+       null as postid, \
+       blog_url, \
+       blog_nickname, \
+       r.warn_type, \
+       r.warn_info \
+FROM ( \
+     SELECT blogid  AS blogId, \
+            blog_url, \
+            blog_nickname, \
+            case \
+                when SUM(DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date)) = 30 \
+                    THEN 9 \
+                WHEN SUM(DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date)) = 180 \
+                    THEN 10 \
+                end as warn_type, \
+            case \
+                when SUM(DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date)) = 30 \
+                    THEN '30天不发文，创作者断更' \
+                WHEN SUM(DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date)) = 180 \
+                    THEN '180天不发文，创作者流失' \
+                end as warn_info \
+     FROM base_today \
+     GROUP BY blogid, \
+              blog_url, \
+              blog_nickname \
+     HAVING SUM( \
+                    DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date) \
+            ) = 30 \
+         or SUM( \
+                    DATEDIFF('${azkaban.flow.1.days.ago}', post_last_date) \
+            ) = 180 \
+     UNION ALL \
+     SELECT a.blogid        AS blogId, \
+            a.blog_url      AS blogUrl, \
+            a.blog_nickname AS blogNickName, \
+            11              as warn_type, \
+            CASE \
+                WHEN a.level_num > b.level_num THEN '等级下降（SAB）' \
+                WHEN a.level_num < b.level_num THEN '等级上升（SAB）' \
+                END         AS warn_info \
+     FROM ( \
+          SELECT blogid, \
+                 blog_url, \
+                 blog_nickname, \
+                 level, \
+                 CASE level \
+                     WHEN 'S' THEN 3 \
+                     WHEN 'A' THEN 2 \
+                     WHEN 'B' THEN 1 \
+                     ELSE 0 \
+                     END AS level_num \
+          FROM lofter_dm.ads_blog_score_di \
+          WHERE dt = '${azkaban.flow.2.days.ago}' \
+            AND level IN ('S', 'A', 'B')) a \
+          JOIN ( \
+               SELECT blogid, \
+                      level, \
+                      CASE level \
+                          WHEN 'S' THEN 3 \
+                          WHEN 'A' THEN 2 \
+                          WHEN 'B' THEN 1 \
+                          ELSE 0 \
+                          END AS level_num \
+               FROM base_today) b ON a.blogid = b.blogid \
+     WHERE a.level <> b.level) r \
+     LEFT JOIN ( \
+               SELECT blogId \
+               FROM exclude_blog \
+               GROUP BY blogId) x ON r.blogId = x.blogId \
+WHERE x.blogId IS NULL

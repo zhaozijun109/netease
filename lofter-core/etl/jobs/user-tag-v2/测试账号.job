@@ -1,0 +1,17 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 测试账号 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '测试账号' as tag_name, \
+                               ''           as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (        select userId, '测试账号' as tag, cast(userId as string) as grp \
+                                      from ( \
+                                          SELECT cast(userId as bigint) as userId \
+                                                LATERAL VIEW explode(array(1288334362,2011534200,1995067397,1288334362,2011534200,1995067397,1944296620,2047691598,1287157289,1944296620,2047691598,1287157289)) users AS userId \
+                                      ) t  ) "

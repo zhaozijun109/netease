@@ -1,0 +1,73 @@
+type = sparksql
+hive.query.01 =  \
+with message as   \
+(select id  as message_id, scene, user_id, character_id, biz_id,   \
+sender, source, create_time, FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd HH:mm:ss') as create_time_r,   \
+update_time, FROM_UNIXTIME(update_time / 1000, 'yyyy-MM-dd HH:mm:ss') as update_time_r   \
+from vc.ods_db_vc_user_dungeon_chat_record_nd   \
+where FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  and sender = 2   \
+and scene != 'USER_CRUSH'),   \
+  \
+simulator as   \
+(  \
+SELECT a.id  as biz_id, a.simulator_id, a.init_param,  \
+GET_JSON_OBJECT(a.init_param, '$.userBaseInfo') as init_user_identity,   \
+b.name,   \
+b.simulator_category, b.simulator_type ,category_label  \
+FROM vc.ods_db_vc_user_simulator_init_info_nd a   \
+LEFT JOIN   \
+(  \
+SELECT   \
+simulator_id, category as simulator_category,   \
+case when category=1 then 'OGC'  \
+     WHEN category=2 then 'PUGC'  \
+     when category=3 then 'UGC'  \
+     END category_label,  \
+type  as simulator_type,  \
+name   \
+FROM vc.ods_db_vc_simulator_info_nd   \
+WHERE is_trial = 0 AND status = 3   \
+) b ON a.simulator_id = b.simulator_id   \
+  \
+)  ,   \
+  \
+lofter_consume as   \
+(select user_code, scene_uniq_id, sum(lofter_nums) as lofter_nums   \
+from (select userid as user_code, outtargetid as scene_uniq_id, abs(delta) as lofter_nums   \
+from lofter_db_dump.ods_db_pve_user_stamina_log_nd   \
+where type = 21 and site = 2   \
+and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'    \
+  \
+union all   \
+select userid as user_code, outtargetid as scene_uniq_id, abs(delta) as lofter_nums   \
+from lofter_db_dump.ods_db_pve_user_timed_stamina_log_nd   \
+where type = 21 and site = 2   \
+and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'    \
+) t group by 1, 2),   \
+  \
+energy_consume as   \
+(  \
+select asset_type, asset_type_desc, total_consume, scene_uniq_id, free_nums,   \
+buy_nums, reward_nums, lofter_nums, scene,   \
+case when scene = 20 then 't:vc->c:vc'   \
+when scene = 21 then 't:pve->c:vc'   \
+when scene=31 then 't:vc->c:vc'    \
+when scene=32 then 't:pve->c:pve'  end as scene_desc   \
+from vc.dwd_vc_asset_consume_info_i_d   \
+where dt = '${azkaban.flow.1.days.ago}'  AND asset_type = 1 and scene in (20, 21,31,32)  \
+)   \
+  \
+insert overwrite table lofter_dm.ads_pve_simulator_talk_info_i_report_di partition (dt = '${azkaban.flow.1.days.ago}' )   \
+select x2.simulator_id, x2.name, x2.init_param, x2.init_user_identity, x1.biz_id,   \
+x1.message_id, x1.scene, x1.user_id, x1.character_id, x1.sender, x1.source,   \
+nvl(x3.asset_type, 1)   as asset_type, nvl(x3.asset_type_desc, '能量')  as asset_type_desc,   \
+COALESCE(x3.total_consume, x4.lofter_nums, 0) as total_consume, nvl(x3.free_nums, 0)  as free_nums,   \
+nvl(x3.buy_nums, 0) as buy_nums, nvl(x3.reward_nums, 0)  as reward_nums,   \
+COALESCE(x3.lofter_nums, x4.lofter_nums, 0)   as lofter_nums, nvl(x3.scene, 21)  as scene_code,   \
+nvl(x3.scene_desc, 't:pve->c:pve')    as scene_desc, x1.create_time, x1.create_time_r,   \
+x1.update_time, x1.update_time_r, x2.simulator_category, x2.simulator_type ,  \
+x2.category_label   \
+from message x1   \
+left join simulator x2 on x1.biz_id = x2.biz_id   \
+left join energy_consume x3 on concat_ws('_', x1.biz_id, x1.message_id) = x3.scene_uniq_id   \
+left join lofter_consume x4 on concat_ws('_', x1.biz_id, x1.message_id) = x4.scene_uniq_id

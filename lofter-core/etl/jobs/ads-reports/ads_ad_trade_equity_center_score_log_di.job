@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_trade_equity_center_score_log_di partition(dt='${azkaban.flow.1.days.ago}') \
+Select count(distinct userid) as uv,count(distinct id) as pv,action, \
+case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end as action_flg,sum(delta) as delta,'日' as type \
+ \
+from \
+ \
+lofter_db_dump.ods_db_reward_user_score_log_nd \
+ \
+where action!=99 and  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+ \
+group by action, \
+case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end \
+  \
+grouping sets (( action, \
+case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end),(case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end)) \
+  \
+ union \
+  \
+ Select count(distinct userid) as uv,count(distinct id) as pv, null as action, \
+case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end as action_flg,sum(delta) as delta ,'累计' as type \
+from \
+ \
+lofter_db_dump.ods_db_reward_user_score_log_nd \
+ \
+where action!=99 and  from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') between  '2024-04-04' and '${azkaban.flow.1.days.ago}' \
+ \
+group by case when action>0 then '获得' \
+ when action=-1 then '兑换' \
+ else '过期'end \

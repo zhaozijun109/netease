@@ -1,0 +1,57 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_coupon_daily_user_group_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, 1 as is_test \
+from ( \
+    select userId, 'Android' as platform, price_band \
+    from ( \
+        select userId, \
+        case when money < 10 then 10 \
+            when money < 20 then 20 \
+            when money < 30 then 30 \
+            when money < 40 then 40 \
+            else 50 end as price_band \
+        from ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_consume_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt='${azkaban.flow.1.days.ago}' \
+        ) t \
+        where money > 0 \
+    ) tt \
+    union all \
+    select userId, 'iOS' as platform, price_band \
+    from ( \
+        select userId, \
+            case when money < 10 then 10 \
+                when money < 25 then 25 \
+                when money < 35 then 35 \
+                when money < 40 then 45 \
+                else 55 end as price_band \
+        from ( \
+            select userId, (nvl(coin_consume_30d, 0) + nvl(fans_consume_30d,0) + nvl(coupon_consume_30d,0)) as money \
+            from lofter.dws_par_user_pay_dd \
+            where dt='${azkaban.flow.1.days.ago}' \
+        ) t \
+        where money > 0 \
+    ) tt \
+) a \
+left join ( \
+    select nvl(m.userId, n.userId) as userId, nvl(m.platform, n.platform) as platform \
+    from ( \
+        select userId, platform \
+        from lofter_dm.ads_act_coupon_daily_user_group_dd \
+        where dt < '${azkaban.flow.1.days.ago}' \
+        group by 1, 2 \
+    ) m \
+    full outer join ( \
+        select x.userId, if(y.deviceOs in ('Android', 'iOS'), y.deviceOs, null) as platform \
+        from ( \
+            select cast(sid as bigint) as userId, tid as deviceUdid \
+            from lofter.dwd_device_mapping \
+            where sid_tp = 'userid' and tid_tp = 'deviceudid' and lastNo = 1 \
+        ) x \
+        join ( \
+            select deviceUdid, deviceOs from lofter.dwd_par_device_all_dd where dt='${azkaban.flow.1.days.ago}' \
+        ) y on x.deviceUdid = y.deviceUdid \
+    ) n on m.userId = n.userId \
+) b on a.userId = b.userId \
+where a.platform = nvl(b.platform, 'iOS') and (a.userId % 10) in (0,1,2,3,4,5,6,7) \

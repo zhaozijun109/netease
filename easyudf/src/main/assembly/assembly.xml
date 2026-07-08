@@ -1,0 +1,50 @@
+<assembly>
+  <id>dist</id>
+  <formats>
+    <format>dir</format>
+  </formats>
+  <includeBaseDirectory>false</includeBaseDirectory>
+
+  <fileSets>
+    <fileSet>
+      <directory>
+        ${project.basedir}/lib/
+      </directory>
+      <outputDirectory>jars</outputDirectory>
+      <includes>
+        <include>**/*</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>
+        ${project.basedir}/target
+      </directory>
+      <outputDirectory>jars</outputDirectory>
+      <includes>
+        <include>${project.artifactId}-${project.version}.jar</include>
+      </includes>
+    </fileSet>
+  </fileSets>
+
+  <dependencySets>
+    <dependencySet>
+      <outputDirectory>jars</outputDirectory>
+      <includes>
+        <include>${project.groupId}:*:jar</include>
+      </includes>
+    </dependencySet>
+    <dependencySet>
+      <outputDirectory>jars</outputDirectory>
+      <useTransitiveDependencies>true</useTransitiveDependencies>
+      <unpack>false</unpack>
+      <scope>runtime</scope>
+      <useProjectArtifact>false</useProjectArtifact>
+      <excludes>
+        <exclude>${project.groupId}:*:jar</exclude>
+        <exclude>org.apache.spark:*:jar</exclude>
+        <exclude>org.scala-lang:scala-compiler:jar</exclude>
+      </excludes>
+    </dependencySet>
+  </dependencySets>
+
+</assembly>

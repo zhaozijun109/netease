@@ -1,0 +1,61 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_ip_supply_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.ip,categories,post_cnt_1d,post_cnt_7d,post_cnt_15d,post_cnt_30d,creator_cnt_1d, \
+creator_cnt_7d,creator_cnt_15d,creator_cnt_30d,valid_creator_cnt_30d,premium_post_cnt,derivedflag,  \
+pay_post_cnt_1d, pay_premium_post_cnt \
+from   \
+(  \
+    select ip,  \
+    count(case when dt='${azkaban.flow.1.days.ago}' then t1.postid end) post_cnt_1d,  \
+    count(case when dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then t1.postid end) post_cnt_7d,  \
+    count(case when datediff('${azkaban.flow.1.days.ago}', dt) between 0 and 14 then t1.postid end) post_cnt_15d,  \
+    count(case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then t1.postid end) post_cnt_30d,  \
+    count(distinct case when dt='${azkaban.flow.1.days.ago}' then t1.userid end) creator_cnt_1d,  \
+    count(distinct case when dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' then t1.userid end) creator_cnt_7d,  \
+    count(distinct case when datediff('${azkaban.flow.1.days.ago}', dt) between 0 and 14 then t1.userid end) creator_cnt_15d,  \
+    count(distinct case when dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' then t1.userid end) creator_cnt_30d,  \
+    count(distinct t2.userid) valid_creator_cnt_30d,  \
+    count(t3.postid) premium_post_cnt,  \
+    count(distinct if(dt='${azkaban.flow.1.days.ago}' and t4.postId is not null, t1.postid, null)) as pay_post_cnt_1d, \
+    count(distinct if(t4.postid is not null and t3.postId is not null, t3.postId, null)) pay_premium_post_cnt \
+    from  \
+    (  \
+        select dt,postid,userid,ip  \
+        from lofter.dwd_post_publish_di  \
+        lateral view explode(post_ips) t1 as ip  \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}'  \
+        group by dt,postid,userid,ip  \
+    ) t1  \
+    left join  \
+    (  \
+        select userid  \
+        from lofter.dws_creator_valid_detail_di  \
+        where  dt='${azkaban.flow.1.days.ago}'  \
+        and is_valid_creator_30d=1  \
+        group by userid  \
+    ) t2  \
+    on t1.userid=t2.userid  \
+    left join  \
+    (  \
+        select postid  \
+        from lofter.dws_post_premium_di  \
+        where dt='${azkaban.flow.1.days.ago}'  \
+        group by postid  \
+    ) t3  \
+    on t1.postid=t3.postid  \
+    left join ( \
+        select postId \
+        from lofter.dim_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 1) \
+        group by 1 \
+    ) t4 on t1.postId = t4.postId \
+    group by ip  \
+) a  \
+left join  \
+(  \
+    select ip,concat_ws(',',categories) categories,derivedflag  \
+    from lofter.dim_ip_dd \
+    where dt='${azkaban.flow.1.days.ago}'  \
+) b  \
+on a.ip=b.ip
+dependencies=dws_creator_valid_detail_di,dws_post_premium_di

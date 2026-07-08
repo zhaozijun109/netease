@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.pre="select * from lofter_dm.ads_ec_paid_subscribe_monitor_di where dt = '${azkaban.flow.1.days.ago}' and order_cnt > 0 and order_amount > 0 "
+conf.spark.check.bad="select * from lofter_dm.ads_ec_paid_subscribe_monitor_di where dt = '${azkaban.flow.1.days.ago}' and (((order_cnt - mini_order_cnt) / (total_pay_order_cnt - internal_order_cnt - total_mini_pay_order_cnt)) < 0.80 or ((order_amount - mini_order_amount) / (total_pay_order_amount - internal_order_amount - total_mini_pay_order_amount)) < 0.80)"
+dependencies=ads_ec_paid_subscribe_monitor_di,paid_subscribe_detail_cvr_consistent

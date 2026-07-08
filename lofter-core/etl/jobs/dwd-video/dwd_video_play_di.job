@@ -1,0 +1,112 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_video_play_di partition(dt='${azkaban.flow.1.days.ago}') \
+select \
+    reqId, \
+    max(postId)                                                            as postId, \
+    max(userId)                                                            as userId, \
+    max(deviceUdid)                                                        as deviceUdid, \
+    max(deviceOs)                                                          as deviceOs, \
+    max(deviceModel)                                                       as deviceModel, \
+    max(appVersion)                                                        as appVersion, \
+    max(appChannel)                                                        as appChannel, \
+    max(case when eventId='m7-5' then quality end)                         as dominant_quality, \
+    max(case when eventId='m7-5' then currentrate end)                     as end_currentrate, \
+    max(playerType)                                                        as player_type, \
+    max(case when eventId='m7-5' then trackerScene end)                    as scene, \
+    max(case when eventId='m7-5' then algInfo end)                         as alg_info, \
+    max(case when eventId='m7-5' then recId end)                           as rec_id, \
+    max(case when eventId='m7-5' then isAdvertise end)                     as is_advertise, \
+    max(case when eventId='m7-5' then itemPosition end)                    as item_position, \
+    max(case when eventId='m7-5' then url end)                             as video_url, \
+    sum(case when eventId='m7-5' then nvl(playedTime, 0) else 0 end)       as played_time_ms, \
+    sum(case when eventId='m7-5' then nvl(bufferTime, 0) else 0 end)       as buffer_time_ms, \
+    max(case when eventId='m7-5' then duration_param end)                  as duration_ms, \
+    max(case when eventId='m7-5' then maxProgress end)                     as max_progress, \
+    max(case when eventId='m7-10' then speed end)                          as play_rate, \
+    if(sum(case when eventId='m7-5' then nvl(playedTime, 0) else 0 end) > 5000, 1, 0) as is_real, \
+    case \
+        when max(case when eventId='m7-5' then maxProgress end) >= 0.9 \
+          or (max(case when eventId='m7-5' then duration_param end) > 0 \
+              and sum(case when eventId='m7-5' then nvl(playedTime, 0) else 0 end) \
+                / max(case when eventId='m7-5' then duration_param end) >= 0.9) \
+        then 1 else 0 \
+    end                                                                    as is_finished, \
+    sum(case when eventId='m7-5' \
+                  and cast(get_json_object(interruptReason, '$.buffer') as int) > 0 \
+             then 1 else 0 end)                                            as buffer_session_count, \
+    sum(case when eventId='m7-5' \
+                  and cast(get_json_object(interruptReason, '$.userSeek') as int) > 0 \
+             then 1 else 0 end)                                            as userseek_session_count, \
+    sum(case when eventId='m7-5' \
+                  and cast(get_json_object(interruptReason, '$.system') as int) > 0 \
+             then 1 else 0 end)                                            as system_interrupt_count, \
+    sum(case when eventId='m7-5' \
+                  and cast(get_json_object(interruptReason, '$.inflateError') as int) > 0 \
+             then 1 else 0 end)                                            as inflate_error_count, \
+    sum(case when eventId='m7-5' \
+                  and cast(get_json_object(interruptReason, '$.timer') as int) > 0 \
+             then 1 else 0 end)                                            as timer_interrupt_count, \
+    min(case when eventId='m7-6' and action='start' then createtime end)   as start_event_time, \
+    min(case when eventId='m7-7' and state=1 then createtime end)          as prepare_event_time, \
+    min(case when eventId='m7-7' and state=2 then createtime end)          as first_frame_event_time, \
+    case when min(case when eventId='m7-7' and state=1 then createtime end) is not null \
+          and min(case when eventId='m7-6' and action='start' then createtime end) is not null \
+         then min(case when eventId='m7-7' and state=1 then createtime end) \
+            - min(case when eventId='m7-6' and action='start' then createtime end) \
+    end                                                                    as ttfr_ms, \
+    case when min(case when eventId='m7-7' and state=2 then createtime end) is not null \
+          and min(case when eventId='m7-6' and action='start' then createtime end) is not null \
+         then min(case when eventId='m7-7' and state=2 then createtime end) \
+            - min(case when eventId='m7-6' and action='start' then createtime end) \
+    end                                                                    as ttfp_ms, \
+    if(min(case when eventId='m7-7' and state=2 then createtime end) is not null, 1, 0)  as is_play_started, \
+    if(max(case when eventId='m7-8' then 1 else 0 end) = 1, 1, 0)          as is_play_failed, \
+    max(case when eventId='m7-8' then errType end)                         as error_type, \
+    max(case when eventId='m7-8' then errCode end)                         as error_code, \
+    max(case when eventId='m7-8' then retryCount end)                      as error_retry_count, \
+    count(case when eventId='m7-5' then 1 end)                             as play_heartbeat_count, \
+    count(case when eventId='m7-6' then 1 end)                             as user_action_count, \
+    count(case when eventId='m7-7' then 1 end)                             as player_state_change_count, \
+    count(case when eventId='m7-8' then 1 end)                             as player_error_count, \
+    count(case when eventId='m7-9' then 1 end)                             as quality_event_count, \
+    count(case when eventId='m7-9' and switch_type <> 'init' then 1 end)   as quality_switch_count, \
+    count(case when eventId='m7-6' and action='pause' then 1 end)          as pause_count, \
+    count(case when eventId='m7-6' and action='resume' then 1 end)         as resume_count, \
+    count(case when eventId='m7-6' and action='seek' then 1 end)           as seek_count, \
+    if(max(case when eventId='m7-5' then speed end) > 1.0, 1, 0)           as is_speedrate_used \
+from ( \
+    select \
+        deviceUdid, deviceOs, deviceModel, appVersion, appChannel, eventId, occurTime, userId, \
+        params['reqId']                                              as reqId, \
+        cast(params['postId']    as bigint)                          as postId, \
+        cast(params['createtime']  as bigint)                        as createtime, \
+        params['playerType']                                         as playerType, \
+        params['trackerScene']                                       as trackerScene, \
+        params['algInfo']                                            as algInfo, \
+        params['recId']                                              as recId, \
+        params['isAdvertise']                                        as isAdvertise, \
+        cast(params['itemPosition'] as int)                          as itemPosition, \
+        cast(params['playedTime']  as bigint)                        as playedTime, \
+        cast(params['bufferTime']  as bigint)                        as bufferTime, \
+        cast(params['duration']    as bigint)                        as duration_param, \
+        cast(params['maxProgress'] as double)                        as maxProgress, \
+        cast(get_json_object(params['ext'], '$.speed') as double)    as speed, \
+        params['interruptReason']                                    as interruptReason, \
+        params['quality']                                            as quality, \
+        params['currentrate']                                        as currentrate, \
+        params['url']                                                as url, \
+        case when eventId='m7-6' then get_json_object(params['ext'], '$.action')  end as action, \
+        case when eventId='m7-7' then cast(get_json_object(params['ext'], '$.state') as int) end as state, \
+        case when eventId='m7-8' then get_json_object(params['ext'], '$.errType') end as errType, \
+        case when eventId='m7-8' then cast(get_json_object(params['ext'], '$.errCode') as int) end as errCode, \
+        cast(params['retryCount']  as int)                           as retryCount, \
+        case when eventId='m7-9' then get_json_object(params['ext'], '$.type')    end as switch_type \
+    from lofter.ods_mda_app_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and eventId in ('m7-5', 'm7-6', 'm7-7', 'm7-8', 'm7-9', 'm7-10') \
+      and length(deviceUdid) > 0 \
+      and params['reqId'] is not null and params['reqId'] <> '' \
+) a \
+group by reqId \
+distribute by hash(reqId) % 50
+dependencies=

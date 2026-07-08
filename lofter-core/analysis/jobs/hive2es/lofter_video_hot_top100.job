@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat(replace(dt, '-'), '-', period,'-',rk) as id, period, postid,blogid,title,blogNickName,blogName,platformType,rk,play_pv_std as calPlayPv,play_pv_1d as yesterdayPlayPv, play_pv_1w as weekPlayPv, play_pv_1m as monthPlayPv,hot_pv_std as calHotPv,hot_pv_1d as yesterdayHotPv,hot_pv_1w as weekHotPv,hot_pv_1m as monthHotPv from lofter_dm.ads_video_hot_top_di where dt='${azkaban.flow.1.days.ago}'"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_video_hot_top100 --postfixsep --atom

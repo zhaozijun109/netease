@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_revisit_di partition(dt = '${azkaban.flow.1.days.ago}')  \
+select baseday,blog_level,collection_post_type,is_collection_new_user, \
+sum(realbrowse_uv) realbrowse_uv, \
+sum(realbrowse_uv_revisit_7d)  realbrowse_uv_revisit_7d, \
+sum(realbrowse_uv_mysubscription) realbrowse_uv_mysubscription, \
+sum(realbrowse_uv_mysubscription_revisit_7d)  realbrowse_uv_mysubscription_revisit_7d, \
+sum(realbrowse_uv_subscribe) realbrowse_uv_subscribe, \
+sum(realbrowse_uv_subscribe_revisit_7d)  realbrowse_uv_subscribe_revisit_7d, \
+is_collection_return_user  \
+from  \
+( \
+select baseday,collectionid,is_collection_new_user,is_collection_return_user,realbrowse_uv,realbrowse_uv_revisit_7d,realbrowse_uv_mysubscription,realbrowse_uv_mysubscription_revisit_7d,realbrowse_uv_subscribe,realbrowse_uv_subscribe_revisit_7d,dt \
+from lofter.dws_collection_revisit_di \
+where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join \
+( \
+select blog_level,collection_post_type,collectionid \
+from lofter.dws_collection_dd \
+where dt='${azkaban.flow.7.days.ago}' \
+and status=0 \
+) b \
+on a.collectionid=b.collectionid \
+group by baseday,blog_level,collection_post_type,is_collection_new_user,is_collection_return_user \

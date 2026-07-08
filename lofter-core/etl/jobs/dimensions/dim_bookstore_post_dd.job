@@ -1,0 +1,17 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dim_bookstore_post_dd  partition (dt = '${azkaban.flow.1.days.ago}') \
+select b.postId, b.blogId, \
+       p.tags, p.title, p.publishTime as publish_time, p.valid, p.allowview, \
+       a.id as bookstore_content_id, split(lower(a.styleTags),',') as bookstore_style_tags, a.status as bookstore_content_status \
+from lofter_db_dump.ods_db_pfb_content_nd a \
+     join lofter_db_dump.ods_db_pfb_content_related_post_nd b on a.id = b.contentId \
+     join lofter.dim_post p on b.postId = p.id \
+     join ( \
+             select  cast(trim(blogId) as bigint) as blogId \
+             from lofter_db_dump.ods_db_admin_pub_data_nd \
+                  lateral view explode(split(content, ',')) as blogId \
+             where name = 'book_store_blogIds' and cast(trim(blogId) as bigint) > 0 \
+             group by 1 \
+     ) c on b.blogId = c.blogId
+hive.query.02=create or replace view lofter.dim_bookstore_post as select * from lofter.dim_bookstore_post_dd where dt = '${azkaban.flow.1.days.ago}';
+dependencies=dim_post

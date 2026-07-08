@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2Kafka
+conf.spark.source.query="select cardActivityCode as activity_code, sum(if(dt >= '${azkaban.flow.7.days.ago}', slotNum,0)) as sale_cnt_7d, sum(slotNum) as sale_cnt_30d from lofter.dwd_benefit_product_trade_di where dt <='${azkaban.flow.1.days.ago}' and dt >='${azkaban.flow.30.days.ago}' and cardActivityCode is not null and productType = 5 group by cardActivityCode"
+params= --topic backend.data.sync --meta _payload_type=card_product_sale_num,_payload_date=${azkaban.flow.1.days.ago} --servers lofter-kafka-bi-risk1.gy.ntes:9092,lofter-kafka-bi-risk2.gy.ntes:9092,lofter-kafka-bi-risk3.gy.ntes:9092

@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_device_platform_v2_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceOs, sum(sessionTime) / count(distinct deviceUdid) as perTime, \
+       sum(sessionTime) as session_times, \
+       sum(sessionCount) as session_count, \
+       count(distinct deviceUdid) as uv \
+from lofter.dws_par_device_session_v2_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+group by deviceOs

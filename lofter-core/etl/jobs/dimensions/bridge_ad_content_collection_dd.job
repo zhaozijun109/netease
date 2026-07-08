@@ -1,0 +1,27 @@
+type=sparksql
+hive.query.01= \
+with ad_content_video_collection as ( \
+    select b.collectionId \
+    from ( \
+        select postId \
+        from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+        where planType=20001 and status = 1 \
+    ) a \
+    join lofter.bridge_collection_post b on a.postId = b.postId \
+    group by 1 \
+) \
+insert overwrite table lofter.bridge_ad_content_collection_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select b.postId, b.blogId, b.collectionId, \
+    if(c.postId is not null, 1, 0) as is_pay \
+from ad_content_video_collection a \
+join lofter.bridge_collection_post b on a.collectionId = b.collectionId \
+left join ( \
+    select postId \
+    from lofter_db_dump.ods_db_trade_return_gift_plan_nd \
+    where planType = 20001 and status = 1 \
+    group by 1 \
+) c on b.postId = c.postId \
+
+hive.query.02=create or replace view lofter.bridge_ad_content_collection as select * from lofter.bridge_ad_content_collection_dd where dt = '${azkaban.flow.1.days.ago}';
+
+dependencies=bridge_collection_post

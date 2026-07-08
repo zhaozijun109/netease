@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_tag_top_browse_di partition(dt='${azkaban.flow.1.days.ago}') \
+select userId, concat_ws(',', collect_list(concat(tag, '|', pv))) as top_tags_with_pv, \
+       concat_ws('|', collect_list(tag)) as top_tags \
+from ( \
+    select userId, tag, pv, row_number() over (partition by userId order by pv desc) as rnk \
+    from ( \
+        select userId, tag, count(1) pv \
+        from lofter.dwd_tag_browse_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt > '${azkaban.flow.7.days.ago}' and \
+              tab = 'entry' and userId > 0 and length(tag) > 0  and instr(tag, ',') <= 0 and instr(tag, '|') <= 0 \
+        group by userId, tag \
+    ) tt \
+) t \
+where rnk <= 10  and pv >= 3 \
+group by userId

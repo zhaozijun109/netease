@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_device_collect_apk_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceUdid, userId, occurTime, apk_name, is_installed, \
+       deviceAdid as idfa, \
+       deviceImei as imei, \
+       deviceAndroidId as androidId, \
+       oaid, deviceIdfv as idfv, deviceOs, \
+       tdid as caid, \
+       customUDID as customudid \
+from lofter.ods_mda_app_partition_di \
+     lateral view explode(from_json(params['pks'], 'map<string,string>')) as apk_name, is_installed \
+where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and eventId = 'z8-9' and length(params['pks']) > 0 \
+distribute by 1

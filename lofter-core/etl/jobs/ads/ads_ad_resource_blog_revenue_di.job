@@ -1,0 +1,16 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_resource_blog_revenue_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, sum(settlement_revenue) as settlement_revenue \
+from ( \
+        select blogId, settlement_revenue \
+        from lofter_dm.ads_ad_resource_group_blog_revenue_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select blogId, sum(revenue) as settlement_revenue \
+        from lofter_dm.ads_ad_resource_sdk_post_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+) t \
+group by 1 \
+
+dependencies=ads_ad_resource_group_blog_revenue_di,ads_ad_resource_sdk_post_di

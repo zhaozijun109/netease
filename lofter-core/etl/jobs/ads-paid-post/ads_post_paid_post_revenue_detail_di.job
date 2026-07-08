@@ -1,0 +1,261 @@
+type=sparksql
+hive.query.01= insert overwrite table lofter_dm.ads_post_paid_post_revenue_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'1' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		, blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid, blogid \
+	) a \
+GROUP BY postid, blogid \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'7' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		, blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 7 \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'30' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')) < 30 \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'history' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid,blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'month' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'MM') \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'MM') \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'quarter' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'quarter') \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'quarter') \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \
+ \
+UNION ALL \
+ \
+SELECT nvl(pay_type, 'all') AS pay_type \
+	,'year' AS period \
+	,postid \
+	,sum(MONEY) AS trade_money \
+	,blogId \
+FROM ( \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'粉丝会员' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_evt_post_paid_detail_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND pay_type IN ('粉丝会员') and postid>0 \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+	GROUP BY postid, blogId \
+	 \
+	UNION ALL \
+	 \
+	SELECT postid \
+		,sum(MONEY) AS MONEY \
+		,'礼物解锁' AS pay_type \
+		,blogId \
+	FROM lofter.dwd_gift_post_unlock_dd \
+	WHERE dt = '${azkaban.flow.1.days.ago}' \
+		AND MONEY > 0 and postid>0 \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+		AND from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= trunc('${azkaban.flow.1.days.ago}', 'YY') \
+	GROUP BY postid, blogId \
+	) a \
+GROUP BY postid, blogId \
+	,pay_type grouping sets(( \
+			postid, blogId \
+			,pay_type \
+			), (postid, blogId)) \

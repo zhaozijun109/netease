@@ -1,0 +1,14 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_valid_detail_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.userid,is_valid_creator_365d,is_valid_creator_30d,level,blog_url,blog_nickname,post_main_content_type,post_top_categories,post_top_ips,post_last_date,active_last_date,post_count_365d,sum_realpv_365d,avg_post_realpv_365d,hotpv_365d,commentpv_365d,post_count_30d,sum_realpv_30d,avg_post_realpv_30d,hotpv_30d,commentpv_30d,fans_std,active_days_30d,gift_income_std,rec_post_count_30d,rec_post_count_365d,premium_posts \
+from ( \
+    select userid,is_valid_creator_365d,is_valid_creator_30d, \
+    post_count_365d,sum_realpv_365d,avg_post_realpv_365d,hotpv_365d,commentpv_365d,post_count_30d,sum_realpv_30d,avg_post_realpv_30d,hotpv_30d,commentpv_30d,premium_posts \
+    from lofter.dws_creator_valid_detail_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+    select userid,level,blog_url,blog_nickname,post_main_content_type,post_top_categories,post_top_ips, \
+           post_last_date,active_last_date,fans_std,active_days_30d,gift_income_std,rec_post_count_30d,rec_post_count_365d \
+    from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.userId = b.userId \

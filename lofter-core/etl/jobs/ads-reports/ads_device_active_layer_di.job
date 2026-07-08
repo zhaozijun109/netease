@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01=\
+with t1 as ( \
+select deviceudid, \
+       active_days_1d, \
+       active_days_7d, \
+       active_days_15d, \
+       active_days_30d, \
+       datediff(dt,from_unixtime(cast(first_active_time / 1000 AS BIGINT), 'yyyy-MM-dd')) as register_date_diff, \
+       datediff(dt,last_return_date) as return_date_diff, \
+       case when active_days_30d>=1  and active_days_30d<=7 then 0 \
+            when active_days_30d>=8  and active_days_30d<=14 then 1 \
+            when active_days_30d>=15 and active_days_30d<=21 then 2 \
+            when active_days_30d>=22 and active_days_30d<=28 then 3 \
+            when active_days_30d>=29 and active_days_30d<=30 then 4 \
+        end as active_type1, \
+        dt \
+from lofter.dws_par_device_active_dd \
+where dt in (date_sub('${azkaban.flow.1.days.ago}', 7),'${azkaban.flow.1.days.ago}') \
+), \
+t2 as ( \
+select deviceudid, \
+       active_days_1d, \
+       active_days_7d, \
+       active_days_15d, \
+       active_days_30d, \
+       active_type1, \
+       case when register_date_diff<=30 or return_date_diff<=30 then '新回用户' \
+            when register_date_diff>30 and (return_date_diff>30 or return_date_diff is null) and active_type1-lead(active_type1,1) over(partition by deviceudid order by dt desc)=0 then '持续用户' \
+            when register_date_diff>30 and (return_date_diff>30 or return_date_diff is null) and active_type1-lead(active_type1,1) over(partition by deviceudid order by dt desc)=-1 then '降档用户' \
+            when register_date_diff>30 and (return_date_diff>30 or return_date_diff is null) and active_type1-lead(active_type1,1) over(partition by deviceudid order by dt desc)=1 then '升档用户' \
+       end as active_type2, \
+       dt \
+from t1 \
+) \
+insert overwrite table lofter_dm.ads_device_active_layer_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceudid, \
+       active_days_1d, \
+       active_days_7d, \
+       active_days_15d, \
+       active_days_30d, \
+       active_type1, \
+       active_type2 \
+from t2 \
+where dt = '${azkaban.flow.1.days.ago}'

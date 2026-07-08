@@ -1,0 +1,26 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_creator_create_subject_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.post_uv \
+from ( \
+    select subject_id, \
+           count(distinct if(action = 'expose', userId, null)) as expose_uv, \
+           count(distinct if(action = 'click', userId, null)) as click_uv \
+    from lofter.dwd_subject_bubble_action_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by subject_id \
+) a \
+left join ( \
+   select x.subject_id, count(distinct y.userId) post_uv \
+   from ( \
+       select subject_id, userId, dt \
+       from lofter.dwd_subject_bubble_action_di \
+       where dt <= '${azkaban.flow.1.days.ago}' and action = 'click' \
+       group by 1,2,3 \
+    ) x \
+    join ( \
+       select userId, postId, dt \
+       from lofter.dwd_post_publish_di \
+       where dt <= '${azkaban.flow.1.days.ago}' \
+    ) y on x.userId = y.userId and datediff(y.dt, x.dt) between 0 and 2 \
+    group by x.subject_id \
+) b on a.subject_id = b.subject_id

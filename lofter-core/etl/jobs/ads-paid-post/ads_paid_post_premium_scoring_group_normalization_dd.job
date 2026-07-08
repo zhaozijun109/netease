@@ -1,0 +1,253 @@
+type=sparksql
+hive.query.01=\
+with merge_data as ( \
+select postid, \
+blog_channel_flg, \
+publishdate, \
+publishdays, \
+words_count, \
+ai_results, \
+blogid, \
+ips, \
+ispay_returngift, \
+recomstatus, \
+blogname, \
+styouzhiflg, \
+yinliuflg, \
+collectionid, \
+bg_flg, \
+tags, \
+review_status, \
+exposureuv, \
+qianbg_amount, \
+liulan_fufei_rate, \
+furate, \
+zhenrate, \
+text_length, \
+level, \
+shuareflg, \
+liulanuv, \
+zhengfankuiuv, \
+fufankuiuv, \
+dianzanuv, \
+unlock_dianzanuv, \
+unlock_hou_dianzanuv, \
+recommenduv, \
+unlock_recommenduv, \
+unlock_hou_recommenduv, \
+subscribecollectionuv, \
+unlock_subscribecollectionuv, \
+unlock_hou_subscribecollectionuv, \
+followuv, \
+unlock_followuv, \
+unlock_hou_followuv, \
+unlock_rate, \
+zhengfankui_rate, \
+fufankui_rate, \
+dianzan_rate, \
+recommend_rate, \
+subscribe_rate, \
+follow_rate, \
+post_content_type, \
+dt, \
+quality_percent, \
+responseuv,  \
+unlock_responseuv,  \
+unlock_hou_responseuv,  \
+blackuv,  \
+unlock_blackuv,  \
+unlock_hou_blackuv,  \
+response_rate,  \
+black_rate  \
+        from lofter_dm.ads_paid_post_premium_scoring_group_normalization_dd \
+        where dt = '${azkaban.flow.2.days.ago}'  \
+      union all  \
+select postid, \
+blog_channel_flg, \
+publishdate, \
+publishdays, \
+words_count, \
+ai_results, \
+blogid, \
+ips, \
+ispay_returngift, \
+recomstatus, \
+blogname, \
+styouzhiflg, \
+yinliuflg, \
+collectionid, \
+bg_flg, \
+tags, \
+review_status, \
+exposureuv, \
+qianbg_amount, \
+liulan_fufei_rate, \
+furate, \
+zhenrate, \
+text_length, \
+level, \
+shuareflg, \
+liulanuv, \
+zhengfankuiuv, \
+fufankuiuv, \
+dianzanuv, \
+unlock_dianzanuv, \
+unlock_hou_dianzanuv, \
+recommenduv, \
+unlock_recommenduv, \
+unlock_hou_recommenduv, \
+subscribecollectionuv, \
+unlock_subscribecollectionuv, \
+unlock_hou_subscribecollectionuv, \
+followuv, \
+unlock_followuv, \
+unlock_hou_followuv, \
+unlock_rate, \
+zhengfankui_rate, \
+fufankui_rate, \
+dianzan_rate, \
+recommend_rate, \
+subscribe_rate, \
+follow_rate, \
+post_content_type, \
+dt, \
+max(quality_percent) as quality_percent, \
+responseuv,  \
+unlock_responseuv,  \
+unlock_hou_responseuv,  \
+blackuv,  \
+unlock_blackuv,  \
+unlock_hou_blackuv,  \
+response_rate,  \
+black_rate \
+        from lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+        where dt = '${azkaban.flow.1.days.ago}'    \
+group by postid, \
+blog_channel_flg, \
+publishdate, \
+publishdays, \
+words_count, \
+ai_results, \
+blogid, \
+ips, \
+ispay_returngift, \
+recomstatus, \
+blogname, \
+styouzhiflg, \
+yinliuflg, \
+collectionid, \
+bg_flg, \
+tags, \
+review_status, \
+exposureuv, \
+qianbg_amount, \
+liulan_fufei_rate, \
+furate, \
+zhenrate, \
+text_length, \
+level, \
+shuareflg, \
+liulanuv, \
+zhengfankuiuv, \
+fufankuiuv, \
+dianzanuv, \
+unlock_dianzanuv, \
+unlock_hou_dianzanuv, \
+recommenduv, \
+unlock_recommenduv, \
+unlock_hou_recommenduv, \
+subscribecollectionuv, \
+unlock_subscribecollectionuv, \
+unlock_hou_subscribecollectionuv, \
+followuv, \
+unlock_followuv, \
+unlock_hou_followuv, \
+unlock_rate, \
+zhengfankui_rate, \
+fufankui_rate, \
+dianzan_rate, \
+recommend_rate, \
+subscribe_rate, \
+follow_rate, \
+post_content_type, \
+dt, \
+responseuv,  \
+unlock_responseuv,  \
+unlock_hou_responseuv,  \
+blackuv,  \
+unlock_blackuv,  \
+unlock_hou_blackuv,  \
+response_rate,  \
+black_rate \
+) \
+insert overwrite table lofter_dm.ads_paid_post_premium_scoring_group_normalization_dd  partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postid, \
+a.blog_channel_flg, \
+a.publishdate, \
+a.publishdays, \
+a.words_count, \
+a.ai_results, \
+a.blogid, \
+a.ips, \
+a.ispay_returngift, \
+a.recomstatus, \
+a.blogname, \
+a.styouzhiflg, \
+a.yinliuflg, \
+a.collectionid, \
+a.bg_flg, \
+a.tags, \
+a.review_status, \
+a.exposureuv, \
+a.qianbg_amount, \
+a.liulan_fufei_rate, \
+a.furate, \
+a.zhenrate, \
+a.text_length, \
+a.level, \
+a.shuareflg, \
+a.liulanuv, \
+a.zhengfankuiuv, \
+a.fufankuiuv, \
+a.dianzanuv, \
+a.unlock_dianzanuv, \
+a.unlock_hou_dianzanuv, \
+a.recommenduv, \
+a.unlock_recommenduv, \
+a.unlock_hou_recommenduv, \
+a.subscribecollectionuv, \
+a.unlock_subscribecollectionuv, \
+a.unlock_hou_subscribecollectionuv, \
+a.followuv, \
+a.unlock_followuv, \
+a.unlock_hou_followuv, \
+a.unlock_rate, \
+a.zhengfankui_rate, \
+a.fufankui_rate, \
+a.dianzan_rate, \
+a.recommend_rate, \
+a.subscribe_rate, \
+a.follow_rate, \
+b.quality_percent, \
+a.post_content_type, \
+a.responseuv,  \
+a.unlock_responseuv,  \
+a.unlock_hou_responseuv,  \
+a.blackuv,  \
+a.unlock_blackuv,  \
+a.unlock_hou_blackuv,  \
+a.response_rate,  \
+a.black_rate \
+from (  \
+    select *,  \
+           row_number() over (partition by postId order by dt desc) as latest_rk  \
+    from merge_data  \
+) a  \
+join (  \
+    select *,  \
+           row_number() over (partition by postId order by quality_percent asc) as value_rk  \
+    from merge_data  \
+) b on a.postId = b.postId  \
+where a.latest_rk = 1 and b.value_rk = 1  \
+
+dependencies=ads_paid_post_premium_scoring_group_normalization_di

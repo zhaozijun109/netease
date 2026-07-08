@@ -1,0 +1,23 @@
+{
+    "namespace": "com.netease.wm.hubble.avro",
+    "type": "record",
+    "name": "AdxMonitorEvent",
+    "fields": [
+        {"name": "app", "type": "string"},
+        {"name": "deviceUdid", "type": "string"},
+        {"name": "deviceOs", "type": "string"},
+        {"name": "adId", "type": "string"},
+        {"name": "adSource", "type": "string"},
+        {"name": "requestUuid", "type": "string"},
+        {"name": "adPosition", "type": "long"},
+        {"name": "time", "type": "long"},
+        {"name": "click", "type": "long"},
+        {"name": "expose", "type": "long"},
+        {"name": "appVersion", "type": "string"},
+        {"name": "adCallTime", "type": "long"},
+        {"name": "pos", "type": ["null", "int"]},
+        {"name": "adTrace", "type": ["null", "string"]},
+        {"name": "adTraceName", "type": ["null", "string"]},
+        {"name": "reqId", "type": ["null", "string"]}
+    ]
+}

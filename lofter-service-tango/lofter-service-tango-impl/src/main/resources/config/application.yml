@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: lofter-service-tango
+
+  aop:
+    auto: true
+    proxy-target-class: true
+
+  http:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
+  profiles:
+    active: dev
+
+server:
+  shutdown: graceful
+  port: 8010
+  tomcat:
+    remoteip:
+      protocol-header: X-Forwarded-Proto
+      remote-ip-header: X-From-Ip
+app:
+  id: ${spring.application.name}
+  datasource:
+    tango:
+      driverClassName: ${db.driverClassName}
+      jdbcUrl: ${db.url}
+      connectionTimeout: 10000
+      maximumPoolSize: 20
+      minimumIdle: 1
+      connectionTestQuery: select 1
+    comic-statis:
+      driverClassName: com.mysql.jdbc.Driver
+      jdbcUrl: ${db.comic-statis.url}
+      connectionTimeout: 10000
+      maximumPoolSize: 20
+      minimumIdle: 1
+      connectionTestQuery: select 1
+    clickhouse:
+      driverClassName: ru.yandex.clickhouse.ClickHouseDriver
+      jdbcUrl: ${db.clickhouse.url}
+      connectionTimeout: 10000
+      maximumPoolSize: 20
+      minimumIdle: 1
+      connectionTestQuery: select 1
+    main:
+      driverClassName: com.netease.lbd.LBDriver
+      jdbcUrl: ${app.datasource.main.url}
+      connectionTimeout: 10000
+      maximumPoolSize: 20
+      minimumIdle: 1
+      connectionTestQuery: select 1
+    activity:
+      driverClassName: com.mysql.jdbc.Driver
+      jdbcUrl: ${app.datasource.activity.url}
+      connectionTimeout: 10000
+      maximumPoolSize: 20
+      minimumIdle: 1
+      connectionTestQuery: select 1
+
+
+apollo:
+  bootstrap:
+    enabled: true
+    namespaces: application,sentinel.config,lofter.tango,lofter.main.db,lofter.activity.db
+    eagerLoad:
+      enabled: true
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.netease.lofter.tango.impl.entity
+  configuration:
+    cache-enabled: false
+    use-generated-keys: true
+    local-cache-scope: statement
+
+dubbo:
+  scan:
+    base-packages: com.netease.lofter.tango.impl
+  application:
+    name: ${spring.application.name}
+  registry:
+    address: ${dubbo.registry.address}
+    client: curator
+  protocol:
+    name: dubbo
+    port: -1
+  metadata-report:
+    address: ${dubbo.registry.address}

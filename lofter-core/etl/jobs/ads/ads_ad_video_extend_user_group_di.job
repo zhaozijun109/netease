@@ -1,0 +1,165 @@
+type=sparksql
+hive.query.01=\
+with a as ( \
+    select t2.userid, \
+        t1.registration_date, \
+        case when \
+            t2.login_days_30d is null then -1 \
+            else t2.login_days_30d end login_days_30d, \
+        login_days_30d_tier, \
+        case when \
+            t3.post_cnt is null or t3.post_cnt = 0 then -1 \
+            else t3.post_cnt end post_cnt, \
+        t3.post_cnt_tier, \
+        case when \
+            t5.grain_incentive_tickets_cnt is null or t5.grain_incentive_tickets_cnt = 0 then -1 \
+            else t5.grain_incentive_tickets_cnt end grain_incentive_tickets_cnt, \
+        t5.grain_incentive_tickets_cnt_tier, \
+        case when \
+            t5.grain_non_incentive_tickets_cnt is null or t5.grain_non_incentive_tickets_cnt = 0 then -1 \
+            else t5.grain_non_incentive_tickets_cnt end grain_non_incentive_tickets_cnt, \
+        t5.grain_non_incentive_tickets_cnt_tier, \
+        case when \
+            t7.consume_tickets_cnt is null or t7.consume_tickets_cnt = 0 then -1 \
+            else t7.consume_tickets_cnt end consume_tickets_cnt, \
+        t7.consume_tickets_cnt_tier, \
+        case when \
+            t7.consume_candy_cnt is null or t7.consume_candy_cnt = 0 then -1 \
+            else t7.consume_candy_cnt end consume_candy_cnt, \
+        t7.consume_candy_cnt_tier \
+    from ( \
+        select userId, login_days_30d, \
+            case when login_days_30d <= login_days_20th_percentile then 0 \
+                when login_days_30d <= login_days_50th_percentile then 1 \
+                else 2 end as login_days_30d_tier \
+        from ( \
+            select userId, login_days_30d, \
+                   percentile_approx(login_days_30d, 0.2) over () login_days_20th_percentile, \
+                   percentile_approx(login_days_30d, 0.5) over () login_days_50th_percentile \
+            from lofter.dws_par_user_base_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and login_days_30d >= 2 \
+        ) t \
+    ) t2 \
+    left join ( \
+        select id, createDate as registration_date from lofter.dim_user \
+    ) t1 on t2.userid = t1.id \
+    left join ( \
+        select userid, post_cnt, \
+            case when post_cnt <= post_cnt_20th_percentile then 0 \
+                  when post_cnt <= post_cnt_50th_percentile then 1 \
+                  else 2 end post_cnt_tier \
+        from ( \
+            select userId, post_cnt, \
+                percentile_approx(post_cnt, 0.2) over () post_cnt_20th_percentile, \
+                percentile_approx(post_cnt, 0.5) over () post_cnt_50th_percentile \
+            from ( \
+                select userid, count(distinct postid) post_cnt \
+                from lofter.dwd_post_browse_di \
+                where dt <= '${azkaban.flow.1.days.ago}' and \
+                    dt >= '${azkaban.flow.30.days.ago}' and \
+                    is_real > 0 and \
+                    postid in ( \
+                        select postid \
+                        from lofter.dim_gift_post_return_dd \
+                        where dt = '${azkaban.flow.1.days.ago}' and ispay_returngift in (0, 2) \
+                    ) \
+                group by userid \
+            ) t \
+        ) tt \
+    ) t3 on t2.userid = t3.userid \
+    left join ( \
+        select userid, \
+            grain_incentive_tickets_cnt, \
+            case when grain_incentive_tickets_cnt <= grain_incentive_tickets_cnt_20th_percentile then 0 \
+                 when grain_incentive_tickets_cnt <= grain_incentive_tickets_cnt_50th_percentile then 1 \
+            else 2 end grain_incentive_tickets_cnt_tier, \
+            grain_non_incentive_tickets_cnt, \
+            case when grain_non_incentive_tickets_cnt <= grain_non_incentive_tickets_cnt_20th_percentile then 0 \
+                 when grain_non_incentive_tickets_cnt <= grain_non_incentive_tickets_cnt_50th_percentile then 1 \
+            else 2 end grain_non_incentive_tickets_cnt_tier \
+        from ( \
+            select userId, grain_incentive_tickets_cnt, grain_non_incentive_tickets_cnt, \
+                percentile_approx(grain_incentive_tickets_cnt,0.2) over () as grain_incentive_tickets_cnt_20th_percentile, \
+                percentile_approx(grain_incentive_tickets_cnt,0.5) over () as grain_incentive_tickets_cnt_50th_percentile, \
+                percentile_approx(grain_non_incentive_tickets_cnt,0.2) over () as grain_non_incentive_tickets_cnt_20th_percentile, \
+                percentile_approx(grain_non_incentive_tickets_cnt,0.5) over () as grain_non_incentive_tickets_cnt_50th_percentile \
+            from ( \
+                select userId, \
+                       sum(case when type in (10,24,48) then 1 else 0 end) grain_incentive_tickets_cnt, \
+                       sum(case when type not in (10,24,48) then 1 else 0 end) grain_non_incentive_tickets_cnt \
+                from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+                where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+                      from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+                group by userId \
+            ) t \
+        ) tt \
+    ) t5 on t2.userid = t5.userid \
+    left join ( \
+        select userid, \
+            consume_tickets_cnt, \
+            case \
+                when consume_tickets_cnt <= consume_tickets_cnt_20th_percentile then 0 \
+                when consume_tickets_cnt <= consume_tickets_cnt_50th_percentile then 1 \
+                else 2 end consume_tickets_cnt_tier, \
+            consume_candy_cnt, \
+            case \
+                when consume_candy_cnt <= consume_candy_cnt_20th_percentile then 0 \
+                when consume_candy_cnt <= consume_candy_cnt_50th_percentile then 1 \
+                else 2 end consume_candy_cnt_tier \
+        from ( \
+            select userId, consume_tickets_cnt, consume_candy_cnt, \
+                    percentile_approx(consume_tickets_cnt,0.2) over () consume_tickets_cnt_20th_percentile, \
+                    percentile_approx(consume_tickets_cnt,0.5) over () consume_tickets_cnt_50th_percentile, \
+                    percentile_approx(consume_candy_cnt,0.2) over () consume_candy_cnt_20th_percentile, \
+                    percentile_approx(consume_candy_cnt,0.5) over () consume_candy_cnt_50th_percentile \
+            from ( \
+                select userid, \
+                    sum(grain_tickets) consume_tickets_cnt, \
+                    sum(case when unlock_method = '券包' then 1 else 0 end ) consume_candy_cnt \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt = date_sub(current_date,1) \
+                    and from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') >= date_sub(current_date,30) \
+                group by userid \
+                having sum(money) < 10 \
+            ) t \
+        ) tt \
+    ) t7 on t2.userid = t7.userid \
+), \
+b as ( \
+    select userid, \
+        case when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 2 and post_cnt_tier = 2 then 1 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 1 and post_cnt_tier = 2 then 4 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 0 and post_cnt_tier = 2 then 7 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 2 and post_cnt_tier = 1 then 2 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 1 and post_cnt_tier = 1 then 5 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 0 and post_cnt_tier = 1 then 8 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 2 and post_cnt_tier = 0 then 3 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 1 and post_cnt_tier = 0 then 6 \
+            when (grain_incentive_tickets_cnt_tier = 0 or grain_incentive_tickets_cnt = -1) and consume_tickets_cnt_tier = 0 and post_cnt_tier = 0 then 9 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 2 then 10 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 2 then 13 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 2 then 16 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 1 then 11 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 1 then 14 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 1 then 17 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 0 then 12 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 0 then 15 \
+            when grain_incentive_tickets_cnt between 1 and 2 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 0 then 18 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 2 then 19 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 2 then 22 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 2 then 25 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 1 then 20 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 1 then 23 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 1 then 26 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 2 and post_cnt_tier = 0 then 21 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 1 and post_cnt_tier = 0 then 24 \
+            when grain_incentive_tickets_cnt between 3 and 10 and consume_tickets_cnt_tier = 0 and post_cnt_tier = 0 then 27 \
+            else 28 end user_rank \
+    from a \
+    where registration_date <= '${azkaban.flow.7.days.ago}' \
+        and post_cnt > 0 \
+        and consume_tickets_cnt > 0 \
+) \
+insert overwrite table lofter_dm.ads_ad_video_extend_user_group_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, user_rank from b where user_rank in (4,7,9,10,13,14,15,16,17,18,19,20,21,22) \
+

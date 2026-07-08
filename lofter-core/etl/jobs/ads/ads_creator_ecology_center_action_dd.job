@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_creator_ecology_center_action_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+       nvl(wordNum,0) as wordNum, \
+       nvl(photoNum,0) as photoNum, \
+       nvl(videoNum,0) as videoNum \
+from ( \
+    select a.blogId, \
+           sum(b.words_count) as wordNum, \
+           sum(b.photo_count) as photoNum, \
+           count(distinct case when a.contentType = '视频' then a.id end) as videoNum \
+    from( \
+        select id, \
+               blogid, \
+               contentType \
+        from lofter.dim_post \
+        where publishdate between date_sub('${azkaban.flow.1.days.ago}', 30) and '${azkaban.flow.1.days.ago}' and isPublished = true \
+    ) a \
+    left join ( \
+        select postid, \
+               words_count, \
+               photo_count \
+        from lofter.dwd_post_length_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b \
+    on a.id = b.postId \
+    group by a.blogId \
+) tmp1

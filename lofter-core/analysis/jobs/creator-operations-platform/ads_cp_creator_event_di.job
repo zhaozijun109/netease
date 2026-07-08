@@ -1,0 +1,108 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE table lofter_dm.ads_cp_creator_event_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+select t1.blogid, \
+       t1.postid, \
+       t1.event, \
+       t1.event_date \
+from ( \
+     select blogid, \
+            postid, \
+            post_status as event, \
+            start_date  as event_date \
+     from lofter.dwd_post_status_dd \
+     where dt = '${azkaban.flow.1.days.ago}' \
+       and ispublished = 1 \
+       and post_status in ('公开', '屏蔽', '仅自己可见') \
+     union all \
+     select blogid, \
+            postid, \
+            '删除'     as event, \
+            start_date as event_date \
+     from ( \
+          SELECT postid, \
+                 blogid, \
+                 MIN(start_date) AS start_date, \
+                 MAX(end_date)   AS end_date \
+          FROM ( \
+               SELECT postid, \
+                      blogid, \
+                      start_date, \
+                      end_date, \
+                      SUM(is_new_group) OVER ( \
+                                        PARTITION BY \
+                                            postid, \
+                                            blogid \
+                                        ORDER BY \
+                                            start_date, \
+                                            end_date \
+                                        ROWS \
+                                            BETWEEN UNBOUNDED PRECEDING \
+                                            AND CURRENT ROW \
+                                    ) AS grp_id \
+               FROM ( \
+                    SELECT postid, \
+                           blogid, \
+                           start_date, \
+                           end_date, \
+                           CASE \
+                               WHEN LAG(end_date) OVER ( \
+                                                    PARTITION BY \
+                                                        postid, \
+                                                        blogid \
+                                                    ORDER BY \
+                                                        start_date, \
+                                                        end_date \
+                                                ) = start_date THEN 0 \
+                               ELSE 1 \
+                               END AS is_new_group \
+                    FROM lofter.dwd_post_status_dd \
+                    WHERE dt = '${azkaban.flow.1.days.ago}' \
+                      AND valid = 32) s1) s2 \
+          GROUP BY postid, \
+                   blogid, \
+                   grp_id)) t1 \
+     join ( \
+          select userid \
+          from lofter.dws_par_creator_dd \
+          where post_count_365d is not NULL \
+            and post_count_365d > 0 \
+            and dt = '${azkaban.flow.1.days.ago}') t2 on t1.blogid = t2.userid \
+where t1.event_date >= '${azkaban.flow.30.days.ago}' \
+union all \
+select userid, \
+       null, \
+       CONCAT(settingtype, '-', settingvalue)          as event, \
+       FROM_UNIXTIME(operatetime / 1000, 'yyyy-MM-dd') as event_date \
+from lofter_db_dump.ods_db_trade_ad_unlock_user_setting_log_nd \
+where FROM_UNIXTIME(operatetime / 1000, 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+  and settingtype = 'AUTHOR_AD_UNLOCK_SWITCH' \
+union all \
+select t1.blogid, \
+       t3.postid, \
+       CASE \
+           WHEN t3.recomstatus = 1 and t3.recomstatusbf <> 1 then '入推荐池' \
+           WHEN t3.recomstatus <> 1 and t3.recomstatusbf = 1 then '出推荐池' \
+           end as event, \
+       t3.create_date as event_date \
+from( \
+    select id,blogid \
+    from lofter.dim_post \
+    where publishDate <= '${azkaban.flow.1.days.ago}' and contenttype in ('文字','视频','图片') \
+      and publishdate >= date_sub('${azkaban.flow.1.days.ago}', 1825) and is_book_store = 0 and isPublished=true and isForbidden=false and isCitedPost = false \
+      and allowView=0 and isMoved = 0 and isActivityAutoPost=0 and isImported=0 \
+    ) t1 \
+    join ( \
+         select userid \
+         from lofter.dws_par_creator_dd \
+         where post_count_365d is not NULL \
+           and post_count_365d > 0 \
+           and dt = '${azkaban.flow.1.days.ago}' \
+) t2 on t1.blogid = t2.userid \
+    join( \
+        select postid,recomstatus,recomstatusbf,FROM_UNIXTIME(CAST(createtime / 1000 as bigint), 'yyyy-MM-dd') as create_date \
+        from lofter_db_dump.ods_db_recommend_post_state_log_nd \
+        where FROM_UNIXTIME(CAST(createtime / 1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+            and FROM_UNIXTIME(CAST(createtime / 1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            and recomstatusbf <> recomstatus and (recomstatusbf = 1 or recomstatus = 1) \
+) t3 on t1.id = t3.postid \

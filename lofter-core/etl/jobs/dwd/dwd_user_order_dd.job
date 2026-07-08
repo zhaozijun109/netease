@@ -1,0 +1,222 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_user_order_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select orderId, 'gift_present' as order_type, sender as userId, \
+           return_gift_id as productId, gift_num as product_num, \
+           createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           createTime as pay_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           coin * 0.1 as money, postId, blogid, \
+           '付费礼物' as revenue_module, '内容付费' as mbo_lv1_module, '礼物付费' as mbo_lv2_module, 1 as is_post_pay \
+    from lofter.dwd_gift_post_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+union all \
+    select id as orderId, order_type, userId, productId, product_num, \
+           order_time, from_unixtime(cast(order_time/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           pay_time, from_unixtime(cast(pay_time/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           amount as money, a.postId, nvl(c.blogId, a.vipBlogId) as blogId, \
+           case when order_type = 'fans_vip' and b.blogId is null then '粉丝会员' \
+                when order_type = 'fans_vip' then '官方账号' \
+                when order_type = 'store_vip' then '书城会员' \
+                when order_type = 'blog_vip' then '博客订阅' \
+                when order_type = 'mini_program' then '小程序会员' \
+                end as revenue_module, \
+           if(order_type = 'mini_program', '其他', '内容付费') as mbo_lv1_module, \
+           case when order_type = 'fans_vip' and b.blogId is null then '粉丝会员' \
+                when order_type = 'mini_program' then '小程序会员' \
+                else '书城会员' end as mbo_lv2_module, \
+           1 as is_post_pay \
+    from ( \
+        select id, 'blog_vip' as order_type, userId, vipBlogId as productId, vipDays as product_num, createTime as order_time, finishTime as pay_time, postId, amount, vipBlogId \
+        from lofter_db_dump.ods_db_trade_blog_vip_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and status = 1 \
+      union all \
+        select id, 'fans_vip' as order_type, userId, vipBlogId as productId, vipDays as product_num, createTime as order_time ,finishTime as pay_time, postId, amount, vipBlogId \
+        from lofter_db_dump.ods_db_trade_fans_vip_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and status = 1 \
+      union all \
+        select id, 'store_vip' as order_type, userId, 1 as productId, vipDays as product_num, createTime as order_time, finishTime pay_time, postId, amount, null as vipBlogId \
+        from lofter_db_dump.ods_db_trade_store_vip_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and status = 1 \
+      union all \
+        select id, 'mini_program' as order_type, userId, miniId as productId, vipDays as product_num, createTime as order_time, finishTime as pay_time, postId, amount, null as vipBlogId \
+        from lofter_db_dump.ods_db_trade_mini_program_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and status = 1 \
+    ) a \
+    left join ( \
+        select cast(trim(blogId) as bigint) as blogId \
+        from lofter_db_dump.ods_db_admin_pub_data_nd \
+             lateral view explode(split(content, ',')) t as blogId \
+        where name in ('blogvip_ids', 'book_store_blogIds') and cast(trim(blogId) as bigint) > 0 \
+        group by 1 \
+    ) b on a.vipBlogId = b.blogId \
+    left join (select id as postId, blogId from lofter.dim_post) c on a.postId = c.postId \
+union all \
+    select id as orderId, 'benefit' as order_type, buyerId as userId, \
+           c.productId as productId, c.productNum as product_num, \
+           createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           payTime as pay_time, from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           amount as money, null as postId, null as blogId, \
+           case when productType=3 then '市集'  \
+                when productType=5 and b.slotType=4 then '一番赏' \
+                else "抽赏" end as revenue_module, \
+           '趣味电商' as mbo_lv1_module, \
+           case when productType=3 then '市集'  \
+                when productType=5 and b.slotType=4 then '一番赏' \
+                else "抽赏" end as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_benefit_trade_nd a \
+    join (select tradeId from lofter_db_dump.ods_db_benefit_order_nd where originType in (0, 4)) a1 on a.id = a1.tradeId \
+    left join ( \
+        select code, slotType, startTime, endTime \
+        from lofter_db_dump.ods_db_benefit_card_activity_nd \
+    ) b on a.thirdPartyNum = b.code and a.createTime between b.startTime and b.endTime \
+    left join ( \
+        select a.id as tradeId, \
+          max(c.productId) as productId, \
+          sum(if(productType = 5, c.slotNum, c.productNum)) as productNum \
+        from lofter_db_dump.ods_db_benefit_trade_nd a \
+        left join ( \
+            select id as orderId, tradeId \
+            from lofter_db_dump.ods_db_benefit_order_nd \
+        ) b on a.id = b.tradeId \
+        left join ( \
+            select orderId,productId,productName, \
+                  productNum, \
+                  cast(get_json_object(get_json_object(attrgroupext,"$.ext"),"$.slotNum") as bigint) as slotNum \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+        ) c on b.orderId = c.orderId \
+        group by 1 \
+    ) c on a.id = c.tradeId \
+    where productType in (3,5) and \
+          from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          status in (1,3,4) and payTime > 0 \
+union all \
+    select a.orderId, a.order_type, a.userId, \
+           a.productId, 1 as product_num, \
+           a.createTime as order_time, from_unixtime(cast(a.createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           a.finishTime as pay_time, from_unixtime(cast(a.finishTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           a.amount as money, a.postId as postId, b.blogId as blogId, \
+           '券包' as revenue_module, '内容付费' as mbo_lv1_module, '礼物付费' as mbo_lv2_module, 1 as is_post_pay \
+    from ( \
+        select id as orderId, 'coupon' as order_type, userId, productId, createTime, finishTime, amount, postId \
+        from lofter_db_dump.ods_db_trade_coupon_order_nd \
+        where status = 1 and \
+              from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+      union all \
+        select id as orderId, 'coupon_card' as order_type, userId, productId, createTime, finishTime, amount, null as postId \
+        from lofter_db_dump.ods_db_trade_coupon_card_order_nd \
+        where status = 1 and \
+              from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+      union all \
+        select id as orderId, 'coupon_coin' as order_type, userId, productId, createTime, createTime as finishTime, coin * 0.1 as amount, null as postId \
+        from lofter_db_dump.ods_db_trade_coupon_coin_order_nd \
+        where status = 1 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join lofter.dim_post b on a.postId = b.id \
+union all \
+    select id as orderId, 'avatar_box' as order_type, userId, \
+         avatarBoxId as productId, count as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         createTime as pay_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         coin*count*0.1 as money, null as postId, null as blogId, \
+         '头像框' as revenue_module, '虚拟社交' as mbo_lv1_module, '装扮商城' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_avatar_box_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+union all \
+    select id as orderId, 'dressing_suit' as order_type, userId, \
+         suitId as productId, num as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         createTime as pay_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         price * 0.1 as money, null as postId, null as blogId, \
+         '皮肤套餐' as revenue_module, '虚拟社交' as mbo_lv1_module, '装扮商城' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_dressing_suit_order_nd \
+    where status = 1 and from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+union all \
+    select id as orderId, 'live_gift' as order_type, userId, \
+         recordId as productId, count as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         successTime as pay_time, from_unixtime(cast(successTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         income*0.1 as money, null as postId, null as blogId, \
+         '直播付费礼物' as revenue_module, '其他' as mbo_lv1_module, '直播付费礼物' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_live_gift_income_nd \
+    where giftType = 'pay' \
+union all \
+    select id as orderId, 'reward' as order_type, userId, \
+         if(authorPostid > 0, authorPostid, authorBlogid) as productId, 1 as product_num, \
+         createTime * 1000 as order_time, from_unixtime(cast(createTime as bigint), 'yyyy-MM-dd') order_date, \
+         finishTime * 1000 as pay_time, from_unixtime(cast(finishTime as bigint), 'yyyy-MM-dd') pay_date, \
+         rewardAmount as money, authorPostid as postId, authorBlogId as blogId, \
+         '打赏' as revenue_module, '其他' as mbo_lv1_module, '打赏' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_trade_reward_order_nd \
+    where status in (1, 10) and \
+          from_unixtime(cast(finishTime as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+union all \
+    select id as orderId, 'pve_stamina' as order_type, userid, \
+           productId, 1 as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         finishTime as pay_time, from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         amount as money, null as postId, null as blogId, \
+         'PVE虚拟陪伴' as revenue_module, '虚拟社交' as mbo_lv1_module, '虚拟陪伴' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+          and productType in (0,1,2,3,4,5,6,7,8,9,10,11) \
+union all \
+    select id as orderId, 'pve_stamina' as order_type, userid, \
+           productId, 1 as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         finishTime as pay_time, from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         amount as money, null as postId, null as blogId, \
+         '小剧场' as revenue_module, '虚拟社交' as mbo_lv1_module, '虚拟陪伴' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_trade_pve_stamina_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+          and productType in (12, 13) \
+union all \
+    select id as orderId, 'paper_man_stamina' as order_type, userid, \
+           productId, 1 as product_num, \
+         createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+         finishTime as pay_time, from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+         amount as money, null as postId, null as blogId, \
+         'PVE互动小说' as revenue_module, '虚拟社交' as mbo_lv1_module, '虚拟陪伴' as mbo_lv2_module, 0 as is_post_pay \
+    from lofter_db_dump.ods_db_trade_paper_man_stamina_order_nd \
+    where status = 1 and \
+          from_unixtime(cast(finishTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+union all \
+    select id as orderId, 'image_market_loot_box' as order_type, userid, \
+           lootBoxId as productId, slotCount as product_num, \
+           createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           createTime as pay_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           coin * 0.1 as money, postId, blogId, \
+          '图片商城' as revenue_module, '内容付费' as mbo_lv1_module, '礼物付费' as mbo_lv2_module, 1 as is_post_pay \
+    from lofter_db_dump.ods_db_image_market_loot_box_order_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          status = 0 \
+union all \
+    select id as orderId, 'image_market_product' as order_type, userid, \
+           productId, 1 as product_num, \
+           createTime as order_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') order_date, \
+           createTime as pay_time, from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') pay_date, \
+           coin * 0.1 as money, postId, blogId, \
+          '图片商城' as revenue_module, '内容付费' as mbo_lv1_module, '礼物付费' as mbo_lv2_module, 1 as is_post_pay \
+    from lofter_db_dump.ods_db_image_market_product_order_nd \
+    where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+union all \
+   select a.orderId as orderId, a.order_type as order_type, a.userId as userId, a.productId as productId, \
+          a.product_num as product_num, a.order_time as order_time, a.order_date as order_date, \
+          a.pay_time as pay_time, a.pay_date as pay_date, \
+          a.money as money, a.postId as postId, b.blogId as blogId, \
+          a.revenue_module as revenue_module, a.mbo_lv1_module as mbo_lv1_module, a.mbo_lv2_module as mbo_lv2_module, \
+          a.is_post_pay as is_post_pay \
+   from ( \
+       select id as orderId, 'membership' as order_type, userId, \
+               vipdays as productId, 1 as product_num, \
+               createTime as order_time, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as order_date, \
+               finishTime as pay_time, from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') as pay_date, \
+               amount as money, postId, \
+               '大会员' as revenue_module, '内容付费' as mbo_lv1_module, '书城会员' as mbo_lv2_module, 1 as is_post_pay \
+        from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and status = 1 \
+   ) a \
+   left join lofter.dim_post b on a.postId = b.id \
+
+dependencies=dwd_gift_post_order_dd

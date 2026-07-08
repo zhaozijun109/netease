@@ -1,0 +1,44 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_ad_unlock_users_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select x.blogId, x.new_browse_uv, x.new_browse_pv, \
+    x.nopay_new_browse_uv, x.nopay_new_browse_pv, \
+    nvl(y.browse_pv,0) as browse_pv, nvl(y.browse_uv, 0) as browse_uv, \
+    x.is_ad_open, \
+    case when is_ad_open > 0 and nopay_new_browse_pv > new_browse_pv * 2 then new_browse_uv * (2 - rand() * 0.5) \
+         when is_ad_open > 0 then nopay_new_browse_uv \
+         else new_browse_uv end as wide_new_browse_uv, \
+    case when is_ad_open > 0 and nopay_new_browse_pv > new_browse_pv * 2 then new_browse_pv * (2 - rand() * 0.5) \
+         when is_ad_open > 0 then nopay_new_browse_pv \
+         else new_browse_pv end as wide_new_browse_pv \
+from ( \
+    select a.blogId, \
+        count(distinct if(a.is_first_browse > 0, a.userId, null)) as new_browse_uv, \
+        sum(a.is_first_browse * a.browse_pv) as new_browse_pv, \
+        count(distinct if(a.is_first_browse > 0 or a.is_nopay_user > 0, a.userId, null)) as nopay_new_browse_uv, \
+        sum(greatest(a.is_first_browse, a.is_nopay_user) * a.browse_pv) as nopay_new_browse_pv, \
+        max(nvl(b.is_ad_open, 0)) as is_ad_open \
+    from ( \
+        select * \
+        from lofter.dws_creator_gift_users_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join ( \
+        select userId, if(settingValue = 'ON', 1, 0) as is_ad_open \
+        from ( \
+            select *, row_number() over (partition by userId order by operateTime desc) as rk \
+            from lofter_db_dump.ods_db_trade_ad_unlock_user_setting_log_nd \
+            where from_unixtime(cast(operateTime/1000 as bigint), 'yyyy-MM-dd') < '${azkaban.flow.1.days.ago}' and \
+                settingType = 'AUTHOR_AD_UNLOCK_SWITCH' \
+        ) t \
+        where rk = 1 \
+    ) b on a.blogId = b.userId \
+    group by 1 \
+) x \
+left join ( \
+    select post_userId as blogId, count(1) as browse_pv, count(distinct userId) as browse_uv \
+    from lofter.dwd_post_browse_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) y on x.blogId = y.blogId \
+

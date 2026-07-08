@@ -1,0 +1,174 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_gift_post_premium_post_score_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, blogid, blog_channel, content_flg, \
+       case when fumian_flg=2 or review_status=-2 then 3 \
+            when fufankui_uv>=3 and furate_ln>=1.80 then 4 \
+            when type_dd='优质' then 1 \
+            when type_day='其他' and model_flg=1 and bg_amount_flg=0 then 2 \
+            else 0 \
+       end as post_score_type, \
+       zonghe_score * ( \
+           case when fumian_flg=2 or (fufankui_uv>=3 and furate_ln>=1.80 ) or review_status=-2 then 0 \
+               when type_dd='优质' then 1.5 \
+               when type_day='其他' and   model_flg=1 and bg_amount_flg=0 then 1 \
+               when review_status=-1 then 0.5 \
+               when review_status in (0,-3) then 0.5 \
+               when type_dd='其他' then 0.8 \
+               when type_dd='低质' then 0.5 \
+               else 0.5 end \
+       ) as post_score, \
+       furate, zhenrate, liulan_fufei_rate, hd_rate, realbrowse_rate, jiesuo_pv, jiesuo_uv, exposureuv, \
+       case when liulan_fufei_rate >= liulan_fufei_rate_high then 1 \
+             when liulan_fufei_rate < liulan_fufei_rate_low then -1 \
+             else 0 end as liulan_fufei_level, \
+       case when hd_rate >= hd_rate_high then 1 \
+            when hd_rate < hd_rate_low then -1 \
+            else 0 end as hd_rate_level, \
+      case when exposureuv >= 1000 and realbrowse_rate >= realbrowse_rate_high then 1 \
+             when exposureuv >= 1000 and realbrowse_rate < realbrowse_rate_low then -1 \
+             else 0 end as realbrowse_rate_level, \
+      case when zhengfankui_uv >= zhengfankui_uv_threshold then 1 \
+            else 0 end as zhenrate_level, \
+      case when fufankui_uv >= fufankui_uv_threshold then -1 \
+           else 0 end as furate_level, \
+      jiesuo_money, fumian_flg, fufankui_uv, furate_ln, review_status, type_dd, model_flg, bg_amount_flg \
+from ( \
+    select a.postId, a.blogid, a.blog_channel, d.content_flg, c.blackRank, a.zonghe_score, a.furate_ln, a.review_status, \
+            case when fumian_num>0 then 2 \
+                 when (fumian_num is null or fumian_num=0) and dizhi_num>0  then 1 \
+                 else 0 \
+            end as fumian_flg, \
+            f.type as type_dd, g.fufankui_uv, g.zhengfankui_uv, h.model_flg, h.type_day, h.bg_amount_flg, \
+            furate, zhenrate, liulan_fufei_rate, \
+            (exp(hd_rate_ln)-1)/100 as hd_rate, \
+            (exp(realbrowse_rate_ln)-1)/100 as realbrowse_rate, \
+            g.jiesuo_money, g.jiesuo_uv, g1.jiesuo_pv, exposureuv, \
+            case when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 1000 and exposureuv < 5000 then 0.0001 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 5000 then 0.0003 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 5000 then 0.05 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 5000 and exposureuv < 50000 then 0.07 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 50000 then 0.08 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.08 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.14 \
+                 end as liulan_fufei_rate_high, \
+            case when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.010 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 10000 and exposureuv < 100000 then 0.015 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 100000 then 0.020 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.02 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.04 \
+                 end as liulan_fufei_rate_low, \
+            case when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 1000 and exposureuv < 5000 then 0.40 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 5000 and exposureuv < 50000 then 0.38 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 50000 then 0.23 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 then 0.13 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.10 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.14 \
+                 end as hd_rate_high, \
+            case when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 1000 and exposureuv < 5000 then 0.10 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 5000 and exposureuv < 50000 then 0.09 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 50000 then 0.04 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 then 0.05 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.03 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.04 \
+                 end as hd_rate_low, \
+            case when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 1000 and exposureuv < 5000 then 0.15 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 5000 and exposureuv < 50000 then 0.18 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 50000 then 0.28 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 then 0.23 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.14 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.20 \
+                 end as realbrowse_rate_high, \
+            case when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 1000 and exposureuv < 5000 then 0.03 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 5000 and exposureuv < 50000 then 0.055 \
+                 when a.blog_channel = 0 and contentType = '图片' and exposureuv >= 50000 then 0.09 \
+                 when a.blog_channel = 0 and contentType = '文字' and exposureuv >= 1000 then 0.07 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 1000 and exposureuv < 10000 then 0.04 \
+                 when a.blog_channel = 1 and contentType = '文字' and exposureuv >= 10000 then 0.06 \
+                 end as realbrowse_rate_low, \
+            case when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 20 and a.jiesuo_uv < 100 then 5 \
+                when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 100 and a.jiesuo_uv < 500 then 8 \
+                when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 500  then 20 \
+                when a.blog_channel = 0 and contentType = '图片' and a.jiesuo_uv >= 3 and a.jiesuo_uv < 10 then 1 \
+                when a.blog_channel = 0 and contentType = '图片' and a.jiesuo_uv >= 10 and a.jiesuo_uv < 50 then 4 \
+                when a.blog_channel = 0 and contentType = '图片' and a.jiesuo_uv >= 50  then 10 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 10 and a.jiesuo_uv < 50 then 3 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 50 and a.jiesuo_uv < 200 then 60 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 200  then 20 \
+                end as zhengfankui_uv_threshold, \
+            case when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 20 and a.jiesuo_uv < 100 then 3 \
+                when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 100 and a.jiesuo_uv < 500 then 4 \
+                when a.blog_channel = 0 and contentType = '文字' and a.jiesuo_uv >= 500  then 5 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 10 and a.jiesuo_uv < 50 then 2 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 50 and a.jiesuo_uv < 200 then 3 \
+                when a.blog_channel = 1 and contentType = '文字' and a.jiesuo_uv >= 200  then 4 \
+                end as fufankui_uv_threshold \
+    from ( \
+        select * \
+        from lofter.dws_gift_post_premium_scoring_detail_dd \
+        where dt= '${azkaban.flow.1.days.ago}' and \
+              publishDate between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select id,blogid \
+        from lofter.dim_post \
+        where valid=0 and allowview=0 \
+    ) b on a.postid=b.id \
+    left join ( \
+        select userid,blackrank \
+        from lofter_db_dump.ods_db_trade_user_black_home_nd \
+        group by userid,blackRank \
+    ) c on a.blogid=c.userid \
+    left join ( \
+        select a.blogid,case when textNum/allNum>=0.5 then '文手' else '画手'  end as content_flg \
+        from ( \
+            select blogid, \
+                  count(distinct case when contentType='文字' then postid else null end) as textNum, \
+                  count(distinct postid) as allNum \
+            from lofter.dws_gift_post_premium_scoring_detail_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and contentType in ('文字','图片') \
+            group by blogid \
+        ) a \
+        group by 1, 2 \
+    ) d on a.blogid=d.blogid \
+    left join ( \
+        select postid, \
+        count(distinct case when review_status=-1 then id else  null end ) as dizhi_num, \
+        count(distinct case when review_status=-2 then id else  null end ) as fumian_num \
+        from \
+        lofter.dim_gift_post_return \
+        where  blog_channel in (0,1) \
+        and ispay_returngift in (0,1) \
+        and publishdate between '${azkaban.flow.30.days.ago}'  and '${azkaban.flow.1.days.ago}' \
+        and auditstatus=1 \
+        and status=1 \
+        and review_status in (-1,-2) \
+        group by postid \
+    ) e on a.postid=e.postid \
+    left join ( \
+        select postid,type \
+        from lofter.dws_gift_post_premium_scoring_v2_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) f on a.postid=f.postid \
+    left join ( \
+        select postid, sum(jiesuo_money) as jiesuo_money, sum(jiesuo_uv) as jiesuo_uv,sum(zhengfankui_uv) as zhengfankui_uv,sum(fufankui_uv) as fufankui_uv \
+        from lofter.dws_gift_post_return_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postid \
+    ) g on a.postid=g.postid \
+    left join ( \
+        select postid, count(1) as jiesuo_pv \
+    	from lofter.dwd_gift_post_unlock_dd \
+    	where dt = '${azkaban.flow.1.days.ago}' and \
+    	      from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+    	      (unlock_method = '粮票' or is_settle > 0 ) \
+    	group by 1 \
+    ) g1 on a.postId = g1.postId \
+    left join ( \
+        select postid,model_flg,type as type_day,bg_amount_flg \
+        from lofter.dws_gift_post_premium_scoring_v2_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postid,model_flg,type ,bg_amount_flg \
+    ) h on a.postid=h.postid \
+) t \
+
+dependencies=dws_gift_post_premium_scoring_detail_dd,dws_gift_post_premium_scoring_v2_dd,dws_gift_post_return_dd

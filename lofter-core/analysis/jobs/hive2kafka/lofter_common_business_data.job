@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="select userId, tag as tagName, score from lofter_dm.ads_risk_user_tag_score_dd where dt ='${azkaban.flow.1.days.ago}' and score >= 75 "
+params=  --messageType 1 --topic lofter.common.businessData --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092 --parallel 1

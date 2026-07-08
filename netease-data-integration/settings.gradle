@@ -1,0 +1,22 @@
+rootProject.name = 'netease-data-integration'
+
+def modules = [
+  'ndi-service-web',
+  'ndi-worker',
+  'ndi-client'
+]
+
+def includeModuleRecursive(module, file) {
+  include "${module}"
+  file.eachDir { submodule ->
+    def name = submodule.name
+    if (!name.startsWith(".") && name != 'src' && name != 'bin' && name != 'build' && name != "out" && name != 'lib') {
+      includeModuleRecursive("${module}:${name}", submodule)
+    }
+  }
+}
+
+modules.each { module ->
+  includeModuleRecursive(module, file(module))
+}
+

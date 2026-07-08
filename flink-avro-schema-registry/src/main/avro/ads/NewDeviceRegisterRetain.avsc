@@ -1,0 +1,14 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "NewDeviceRegisterRetain",
+  "fields": [
+    {"name": "deviceId", "type": "string"},
+    {"name": "actionId", "type": "long"},
+    {"name": "time", "type": "long"},
+    {"name": "registerUserId", "type": "long"},
+    {"name": "retain", "type": "int"},
+    {"name": "appId", "type": ["null", "string"], "default": null},
+    {"name": "vcUserId", "type": ["null", "string"], "default": null}
+  ]
+}

@@ -1,0 +1,86 @@
+type=sparksql
+conf.spark.sql.autoBroadcastJoinThreshold=-1
+conf.spark.sql.adaptive.autoBroadcastJoinThreshold=-1
+hive.query.01=create temporary function nos_users as 'com.netease.wm.udf.NosUserList';
+hive.query.02=create temporary function parse_array as 'com.netease.wm.udf.ParseArrayJson';
+hive.query.03=create temporary function version_compare as 'com.netease.wm.udf.VersionCompare';
+hive.query.04=insert overwrite table lofter.dwd_push_action_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.*, b.title, b.content \
+from ( \
+    select *, \
+          regexp_replace(pushGroupId, '_\\\\d+$', '') as pushGroup, \
+          cast(substring_index(pushGroupId, '_', -1) as bigint) as pushMessageId \
+    from ( \
+        select userId, 1 as action, pushTime as occurTime, pushGroupId, \
+               null as is_push_option_on, null as deviceUdid, \
+               null as channelType \
+        from ( \
+          select pushGroupId, pushTime, userId \
+          from (      \
+               select id, pushTime, nos_url,  \
+                      concat(case pushType when 1 then 'market_push_' when 2 then 'broadcast_push_' end, id) as pushGroupId \
+               from lofter_db_dump.ods_db_act_backend_message_push_record_nd lateral view explode(parse_array(url)) as nos_url \
+               where from_unixtime(cast(pushTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+                     pushType in (1,2) \
+               group by id, pushTime, pushType, nos_url  \
+          ) t lateral view explode(nos_users(nos_url)) as userId \
+          union all \
+          select pushGroupId, time as pushTime, userId from lofter.ods_log_push_log_di \
+          where dt = '${azkaban.flow.1.days.ago}' and pushGroupId is not null \
+        ) t group by pushGroupId, pushTime, userId \
+      union all \
+        select userId, \
+               case eventId when 'rd-2' then 2 when 'rd-1' then 3 when 'rd-3' then 4 end as action, \
+               occurTime, params['pushgroupid'] as pushGroupId, \
+               if(eventId = 'rd-3', if(params['type'] = 'on', 1, 0), null) as is_push_option_on, deviceUdid, \
+               null as channelType \
+        from lofter.ods_mda_app_partition_di \
+        where dt='${azkaban.flow.1.days.ago}' and \
+              actionType = 'other' and \
+              eventId in ('rd-1', 'rd-2', 'rd-3') and \
+              (params['pushgroupid'] != '(null)' or params['pushgroupid'] is null) \
+      union all \
+        select b.userId, 2 as action, acktime  as `occurTime`, \
+               a.pushgroupid as pushGroupId, null as is_push_option_on, \
+               nvl(c.deviceUdid, b.deviceId) as deviceUdid, \
+               a.channelType \
+        from ( \
+          select * \
+          from lofter.ods_log_push_callback_info_di \
+          where dt = '${azkaban.flow.1.days.ago}' and channeltype != 10 and ackTypeDescription = '消息到达' \
+        ) a \
+        join lofter_db_dump.ods_db_push_deviceid_token_nd b on a.token = b.token \
+        left join ( \
+            select sid as customUdid, tid as deviceUdid \
+            from lofter.dwd_device_mapping \
+            where sid_tp='customudid' and tid_tp='deviceudid' and \
+                  lastNo = 1 \
+        ) c on b.deviceId = c.customUdid \
+      union all \
+        select cast(userId as bigint) as userId, 2 as action, occurTime, attributes['pushgroupid'] as pushGroupId, null as is_push_option_on, deviceUdid, \
+               if(version_compare(appVersion, '8.2.3') >= 0, 12, 10) as channelType \
+        from lofter.ods_mda_push_reach_di \
+        where dt='${azkaban.flow.1.days.ago}' and eventId = 'rd-2' and attributes['pushgroupid'] != '(null)' \
+      union all \
+        select a.userId, 5 as action, unix_timestamp(replace(a.logTime, 'T', ' '), 'yyyy-MM-dd HH:mm:ss.SSS') * 1000  as `occurTime`, \
+           a.pushgroupid as pushGroupId, null as is_push_option_on,  \
+           nvl(b.deviceUdid, a.deviceId) as deviceUdid, \
+           a.pushChannel as channelType \
+        from ( \
+          select * \
+          from lofter.ods_log_user_push_token_info_di \
+          where dt = '${azkaban.flow.1.days.ago}' and \
+                length(token) > 0 \
+        ) a \
+        left join ( \
+            select sid as customUdid, tid as deviceUdid \
+            from lofter.dwd_device_mapping \
+            where sid_tp='customudid' and tid_tp='deviceudid' and \
+                  lastNo = 1 \
+        ) b on a.deviceId = b.customUdid \
+        where length(token) > 0 \
+    ) t \
+    where cast(userId as bigint) > 0 \
+) a \
+left join lofter_db_dump.ods_db_act_backend_message_push_record_nd b on a.pushMessageId = b.id \
+distribute by 1

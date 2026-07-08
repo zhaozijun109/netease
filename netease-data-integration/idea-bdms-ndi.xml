@@ -1,0 +1,164 @@
+<code_scheme name="bdms-ndi" version="173">
+  <option name="OTHER_INDENT_OPTIONS">
+    <value>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </value>
+  </option>
+  <JavaCodeStyleSettings>
+    <option name="CLASS_COUNT_TO_USE_IMPORT_ON_DEMAND" value="500"/>
+    <option name="NAMES_COUNT_TO_USE_IMPORT_ON_DEMAND" value="300"/>
+    <option name="IMPORT_LAYOUT_TABLE">
+      <value>
+        <emptyLine/>
+        <package name="javax" withSubpackages="true" static="false"/>
+        <package name="java" withSubpackages="true" static="false"/>
+        <emptyLine/>
+        <package name="" withSubpackages="true" static="false"/>
+        <emptyLine/>
+        <package name="" withSubpackages="true" static="true"/>
+      </value>
+    </option>
+  </JavaCodeStyleSettings>
+  <codeStyleSettings language="CSS">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="ECMA Script Level 4">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="GSP">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Gherkin">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Groovy">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="HAML">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="HTML">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Java">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="JSON">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="JSP">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="JSPX">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="JavaScript">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="LESS">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Python">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="SASS">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="SCSS">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Stylus">
+    <indentOptions>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="TypeScript">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="XML">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Kotlin">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+  <codeStyleSettings language="Scala">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2"/>
+      <option name="CONTINUATION_INDENT_SIZE" value="2"/>
+      <option name="TAB_SIZE" value="2"/>
+    </indentOptions>
+  </codeStyleSettings>
+</code_scheme>

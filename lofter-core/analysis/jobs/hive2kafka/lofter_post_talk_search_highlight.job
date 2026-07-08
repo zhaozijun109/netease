@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="select cleaned_title as keyword from lofter_dm.ads_post_talk_search_highlight_dd where dt ='${azkaban.flow.1.days.ago}' group by cleaned_title"
+params= --messageType 16 --topic lofter.common.businessData --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092 --parallel 1

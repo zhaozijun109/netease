@@ -1,0 +1,149 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='1', retain_period=1) \
+select '${azkaban.flow.2.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.2.days.ago}' and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId from lofter.dim_user where createDate = '${azkaban.flow.2.days.ago}' ) b on a.buyerId = b.userId \
+left join (select userId from lofter.dws_par_user_active_di where dt = '${azkaban.flow.1.days.ago}') c on a.buyerId = c.userId \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.02=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='1', retain_period=6) \
+select '${azkaban.flow.7.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.7.days.ago}' and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId from lofter.dim_user where createDate = '${azkaban.flow.7.days.ago}' ) b on a.buyerId = b.userId \
+left join (select userId from lofter.dws_par_user_active_di where dt = '${azkaban.flow.1.days.ago}') c on a.buyerId = c.userId \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.03=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='7', retain_period=1) \
+select '${azkaban.flow.2.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.2.days.ago}' and \
+                  datediff('${azkaban.flow.2.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId, createDate from lofter.dim_user ) b on a.buyerId = b.userId and a.day = b.createDate \
+left join ( \
+   select userId, dt from lofter.dws_par_user_active_di \
+   where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+) c on a.buyerId = c.userId and datediff(c.dt, a.day) = 1 \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.04=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='7', retain_period=6) \
+select '${azkaban.flow.7.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.7.days.ago}' and \
+                  datediff('${azkaban.flow.7.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 7 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId, createDate from lofter.dim_user) b on a.buyerId = b.userId and a.day = b.createDate \
+left join ( \
+  select userId, dt from lofter.dws_par_user_active_di \
+  where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' \
+) c on a.buyerId = c.userId and datediff(c.dt, a.day) = 6 \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.05=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='30', retain_period=1) \
+select '${azkaban.flow.2.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.2.days.ago}' and \
+                  datediff('${azkaban.flow.2.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId, createDate from lofter.dim_user ) b on a.buyerId = b.userId and a.day = b.createDate \
+left join ( \
+   select userId, dt from lofter.dws_par_user_active_di \
+   where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) c on a.buyerId = c.userId and datediff(c.dt, a.day) = 1 \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())
+hive.query.06=insert overwrite table lofter_dm.ads_ec_product_trade_retain_di partition(dt='${azkaban.flow.1.days.ago}', period='30', retain_period=6) \
+select '${azkaban.flow.7.days.ago}' as baseDate, \
+    nvl(a.oneLevel, 'all') as oneLevel, \
+    nvl(cast(a.productId as string), 'all') as productId, \
+    a.ips, \
+    count(distinct if( b.userId is not null and c.userId is not null, a.buyerId, null)) as remain_uv \
+from ( \
+        select a.orderId,a.productId,a.buyerId,a.day, nvl(b.oneLevel, 'no') as oneLevel, concat_ws(',', b.ips) as ips \
+        from ( \
+            select orderId,productId,buyerId,from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as day \
+            from lofter_db_dump.ods_db_benefit_order_product_nd \
+            where from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <=  '${azkaban.flow.7.days.ago}' and \
+                  datediff('${azkaban.flow.7.days.ago}', from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) < 30 and \
+                  status in (1,3,4) \
+        ) a \
+        join ( \
+            select productId, category1_name as oneLevel, ips from lofter.dim_benefit_product \
+        ) b on a.productId = b.productId \
+) a \
+left join (select id as userId, createDate from lofter.dim_user) b on a.buyerId = b.userId and a.day = b.createDate \
+left join ( \
+  select userId, dt from lofter.dws_par_user_active_di \
+  where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) c on a.buyerId = c.userId and datediff(c.dt, a.day) = 6 \
+group by a.oneLevel,a.productId,a.ips \
+grouping sets ((a.oneLevel,a.productId,a.ips), (a.oneLevel), ())

@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2KafkaPayload
+conf.spark.source.query="\
+select commentId, postId, blogId, commentInteractionCount \
+from lofter_dm.ads_comment_dynamic_activation_di \
+where dt = '${azkaban.flow.1.days.ago}' \
+"
+params= --messageType 5 --topic lofter.common.businessData --servers lofter-kafka-dc1.gy.ntes:9092,lofter-kafka-dc2.gy.ntes:9092,lofter-kafka-dc3.gy.ntes:9092 --parallel 1

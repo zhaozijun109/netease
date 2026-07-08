@@ -1,0 +1,51 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_device_appchannel_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select a.deviceOs, a.appVersion, a.appChannel, \
+           to_bitmap(e.deviceId) as active_device_bitmap, \
+           to_bitmap(if(b.device_type = 'new' and b.is_paid_subscribe = 0, e.deviceId, null)) as new_device_bitmap, \
+           to_bitmap(if(b.device_type = 'return_30' and b.is_paid_subscribe = 0, e.deviceId, null)) as return_device_bitmap, \
+           to_bitmap(if(b.device_type = 'new' and b.is_paid_subscribe > 0, e.deviceId, null)) as paid_subscribe_new_device_bitmap, \
+           to_bitmap(if(b.device_type = 'return_30' and b.is_paid_subscribe > 0, e.deviceId, null)) as paid_subscribe_return_device_bitmap, \
+           sum(c.real_browse_pv) as real_browse_pv, \
+           to_bitmap(if(c.deviceUdid is not null, e.deviceId, null)) as real_browse_device_bitmap, \
+           sum(d.session_times) session_times, \
+           to_bitmap(if(d.deviceUdid is not null, e.deviceId, null)) as session_device_bitmap, \
+           sum(if(b.device_type = 'new',c.real_browse_pv,0)) as new_real_browse_pv, \
+           to_bitmap(if(b.device_type = 'new' and c.deviceUdid is not null, e.deviceId, null)) as new_real_browse_device_bitmap, \
+           sum(if(b.device_type = 'new',d.session_times,0)) session_times, \
+           to_bitmap(if(b.device_type = 'new' and d.deviceUdid is not null, e.deviceId, null)) as new_session_device_bitmap, \
+           sum(if(b.device_type = 'return_30', c.real_browse_pv,0)) as return_real_browse_pv, \
+           to_bitmap(if(b.device_type = 'return_30' and c.deviceUdid is not null, e.deviceId, null)) as return_real_browse_device_bitmap, \
+           sum(if(b.device_type = 'return_30', d.session_times, 0)) return_session_times, \
+           to_bitmap(if(b.device_type = 'return_30' and d.deviceUdid is not null, e.deviceId, null)) as return_session_device_bitmap \
+    from ( \
+        select deviceOs, kv.key as appVersion, kv.value as appChannel, deviceUdid \
+        from lofter.device_active \
+             lateral view explode(map_entries(appVersionChannel)) as kv \
+        where dt ='${azkaban.flow.1.days.ago}' \
+        group by 1,2,3,4 \
+    ) a \
+    left join ( \
+        select deviceUdid, is_paid_subscribe, device_type \
+        from lofter.dwd_device_growth_attribution_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.deviceUdid = b.deviceUdid \
+    left join ( \
+        select deviceUdid, \
+               count(1) as real_browse_pv \
+        from lofter.dwd_post_browse_di \
+        where dt='${azkaban.flow.1.days.ago}' and is_real > 0 \
+        group by deviceUdid \
+    ) c on a.deviceUdid = c.deviceUdid \
+    left join ( \
+        select deviceUdid, deviceOs, appVersion, appChannel, sum(sessionTime) as session_times \
+        from lofter.dws_par_device_session_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by deviceUdid, deviceOs, appVersion, appChannel \
+    ) d on a.deviceUdid = d.deviceUdid and a.deviceOs = d.deviceOs and a.appVersion = d.appVersion and a.appChannel = d.appChannel \
+    left join ( \
+      select deviceUdid, deviceId from lofter.dwd_par_device_all_dd where dt = '${azkaban.flow.1.days.ago}' \
+    ) e on a.deviceUdid = e.deviceUdid \
+    group by 1, 2, 3
+

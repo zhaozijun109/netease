@@ -1,0 +1,336 @@
+type=sparksql
+hive.query.01=  \
+WITH \
+curr_publish_base AS ( \
+SELECT DISTINCT userid, postid \
+FROM lofter.dwd_post_publish_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+), \
+prev_publish_base AS ( \
+SELECT DISTINCT userid, postid \
+FROM lofter.dwd_post_publish_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+), \
+author_capacity AS ( \
+SELECT \
+userid, \
+COUNT(DISTINCT CASE WHEN dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' THEN postid ELSE NULL END) AS curr_post_cnt, \
+COUNT(DISTINCT CASE WHEN dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' THEN dt ELSE NULL END) AS curr_publish_days, \
+COUNT(DISTINCT CASE WHEN dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) THEN postid ELSE NULL END) AS prev_post_cnt, \
+COUNT(DISTINCT CASE WHEN dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) THEN dt ELSE NULL END) AS prev_publish_days \
+FROM lofter.dwd_post_publish_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND '${azkaban.flow.1.days.ago}' \
+GROUP BY userid \
+), \
+prev_post_private_stats AS ( \
+SELECT v.post_userid, v.postid, v.pv, \
+(COALESCE(h.actions,0) + COALESCE(r.comments,0)) AS interact_cnt, \
+((COALESCE(h.score,0) + COALESCE(r.score,0)) / v.pv) AS interact_rate \
+FROM ( \
+SELECT post_userid, postid, COUNT(1) AS pv \
+FROM lofter.dwd_post_browse_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+AND is_real > 0 AND is_fans = 1 \
+GROUP BY post_userid, postid \
+) v \
+LEFT JOIN ( \
+SELECT blogid, postid, COUNT(1) AS actions, \
+SUM(CASE WHEN optype IN ('recommend','reproduce','share') THEN 3.0 WHEN optype='subscribe' THEN 1.5 ELSE 1.0 END) AS score \
+FROM lofter.dwd_post_hot_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+AND is_fans = 1 AND optype IN ('praise','reproduce','recommend','subscribe','share') \
+GROUP BY blogid, postid \
+) h ON v.postid = h.postid \
+LEFT JOIN ( \
+SELECT blogid, postid, COUNT(1) AS comments, COUNT(1)*2.0 AS score \
+FROM lofter.dwd_post_response_di \
+WHERE dt BETWEEN CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 59) AS STRING) AND CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+AND is_fans = 1 \
+GROUP BY blogid, postid \
+) r ON v.postid = r.postid \
+), \
+prev_private_p80 AS ( \
+SELECT \
+percentile_approx(pv, 0.8) AS dynamic_p80_pv, \
+percentile_approx(interact_cnt, 0.8) AS dynamic_p80_interact, \
+percentile_approx(interact_rate, 0.8) AS dynamic_p80_rate \
+FROM prev_post_private_stats \
+), \
+prev_fan_premium_detail AS ( \
+SELECT s.post_userid AS userid, s.postid \
+FROM prev_post_private_stats s \
+CROSS JOIN prev_private_p80 p \
+WHERE s.pv >= p.dynamic_p80_pv \
+AND s.interact_cnt >= p.dynamic_p80_interact \
+AND s.interact_rate >= p.dynamic_p80_rate \
+), \
+prev_public_premium_detail AS ( \
+SELECT pub.userid, pub.postid \
+FROM prev_publish_base pub \
+JOIN lofter.dws_post_premium_di prem \
+ON pub.postid = prem.postid \
+AND prem.dt = CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+), \
+prev_total_premium AS ( \
+SELECT t.userid, COUNT(DISTINCT t.postid) AS premium_cnt \
+FROM ( \
+SELECT userid, postid FROM prev_fan_premium_detail \
+UNION ALL \
+SELECT userid, postid FROM prev_public_premium_detail \
+) t \
+JOIN prev_publish_base bp ON t.postid = bp.postid \
+GROUP BY t.userid \
+), \
+prev_paid_premium AS ( \
+SELECT userid \
+FROM ( \
+SELECT \
+userid, \
+PERCENT_RANK() OVER(ORDER BY max_quality_score ASC) as score_pct \
+FROM ( \
+SELECT \
+blogid as userid, \
+MAX(quality_score) as max_quality_score \
+FROM lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+WHERE dt = CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+GROUP BY blogid \
+) author_max \
+) t \
+WHERE score_pct >= 0.8 \
+), \
+prev_level AS ( \
+SELECT userid, level \
+FROM lofter.dws_par_creator_dd \
+WHERE dt = CAST(DATE_SUB('${azkaban.flow.1.days.ago}', 30) AS STRING) \
+), \
+prev_persona_result AS ( \
+SELECT a.userid, \
+CASE \
+WHEN (a.prev_publish_days >= 8) AND ( \
+cl.level IN ('S','A','B','C') OR paid_p.userid IS NOT NULL \
+OR (a.prev_post_cnt BETWEEN 1 AND 10 AND COALESCE(tp.premium_cnt, 0) >= 1) \
+OR (a.prev_post_cnt BETWEEN 11 AND 20 AND COALESCE(tp.premium_cnt, 0) >= 2) \
+OR (a.prev_post_cnt >= 21 AND COALESCE(tp.premium_cnt, 0) >= 3) \
+) THEN '专业型' \
+WHEN (a.prev_publish_days < 8) AND ( \
+cl.level IN ('S','A','B','C') OR paid_p.userid IS NOT NULL \
+OR COALESCE(tp.premium_cnt, 0) >= 1 \
+) THEN '匠人型_硬实力' \
+WHEN (a.prev_publish_days >= 8) THEN '跟风型' \
+ELSE '兴趣型' \
+END AS last_month_hard_persona \
+FROM (SELECT * FROM author_capacity WHERE prev_publish_days > 0) a \
+LEFT JOIN prev_level cl ON a.userid = cl.userid \
+LEFT JOIN prev_paid_premium paid_p ON a.userid = paid_p.userid \
+LEFT JOIN prev_total_premium tp ON a.userid = tp.userid \
+), \
+curr_post_private_stats AS ( \
+SELECT v.post_userid, v.postid, v.pv, \
+(COALESCE(h.actions,0) + COALESCE(r.comments,0)) AS interact_cnt, \
+((COALESCE(h.score,0) + COALESCE(r.score,0)) / v.pv) AS interact_rate \
+FROM ( \
+SELECT post_userid, postid, COUNT(1) AS pv \
+FROM lofter.dwd_post_browse_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_real > 0 AND is_fans = 1 \
+GROUP BY post_userid, postid \
+) v \
+LEFT JOIN ( \
+SELECT blogid, postid, COUNT(1) AS actions, \
+SUM(CASE WHEN optype IN ('recommend','reproduce','share') THEN 3.0 WHEN optype='subscribe' THEN 1.5 ELSE 1.0 END) AS score \
+FROM lofter.dwd_post_hot_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_fans = 1 AND optype IN ('praise','reproduce','recommend','subscribe','share') \
+GROUP BY blogid, postid \
+) h ON v.postid = h.postid \
+LEFT JOIN ( \
+SELECT blogid, postid, COUNT(1) AS comments, COUNT(1)*2.0 AS score \
+FROM lofter.dwd_post_response_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND is_fans = 1 \
+GROUP BY blogid, postid \
+) r ON v.postid = r.postid \
+), \
+curr_private_p80 AS ( \
+SELECT \
+percentile_approx(pv, 0.8) AS dynamic_p80_pv, \
+percentile_approx(interact_cnt, 0.8) AS dynamic_p80_interact, \
+percentile_approx(interact_rate, 0.8) AS dynamic_p80_rate \
+FROM curr_post_private_stats \
+), \
+curr_fan_premium_detail AS ( \
+SELECT s.post_userid AS userid, s.postid \
+FROM curr_post_private_stats s \
+CROSS JOIN curr_private_p80 p \
+WHERE s.pv >= p.dynamic_p80_pv \
+AND s.interact_cnt >= p.dynamic_p80_interact \
+AND s.interact_rate >= p.dynamic_p80_rate \
+), \
+curr_public_premium_detail AS ( \
+SELECT pub.userid, pub.postid \
+FROM curr_publish_base pub \
+JOIN lofter.dws_post_premium_di prem \
+ON pub.postid = prem.postid \
+AND prem.dt = '${azkaban.flow.1.days.ago}' \
+), \
+curr_total_premium AS ( \
+SELECT t.userid, COUNT(DISTINCT t.postid) AS premium_cnt \
+FROM ( \
+SELECT userid, postid FROM curr_fan_premium_detail \
+UNION ALL \
+SELECT userid, postid FROM curr_public_premium_detail \
+) t \
+JOIN curr_publish_base bp ON t.postid = bp.postid \
+GROUP BY t.userid \
+), \
+curr_public_premium AS ( \
+SELECT DISTINCT userid FROM curr_public_premium_detail \
+), \
+curr_paid_premium AS ( \
+SELECT userid \
+FROM ( \
+SELECT \
+userid, \
+PERCENT_RANK() OVER(ORDER BY max_quality_score ASC) as score_pct \
+FROM ( \
+SELECT \
+blogid as userid, \
+MAX(quality_score) as max_quality_score \
+FROM lofter_dm.ads_paid_post_premium_scoring_group_normalization_di \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+GROUP BY blogid \
+) author_max \
+) t \
+WHERE score_pct >= 0.8 \
+), \
+author_main_content_type AS ( \
+SELECT userid, post_content_type as main_content_type \
+FROM ( \
+SELECT \
+userid, \
+post_content_type, \
+ROW_NUMBER() OVER(PARTITION BY userid ORDER BY type_cnt DESC) as rn \
+FROM ( \
+SELECT \
+userid, \
+post_content_type, \
+COUNT(1) as type_cnt \
+FROM lofter.dwd_post_publish_di \
+WHERE dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+GROUP BY userid, post_content_type \
+) type_agg \
+) ranked_type \
+WHERE rn = 1 \
+), \
+user_base_info AS ( \
+SELECT \
+userid, \
+TO_DATE(FROM_UNIXTIME(CAST(createtime / 1000 AS BIGINT))) as createtime_date, \
+(YEAR(CURRENT_DATE) - CAST(birth_year AS INT)) AS age, \
+CASE WHEN gender = '1' THEN '男' WHEN gender = '2' THEN '女' ELSE '其它' END as gender, \
+profession \
+FROM lofter.dws_par_user_base_dd \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+creator_level_info AS ( \
+SELECT \
+userid, \
+level as creator_level, \
+post_first_date as first_post_date, \
+blog_url \
+FROM lofter.dws_par_creator_dd \
+WHERE dt = '${azkaban.flow.1.days.ago}' \
+), \
+ip_circle_tier AS ( \
+SELECT \
+ip, \
+COUNT(DISTINCT deviceudid) as ip_mau, \
+CASE \
+WHEN COUNT(DISTINCT deviceudid) > 850000 THEN '热圈' \
+WHEN COUNT(DISTINCT deviceudid) BETWEEN 350000 AND 850000 THEN '温圈' \
+ELSE '冷圈' \
+END as circle_tier \
+FROM lofter.dws_device_ip_interest_di \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+GROUP BY ip \
+), \
+author_circle_tier AS ( \
+SELECT a.userid, a.ip, b.circle_tier \
+FROM ( \
+SELECT userid, ip \
+FROM ( \
+SELECT \
+userid, \
+ip, \
+ROW_NUMBER() OVER(PARTITION BY userid ORDER BY cnt DESC) as rn \
+FROM ( \
+SELECT userid, ip, COUNT(1) as cnt \
+FROM lofter.dwd_post_publish_di \
+LATERAL VIEW EXPLODE(post_ips) tmp as ip \
+WHERE dt BETWEEN '${azkaban.flow.30.days.ago}' AND '${azkaban.flow.1.days.ago}' \
+AND ip IS NOT NULL \
+GROUP BY userid, ip \
+) t1 \
+) t2 \
+WHERE rn = 1 \
+) a \
+LEFT JOIN ip_circle_tier b ON a.ip = b.ip \
+) \
+INSERT OVERWRITE TABLE lofter_dm.ads_creator_user_persona_di PARTITION (dt='${azkaban.flow.1.days.ago}') \
+SELECT \
+a.userid, \
+c_lvl.creator_level, \
+a.curr_post_cnt AS post_cnt, \
+a.curr_publish_days AS publish_days_30d, \
+CASE \
+WHEN c_lvl.creator_level IN ('S', 'A','B','C') OR p_score.userid IS NOT NULL THEN 1 \
+WHEN a.curr_publish_days >= 8 AND ( \
+(a.curr_post_cnt BETWEEN 1 AND 10 AND COALESCE(curr_tp.premium_cnt, 0) >= 1) \
+OR (a.curr_post_cnt BETWEEN 11 AND 20 AND COALESCE(curr_tp.premium_cnt, 0) >= 2) \
+OR (a.curr_post_cnt >= 21 AND COALESCE(curr_tp.premium_cnt, 0) >= 3) \
+) THEN 1 \
+WHEN a.curr_publish_days < 8 AND COALESCE(curr_tp.premium_cnt, 0) >= 1 THEN 1 \
+ELSE 0 \
+END as is_high_quality, \
+CASE WHEN a.curr_publish_days >= 8 THEN 1 ELSE 0 END as is_high_yield, \
+CASE \
+WHEN (a.curr_publish_days >= 8) AND ( \
+c_lvl.creator_level IN ('S','A','B','C') OR p_score.userid IS NOT NULL \
+OR (a.curr_post_cnt BETWEEN 1 AND 10 AND COALESCE(curr_tp.premium_cnt, 0) >= 1) \
+OR (a.curr_post_cnt BETWEEN 11 AND 20 AND COALESCE(curr_tp.premium_cnt, 0) >= 2) \
+OR (a.curr_post_cnt >= 21 AND COALESCE(curr_tp.premium_cnt, 0) >= 3) \
+) THEN '专业型' \
+WHEN (a.curr_publish_days < 8) AND ( \
+c_lvl.creator_level IN ('S','A','B','C') OR p_score.userid IS NOT NULL \
+OR COALESCE(curr_tp.premium_cnt, 0) >= 1 \
+) THEN '匠人型' \
+WHEN (a.curr_publish_days >= 8) THEN '跟风型' \
+WHEN ppr.last_month_hard_persona = '匠人型_硬实力' AND a.curr_post_cnt >= (a.prev_post_cnt * 0.5) THEN '匠人型(兜底保护)' \
+ELSE '兴趣型' \
+END as creator_persona, \
+t_type.main_content_type AS main_post_content_type, \
+u_base.age, \
+u_base.gender, \
+u_base.profession, \
+c_lvl.blog_url, \
+CASE WHEN p_score.userid IS NOT NULL THEN '付费质量分_高' ELSE '付费质量分_低' END as p_score, \
+CASE WHEN p_prem.userid IS NOT NULL THEN '高质' ELSE '低质' END as p_prem, \
+CASE WHEN ac.circle_tier IS NULL THEN '无圈层' ELSE ac.circle_tier END as circle_tier, \
+CASE WHEN ac.ip IS NULL THEN '无圈层' ELSE ac.ip END as ip, \
+CASE WHEN u_base.createtime_date >= '${azkaban.flow.30.days.ago}' \
+AND c_lvl.first_post_date >= '${azkaban.flow.30.days.ago}' THEN '近30天内注册且近30天发文' \
+WHEN u_base.createtime_date < '${azkaban.flow.30.days.ago}' \
+AND c_lvl.first_post_date >= '${azkaban.flow.30.days.ago}' THEN '30天前注册且近30天发文' \
+ELSE '30天前发文' \
+END as lifecycle_tag, \
+u_base.createtime_date, \
+c_lvl.first_post_date \
+FROM (SELECT * FROM author_capacity WHERE curr_publish_days > 0) a \
+LEFT JOIN curr_total_premium curr_tp      ON a.userid = curr_tp.userid \
+LEFT JOIN curr_paid_premium p_score       ON a.userid = p_score.userid \
+LEFT JOIN curr_public_premium p_prem      ON a.userid = p_prem.userid \
+LEFT JOIN prev_persona_result ppr         ON a.userid = ppr.userid \
+LEFT JOIN author_main_content_type t_type ON a.userid = t_type.userid \
+LEFT JOIN user_base_info u_base           ON a.userid = u_base.userid \
+LEFT JOIN creator_level_info c_lvl        ON a.userid = c_lvl.userid \
+LEFT JOIN author_circle_tier ac           ON a.userid = ac.userid

@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.02=insert overwrite table lofter.dws_video_post_general_di partition(dt='${azkaban.flow.1.days.ago}') \
+select m.*, praisepv, reproducepv, recommendpv, subscribepv, responsepv, hotpv, q.videoType, r.publishDate, r.tags, \
+       r.blogname, r.blogId, r.blognickname, \
+       get_json_object(q.embed,'$.originUrl') as originUrl, \
+       get_json_object(q.embed,'$.duration') as duration, \
+       get_json_object(q.embed,'$.size') as size_mb, \
+       case when r.movefrom like '%ios%' or r.movefrom like '%iphone%' then 'ios' \
+            when r.movefrom like '%android%' then 'android' \
+            when r.movefrom is null then 'web' \
+            else split(r.movefrom, '\\\\&')[0] end movefrom \
+from ( \
+      select postid, viewpv, viewuv, playuv,availableplayuv,finishplayuv, \
+             case when finishplayuv is null then 0 else finishplayuv/playuv end finishPlayRatio, \
+             case when availableplayuv is null then 0 else availableplayuv/playuv end availablePlayRatio, \
+             realplaypv,realplayuv,playpv, availableplaypv,finishplaypv,realplaytime,playtime,playprogress \
+      from ( \
+        select postId, \
+            sum(if(action_type = 'page_view', 1, 0)) viewpv, \
+            count(distinct if(action_type = 'page_view', deviceUdid, null)) viewuv, \
+            sum(if(action_type = 'page_duration', 1, 0)) playpv, \
+            count(distinct if(action_type = 'page_duration', deviceUdid, null)) playuv, \
+            0 as availableplayuv, \
+            0 as availableplaypv, \
+            count(distinct if(is_video_finish > 0, deviceUdid, null)) finishplayuv, \
+            sum(is_video_finish) finishplaypv, \
+            sum(is_real) as realplaypv, \
+            count(distinct if(is_real > 0, deviceUdid, null)) as realplayuv, \
+            sum(if(is_real > 0, duration, 0)) as realplaytime, \
+            sum(duration) as playtime, \
+            0 as playprogress \
+        from lofter.dwd_post_browse_di \
+        where dt='${azkaban.flow.1.days.ago}' \
+        group by postId \
+      ) t \
+) m \
+left join ( \
+  select postId, count(1) as hotpv, \
+         sum(if(opType = 'praise', 1, 0)) as praisepv, sum(if(opType = 'reproduce', 1, 0)) as reproducepv, \
+         sum(if(opType = 'recommend', 1, 0)) as recommendpv, sum(if(opType = 'subscribe', 1, 0)) as subscribepv \
+  from lofter.dwd_post_hot_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by postId \
+) n on m.postId = n.postId \
+left join ( \
+  select postId, count(1) as responsepv \
+  from lofter.dwd_post_response_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by postId \
+) p on m.postId = p.postId \
+join lofter_db_dump.ods_db_video_post_nd q on m.postId = q.id \
+join lofter.dim_post r on m.postId = r.id
+dependencies=

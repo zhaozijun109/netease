@@ -1,0 +1,22 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_par_user_subscribed_hot_tags_di partition(dt='${azkaban.flow.1.days.ago}') \
+    select userId, concat_ws('|', collect_list(tag)) as hotTags \
+    from ( \
+      select userId, tag, ra \
+      from ( \
+        select a.userId, a.tag, a.openCount, \
+               row_number() over (partition by a.userId order by a.openCount desc) as ra \
+        from ( \
+             select userId, tag, count(1) openCount \
+             from lofter.dwd_tag_browse_di \
+             where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' and \
+                   userId > 0 and tab = 'entry' \
+             group by userId, tag \
+        ) a join lofter_db_dump.ods_db_favorite_tag_nd b \
+           on a.userId = b.userId and a.tag = b.tagName \
+      ) b \
+      where ra <= 10 \
+      order by userId, ra \
+    ) t \
+    group by userId \
+    distribute by userId % 10

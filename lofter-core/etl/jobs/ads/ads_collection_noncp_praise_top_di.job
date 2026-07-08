@@ -1,0 +1,30 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_collection_noncp_praise_top_di partition(dt='${azkaban.flow.1.days.ago}') \
+select id, collectionid, praise_std, praise_1d \
+from ( \
+    select row_number() over (order by praise_1d desc) as id, \
+      aa.collectionid, \
+      aa.praise_std, \
+      aa.praise_1d \
+    from ( \
+        select collectionid, \
+          sum(praise_std) as praise_std, \
+          sum(praise_1d) as praise_1d \
+        from ( \
+            select \
+              postid, \
+              sum(if(from_unixtime(cast(optime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}', 1, 0)) as praise_1d, \
+              sum(if(from_unixtime(cast(optime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}', 1, 0)) as praise_std \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where type = 1 \
+            group by postid \
+        ) a join ( \
+            select id, collectionid \
+            from lofter_db_dump.ods_db_post_nd \
+            where collectionid > 0 and ( tag not like '%同人%' and tag not like '%耽美%') \
+        ) b on a.postid = b.id \
+        group by collectionid \
+    ) aa join lofter_db_dump.ods_db_post_collection_nd bb on aa.collectionid = bb.id \
+    where bb.tags not like '%同人%' and bb.tags not like '%耽美%' and bb.name not like '%同人%' and bb.name not like '%耽美%' \
+) cc \
+where id <= 500 distribute by 1

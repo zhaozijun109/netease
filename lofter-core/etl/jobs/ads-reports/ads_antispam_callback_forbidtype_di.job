@@ -1,0 +1,20 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_antispam_callback_forbidtype_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT forbidtype \
+	,get_json_object(content, "$.reclassify") AS sec_forbidtype \
+	,machine \
+	,count(DISTINCT get_json_object(get_json_object(content, "$.callback"), "$.uuId")) AS num \
+	,count(DISTINCT postid) AS postnum \
+	,count(DISTINCT blogid) AS blognum \
+FROM lofter_db_dump.ods_db_risk_antispam_callback_record_nd \
+WHERE type = 0 \
+	AND version > 0 \
+	AND machine IN ( \
+		1 \
+		,0 \
+		) \
+	AND from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+	AND STATUS = 2 \
+GROUP BY forbidtype \
+	,get_json_object(content, "$.reclassify") \
+	,machine \

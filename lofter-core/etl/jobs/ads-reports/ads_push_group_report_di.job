@@ -1,0 +1,79 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_group_report_di partition(dt='${azkaban.flow.1.days.ago}')  \
+select  \
+       nvl(a.deviceOs, 'ALL') as deviceOs,  \
+       nvl(a.pushGroup, 'ALL') as pushGroup, \
+       nvl(a.channelType, 'ALL') as channelType,  \
+       nvl(a.is_broadcast_push,'ALL') as is_broadcast_push, \
+       count(distinct if(a.action = 1, a.userId, null)) push_uv,   \
+       count(distinct if(a.action = 5, a.userId, null)) as valid_push_uv, \
+       count(distinct if(a.action = 2, a.userId, null)) as push_reach_uv, \
+       count(distinct if(a.action = 3, a.userId, null)) as push_click_uv, \
+       count(distinct c.userId) push_activated_uv,   \
+       count(concat(a.pushGroupId, '-', if(a.action = 1, a.userId, null))) push_pv, \
+       count(concat(a.pushGroupId, '-', if(a.action = 5, a.userId, null))) as valid_push_pv,  \
+       count(concat(a.pushGroupId, '-', if(a.action = 2, a.userId, null))) push_reach_pv, \
+       count(concat(a.pushGroupId, '-', if(a.action = 3, a.userId, null))) as push_click_pv, \
+       count(distinct if(a.action = 5, a.deviceUdid, null)) as valid_push_device_count,  \
+       count(distinct if(a.action = 2, a.deviceUdid, null)) as push_reach_device_count,  \
+       count(distinct if(a.action = 3, a.deviceUdid, null)) as push_click_device_count,  \
+       count(distinct c.deviceUdid) as push_activated_device_count,  \
+       count(distinct d.deviceUdid) as overlap_active_device_count,  \
+       count(distinct e.deviceUdid) as overlap_new_device_count,  \
+       count(distinct f.deviceUdid) as overlap_return_device_count,  \
+       max(deviceUdid_cnt)          as deviceUdid_cnt, \
+       max(deviceUdid_new)          as deviceUdid_new, \
+       max(deviceUdid_return)       as deviceUdid_return \
+from  \
+    (select \
+        a.dt, \
+        nvl(b.deviceOs, 'other') as deviceOs,  \
+        nvl(a.pushGroupId, 'other') as pushGroupId, \
+        nvl(pushGroup, 'other') as pushGroup, \
+        nvl(a2.channelType, 'other') as channelType, \
+        case when a.pushGroupId regexp 'broadcast_push' then 1 else 0 end is_broadcast_push, \
+        action, \
+        a.userId,a.deviceudid \
+    from   \
+        (select *  \
+        from lofter.dwd_push_action_di  \
+        where dt = '${azkaban.flow.1.days.ago}' and action <> 4  \
+        ) a   \
+    join  \
+        (select pushgroupid from  lofter.dwd_push_action_di where dt = '${azkaban.flow.1.days.ago}' and action in (1,5) group by pushgroupid) a1 \
+    on a1.pushgroupid=a.pushgroupid \
+    left join (select deviceudid ,channeltype from  lofter.dwd_push_action_di where dt = '${azkaban.flow.1.days.ago}' and action=5 group by deviceudid ,channeltype) a2 \
+    on a.deviceudid =a2.deviceudid \
+    left join  \
+     (  \
+        select  \
+            deviceudid, deviceOs \
+        from lofter.dwd_device_all_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by deviceudid, deviceOs \
+     ) b on a.deviceudid = b.deviceudid  \
+    )a \
+left join  \
+    (  \
+        select m.pushGroupId, m.userId, m.deviceUdid, m.action  \
+        from (  \
+        select pushGroupId, userId, occurTime, deviceUdid ,action from lofter.dwd_push_action_di where dt='${azkaban.flow.1.days.ago}' and action = 3  \
+        ) m  \
+        join ( select * from lofter.dws_par_user_active_di where dt = '${azkaban.flow.1.days.ago}') n on m.userId = n.userId and m.occurTime > n.firstActiveTime  and (m.occurTime - n.firstActiveTime) <= 3*60000  \
+        group by 1,2,3,4  \
+    ) c on a.userId = c.userId and a.pushGroupId = c.pushGroupId and a.action = c.action  \
+left join (select deviceUdid from lofter.device_active where dt = '${azkaban.flow.1.days.ago}') d on a.deviceUdid = d.deviceUdid  \
+left join (select deviceUdid from lofter.device_new where dt = '${azkaban.flow.1.days.ago}') e on a.deviceUdid = e.deviceUdid  \
+left join (select deviceUdid from lofter.device_return where dt = '${azkaban.flow.1.days.ago}' and period = 30) f on a.deviceUdid = f.deviceUdid \
+left join (select dt ,count(distinct deviceUdid) deviceUdid_cnt from lofter.device_active where dt = '${azkaban.flow.1.days.ago}' group by dt) g on a.dt=g.dt  \
+left join (select dt ,count(distinct deviceUdid) deviceUdid_new from lofter.device_new where dt = '${azkaban.flow.1.days.ago}' group by dt) h on a.dt=h.dt \
+left join (select dt ,count(distinct deviceUdid) deviceUdid_return from lofter.device_return where dt = '${azkaban.flow.1.days.ago}' and period = 30 group by dt) i on a.dt=i.dt \
+group by  a.deviceOs  ,a.pushGroup , a.channelType  ,a.is_broadcast_push \
+grouping sets( \
+                (a.deviceOs , a.pushGroup, a.channelType ,a.is_broadcast_push)  \
+                ,(a.deviceOs , a.pushGroup, a.channelType) ,(a.deviceOs , a.pushGroup ,a.is_broadcast_push) ,(a.deviceOs , a.channelType ,a.is_broadcast_push) ,(a.pushGroup, a.channelType ,a.is_broadcast_push) \
+                ,(a.deviceOs ,a.pushGroup) ,(a.deviceOs ,a.channelType) ,(a.deviceOs ,a.is_broadcast_push) ,(a.pushGroup ,a.channelType) ,(a.pushGroup ,a.is_broadcast_push),(a.channelType ,a.is_broadcast_push) \
+                ,(a.deviceOs) ,(a.pushGroup) ,(a.channelType) ,(a.is_broadcast_push) \
+                ,() \
+            ) \
+distribute by 1

@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=\
+with ad_post as ( \
+    select postId, dsp_channel, \
+           sum(bgPv) as bg_pv, \
+           sum(clickPv) as click_pv, \
+           sum(bid_amount) / 1000 as ad_revenue \
+    from ( \
+        select cast(get_json_object(ext['bizTracking'], '$.postId') as bigint) as postId, \
+               if(dspId = '5002', '麦穗', '如愿sdk') as dsp_channel, \
+               * \
+        from lofter.dwd_ad_actions_di \
+        where dt = '${azkaban.flow.1.days.ago}' and (bgPv > 0 or clickPv > 0) and \
+          positionId in ('147004') \
+    ) t \
+    where postId > 0 \
+    group by 1, 2 \
+) \
+insert overwrite table lofter_dm.ads_ad_resource_blog_revenue_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.postId, b.blogId, a.bg_pv, a.click_pv, a.ad_revenue, a.dsp_channel, b.contentType \
+from ad_post a \
+join lofter.dim_post b on a.postId = b.id \
+

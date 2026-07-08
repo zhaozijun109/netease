@@ -1,0 +1,92 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=50
+hive.query.01=create temporary function resolve_mda_action_type as 'com.netease.wm.udf.ResolveMdaActionType'
+hive.query.02= \
+with return_users as ( \
+    select userId \
+    from lofter.dwd_user_return_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+historical_interest_users as ( \
+    select a.userId, \
+        split(get_json_object(b.interests, '$.tags'), ',') as tags, \
+        split(get_json_object(b.interests, '$.ipNames'), ',') as ips, \
+        split(get_json_object(b.interests, '$.categorys'), ',') as categories, \
+        split(get_json_object(b.interests, '$.interests'), ',')  as interests \
+    from return_users a \
+    join lofter_db_dump.ods_db_blog_settings_nd b on a.userId = b.blogId \
+    where b.interests is not null and b.interests != '{}' \
+), \
+beginner_guide_behavior as ( \
+    select userId, \
+           click_choose_category_cnt, \
+           click_choose_ip_cnt, \
+           click_choose_tag_cnt, \
+           click_skip_cnt \
+    from lofter.dwd_beginner_guide_page_events_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+no_interest_action_users as ( \
+    select h.userId, h.tags, h.ips, h.categories, h.interests \
+    from historical_interest_users h \
+    left join beginner_guide_behavior b on h.userId = b.userId \
+    where (b.userId is null) \
+       or (nvl(b.click_choose_category_cnt, 0) = 0 and nvl(b.click_choose_ip_cnt, 0) = 0 and nvl(b.click_choose_tag_cnt, 0) = 0) \
+       or (nvl(b.click_skip_cnt, 0) > 0) \
+), \
+return_day_browse_users as ( \
+    select userId, count(distinct CAST(itemId AS bigint)) as browse_count \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and userId > 0 \
+      and resolve_mda_action_type(eventId) IN ('page_view', 'page_duration') \
+      and itemType IN ('ARTICLE', 'TEXT', 'PHOTO', 'VIDEO') \
+      and CAST(itemId AS bigint) > 0 \
+    group by userId \
+), \
+no_browse_return_users as ( \
+    select n.userId, n.tags, n.ips, n.categories, n.interests \
+    from no_interest_action_users n \
+    left join return_day_browse_users r on n.userId = r.userId \
+    where r.userId is null \
+), \
+next_day_active_users as ( \
+    select userId \
+    from lofter.ods_mda_app_raw_di \
+    where dt = '${azkaban.flow.current.date}' \
+      and from_unixtime(cast(occurTime/1000 as bigint), 'HH:mm') < '12:00' \
+      and userId > 0 \
+      and resolve_mda_action_type(eventId) IN ('page_view', 'page_duration', 'click', 'like', 'comment') \
+    group by userId \
+), \
+final_target_users as ( \
+    select n.userId \
+    from no_browse_return_users n \
+    left join next_day_active_users a on n.userId = a.userId \
+    where a.userId is null \
+    group by 1 \
+), \
+user_content_match as ( \
+    select a.userId, a.tag \
+    from ( \
+        select \
+          cast(user_id as bigint) userid, \
+          tag, \
+          score, \
+          row_number() over (partition by user_id order by score desc) as rk \
+        from \
+          rec.rec_fea_user_long_profile_tags_v3 \
+          lateral view explode(str_to_map(l_p_tag_pos)) t as tag, score \
+        where day = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    left join lofter_db_dump.ods_db_user_forbid_tag_nd b \
+          on a.userId = b.userId and a.tag = b.tagName \
+    where a.rk = 1 and b.tagName is null \
+) \
+insert overwrite table lofter_dm.ads_push_return_user_history_interest_di partition(dt = '${azkaban.flow.current.date}') \
+select m.userId, m.tag, nvl(p.post_cnt_30d, 0) as tag_post_count \
+from user_content_match m \
+join final_target_users n on m.userId = n.userId \
+left join ( \
+    select tag, post_cnt_30d from lofter.dws_tag_supply_di where dt = '${azkaban.flow.1.days.ago}' \
+) p on m.tag = p.tag \

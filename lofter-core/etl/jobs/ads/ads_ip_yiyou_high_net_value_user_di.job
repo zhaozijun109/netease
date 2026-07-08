@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ip_yiyou_high_net_value_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId as userId \
+from ( \
+    select userId, \
+           sum(if(pay_date >= '${azkaban.flow.30.days.ago}', money, 0)) as money_30d, \
+           sum(if(pay_date = '${azkaban.flow.1.days.ago}', money, 0)) as money_1d, \
+           sum(money) as money_std \
+    from lofter.dwd_user_order_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          pay_date <= '${azkaban.flow.1.days.ago}' and \
+          revenue_module in ('付费礼物','券包','粉丝会员','小程序会员','博客订阅','书城会员','官方账号','图片商城') \
+    group by 1 \
+) a \
+left join ( \
+    select userId \
+    from lofter.dws_par_user_base_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and login_days_30d = 0 and \
+          from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') < '${azkaban.flow.30.days.ago}' \
+) b on a.userId = b.userId \
+where (a.money_30d >= 15 or a.money_1d >= 10 or (a.money_std >= 100 and b.userId is null)) \
+
+dependencies=

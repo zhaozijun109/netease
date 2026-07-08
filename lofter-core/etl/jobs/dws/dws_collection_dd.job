@@ -1,0 +1,149 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+conf.spark.executor.cores=4
+conf.spark.sql.shuffle.partitions=200
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_or as 'com.netease.wm.udf.bitmap.BitmapOrUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05= \
+with collection_posts as ( \
+    select collectionId, postType, postid, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as update_date, \
+           datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd')) as update_days \
+    from lofter_db_dump.ods_db_post_collection_record_nd \
+    where status = 0 and from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) \
+insert overwrite table lofter.dws_collection_dd partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as collectionId,tags,a.blogId,coverUrl as cover_url,name,createTime,lastPublishTime,status,collectionType, \
+       onlyVideo, creatorCount, postCount, postCollectionHot, \
+       f.viewCount, \
+       b.level as blog_level, \
+       case when c.postType = 1 then '文字' when c.postType = 2 then '图片' when c.postType = 4 then '视频' else '其他' end collection_post_type, \
+       subscribe_uv_acc,subscribe_uv_1d,subscribe_uv_7d,subscribe_uv_30d, \
+       update_post_1d,update_post_7d,update_post_30d, \
+       if(g.collectionId is not null, 1, 0) as is_recommend, \
+       h.hot_7d, hot_1k_post, hot_1w_post, \
+       bitmap_or(k.browse_user_bitmap, j.browse_user_bitmap) browse_user_bitmap, \
+       h.recommend_user_bitmap, \
+       e.is_stable_update, \
+       j.browse_uv_7d, \
+       h.underscore_comment_pv, \
+       h.sweet_pv, \
+       h.bitter_pv, \
+       subscribe_uv_3d, detail_browse_uv_3d, \
+       subscribe_uv_90d, \
+       subscribe_bitmap_7d,subscribe_bitmap_30d,subscribe_bitmap_90d, \
+       subscribe_real_browse_bitmap_7d,subscribe_real_browse_bitmap_30d,subscribe_real_browse_bitmap_90d, \
+       subscribe_real_hd_bitmap_7d,subscribe_real_hd_bitmap_30d,subscribe_real_hd_bitmap_90d, \
+       subscribe_bitmap_std \
+from lofter_db_dump.ods_db_post_collection_nd a \
+left join ( \
+    select userid blogid, level \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+) b on a.blogId = b.blogId \
+left join ( \
+   select collectionId, postType \
+   from ( \
+       select collectionId, postType, row_number() over(partition by collectionId order by cnt desc) rk \
+       from ( \
+           select collectionId, postType, count(postid) cnt \
+           from collection_posts \
+           group by collectionId, postType \
+       ) t \
+       where postType in (1,2,4) \
+   ) tt \
+   where rk=1 \
+) c on a.id = c.collectionId \
+left join ( \
+    select collectionId, \
+           count(distinct subscribe_userId ) as subscribe_uv_acc, \
+           count(distinct case when from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' then subscribe_userId else null end) as subscribe_uv_1d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<3 then subscribe_userId else null end) as subscribe_uv_3d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<7 then subscribe_userId else null end) as subscribe_uv_7d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<30 then subscribe_userId else null end) as subscribe_uv_30d, \
+           count(distinct case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<90 then subscribe_userId else null end) as subscribe_uv_90d, \
+           to_bitmap(case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<7 then subscribe_userId else null end) as subscribe_bitmap_7d, \
+           to_bitmap(case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<30 then subscribe_userId else null end) as subscribe_bitmap_30d, \
+           to_bitmap(case when datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(subscribeTime/1000 as bigint),'yyyy-MM-dd'))<90 then subscribe_userId else null end) as subscribe_bitmap_90d, \
+           to_bitmap(subscribe_userId) as subscribe_bitmap_std \
+    from lofter.dwd_collection_user_subscribe_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by collectionId \
+) d on a.id = d.collectionId \
+left join ( \
+    select collectionId, \
+           count(distinct if(update_date ='${azkaban.flow.1.days.ago}',postId,null)) as update_post_1d, \
+           count(distinct if(update_days < 7,postId,null)) as update_post_7d, \
+           count(distinct if(update_days < 30,postId,null)) as update_post_30d, \
+           if(count(distinct if(update_days >= 0 and update_days < 28, cast(update_days / 7 as bigint), null)) >= 3, 1, 0) as is_stable_update \
+    from collection_posts \
+    group by collectionId \
+) e on a.id = e.collectionId \
+left join lofter_db_dump.ods_db_post_collection_view_count_nd f on a.id = f.collectionId \
+left join ( \
+    select collectionId \
+    from lofter_db_dump.ods_db_recommend_review_collection_nd \
+    where `type` = 0 and recomStatus = 1 \
+    group by collectionId \
+) g on a.id = g.collectionId \
+left join ( \
+    select x.collectionId, sum(hot_7d) as hot_7d, \
+           count(distinct if(y.hot >= 1000, y.postId,null)) as hot_1k_post, \
+           count(distinct if(y.hot >= 10000, y.postId,null)) as hot_1w_post, \
+           bitmap_union(recommend_user_bitmap) recommend_user_bitmap, \
+           sum(underscore_comment_pv) as underscore_comment_pv, \
+           sum(sweet_pv) as sweet_pv, \
+           sum(bitter_pv) as bitter_pv \
+    from ( \
+        select collectionId, postId \
+        from lofter.bridge_collection_post \
+    ) x \
+    left join ( \
+        select postId, hot_7d, hot, recommend_user_bitmap \
+        from lofter.dws_post_interaction_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) y on x.postId = y.postId \
+    left join ( \
+        select postId, \
+              sum(underscore_comment_pv) as underscore_comment_pv, \
+              sum(sweet_pv) as sweet_pv, \
+              sum(bitter_pv) as bitter_pv \
+        from lofter.dws_post_highlight_comment_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by postId \
+    ) z on x.postId = z.postId \
+    group by x.collectionId \
+) h on a.id = h.collectionId \
+left join ( \
+    select t1.collectionId, \
+           to_bitmap(if(t1.action_type = 'browse' and t1.dt = '${azkaban.flow.1.days.ago}', t1.userId, null)) as browse_user_bitmap, \
+           bitmap_count(to_bitmap(if(t1.action_type = 'browse' and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 7, t1.userId, null))) as browse_uv_7d, \
+           to_bitmap(if(t1.action_type = 'browse' and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 7 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_browse_bitmap_7d, \
+           to_bitmap(if(t1.action_type = 'browse' and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 30 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_browse_bitmap_30d, \
+           to_bitmap(if(t1.action_type = 'browse' and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 90 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_browse_bitmap_90d, \
+           to_bitmap(if(t1.action_type in ('praise','reproduce','recommend','subscribe','share','comment') and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 7 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_hd_bitmap_7d, \
+           to_bitmap(if(t1.action_type in ('praise','reproduce','recommend','subscribe','share','comment') and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 30 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_hd_bitmap_30d, \
+           to_bitmap(if(t1.action_type in ('praise','reproduce','recommend','subscribe','share','comment') and datediff('${azkaban.flow.1.days.ago}', t1.dt) < 90 and t1.is_real = 1 and t2.userId is not null, t1.userId, null)) as subscribe_real_hd_bitmap_90d \
+    from ( \
+        select * from lofter.dwd_post_collection_di where dt <= '${azkaban.flow.1.days.ago}' and dt >= date_sub('${azkaban.flow.1.days.ago}',90) and collectionId > 0 and userId > 0 \
+    ) t1 \
+    left join ( \
+        select userid, collectionid from `lofter_db_dump`.`ods_db_subscribe_collection_nd` \
+    ) t2 \
+    on t1.userId = t2.userId and t1.collectionid = t2.collectionId \
+    group by t1.collectionId \
+) j on a.id = j.collectionId \
+left join ( \
+    select collectionId, bitmap_union(browse_user_bitmap) as browse_user_bitmap \
+    from lofter.dws_collection_dd \
+    where dt = '${azkaban.flow.2.days.ago}' \
+    group by collectionId \
+) k on a.id = k.collectionId \
+left join ( \
+    select collectionId, count(distinct deviceUdid) as detail_browse_uv_3d \
+    from lofter.dwd_collection_detail_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.3.days.ago}' \
+    group by 1 \
+) m on a.id = m.collectionId
+dependencies=dws_par_creator_level_scoring_dd,dws_post_interaction_dd,dws_post_highlight_comment_dd

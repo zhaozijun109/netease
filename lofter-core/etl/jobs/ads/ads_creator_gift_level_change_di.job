@@ -1,0 +1,64 @@
+type=sparksql
+hive.query.01= \
+with day_level as ( \
+	select dt, userId as blogId, creatorType as flg, new_grade as grade \
+	from lofter_dm.ads_paid_post_blog_level_detail_di \
+	where dt <= '${azkaban.flow.1.days.ago}' \
+), \
+week_level as ( \
+	select blogId, flg, grade, min(dt) as start_week, max(dt) as end_week, (datediff(max(dt), min(dt)) / 7) + 1 as weeks \
+	from ( \
+		select blogId, flg, dt, date_sub(dt, 7 * (row_number() over (partition by blogId, flg, grade order by dt))) as rank, \
+		       grade \
+		from day_level \
+		where dayofweek(dt) = 3 and dt < '${azkaban.flow.1.days.ago}' \
+	) t \
+	group by blogId, flg, grade, rank \
+) \
+insert overwrite table lofter_dm.ads_creator_gift_level_change_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.flg, a.grade, if(a.grade == b.grade, nvl(b.weeks,0) + 1, 1) as weeks, b.grade as last_grade, \
+       c.unlock_gift_money, c.unlock_grain_ticket, c.unlock_coupon_money, d.level, \
+       e.openFrom, f.online_grade, \
+       d.fans_std, g.revenue_level, g.revenue_money, agree_time \
+from ( \
+	select * \
+	from day_level \
+	where dt = '${azkaban.flow.1.days.ago}' \
+) a \
+left join ( \
+	select blogId, flg, grade, end_week, weeks \
+	from week_level \
+	where end_week = date_sub('${azkaban.flow.1.days.ago}', (dayofweek('${azkaban.flow.1.days.ago}') + 3) % 7 + 1) \
+) b on a.blogId = b.blogId \
+left join ( \
+    select blogId, \
+           sum(if(unlock_method = '礼物', money, 0)) unlock_gift_money, \
+           sum(if(unlock_method = '粮票', grain_tickets, 0)) unlock_grain_ticket, \
+           sum(if(unlock_method = '券包', money, 0)) unlock_coupon_money \
+    from lofter.dwd_gift_post_unlock_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+          from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    group by 1 \
+) c on a.blogId = c.blogId \
+left join ( \
+    select userId, level, fans_std \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) d on a.blogId = d.userId \
+left join ( \
+    select userId, openFrom, agreeTime as agree_time \
+    from lofter_db_dump.ods_db_trade_gift_pay_account_nd \
+    where status = 2 \
+) e on a.blogId = e.userId \
+left join ( \
+    select userId, grade as online_grade \
+    from lofter_db_dump.ods_db_trade_pay_grade_nd \
+) f on a.blogId = f.userId \
+left join ( \
+    select blogId, revenue_level, revenue_money \
+    from lofter_dm.ads_post_paid_creator_revenue_detail_di \
+    where dt = '${azkaban.flow.1.days.ago}' and period = 'history' and pay_type = 'all' \
+) g on a.blogId = g.blogId \
+
+dependencies=

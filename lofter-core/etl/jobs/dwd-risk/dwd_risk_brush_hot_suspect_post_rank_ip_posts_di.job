@@ -1,0 +1,105 @@
+type=sparksql
+hive.query.01=create temporary function resolve_ip as 'com.netease.wm.udf.ResolveIp';
+hive.query.02= \
+with \
+hot_ops as ( \
+    select a.postId, a.blogId, a.userId, a.ip \
+    from ( \
+        select postId, blogId, userId, ip, opTime, \
+            row_number() over (partition by postId order by opTime desc) as rk, \
+            count(1) over (partition by postId) as hot_uv \
+        from ( \
+            select postId, blogId, userId, opTime, ip, \
+                row_number() over (partition by postId, userId order by opTime) as rk \
+            from lofter.dwd_post_hot_di \
+            where dt >= date_sub('${azkaban.flow.30.days.ago}', 7) \
+        ) t \
+        where rk = 1 \
+    ) a \
+    left join (select blogId as userId from lofter_db_dump.ods_db_robot_blog_info_nd) b on a.userId = b.userId \
+    where b.userId is null and rk <= 100 and hot_uv >= 70 \
+) \
+insert overwrite table lofter.dwd_risk_brush_hot_suspect_post_rank_ip_posts_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT a.postId, a.blogId, a.hot_uv, b.op_city_uv as max_op_city_uv, c.register_city_uv as max_register_city_uv, \
+    case when d.ip_uv /a.hot_uv > 0.2 then 0 \
+         when c.register_city_uv/a.hot_uv > 0.3 then 1 \
+         else 2 end as ruleId, \
+    case when d.ip_uv /a.hot_uv > 0.2 then d.ip \
+         when c.register_city_uv/a.hot_uv > 0.3 then c.register_city \
+         else b.op_city end as ip_city \
+from ( \
+    select postId, blogId, count(distinct userId) hot_uv from hot_ops group by 1, 2 \
+) a \
+left join ( \
+    select * \
+    from ( \
+        SELECT postId,  op_city, op_city_uv, row_number() over (partition by postId order by op_city_uv desc) op_city_rk \
+        from ( \
+            SELECT postId, \
+              concat_ws('-', op_country, op_province, op_city) as op_city, \
+              count(distinct userId) as op_city_uv \
+            from ( \
+                select *, inline(Array(resolve_ip(ip))) AS (op_country, op_province, op_city) \
+                from hot_ops \
+            ) t \
+            group by 1, 2 \
+        ) tt \
+    ) ttt \
+    where op_city_rk = 1 \
+) b on a.postId = b.postId \
+left join ( \
+    select * \
+    from ( \
+        SELECT postId, register_city, register_city_uv, row_number() over (partition by postId order by register_city_uv desc) as register_city_rk \
+        from ( \
+            select postId, \
+                concat_ws('-', register_country, register_province, register_city) as register_city, \
+                count(distinct userId) as register_city_uv \
+            from ( \
+                select x.postId, x.userId, inline(Array(resolve_ip(y.ip))) AS (register_country, register_province, register_city) \
+                from hot_ops x \
+                join ( \
+                    SELECT  ip, userId \
+                    FROM lofter_db_dump.ods_db_audit_log_nd \
+                    WHERE opType = 6 AND ip is not null AND ip NOT IN ('127.0.0.1', '127.0.1') \
+                ) y on x.userId = y.userId \
+            ) t \
+            group by 1, 2 \
+        ) tt \
+    ) ttt \
+    where register_city_rk = 1 \
+) c on a.postId = c.postId \
+left join ( \
+    select * \
+    from ( \
+        SELECT postId, ip, ip_uv, row_number() over (partition by postId order by ip_uv desc) as ip_uv_rk \
+        from ( \
+            select postId, ip, count(distinct userId) as ip_uv \
+            from hot_ops x \
+            group by 1, 2 \
+        ) tt \
+    ) ttt \
+    where ip_uv_rk = 1 \
+) d on a.postId = d.postId \
+join ( \
+    select postId \
+    from ( \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+        union all \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.7.days.ago}' \
+        union all \
+            select postId, tagName as tag, row_number() over (partition by tagName order by postHot desc) as rk \
+            from lofter_db_dump.ods_db_tag_resource_nd \
+            where from_unixtime(cast(publishtime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' \
+    ) t \
+    where rk <= 100 \
+    group by 1 \
+) e on a.postId = e.postId \
+left join ( \
+    select postId from lofter.dwd_risk_brush_hot_suspect_post_rank_ip_posts_di where dt < '${azkaban.flow.1.days.ago}' \
+) f on a.postId = f.postId \
+where f.postId is null and (b.op_city_uv / a.hot_uv > 0.3 or c.register_city_uv/a.hot_uv > 0.3 or d.ip_uv /a.hot_uv > 0.2) and hot_uv >= 70; \

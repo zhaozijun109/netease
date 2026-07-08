@@ -1,0 +1,403 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=400
+conf.spark.dynamicAllocation.maxExecutors=50
+conf.spark.executor.cores=4
+hive.query.01=\
+with ods_evt as ( \
+    select appversion, deviceos, eventid, deviceudid, userid, itemtype, actiontype, params \
+    from lofter.ods_mda_app_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+      and eventid in ( \
+            'c10-1','c10-15','c10-50','c10-65', \
+            'lg-5','lg-6','lg-8','lg-9','lg-13','lg-15','lg-18', \
+            'lg-20','lg-21','lg-22','lg-23','lg-24','lg-25','lg-27','lg-28','lg-31','lg-32','lg-35', \
+            'm7-5','m6-5','m6-6','z9-10','z9-11','z9-1000','ad-500' \
+          ) \
+), \
+evt_funnel as ( \
+    select appversion, deviceos, itemtype, eventid, \
+           params['reqId'] as req_id, \
+           get_json_object(params['ext'], '$.siteType') as site_type \
+    from ods_evt \
+    where eventid in ( \
+            'c10-1','c10-15','c10-50','c10-65', \
+            'lg-5','lg-6','lg-8','lg-9','lg-13','lg-15','lg-18', \
+            'lg-20','lg-21','lg-22','lg-23','lg-24','lg-25','lg-27','lg-28','lg-31','lg-32','lg-35' \
+          ) \
+      and params['reqId'] is not null and params['reqId'] <> '' \
+), \
+video_raw as ( \
+    select appversion, deviceos, \
+           params['playerType']                       as player_type, \
+           params['postId']                           as post_id, \
+           params['reqId']                            as req_id, \
+           cast(params['maxProgress'] as double)      as max_progress_v, \
+           cast(params['playedTime']  as double)      as played_time_v, \
+           cast(params['duration']    as double)      as duration_v \
+    from ods_evt \
+    where eventid    = 'm7-5' \
+      and actiontype = 'play_video' \
+      and params['playerType'] in ('AVPlayer','exoplayer','neliveplayer') \
+      and params['postId'] is not null and params['postId'] <> '' \
+      and params['reqId']  is not null and params['reqId']  <> '' \
+), \
+audio_raw as ( \
+    select appversion, deviceos, eventid, deviceudid, \
+           cast(get_json_object(params['interruptReason'], '$.buffer')        as double) as buffer_v, \
+           cast(get_json_object(params['interruptReason'], '$.inflateError')  as double) as inflate_v, \
+           cast(get_json_object(params['interruptReason'], '$.system')        as double) as system_v, \
+           cast(params['playedTime'] as double) as played_time_v, \
+           cast(params['duration']   as double) as duration_v \
+    from ods_evt \
+    where eventid in ('m6-5','m6-6') \
+), \
+image_raw as ( \
+    select appversion, deviceos, deviceudid, \
+           cast(get_json_object(img_json, '$.fail_count')         as double) as fail_v, \
+           cast(get_json_object(img_json, '$.success_count')      as double) as success_v, \
+           cast(get_json_object(img_json, '$.cache_hit_count')    as double) as cache_v, \
+           cast(get_json_object(img_json, '$.unhealthy_count')    as double) as unhealthy_v, \
+           cast(get_json_object(img_json, '$.load_duration_avg')  as double) as load_avg_v, \
+           cast(get_json_object(img_json, '$.load_duration_p90')  as double) as load_p90_v \
+    from ( \
+        select appversion, deviceos, deviceudid, \
+               get_json_object(params['ext'], '$.img_monitor') as img_json \
+        from ods_evt \
+        where eventid = 'z9-11' \
+    ) t \
+    where img_json is not null \
+), \
+traffic_raw as ( \
+    select appversion, deviceos, deviceudid, \
+           cell_dl_v, cell_ul_v, wifi_dl_v, wifi_ul_v, \
+           case when fg_v > 0 then (cell_dl_v + cell_ul_v) / fg_v * 3600 end as rate_v \
+    from ( \
+        select appversion, deviceos, deviceudid, \
+               cast(get_json_object(params['ext'], '$.cellDownloadKB')    as double) as cell_dl_v, \
+               cast(get_json_object(params['ext'], '$.cellUploadKB')      as double) as cell_ul_v, \
+               cast(get_json_object(params['ext'], '$.foregroundTimeSec') as double) as fg_v, \
+               cast(get_json_object(params['ext'], '$.wifiDownloadKB')    as double) as wifi_dl_v, \
+               cast(get_json_object(params['ext'], '$.wifiUploadKB')      as double) as wifi_ul_v \
+        from ods_evt \
+        where eventid = 'z9-10' \
+    ) t \
+), \
+anr_raw as ( \
+    select appversion, deviceos, params['type'] as type, params['ext'] as ext, userid \
+    from ods_evt \
+    where eventid = 'z9-1000' \
+      and params['code'] in ('1300','1301','901') \
+      and params['type'] is not null and params['type'] <> '' \
+      and userid is not null and userid > 0 \
+      and appversion is not null and appversion <> '' \
+), \
+cold_start_raw as ( \
+    select appversion, deviceos, \
+           cast(get_json_object(params['events'], '$.totalTime') as bigint) as total_time_v, \
+           cast(get_json_object(params['events'], '$.homeExp')   as bigint) as home_exp_v \
+    from ods_evt \
+    where eventid = 'ad-500' \
+      and params['events'] is not null and params['events'] <> '' \
+      and appversion is not null and appversion <> '' \
+) \
+insert overwrite table lofter_dm.ads_client_version_metrics_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select appversion, deviceos, \
+       'itemtype' as dim_type, \
+       itemtype   as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select t.appversion, t.deviceos, t.itemtype, \
+           map( \
+               'publish_start_uv',   t.publish_start_uv, \
+               'publish_success_uv', t.publish_success_uv, \
+               'draft_start_uv',     t.draft_start_uv, \
+               'draft_success_uv',   t.draft_success_uv \
+           ) as metric_map \
+    from ( \
+        select b.appversion, b.deviceos, b.itemtype, \
+               count(case when b.event_kind = 'publish' then b.req_id end) as publish_start_uv, \
+               count(case when b.event_kind = 'publish' and s.req_id is not null then b.req_id end) as publish_success_uv, \
+               count(case when b.event_kind = 'draft'   then b.req_id end) as draft_start_uv, \
+               count(case when b.event_kind = 'draft'   and s.req_id is not null then b.req_id end) as draft_success_uv \
+        from ( \
+            select appversion, deviceos, itemtype, event_kind, req_id \
+            from ( \
+                select appversion, deviceos, itemtype, \
+                       case eventid when 'c10-1' then 'publish' when 'c10-50' then 'draft' end as event_kind, \
+                       req_id \
+                from evt_funnel \
+                where eventid in ('c10-1','c10-50') \
+                  and itemtype is not null and itemtype <> '' \
+            ) raw \
+            group by appversion, deviceos, itemtype, event_kind, req_id \
+        ) b \
+        left join ( \
+            select appversion, deviceos, event_kind, req_id \
+            from ( \
+                select appversion, deviceos, \
+                       case eventid when 'c10-15' then 'publish' when 'c10-65' then 'draft' end as event_kind, \
+                       req_id \
+                from evt_funnel \
+                where eventid in ('c10-15','c10-65') \
+            ) raw \
+            group by appversion, deviceos, event_kind, req_id \
+        ) s \
+          on  b.appversion = s.appversion \
+          and b.deviceos   = s.deviceos \
+          and b.event_kind = s.event_kind \
+          and b.req_id     = s.req_id \
+        group by b.appversion, b.deviceos, b.itemtype \
+    ) t \
+) m1 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where metric_value is not null \
+union all \
+select appversion, deviceos, \
+       'login_type' as dim_type, \
+       dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select b.appversion, b.deviceos, b.dim_value, \
+           map( \
+               'login_begin_uv',   count(b.req_id), \
+               'login_success_uv', count(case when s.req_id is not null then b.req_id end) \
+           ) as metric_map \
+    from ( \
+        select appversion, deviceos, dim_value, req_id \
+        from ( \
+            select appversion, deviceos, req_id, \
+                   case eventid \
+                       when 'lg-8'  then '快捷登录' \
+                       when 'lg-5'  then '一键登录' \
+                       when 'lg-31' then '一键登录预取' \
+                       when 'lg-35' then '手机号登录' \
+                       when 'lg-27' then 'LofterID登录' \
+                       when 'lg-15' then '邮箱登录' \
+                       when 'lg-24' then 'Apple登录' \
+                   end as dim_value \
+            from evt_funnel \
+            where eventid in ('lg-5','lg-8','lg-15','lg-24','lg-27','lg-31','lg-35') \
+        ) raw \
+        group by appversion, deviceos, dim_value, req_id \
+    ) b \
+    left join ( \
+        select appversion, deviceos, dim_value, req_id \
+        from ( \
+            select appversion, deviceos, req_id, \
+                   case eventid \
+                       when 'lg-9'  then '快捷登录' \
+                       when 'lg-6'  then '一键登录' \
+                       when 'lg-32' then '一键登录预取' \
+                       when 'lg-13' then '手机号登录' \
+                       when 'lg-28' then 'LofterID登录' \
+                       when 'lg-18' then '邮箱登录' \
+                       when 'lg-25' then 'Apple登录' \
+                   end as dim_value \
+            from evt_funnel \
+            where eventid in ('lg-6','lg-9','lg-13','lg-18','lg-25','lg-28','lg-32') \
+        ) raw \
+        group by appversion, deviceos, dim_value, req_id \
+    ) s \
+      on  b.appversion = s.appversion \
+      and b.deviceos   = s.deviceos \
+      and b.dim_value  = s.dim_value \
+      and b.req_id     = s.req_id \
+    group by b.appversion, b.deviceos, b.dim_value \
+) m2 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where dim_value is not null \
+union all \
+select appversion, deviceos, \
+       'login_type' as dim_type, \
+       dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select b.appversion, b.deviceos, b.dim_value, \
+           map( \
+               'login_begin_uv',   count(b.req_id), \
+               'login_success_uv', count(case when s.req_id is not null then b.req_id end) \
+           ) as metric_map \
+    from ( \
+        select appversion, deviceos, dim_value, site_type, req_id \
+        from ( \
+            select appversion, deviceos, req_id, \
+                   case eventid \
+                       when 'lg-21' then '微信登录' \
+                       when 'lg-22' then 'QQ登录' \
+                       when 'lg-20' then '微博登录' \
+                   end as dim_value, \
+                   case eventid \
+                       when 'lg-21' then '12' \
+                       when 'lg-22' then '3' \
+                       when 'lg-20' then '1' \
+                   end as site_type \
+            from evt_funnel \
+            where eventid in ('lg-20','lg-21','lg-22') \
+        ) raw \
+        group by appversion, deviceos, dim_value, site_type, req_id \
+    ) b \
+    left join ( \
+        select appversion, deviceos, site_type, req_id \
+        from evt_funnel \
+        where eventid = 'lg-23' \
+          and site_type in ('1','3','12') \
+        group by appversion, deviceos, site_type, req_id \
+    ) s \
+      on  b.appversion = s.appversion \
+      and b.deviceos   = s.deviceos \
+      and b.req_id     = s.req_id \
+      and b.site_type  = s.site_type \
+    group by b.appversion, b.deviceos, b.dim_value \
+) m3 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where dim_value is not null \
+union all \
+select appversion, deviceos, \
+       'player_type' as dim_type, \
+       player_type   as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select appversion, deviceos, player_type, \
+           map( \
+               'video_post_total',  count(distinct post_id), \
+               'video_post_finish', count(distinct case when is_finish = 1 then post_id end) \
+           ) as metric_map \
+    from ( \
+        select appversion, deviceos, player_type, post_id, \
+               max(case when (max_progress >= 0.9) or (duration > 0 and played_time / duration >= 0.9) then 1 else 0 end) as is_finish \
+        from ( \
+            select appversion, deviceos, player_type, post_id, req_id, \
+                   max(max_progress_v) as max_progress, \
+                   max(played_time_v)  as played_time, \
+                   max(duration_v)     as duration \
+            from video_raw \
+            group by appversion, deviceos, player_type, post_id, req_id \
+        ) req_lvl \
+        group by appversion, deviceos, player_type, post_id \
+    ) post_lvl \
+    group by appversion, deviceos, player_type \
+) m4 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+union all \
+select appversion, deviceos, \
+       'overall' as dim_type, \
+       'all'     as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select appversion, deviceos, \
+           map( \
+               'audio_play_pv',        audio_play_pv, \
+               'audio_play_uv',        audio_play_uv, \
+               'audio_interrupt_uv',   audio_interrupt_uv, \
+               'audio_stall_uv',       audio_stall_uv, \
+               'audio_error_uv',       audio_error_uv, \
+               'audio_loss_focus_uv',  audio_loss_focus_uv, \
+               'audio_valid_play_uv',  audio_valid_play_uv, \
+               'audio_completion_avg', audio_completion_avg, \
+               'audio_played_p50',     audio_played_p50, \
+               'audio_played_p90',     audio_played_p90 \
+           ) as metric_map \
+    from ( \
+        select appversion, deviceos, \
+               sum(case when eventid = 'm6-6' then 1 else 0 end)                                                       as audio_play_pv, \
+               count(distinct case when eventid = 'm6-6' then deviceudid end)                                          as audio_play_uv, \
+               count(distinct case when eventid = 'm6-5' then deviceudid end)                                          as audio_interrupt_uv, \
+               count(distinct case when eventid = 'm6-5' and buffer_v       > 0 then deviceudid end)                   as audio_stall_uv, \
+               count(distinct case when eventid = 'm6-5' and inflate_v      > 0 then deviceudid end)                   as audio_error_uv, \
+               count(distinct case when eventid = 'm6-5' and system_v       > 0 then deviceudid end)                   as audio_loss_focus_uv, \
+               count(distinct case when eventid = 'm6-5' and played_time_v >= 3000 then deviceudid end)                as audio_valid_play_uv, \
+               avg(case when eventid = 'm6-5' and duration_v > 0 then played_time_v / duration_v end)                  as audio_completion_avg, \
+               cast(percentile_approx(case when eventid = 'm6-5' then played_time_v end, 0.5) as double)               as audio_played_p50, \
+               cast(percentile_approx(case when eventid = 'm6-5' then played_time_v end, 0.9) as double)               as audio_played_p90 \
+        from audio_raw \
+        group by appversion, deviceos \
+    ) t \
+) m5 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where metric_value is not null \
+union all \
+select appversion, deviceos, \
+       'overall' as dim_type, \
+       'all'     as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select appversion, deviceos, \
+           map( \
+               'image_report_uv',       image_report_uv, \
+               'image_fail_count',      image_fail_count, \
+               'image_success_count',   image_success_count, \
+               'image_cache_count',     image_cache_count, \
+               'image_unhealthy_count', image_unhealthy_count, \
+               'image_load_avg_ms',     image_load_avg_ms, \
+               'image_load_p90_ms',     image_load_p90_ms \
+           ) as metric_map \
+    from ( \
+        select appversion, deviceos, \
+               count(distinct deviceudid)             as image_report_uv, \
+               sum(fail_v)                            as image_fail_count, \
+               sum(success_v)                         as image_success_count, \
+               sum(cache_v)                           as image_cache_count, \
+               sum(unhealthy_v)                       as image_unhealthy_count, \
+               avg(load_avg_v)                        as image_load_avg_ms, \
+               avg(load_p90_v)                        as image_load_p90_ms \
+        from image_raw \
+        group by appversion, deviceos \
+    ) t \
+) m6 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where metric_value is not null \
+union all \
+select appversion, deviceos, \
+       'overall' as dim_type, \
+       'all'     as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select appversion, deviceos, \
+           map( \
+               'traffic_report_uv',         count(distinct deviceudid), \
+               'traffic_rate_avg',          avg(rate_v), \
+               'traffic_rate_p50',          cast(percentile_approx(rate_v, 0.5) as double), \
+               'traffic_rate_p90',          cast(percentile_approx(rate_v, 0.9) as double), \
+               'traffic_cell_download_avg', avg(cell_dl_v), \
+               'traffic_cell_upload_avg',   avg(cell_ul_v), \
+               'traffic_wifi_download_avg', avg(wifi_dl_v), \
+               'traffic_wifi_upload_avg',   avg(wifi_ul_v) \
+           ) as metric_map \
+    from traffic_raw \
+    group by appversion, deviceos \
+) m7 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where metric_value is not null \
+union all \
+select appversion, deviceos, \
+       type  as dim_type, \
+       ext   as dim_value, \
+       'uv'  as metric_name, \
+       cast(count(distinct userid) as double) as metric_value \
+from anr_raw \
+group by appversion, deviceos, type, ext \
+union all \
+select appversion, deviceos, \
+       'cold_start' as dim_type, \
+       'all'        as dim_value, \
+       metric_name, \
+       cast(metric_value as double) as metric_value \
+from ( \
+    select appversion, deviceos, \
+           map( \
+               'cold_start_sample_count',   cast(count(1) as double), \
+               'cold_start_total_time_p50', cast(percentile_approx(total_time_v, 0.5) as double), \
+               'cold_start_home_exp_p50',   cast(percentile_approx(home_exp_v,   0.5) as double) \
+           ) as metric_map \
+    from cold_start_raw \
+    group by appversion, deviceos \
+) m9 \
+lateral view explode(metric_map) tbl as metric_name, metric_value \
+where metric_value is not null

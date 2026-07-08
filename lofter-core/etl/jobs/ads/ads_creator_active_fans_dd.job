@@ -1,0 +1,16 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=25
+hive.query.01=insert overwrite table lofter_dm.ads_creator_active_fans_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.userId, real_pv \
+from ( \
+    select userId, post_userId as blogId, count(1) real_pv \
+    from lofter.dwd_post_browse_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and \
+          dt >= date_sub('${azkaban.flow.1.days.ago}', 180) and \
+          is_real > 0 and \
+          is_fans > 0 \
+    group by 1, 2 \
+) a \
+join lofter.dim_blog b on a.blogId = b.id \
+join lofter_db_dump.ods_db_user_following_nd c on a.userId = c.userId and a.blogId = c.blogId \
+where b.isOfficial = 0 and real_pv >= 3

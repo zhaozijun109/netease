@@ -1,0 +1,135 @@
+type = sparksql
+hive.query.01 =    \
+with maisui AS (    \
+select   \
+aa.dt,  \
+aa.create_userid,  \
+aa.openad,  \
+aa.createtime,  \
+aa.updatetime,  \
+aa.lastclosetime,  \
+aa.postid,  \
+bb.userid,  \
+cc.postid ad_expose_postid,  \
+sum(if(action_type = 'page_duration' and is_real > 0,1,0)) as real_browse_pv  \
+from(  \
+select  \
+a.dt,  \
+a.userid create_userid,a.openad ,   \
+a.createtime,a.updatetime,  \
+a.lastclosetime,  \
+b.id postid   \
+from lofter_dm.ads_taitai_open_report_dd a   \
+left join  \
+(  \
+select userid,id   \
+from  lofter.dim_post b  \
+where  b.ispublished='true'  \
+and b.isforbidden='false'  \
+and b.valid in (0,15,16)  \
+and b.allowview=0  \
+and contenttype in ('文字','图片')  \
+group by 1 ,2  \
+ ) b on a.userid=b.userid  \
+left join   \
+(  \
+select     \
+postid  \
+from  lofter.dim_gift_post_return  \
+where blog_channel in (0,1)  \
+and  ispay_returngift in (0,1)  \
+and status=1    \
+and auditstatus=1  \
+group by 1     \
+) d on b.id=d.postid  \
+where a.openad=1   \
+and a.dt='${azkaban.flow.1.days.ago}'   \
+and d.postid is null   \
+group by 1,2,3,4,5,6,7  \
+)aa   \
+left join  \
+(    \
+select postid,dt,is_real,action_type,userid  \
+from lofter.dwd_post_browse_di bb  \
+where  bb.dt ='${azkaban.flow.1.days.ago}'     \
+and bb.is_real > 0   \
+and bb.action_type = 'page_duration'   \
+ )  bb on aa.postid=bb.postid  and aa.dt=bb.dt   \
+left join   \
+(  \
+select dt, postId postid, count(1) as expose_pv   \
+from lofter.dwd_ad_resource_action_di   \
+where dt ='${azkaban.flow.1.days.ago}'    \
+and opType = 'expose'   \
+group by 1, 2  \
+having count(1) >0   \
+)cc on aa.postid=cc.postid and aa.dt=cc.dt   \
+  \
+group by 1,2,3,4,5,6,7,8,9  \
+)   \
+  \
+insert overwrite table lofter_dm.ads_maisui_key_indicators_report_di partition(dt ='${azkaban.flow.1.days.ago}')    \
+select    \
+b.cnt_create_user,  \
+ttl_post_cnt,  \
+real_expose_cnt_create_user,  \
+real_expose_post_cnt,  \
+real_expose_uv,  \
+real_browse_pv,  \
+ad_expose_post_cnt,  \
+ad_expose_create_user_cnt,  \
+ad_expose_real_expose_uv,  \
+ad_expose_real_browse_pv,  \
+  \
+maisui_settle_money,  \
+cnt_groupid,  \
+expose_pv,  \
+expose_uv,  \
+maisui_expose_pv,  \
+maisui_click_pv,  \
+lofter_revenue,  \
+lofter_creator_revenue  \
+  \
+  \
+from(  \
+select dt,  \
+count(distinct create_userid) cnt_create_user,  \
+count(distinct postid) ttl_post_cnt,  \
+  \
+count(distinct case when real_browse_pv>0 then create_userid end) real_expose_cnt_create_user,  \
+count(distinct case when real_browse_pv>0 then postid end) real_expose_post_cnt,  \
+count(distinct case when real_browse_pv>0 then userid end) real_expose_uv,  \
+sum(real_browse_pv) real_browse_pv,  \
+  \
+count(distinct case when ad_expose_postid is not null then postid end ) ad_expose_post_cnt,  \
+count(distinct case when ad_expose_postid is not null then  create_userid end   ) ad_expose_create_user_cnt,  \
+count(distinct case when ad_expose_postid is not null then userid end) ad_expose_real_expose_uv,  \
+sum(case when ad_expose_postid is not null then real_browse_pv end) ad_expose_real_browse_pv  \
+from  maisui a   \
+group by 1   \
+) a    \
+left join   \
+(  \
+select dt,count(distinct userid) cnt_create_user  \
+from lofter_dm.ads_taitai_open_report_dd a   \
+where a.openad=1   \
+and a.dt='${azkaban.flow.1.days.ago}'   \
+group by 1   \
+) b on a.dt=b.dt   \
+left join   \
+(  \
+select dt,  \
+sum(maisui_settle_money)maisui_settle_money,  \
+count(distinct groupid) cnt_groupid,  \
+sum(expose_pv) expose_pv,  \
+sum(expose_uv) expose_uv,  \
+sum(maisui_expose_pv)maisui_expose_pv,  \
+sum(maisui_click_pv)maisui_click_pv,  \
+sum(lofter_revenue)lofter_revenue,  \
+sum(lofter_creator_revenue) lofter_creator_revenue  \
+from lofter_dm.ads_maisui_advertisers_detail_report_di  \
+where dt='${azkaban.flow.1.days.ago}'   \
+and groupid<>'nil'  \
+group by 1   \
+) c on a.dt=c.dt
+dependencies=ads_taitai_open_report_dd,ads_maisui_advertisers_detail_report_di

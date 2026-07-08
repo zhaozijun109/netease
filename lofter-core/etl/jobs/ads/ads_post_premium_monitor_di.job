@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_premium_monitor_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select all_premium_posts, add_premium_posts, all_posts_30d, all_posts_7d, premium_posts_7d,premium_posts_30d_realpv,posts_30d_realpv,premium_posts_7d_realpv,posts_7d_realpv \
+from ( \
+    select '${azkaban.flow.1.days.ago}' as dt, \
+           count(1) as all_premium_posts, \
+           count(distinct if(premium_date = '${azkaban.flow.1.days.ago}',postId, null)) as add_premium_posts, \
+           count(distinct case when publish_date <= '${azkaban.flow.1.days.ago}' and publish_date >= '${azkaban.flow.7.days.ago}' then postId end) as premium_posts_7d, \
+           sum(realPv_1d) premium_posts_30d_realpv, \
+           sum(case when publish_date <= '${azkaban.flow.1.days.ago}' and publish_date >= '${azkaban.flow.7.days.ago}' then realPv_1d end) premium_posts_7d_realpv \
+    from lofter.dws_post_premium_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) a join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, sum(post_count) as all_posts_30d, sum(case when dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.7.days.ago}' then post_count end) as all_posts_7d \
+    from lofter.dws_par_creator_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+) b on a.dt = b.dt \
+left join ( \
+    select dt,sum(realBrowsePv) as posts_30d_realpv, \
+           sum(case when publishdate >= '${azkaban.flow.7.days.ago}' and publishdate <= '${azkaban.flow.1.days.ago}' then realBrowsePv end) as posts_7d_realpv \
+    from lofter.dws_post_base_stats_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and publishdate >= '${azkaban.flow.30.days.ago}' and publishdate <= '${azkaban.flow.1.days.ago}' \
+    group by dt \
+) c on a.dt = c.dt \

@@ -1,0 +1,18 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_domain_daren_active_di partition(dt='${azkaban.flow.1.days.ago}') \
+select domainName, count(distinct blogId) as accumMaster, count(distinct activeBlogId) activeNum \
+from( \
+   select nvl(c.domainName, 'else') as domainName, c.blogId, d.blogId as activeBlogId \
+   from ( \
+        select b.domainName, a.blogId \
+        from lofter_db_dump.ods_db_authenticate_blog_nd a left join lofter.dim_domain b on a.domainId = b.id \
+   ) c left join ( \
+        select blogId \
+        from lofter_db_dump.ods_db_post_nd \
+        where isPublished=1 and from_unixtime(cast(publishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+              (valid is null or cast(valid as bigint)<>25 ) and \
+              (moveFrom is null or moveFrom not like 'blogmove2018%') \
+   ) d on c.blogId = d.blogId \
+) e \
+group by domainName \
+distribute by 1

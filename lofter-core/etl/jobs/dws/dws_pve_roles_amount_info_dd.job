@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dws_pve_roles_amount_info_dd PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT	tmp1.id AS roleId, \
+        tmp1.type AS roleType, \
+		tmp1.7d_is_new, \
+		NVL(7d_tradeUv / 7d_dialogueUv, 0) AS 7d_trade_convert, \
+		NVL(15d_amount, 0) AS 15d_amount, \
+		NVL(30d_amount, 0) AS 30d_amount, \
+		NVL(30d_dialogueUv, 0) AS 30d_dialogueUv, \
+		NVL(30d_totalChats, 0) AS 30d_totalChats, \
+		NVL(7d_amount, 0) AS 7d_amount \
+FROM ( \
+	SELECT  id, \
+	        type, \
+	        CASE WHEN from_unixtime(cast(createTime/1000 AS bigint), 'yyyy-MM-dd') BETWEEN '${azkaban.flow.7.days.ago}' AND '${azkaban.flow.1.days.ago}' THEN 1 \
+	             ELSE 0 END AS 7d_is_new \
+	FROM `lofter_db_dump`.`ods_db_pve_role_info_nd` \
+	WHERE (status = 1 AND publicView = 1 AND type IN (0, 20)) OR (status = 1 AND publicView IN (0,1) AND type = 4) \
+) tmp1 \
+LEFT JOIN ( \
+    SELECT roleId, \
+           COUNT(DISTINCT if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, userId, null)) AS 7d_tradeUv, \
+           SUM(if(datediff('${azkaban.flow.1.days.ago}', dt) < 15, amount, 0)) AS 15d_amount, \
+           SUM(if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, amount, 0)) AS 7d_amount, \
+           SUM(amount) AS 30d_amount \
+    FROM lofter.dwd_pve_user_amount_info_di \
+    WHERE dt between date_sub('${azkaban.flow.1.days.ago}', 29) AND '${azkaban.flow.1.days.ago}' AND \
+    ((roleStatus = 1 AND rolePublicView = 1 AND roleType IN (0, 20)) OR (roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4)) \
+    GROUP BY roleId \
+) tmp2 \
+ON tmp1.id = tmp2.roleId \
+LEFT JOIN ( \
+    SELECT roleId, \
+           COUNT(DISTINCT if(datediff('${azkaban.flow.1.days.ago}', dt) < 7, userId, null)) AS 7d_dialogueUv, \
+           COUNT(DISTINCT userId) AS 30d_dialogueUv, \
+           COUNT(1) AS 30d_totalChats \
+    FROM lofter.dwd_pve_user_chats_info_di \
+    WHERE dt between date_sub('${azkaban.flow.1.days.ago}', 29) AND '${azkaban.flow.1.days.ago}' AND \
+    ((roleStatus = 1 AND rolePublicView = 1 AND roleType IN (0, 20)) OR (roleStatus = 1 AND rolePublicView IN (0,1) AND roleType = 4)) \
+    GROUP BY roleId \
+) tmp3 \
+ON tmp1.id = tmp3.roleId

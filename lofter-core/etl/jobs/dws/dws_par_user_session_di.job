@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_user_session_di partition(dt='${azkaban.flow.1.days.ago}') \
+  select userId, \
+         count(distinct sessionUuid) as session_count, \
+         sum(durationDelta) as session_total_time \
+  from lofter.ods_log_user_session_time_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  group by userId \
+  distribute by 1

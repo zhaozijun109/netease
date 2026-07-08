@@ -1,0 +1,8 @@
+target/
+.idea/
+src/main/main.iml
+/.idea_modules
+**/.DS_Store
+.bsp
+**/.bsp
+*.iml

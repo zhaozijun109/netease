@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_search_keyword_rec_reason_detail_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select search_query, reason, priority \
+from ( \
+    select a.search_query as search_query, '正在热搜' as reason, 1 as priority \
+    from ( \
+        select item_id as search_query \
+        from rec.rec_explore_word_pool \
+        where day='${azkaban.flow.1.days.ago}' and item_type = 'WORD' \
+    ) a \
+    join ( \
+        select targetWord as search_query \
+        from lofter_dm.ads_hot_search_list_di \
+        where dt = '${azkaban.flow.1.days.ago}' and listName = 1 \
+    ) b on a.search_query = b.search_query \
+  union all \
+    select search_query, '搜索飙升' as reason, 2 as priority \
+    from ( \
+        select search_query, count(distinct userId) uv \
+        from lofter.dwd_search_action_di \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+              search_query != '搜标签、合集、文章、讨论、粮单、用户' \
+        group by 1 \
+        having uv >= 50 \
+    ) t \
+  union all \
+    select search_query, \
+           case when uv_30d < 10000 then concat(cast(uv_30d/100 as bigint) * 100, '+人正在搜') \
+                else printf('%s万人正在搜', cast((uv_30d/10000) as DECIMAL(10, 1))) end as reason, \
+           3 as priority \
+    from ( \
+        select search_query, count(distinct userId) as uv_30d \
+        from lofter.dwd_search_action_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' and \
+              search_query != '搜标签、合集、文章、讨论、粮单、用户' \
+        group by 1 \
+        having uv_30d > 1000 \
+    ) t \
+) tt
+dependencies=ads_hot_search_list_query_name_di

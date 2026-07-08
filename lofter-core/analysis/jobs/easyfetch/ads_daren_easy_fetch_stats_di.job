@@ -1,0 +1,97 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter_dm.ads_daren_easy_fetch_stats_di PARTITION(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    t1.blogid, \
+    NVL(t2.blogname, '') AS blogname, \
+    NVL(t2.blognickname, '') AS blognickname, \
+    CONCAT('https://', t2.blogname, '.lofter.com') AS blogurl, \
+    FROM_UNIXTIME(CAST(t2.blogcreatetime/1000 AS BIGINT), 'yyyy-MM-dd') AS blogcreatetime, \
+    IF(tt2.isvalid, '是', '否') AS isvalid, \
+    NVL(CONCAT_WS(',', t1.authenticatename), '') AS authenticatename, \
+    NVL(CONCAT_WS(',', t1.domainname), '') AS domainname, \
+    NVL(CONCAT_WS(',', t1.updatetime), '') AS updatetime, \
+    NVL(t3.total_fans, 0) AS total_fans, \
+    NVL(t4.total_postnum, 0) AS total_postnum, \
+    NVL(t5.total_hotpv, 0) AS total_hotpv, \
+    NVL(t5.praise_pv, 0) AS praise_pv, \
+    NVL(t5.reproduce_pv, 0) AS reproduce_pv, \
+    NVL(t5.recommend_pv, 0) AS recommend_pv, \
+    NVL(t5.subscribe_pv, 0) AS subscribe_pv, \
+    NVL(t6.total_commentpv, 0) AS total_commentpv, \
+    NVL(FROM_UNIXTIME(CAST(t4.first_publishtime/1000 AS BIGINT), 'yyyy-MM-dd'), '') AS first_publishtime, \
+    NVL(FROM_UNIXTIME(CAST(t4.last_publishtime/1000 AS BIGINT), 'yyyy-MM-dd'), '') AS last_publishtime, \
+    NVL(t3.day_fans, 0) AS day_fans, \
+    NVL(t4.day_postnum, 0) AS day_postnum, \
+    NVL(t5.day_hotpv, 0) AS day_hotpv, \
+    NVL(t6.day_commentpv, 0) AS day_commentpv, \
+    NVL(t7.day_logdays, 0) AS day_logdays \
+FROM ( \
+    SELECT blogid, \
+        COLLECT_LIST(authenticatename) AS authenticatename, \
+        COLLECT_LIST(createtime) AS createtime, \
+        COLLECT_LIST(updatetime) AS updatetime, \
+        COLLECT_LIST(domainname) AS domainname \
+    FROM ( \
+        SELECT  \
+            a.blogid, \
+            b.domainname AS authenticatename, \
+            FROM_UNIXTIME(CAST(a.createtime/1000 AS BIGINT), 'yyyy-MM-dd') AS createtime, \
+            FROM_UNIXTIME(CAST(a.updatetime/1000 AS BIGINT), 'yyyy-MM-dd') AS updatetime, \
+            b.domainname \
+        FROM lofter_db_dump.ods_db_authenticate_blog_nd a \
+        LEFT JOIN lofter.dim_domain b ON a.domainid = b.id \
+    ) c \
+    GROUP BY blogid \
+) t1 \
+LEFT JOIN lofter_db_dump.ods_db_blog_info_nd t2 ON t1.blogid = t2.blogid \
+LEFT JOIN lofter.dim_blog tt2 ON t1.blogid = tt2.id \
+LEFT JOIN ( \
+    SELECT blogid, \
+        COUNT(DISTINCT userid) AS total_fans, \
+        COUNT(DISTINCT CASE  \
+                WHEN FROM_UNIXTIME(CAST(followtime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+                THEN userid END) AS day_fans \
+    FROM lofter_db_dump.ods_db_user_following_nd \
+    GROUP BY blogid \
+) t3 ON t1.blogid = t3.blogid \
+LEFT JOIN ( \
+    SELECT b.blogid, \
+        COUNT(DISTINCT b.id) AS total_postnum, \
+        MIN(b.publishtime) AS first_publishtime, \
+        MAX(b.publishtime) AS last_publishtime, \
+        COUNT(DISTINCT CASE  \
+                WHEN FROM_UNIXTIME(CAST(b.publishtime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+                THEN b.id END) AS day_postnum \
+    FROM lofter.dim_post b \
+    WHERE ispublished = true \
+    GROUP BY b.blogid \
+) t4 ON t1.blogid = t4.blogid \
+LEFT JOIN ( \
+    SELECT blogid, \
+        SUM(1) AS total_hotpv, \
+        SUM(CASE WHEN type=1 THEN 1 ELSE 0 END) AS praise_pv, \
+        SUM(CASE WHEN type=2 THEN 1 ELSE 0 END) AS reproduce_pv, \
+        SUM(CASE WHEN type=3 THEN 1 ELSE 0 END) AS recommend_pv, \
+        SUM(CASE WHEN type=4 THEN 1 ELSE 0 END) AS subscribe_pv, \
+        SUM(CASE  \
+                WHEN FROM_UNIXTIME(CAST(optime/1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  \
+                THEN 1 ELSE 0 END) AS day_hotpv \
+    FROM lofter_db_dump.ods_db_post_hot_nd \
+    GROUP BY blogid \
+) t5 ON t1.blogid = t5.blogid \
+LEFT JOIN ( \
+    SELECT blogid, \
+        SUM(1) AS total_commentpv, \
+        SUM(CASE  \
+                WHEN FROM_UNIXTIME(CAST(publishtime/1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'  \
+                THEN 1 ELSE 0 END) AS day_commentpv \
+    FROM lofter_db_dump.ods_db_post_response_nd \
+    GROUP BY blogid \
+) t6 ON t1.blogid = t6.blogid \
+LEFT JOIN ( \
+    SELECT accountid, 1 AS day_logdays \
+    FROM lofter.dwd_evt_user_login_di \
+    WHERE dt = '${azkaban.flow.1.days.ago}' \
+    GROUP BY accountid \
+) t7 ON t1.blogid = t7.accountid

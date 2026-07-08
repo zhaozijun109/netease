@@ -1,0 +1,37 @@
+execution-jar=${classpath}
+class=com.netease.lofter.etl.userTag.TagDataHandle2Clickhouse
+params=--b_line lofter --tag_type user --dt ${azkaban.flow.1.days.ago} --tag 活跃天数 --bitmap
+retries=0
+conf.spark.execute.sql="select userid       as userId, \
+                               '活跃天数'  as tag_name, \
+                               cat          as dim1, \
+                               ''           as dim2, \
+                               ''           as dim3, \
+                               ''           as dim4, \
+                               grp          as grp, \
+                               ''           as value \
+                        from (    select userId, '活跃天数' as tag, 'DAY_7' as cat, \
+                                         cast(active_days_7d as string) as grp \
+                                  from lofter.dws_par_user_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_7d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '活跃天数' as tag, 'DAY_15' as cat, \
+                                         cast(active_days_15d as string) as grp \
+                                  from lofter.dws_par_user_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_15d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '活跃天数' as tag, 'DAY_30' as cat, \
+                                         cast(active_days_30d as string) as grp \
+                                  from lofter.dws_par_user_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0 \
+                               \
+                                  union all \
+                               \
+                                  select userId, '活跃天数' as tag, 'DAY_90' as cat, \
+                                         cast(active_days_90d as string) as grp \
+                                  from lofter.dws_par_user_active_dd \
+                                  where dt = '${azkaban.flow.1.days.ago}' and active_days_90d > 0 ) "

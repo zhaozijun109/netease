@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+conf.spark.dynamicAllocation.maxExecutors=5
+conf.spark.executor.cores=2
+class=com.netease.lofter.etl.common.TagFetchClickhouseLoad
+conf.spark.source.query="select dt, action_date, tag, hot_post_bitmap, hot_blog_bitmap, hot_bitmap, publish_post_bitmap, publish_blog_bitmap, publish_post_ext_bitmap, response_post_bitmap, response_blog_bitmap, response_bitmap from lofter.dws_index_tag_action_dd where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest lofter.tag_fetch_tag_action_dd --partition '${azkaban.flow.1.days.ago}' --parallel 200 --batch 6000
+retries=0
+dependencies=dws_index_tag_action_dd

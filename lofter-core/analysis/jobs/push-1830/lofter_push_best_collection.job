@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_push_task_pool_di partition(dt = '${azkaban.flow.current.date}', executionId= 'best_collection.job') \
+select userId, \
+       'lofter.push.best.collection' as push_topic, \
+       to_json(struct(*)) as push_params, \
+       'best_collection' as policy, \
+       1 as priority, \
+       unix_timestamp()*1000L as create_time \
+from ( \
+    select userId, collection_id as collectionId, item_id as itemId, browse_uv as browseUv \
+    from lofter_dm.ads_push_collection_rec_di \
+    where dt='${azkaban.flow.1.days.ago}' \
+) t \
+
+dependencies=ads_push_collection_rec_di

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.jobs.backend.RecPoolBogListExport
+conf.spark.sql.shuffle.partitions=200
+params=--date ${azkaban.flow.1.days.ago}

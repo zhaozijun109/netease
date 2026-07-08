@@ -1,0 +1,59 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.userTag.TagDataHandle2Clickhouse
+params=--b_line vc --tag_type user --dt '${azkaban.flow.1.days.ago}' --tags vc_user_simulator_churn --bitmap
+retries=0
+conf.spark.execute.sql="\
+select user_id as userId, \
+       '用户聊天流失' as tag_name, \
+       '' as dim1, \
+       '' as dim2, \
+       '' as dim3, \
+       '' as dim4, \
+       grp, \
+       '' as value, \
+       '${azkaban.flow.1.days.ago}' as dt, \
+       'vc_user_simulator_churn' as tag \
+from ( \
+    select t2.user_code as user_id, \
+           grp \
+    from ( \
+        select user_id, \
+               case when chats_churn = 1 then '1d聊天流失' \
+                    when chats_churn = 3 then '3d聊天流失' \
+                    when chats_churn = 5 then '5d聊天流失' \
+                    when chats_churn = 7 then '7d聊天流失' \
+                    when chats_churn = 15 then '15d聊天流失' \
+                    when chats_churn = 30 then '30d聊天流失' \
+               end as grp \
+        from vc_dm.ads_vc_user_chats_churn_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        union all \
+        select user_id, \
+               case when simulator_def = 'vc' and chats_churn = 1 then 'vc-1d聊天流失' \
+                    when simulator_def = 'vc' and chats_churn = 3 then 'vc-3d聊天流失' \
+                    when simulator_def = 'vc' and chats_churn = 5 then 'vc-5d聊天流失' \
+                    when simulator_def = 'vc' and chats_churn = 7 then 'vc-7d聊天流失' \
+                    when simulator_def = 'vc' and chats_churn = 15 then 'vc-15d聊天流失' \
+                    when simulator_def = 'vc' and chats_churn = 30 then 'vc-30d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 1 then 'lofter-1d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 3 then 'lofter-3d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 5 then 'lofter-5d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 7 then 'lofter-7d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 15 then 'lofter-15d聊天流失' \
+                    when simulator_def = 'lofter' and chats_churn = 30 then 'lofter-30d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 1 then 'theater-1d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 3 then 'theater-3d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 5 then 'theater-5d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 7 then 'theater-7d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 15 then 'theater-15d聊天流失' \
+                    when simulator_def = 'theater' and chats_churn = 30 then 'theater-30d聊天流失' \
+               end as grp \
+        from vc_dm.ads_vc_user_chats_churn_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) t1 \
+    join ( \
+select id, user_code  from  vc.ods_db_vc_user_account_nd  \
+    ) t2 \
+    on t1.user_id = t2.id \
+) t "
+dependencies=

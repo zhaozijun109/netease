@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rec_collection_user_follow_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select userId, collectionId \
+from ( \
+    select b.userId, a.collectionId, a.subscribe_uv, \
+        row_number() over (partition by b.userId order by a.subscribe_uv desc) rk \
+    from ( \
+        select collectionId, subscribe_uv_acc as subscribe_uv \
+        from lofter.dws_collection_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and subscribe_uv_30d >= 5 \
+    ) a \
+    join ( \
+        select y.collectionId, x.userId \
+        from ( \
+            select userId, blogId \
+            from lofter_db_dump.ods_db_user_following_nd \
+        ) x \
+        join lofter.dim_blog x1 on x.blogId = x1.id \
+        join ( \
+            select userId, collectionId, postId \
+            from lofter.dwd_post_collection_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and dt >='${azkaban.flow.30.days.ago}' and \
+                datediff('${azkaban.flow.1.days.ago}', dt) < 14 and \
+                action_type = 'browse' and is_real > 0 \
+        ) y on x.blogId = y.userId \
+        left join ( \
+            select subscribe_userid as userId, collectionId \
+            from lofter.dwd_collection_user_subscribe_dd \
+            where dt='${azkaban.flow.1.days.ago}' \
+        ) z on x.userId = z.userId and y.collectionId = z.collectionId \
+        where z.collectionId is null and x1.isOfficial = 0 \
+        group by 1, 2 \
+    ) b on a.collectionId = b.collectionId \
+    join (select userId from lofter.dws_par_user_active_dd where dt = '${azkaban.flow.1.days.ago}' and active_days_30d > 0) c on b.userId = c.userId \
+) t \
+where rk <= 5 \

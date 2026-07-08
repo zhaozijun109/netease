@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01 = insert overwrite table vc.dwd_vc_free_character_i_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select x1.character_id, \
+                       x2.character_name, \
+                       x1.free_type, \
+                       FROM_UNIXTIME(x1.valid_start_time, 'yyyy-MM-dd')                               as valid_start_time, \
+                       FROM_UNIXTIME(x1.valid_end_time, 'yyyy-MM-dd')                                 as valid_end_time, \
+                       case when free_type = 1 then 'dailyfree' when free_type = 2 then 'newuser' end as free_for_role \
+                from vc.ods_db_vc_character_free_config_nd x1 \
+                         left join vc.ods_db_vc_character_nd x2 on x1.character_id = x2.id \
+                where '${azkaban.flow.1.days.ago}' >= FROM_UNIXTIME(x1.valid_start_time, 'yyyy-MM-dd') \
+                  and '${azkaban.flow.1.days.ago}' < FROM_UNIXTIME(x1.valid_end_time, 'yyyy-MM-dd') \
+                  and x1.status = 1;

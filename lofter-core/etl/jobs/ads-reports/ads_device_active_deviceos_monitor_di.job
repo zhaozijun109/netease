@@ -1,0 +1,12 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_device_active_deviceos_monitor_di partition(dt='${azkaban.flow.1.days.ago}') \
+select deviceos, \
+avg(case when active_days_7d>0 then active_days_7d end) avg_active_days_7d, \
+avg(case when active_days_15d>0 then active_days_15d end) avg_active_days_15d, \
+avg(case when active_days_30d>0 then active_days_30d end) avg_active_days_30d, \
+count(case when active_days_7d>0 then deviceudid end) active_device_cnt_7d, \
+count(case when active_days_15d>0 then deviceudid end) active_device_cnt_15d, \
+count(case when active_days_30d>0 then deviceudid end) active_device_cnt_30d \
+from lofter.dws_par_device_active_dd \
+where dt='${azkaban.flow.1.days.ago}' \
+group by deviceos \

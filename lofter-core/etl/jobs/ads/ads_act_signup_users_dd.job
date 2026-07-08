@@ -1,0 +1,9 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_act_signup_users_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select b.cname as activity_name, a.userId \
+from lofter_db_dump.ods_db_act_user_activity_record_nd a \
+join lofter_db_dump.ods_db_act_event_nd b on a.name = b.name \
+where a.type = 'signUp' and length(b.cname) > 0 \
+group by 1, 2 \
+
+

@@ -1,0 +1,42 @@
+type=sparksql
+hive.query.01=\
+with first_and_last_push_type as  \
+(select \
+      dt  \
+      ,deviceudid \
+      ,deviceos \
+      ,params['type'] type \
+      ,row_number() over(partition by deviceudid ,deviceos order by occurtime) rn_first \
+      ,row_number() over(partition by deviceudid ,deviceos order by occurtime desc) rn_last  \
+  from lofter.ods_mda_app_partition_di \
+  where dt = '${azkaban.flow.1.days.ago}' \
+  and eventid in ('rd-3') \
+  and actiontype = 'other' \
+) \
+insert overwrite table  lofter_dm.ads_push_off_report_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select \
+   nvl(t1.deviceos,'ALL') deviceos \
+   ,count(distinct t1.deviceudid) deviceudid_Cnt \
+   ,count(distinct if(rn_last=1 and type='off' ,t3.deviceudid ,null)) off_deviceudid_Cnt \
+   ,count(distinct t2.deviceudid) off_increase_deviceudid_Cnt \
+from   \
+  (select  \
+      dt  \
+      ,deviceudid ,deviceos \
+      from lofter.device_active  \
+      where dt = '${azkaban.flow.1.days.ago}' \
+  )t1  \
+left join  \
+  (select \
+      a.dt ,a.deviceos ,a.deviceudid \
+  from   \
+    (select  * from first_and_last_push_type a  where rn_first=1 and type='on') a  \
+  join  \
+    (select  * from first_and_last_push_type a  where rn_last=1 and type='off') b  \
+  on a.deviceudid = b.deviceudid and a.deviceos = b.deviceos   \
+  )t2  \
+on t1.dt = t2.dt and t1.deviceos=t2.deviceos and t1.deviceudid=t2.deviceudid \
+left join first_and_last_push_type t3  \
+on t1.deviceudid=t3.deviceudid and t1.deviceos=t3.deviceos \
+group by t1.deviceos \
+grouping sets(t1.deviceos , ()) \

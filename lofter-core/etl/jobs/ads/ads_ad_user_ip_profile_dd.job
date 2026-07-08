@@ -1,0 +1,69 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ad_user_ip_profile_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  b.*, c.type1 as deviceType, c.idfa as deviceId \
+from ( \
+      select ip \
+      from lofter.dim_ip_dd \
+            lateral view  explode(categories) as category \
+      where dt='${azkaban.flow.1.days.ago}' and category like '游戏-%' \
+      group by ip \
+) a \
+join ( \
+      select cast(user_id as bigint) as userId, ip, score from rec.rec_lofter_user_profile_ips where day = '${azkaban.flow.1.days.ago}' \
+) b on a.ip = b.ip \
+join ( \
+  select \
+    lower(sid) userid, \
+    tid idfa, \
+    "idfa" type1 \
+  from \
+    lofter.dwd_device_mapping \
+  where \
+    sid_tp='userid' \
+    and tid_tp='idfa' and lastNo = 1 \
+    and  from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd') >=  date_sub('${azkaban.flow.1.days.ago}',90) \
+  union all \
+  select \
+    lower(sid) userid, \
+    tid idfa, \
+    "imei" type1 \
+  from \
+    lofter.dwd_device_mapping \
+  where \
+    sid_tp='userid' \
+    and tid_tp='imei' and lastNo = 1 \
+    and from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd') >=  date_sub('${azkaban.flow.1.days.ago}',90) \
+  union all \
+  select \
+    lower(sid) userid, \
+    tid idfa, \
+    "idfv" type1 \
+  from \
+    lofter.dwd_device_mapping \
+  where \
+    sid_tp='userid' \
+    and tid_tp='idfv' and lastNo = 1 \
+    and from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd') >=  date_sub('${azkaban.flow.1.days.ago}',90) \
+  union all \
+  select \
+    lower(sid) userid, \
+    tid idfa, \
+    "oaid" type1 \
+  from \
+    lofter.dwd_device_mapping \
+  where \
+    sid_tp='userid' \
+    and tid_tp='oaid' and lastNo = 1 \
+    and from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd') >= date_sub('${azkaban.flow.1.days.ago}',90) \
+  union all \
+  select \
+    lower(sid) userid, \
+    tid idfa, \
+    "android_id" type1 \
+  from \
+    lofter.dwd_device_mapping \
+  where \
+    sid_tp='userid' \
+    and tid_tp='androidid' and lastNo = 1 \
+    and from_unixtime(cast(lastTime/1000 as bigint), 'yyyy-MM-dd') >=  date_sub('${azkaban.flow.1.days.ago}',90) \
+) c on b.userId=c.userId \

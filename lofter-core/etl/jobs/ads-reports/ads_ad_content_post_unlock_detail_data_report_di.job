@@ -1,0 +1,185 @@
+type = sparksql
+hive.query.01 =      \
+with post as         \
+(        \
+select  a.module,a.dt,a.postid,	blogid,b.unlock_count,a.bid_amount post_ad_revenue ,bg_pv,click_pv        \
+from        \
+(        \
+select dt, 	        \
+postid,        \
+case positionId when 279600 then '激励广告'         \
+when 278625 then '广告文'         \
+when 278626 then '广告文'         \
+when 277629 then '视频合集' end as module,         \
+sum(bid_amount)/1000 as bid_amount,     \
+sum(is_bg) as bg_pv,         \
+sum(is_click) click_pv         \
+from lofter.dwd_ad_actions_v2_di         \
+where dt = '${azkaban.flow.1.days.ago}'  and positionId in (279600, 278625, 278626, 277629)         \
+and (is_bg > 0 or is_click > 0)         \
+group by 1, 2,3        \
+ ) a         \
+left join         \
+(         \
+select         \
+module, dt,postid, count(distinct postId, userId) as unlock_count         \
+from lofter.dwd_ad_content_unlock_di         \
+where dt = '${azkaban.flow.1.days.ago}'          \
+group by 1, 2 ,3        \
+) b on a.dt = b.dt and a.module = b.module and a.postid=b.postid         \
+left join (select id, blogid from  lofter.dim_post  group by id, blogid ) c on a.postid=c.id         \
+group by 1,2,3,4,5,6,7,8        \
+    \
+)          \
+,    \
+post_v1 as (     \
+select     \
+a.module,a.dt,a.postid,	a.blogid,a.unlock_count, a.post_ad_revenue ,bg_pv,click_pv ,    \
+unlock_cnt_liangpiao       \
+from    \
+(      \
+select  module,dt,postid, blogid,    \
+unlock_count,post_ad_revenue ,bg_pv,click_pv        \
+from    post    \
+) a     \
+left join        \
+(    \
+select     \
+postid,blogid,    \
+from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')dt ,    \
+count(1) unlock_cnt_liangpiao    \
+from lofter.dwd_gift_post_unlock_dd    \
+where dt='${azkaban.flow.1.days.ago}'     \
+and ( ( from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  ) )    \
+and unlock_method like '%粮票%'    \
+group by 1,2,3      \
+)  b on a.dt=b.dt and a.postid=b.postid       \
+        \
+union all     \
+    \
+select     \
+'粮票文' module ,    \
+a.dt,    \
+a.postid,    \
+a.blogid,    \
+'' ,    \
+'',    \
+'',    \
+'',    \
+unlock_cnt_liangpiao    \
+from(    \
+select     \
+postid,blogid,    \
+from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')dt ,    \
+count(1) unlock_cnt_liangpiao    \
+from lofter.dwd_gift_post_unlock_dd    \
+where dt='${azkaban.flow.1.days.ago}'     \
+and ( ( from_unixtime(cast(unlock_time / 1000 AS BIGINT), 'yyyy-MM-dd')  = '${azkaban.flow.1.days.ago}'  ) )    \
+and unlock_method like '%粮票%'    \
+group by 1,2,3      \
+) a     \
+left join     \
+(    \
+select  dt, 	      \
+postid    \
+from  post     \
+group by 1,2    \
+)  b on a.dt=b.dt and a.postid=b.postid     \
+where b.postid is null     \
+ )     \
+,    \
+    \
+hot as (        \
+select         \
+postid        \
+,FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd') as dt        \
+,count(1) hot_cnt         \
+from lofter.dwd_post_hot_di        \
+where FROM_UNIXTIME(CAST(optime / 1000 AS BIGINT), 'yyyy-MM-dd')  ='${azkaban.flow.1.days.ago}'         \
+group by 1,2         \
+)         \
+        \
+insert overwrite table lofter_dm.ads_ad_content_post_unlock_detail_data_report_di  partition(dt ='${azkaban.flow.1.days.ago}')          \
+select         \
+a.module,        \
+a.postid,	        \
+b.url ,        \
+b.publishdate ,        \
+a.blogid ,        \
+c.blog_nickname ,        \
+case when d.blog_channel=1  then 'pgc'        \
+     else 'ugc' end id_flag,         \
+concat_ws(',', b.tags) as tags	 ,        \
+concat_ws(',', b.ips) as ips  ,       \
+e.expose_pv ,         \
+f.real_uv ,        \
+CAST(a.bg_pv  AS BIGINT) AS bg_pv ,        \
+CAST(a.click_pv  AS BIGINT) AS click_pv ,      \
+CAST(a.unlock_count  AS BIGINT) AS unlock_count ,      \
+CAST(a.post_ad_revenue  AS double) AS post_ad_revenue,        \
+h.money_gift money_gift_revenue ,        \
+coalesce(h.money_neirongfufei,0) + coalesce(a.post_ad_revenue,0) ttl_revenue,        \
+coalesce(a.post_ad_revenue,0)/e.expose_pv *1000  post_ad_cpm,        \
+coalesce(h.money_gift,0)/e.expose_pv *1000  money_gift_cpm ,        \
+(coalesce(h.money_neirongfufei,0) + coalesce(a.post_ad_revenue,0))/e.expose_pv *1000  ttl_revenue_cpm ,        \
+hot_cnt   ,      \
+real_pv ,      \
+jiaquan_all_score    ,    \
+gift_ability_status  ,    \
+unlock_cnt_liangpiao     ,  \
+b.title  \
+    \
+from post_v1 a         \
+left join (select id,publishdate,url ,ips,tags,title  from lofter.dim_post group by 1,2,3,4,5,6) b on a.postid=b.id          \
+left join (select userid, blog_nickname from  lofter.dws_par_creator_dd where dt='${azkaban.flow.1.days.ago}'  group by 1,2) c on a.blogid=c.userid         \
+left join         \
+(        \
+select 	postid ,gift_ability_status ,  blog_channel    \
+from lofter.dim_gift_post_return          \
+group by 1 ,2,3        \
+) d on a.postid=d.postid         \
+left join         \
+(        \
+select          \
+dt,postid,        \
+count(1) expose_pv         \
+from lofter.dwd_post_expose_di        \
+where  dt  ='${azkaban.flow.1.days.ago}'         \
+and reaction is null         \
+group by 1,2        \
+) e on a.dt=e.dt and a.postid=e.postid         \
+left join         \
+(        \
+select         \
+dt,postid,      \
+count(distinct userid) real_uv  ,      \
+count(userid) real_pv       \
+from lofter.dwd_post_browse_di  a         \
+where dt  ='${azkaban.flow.1.days.ago}'         \
+and a.action_type='page_duration'         \
+and post_content_type in ('文字','图片')        \
+and  a.is_real=1          \
+group by 1,2         \
+) f on a.dt=f.dt and a.postid=f.postid         \
+left join         \
+(        \
+select          \
+from_unixtime(createtime / 1000, 'yyyy-MM-dd') dt,        \
+postid,        \
+sum(case when pay_type in ('付费礼物') then money end)money_gift,        \
+sum(case when pay_type in ('付费礼物','书城会员','粉丝会员') then money end)money_neirongfufei         \
+from  lofter.dwd_evt_post_paid_detail_dd         \
+where dt='${azkaban.flow.1.days.ago}'           \
+and from_unixtime(createtime / 1000, 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'         \
+group by 1,2         \
+) h on  a.dt=h.dt and a.postid=h.postid        \
+left join hot i on a.dt=i.dt  and a.postid=i.postid         \
+left join       \
+(      \
+select dt,postid,max(jiaquan_all_score) jiaquan_all_score      \
+from  lofter_dm.ads_content_ad_post_premium_scoring_group_normalization_report_di      \
+where dt='${azkaban.flow.1.days.ago}'        \
+group by 1 ,2      \
+  )  b on a.dt=b.dt and a.postid=b.postid
+
+dependencies=ads_content_ad_post_premium_scoring_group_normalization_report_di

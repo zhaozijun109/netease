@@ -1,0 +1,11 @@
+{
+  "namespace": "com.netease.wm.hubble.avro",
+  "type": "record",
+  "name": "RecSceneCtr",
+  "fields": [
+    {"name": "scene", "type": "string"},
+    {"name": "time", "type": "long"},
+    {"name": "exp", "type": "long"},
+    {"name": "clk", "type": "long"}
+  ]
+}

@@ -1,0 +1,30 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.CheckPointTask
+conf.spark.check.pre="select sum(order_cnt) as cvr_orders from lofter_dm.ads_kol_actpwd_cvr_di where dt = '${azkaban.flow.1.days.ago}' having cvr_orders > 0 "
+conf.spark.check.bad="\
+select cvr_orders, detail_orders, cvr_new_devices, detail_new_devices \
+from ( \
+    select dt, sum(order_cnt) as cvr_orders, sum(new_devices) as cvr_new_devices from lofter_dm.ads_kol_actpwd_cvr_di where dt = '${azkaban.flow.1.days.ago}' group by dt \
+) a \
+left join ( \
+    select dt, count(distinct order_type, orderId) as detail_orders from lofter_dm.ads_kol_attribution_order_di where dt = '${azkaban.flow.1.days.ago}' group by dt \
+) b on a.dt = b.dt \
+left join ( \
+    select a.dt, count(distinct a.deviceUdid) as detail_new_devices \
+    from ( \
+        select dt, land_nonrec_userid as userid, deviceudid, origin_actpwd, occurtime \
+        from lofter.dwd_device_growth_attribution_di \
+        where dt ='${azkaban.flow.1.days.ago}' and  device_type = 'new' \
+    ) a \
+    join (select actpwd from lofter_dm.ads_kol_actpwd_cvr_di where dt = '${azkaban.flow.1.days.ago}' group by 1) a1 on a.origin_actpwd = a1.actpwd \
+    left join ( \
+        select deviceUdid, actpwd \
+        from lofter.dwd_paid_subscribe_device_cpa_deduplicate_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.origin_actpwd = b.actpwd and a.deviceudid = b.deviceUdid \
+    where b.deviceUdid is null \
+    group by 1 \
+) c on a.dt = c.dt \
+where cvr_orders <> nvl(detail_orders,0) or cvr_new_devices <> nvl(detail_new_devices,0) \
+"
+dependencies=ads_kol_actpwd_cvr_di,ads_kol_attribution_order_di

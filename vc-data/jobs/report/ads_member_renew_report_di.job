@@ -1,0 +1,67 @@
+type = sparksql
+hive.query.01 =   \
+with member_renew(       \
+select user_id, \
+valid_start_time, \
+valid_start_dt, \
+valid_end_dt, \
+LAG(valid_start_dt, 1, '无') OVER (PARTITION BY user_id ORDER BY valid_start_dt desc) AS prev_dt, \
+scene \
+from( \
+    SELECT  \
+    user_id, \
+    from_unixtime(CAST(valid_start_time AS BIGINT), 'yyyy-MM-dd')valid_start_time ,  \
+    from_unixtime(CAST(valid_end_time AS BIGINT), 'yyyy-MM-dd') AS valid_end_dt , \
+    to_date(from_unixtime(GREATEST(income_time,(CAST(valid_end_time AS BIGINT) - amount * 60)))) AS valid_start_dt,  \
+    scene \
+  FROM vc.ods_db_vc_user_income_record_nd  \
+  WHERE  reward_type = 3  \
+    AND reward_id IN ( 1,15)  \
+  GROUP BY 1,2,3,4 ,5 \
+  order  by user_id,to_date(from_unixtime(GREATEST(income_time,(CAST(valid_end_time AS BIGINT) - amount * 60)))) \
+) a  \
+) \
+ \
+insert overwrite table vc_dm.ads_member_renew_report_di partition(dt ='${azkaban.flow.1.days.ago}')       \
+select  \
+a.valid_end_dt, \
+datediff('${azkaban.flow.1.days.ago}',valid_end_dt)diff, \
+origin_type, \
+device_os,  \
+origin, \
+new_register_level, \
+count(distinct a.user_id ) user_cnt, \
+count(distinct case when datediff(prev_dt,valid_end_dt)=0 and datediff('${azkaban.flow.1.days.ago}',valid_end_dt)=0 then a.user_id end) day0_user_cnt, \
+count(distinct case when (datediff(prev_dt,valid_end_dt) between 0 and 2) and datediff('${azkaban.flow.1.days.ago}',valid_end_dt)=2 then a.user_id end) day3_user_cnt, \
+count(distinct case when (datediff(prev_dt,valid_end_dt) between 0 and 6) and datediff('${azkaban.flow.1.days.ago}',valid_end_dt)=6 then a.user_id end) day7_user_cnt, \
+count(distinct case when (datediff(prev_dt,valid_end_dt) between 0 and 14) and datediff('${azkaban.flow.1.days.ago}',valid_end_dt)=14 then a.user_id end) day15_user_cnt \
+ \
+from member_renew a  \
+left join  \
+( \
+select user_id,	register_date ,origin_type,device_os,  \
+case when is_lofter='Y'  and  is_pve='Y' then 'LOFTER PVE'  \
+     when is_lofter='Y'  and  is_pve='N' then 'LOFTER 非PVE'  \
+     else '非LOFTER' end origin , \
+CASE        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) = 0 THEN 'd0'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 1 AND 7 THEN 'd1_d7'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 8 AND 15 THEN 'd8_d15'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 16 AND 31 THEN 'd16_d31'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 32 AND 60 THEN 'd32_d60'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 61 AND 90 THEN 'd61_d90'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 91 AND 180 THEN 'd91_d180'        \
+WHEN datediff('${azkaban.flow.1.days.ago}' ,register_date) BETWEEN 181 AND 360 THEN 'd181_d360'        \
+ELSE 'd361_plus'        \
+END as new_register_level       \
+ from vc.dws_vc_user_behavior_info_a_d   \
+ where dt in (select max(dt) from vc.dws_vc_user_behavior_info_a_d )   \
+ and is_anonymity='N'  \
+ and is_test_user='N'  \
+ group by 1,2,3,4,5      \
+)b on a.user_id=b.user_id \
+where a.valid_end_dt between  date_sub('${azkaban.flow.1.days.ago}' ,15) and '${azkaban.flow.1.days.ago}' \
+and datediff('${azkaban.flow.1.days.ago}',a.valid_end_dt) in  (0,2,6,14) \
+group by a.valid_end_dt, \
+datediff('${azkaban.flow.1.days.ago}',valid_end_dt), \
+origin_type,device_os, origin,new_register_level

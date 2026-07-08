@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('_',distinctId,rk) as id, statType, period, tag, postId, blogId, content_type as contentType, platform_type as sourceType, num, rk, distinctId, dt from lofter_dm.ads_gift_return_hot_list_di where dt='${azkaban.flow.1.days.ago}' and (dayofweek(dt)=6)"
+params= --partition ${azkaban.flow.1.days.ago} --dest lofter_gift_return_hot_list --postfixsep  --atom

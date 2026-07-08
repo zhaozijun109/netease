@@ -1,0 +1,163 @@
+type=sparksql
+hive.query.01=\
+with exp_users_month as ( \
+    select a.*, if(b.user_id is not null, 1, 0) as new_flag \
+    from( \
+        select user_id as userId, dt as exp_date, appId, sceneId, exp_id, bucket_id, count(1) as pv \
+        from vc.dwd_ab_platform_exp_user_di \
+        where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and bucket_id not in (10,12) \
+        group by 1 , 2, 3, 4, 5, 6 \
+    )a \
+    left join( \
+        select user_id, register_date \
+        from vc.dws_vc_user_behavior_info_a_d \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1,2 \
+    )b \
+    on a.userId = b.user_id and a.exp_date = b.register_date \
+), \
+exp_device_month as( \
+    select deviceid,abs(cast(hash(deviceid) as bigint)) as userId,dt as exp_date, appId, sceneId, exp_id, bucket_id \
+    from vc.dwd_ab_platform_exp_user_di \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and bucket_id not in (10,12) \
+    group by 1 , 2, 3, 4, 5, 6, 7 \
+), \
+new_device_month_source as( \
+    select dt,deviceudid \
+    from vc.dwd_device_new_di \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+    group by 1,2 \
+), \
+register_device_month_source as( \
+    select dt,device_udid \
+    from vc.dwd_vc_device_user_correlation_a_d \
+    where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' and user_id is not null \
+    group by 1,2 \
+), \
+vc_metric_source as( \
+    select base_date,period,user_id,type,metric,metric_value, exp_id, bucket_id \
+    from vc.dws_ab_platform_vc_metric_expand_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+), \
+dimension_source as( \
+    SELECT '全部' AS dimension, 'ALL' AS dimension_value, 0 as period \
+    UNION ALL \
+    SELECT '次日', 'NEXT_DAY', 1 \
+    UNION ALL \
+    SELECT '三日', 'THREE_DAYS', 2 \
+    UNION ALL \
+    SELECT '七日', 'SEVEN_DAYS', 6 \
+    UNION ALL \
+    SELECT '十四日', 'FOURTEEN_DAYS', 13 \
+    UNION ALL \
+    SELECT '三十日', 'THIRTY_DAYS', 29 \
+) \
+insert overwrite table vc.dws_ab_platform_user_metric_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.userId,a.exp_date,a.appId,a.sceneId,a.exp_id,a.bucket_id,a.metric,a.dimension,a.dimension_value,a.metric_value \
+from ( \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'exp_uv' as metric, \
+      b.dimension, b.dimension_value, \
+      1.0 as metric_value \
+   from exp_users_month a \
+   cross join dimension_source b \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'exp_pv' as metric, \
+      b.dimension, b.dimension_value, \
+      cast(pv as double) as metric_value \
+   from exp_users_month a \
+   cross join dimension_source b \
+union all \
+    select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'new_exp_uv' as metric, \
+      b.dimension, b.dimension_value, \
+      1.0 as metric_value \
+   from (select * from exp_users_month where new_flag = 1 ) a \
+   cross join dimension_source b \
+union all \
+   select a.userId, a.exp_date, a.appId, a.sceneId, a.exp_id, a.bucket_id, \
+      'new_exp_pv' as metric, \
+      b.dimension, b.dimension_value, \
+      cast(pv as double) as metric_value \
+   from (select * from exp_users_month where new_flag = 1 ) a \
+   cross join dimension_source b \
+union all \
+    select a.userId,a.exp_date,a.appId,a.sceneId,a.exp_id,a.bucket_id, \
+        'vc_new_device_cnt' as metric, \
+        c.dimension, \
+        c.dimension_value, \
+        if(b.deviceudid is not null,1.0,0.0) as metric_value \
+    from exp_device_month a \
+    left join new_device_month_source b \
+    on a.exp_date = b.dt and a.deviceid = b.deviceudid \
+    cross join dimension_source c \
+union all  \
+    SELECT \
+      a.userId, \
+      a.exp_date, \
+      a.appId, \
+      a.sceneId, \
+      a.exp_id, \
+      a.bucket_id, \
+      'vc_register_uv' AS metric, \
+      i.dimension, \
+      i.dimension_value, \
+      CASE WHEN b.deviceudid IS NOT NULL AND c.device_udid IS NOT NULL \
+         THEN 1.0 ELSE 0.0 \
+      END AS metric_value \
+    FROM exp_device_month a \
+    CROSS JOIN dimension_source i \
+    LEFT JOIN new_device_month_source b \
+      ON a.deviceid = b.deviceudid \
+      AND b.dt = a.exp_date \
+    LEFT JOIN register_device_month_source c \
+      ON a.deviceid = c.device_udid \
+      AND c.dt = DATE_ADD(a.exp_date, i.period) \
+    WHERE a.exp_date <= DATE_SUB('${azkaban.flow.1.days.ago}', i.period) \
+union all \
+   SELECT \
+       a.userId, \
+       a.exp_date, \
+       a.appId, \
+       a.sceneId, \
+       a.exp_id, \
+       a.bucket_id, \
+       CONCAT('vc_', b.metric) AS metric, \
+       m.dimension, \
+       m.dimension_value, \
+       CAST(COALESCE(b.metric_value, 0) AS DOUBLE) AS metric_value \
+   FROM exp_users_month a \
+   CROSS JOIN dimension_source m \
+   LEFT JOIN vc_metric_source b \
+       ON a.userId = b.user_id \
+       AND a.exp_date = b.base_date \
+       AND a.exp_id = b.exp_id \
+       AND a.bucket_id = b.bucket_id \
+       AND b.period = m.period \
+   WHERE m.period = 0  \
+      OR a.exp_date <= DATE_SUB('${azkaban.flow.1.days.ago}', m.period) \
+union all \
+   SELECT \
+       a.userId, \
+       a.exp_date, \
+       a.appId, \
+       a.sceneId, \
+       a.exp_id, \
+       a.bucket_id, \
+       CONCAT('new_vc_', b.metric) AS metric, \
+       m.dimension, \
+       m.dimension_value, \
+       CAST(COALESCE(b.metric_value, 0) AS DOUBLE) AS metric_value \
+   FROM (select * from exp_users_month where new_flag = 1 ) a \
+   CROSS JOIN dimension_source m \
+   LEFT JOIN vc_metric_source b \
+       ON a.userId = b.user_id \
+       AND a.exp_date = b.base_date \
+       AND a.exp_id = b.exp_id \
+       AND a.bucket_id = b.bucket_id \
+       AND b.period = m.period \
+   WHERE m.period = 0  \
+      OR a.exp_date <= DATE_SUB('${azkaban.flow.1.days.ago}', m.period) \
+)a
+dependencies=dws_ab_platform_vc_metric_expand_di,dwd_ab_platform_exp_user_di

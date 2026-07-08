@@ -1,0 +1,49 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_membership_collection_rec_reason_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select collectionId, recReason, priority \
+from ( \
+    select *, row_number() over (partition by collectionId order by priority) as priority_rk \
+    from ( \
+        select collectionId, '爆款' as recReason, 1 as priority \
+        from ( \
+            select a.collectionId, \
+                sum(c.revenue) as total_revenue, count(distinct b.postId) as total_post_count \
+            from ( \
+                select collectionId \
+                from lofter.dim_membership_collection_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) a \
+            join lofter.bridge_collection_post b on a.collectionId = b.collectionId \
+            left join ( \
+                select postId, sum(money) revenue \
+                from lofter.dwd_gift_post_unlock_dd \
+                where dt='${azkaban.flow.1.days.ago}' \
+                group by 1 \
+            ) c on b.postId = c.postId \
+            group by 1 \
+            having total_revenue >= 10000 and (total_revenue/total_post_count) >= 500 \
+        ) t \
+      union all \
+        select collectionId, '精选' as recReason, 2 as priority \
+        from ( \
+            select a.collectionId, \
+                sum(b.postId) as total_post_count, count(distinct c.postId) as total_hot_post_count \
+            from ( \
+                select collectionId \
+                from lofter.dim_membership_collection_dd \
+                where dt = '${azkaban.flow.1.days.ago}' \
+            ) a \
+            join lofter.bridge_collection_post b on a.collectionId = b.collectionId \
+            left join ( \
+                select postId \
+                from lofter_dm.ads_membership_hot_list_di \
+                where dt <='${azkaban.flow.1.days.ago}' \
+                group by 1 \
+            ) c on b.postId = c.postId \
+            group by 1 \
+            having total_hot_post_count > total_post_count * 0.3 \
+        ) t \
+    ) tt \
+) ttt \
+where priority_rk = 1 \

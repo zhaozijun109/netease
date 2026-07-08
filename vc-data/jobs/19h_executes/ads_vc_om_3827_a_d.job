@@ -1,0 +1,45 @@
+type=sparksql
+hive.query.01 = with event_callback as (select user_id, character_id, create_time, 'play' as event_type \
+                                        from (select user_id, \
+                                                     character_id, \
+                                                     create_time, \
+                                                     row_number() over (partition by user_id,character_id order by create_time desc) as rk \
+                                              from vc.dwd_vc_special_event_i_d \
+                                              where dt = '${azkaban.flow.1.days.ago}' \
+                                                and sub_event_type = 6) \
+                                        where rk = 1 \
+                                        union all \
+                                        select user_id, character_id, create_time, 'message' as event_type \
+                                        from (select user_id, \
+                                                     character_id, \
+                                                     FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd HH:mm:ss')                          as create_time, \
+                                                     row_number() over (partition by user_id,character_id order by create_time desc) as rk \
+                                              from vc.ods_binlog_vc_user_message_record_partition_di \
+                                              where sender = 1 \
+                                                and status in (2, 6) \
+                                                and nvl(cast(GET_JSON_OBJECT(ext, '$.callBackEvent') as BOOLEAN), false) = true \
+                                                and user_id not in (select user_id from vc.dim_vc_discardted_users_a_d) \
+                                                and lower(nvl(from_json(ext,'STRUCT<source: STRING>').source, 'vc')) != 'lofter' \
+                                                and dt = '${azkaban.flow.1.days.ago}') \
+                                        where rk = 1), \
+                     today_talk as (select user_id, character_id, create_time \
+                                    from (select user_id, \
+                                                 character_id, \
+                                                 FROM_UNIXTIME(create_time / 1000, 'yyyy-MM-dd HH:mm:ss')                          as create_time, \
+                                                 row_number() over (partition by user_id,character_id order by create_time desc) as rk \
+                                          from vc.ods_binlog_vc_user_message_record_partition_di x1 \
+                                          where dt = '${azkaban.flow.current.date}' \
+                                            and sender in (2, 4) \
+                                            and _bin_op = 0 \
+                                            and exists( \
+                                                  select user_id, \
+                                                  character_id from event_callback x2 where x1.user_id = x2.user_id and x1.character_id = x2.character_id \
+                                                )) \
+                                    where rk = 1) \
+                insert OVERWRITE table vc.ads_vc_om_3827_a_d PARTITION (dt = '${azkaban.flow.current.date}') \
+                select a.user_id \
+                from (select user_id from event_callback group by user_id) a \
+                         left join (select user_id from today_talk group by user_id) b \
+                         on a.user_id = b.user_id  \
+                where b.user_id is null \
+                group by a.user_id;

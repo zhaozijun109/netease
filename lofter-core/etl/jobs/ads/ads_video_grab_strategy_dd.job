@@ -1,0 +1,31 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_video_grab_strategy_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.strategyId, \
+   nvl(sum(hotpv_std),0) hotpv_std, \
+   nvl(sum(hotpv_1d),0) hotpv_1d, \
+   nvl(sum(realplaypv_std),0) realplaypv_std, \
+   nvl(sum(realplaypv_1d),0) realplaypv_1d \
+from ( \
+    select strategyId, postid \
+    from lofter_db_dump.ods_db_media_video_fetch_nd \
+    where publishState = 2 and postid > 0 \
+) a \
+left outer join ( \
+    select postid, \
+       count(1) hotpv_std, \
+       sum(if(dt='${azkaban.flow.1.days.ago}', 1, 0)) hotpv_1d \
+    from lofter.dwd_post_hot_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) c on a.postid = c.postid \
+left outer join ( \
+    select postid, \
+       sum(realplaypv) realplaypv_std, \
+       sum(case when dt='${azkaban.flow.1.days.ago}' then realplaypv else 0 end) realplaypv_1d \
+    from lofter.dws_video_post_general_di \
+    where dt between '2020-10-30' and '${azkaban.flow.1.days.ago}' \
+    group by postid \
+) d on a.postid = d.postid \
+group by a.strategyId \
+grouping sets((a.strategyId), ()) \
+having hotpv_std > 0

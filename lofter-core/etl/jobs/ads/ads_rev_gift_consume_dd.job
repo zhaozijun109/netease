@@ -1,0 +1,32 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_rev_gift_consume_dd partition(dt='${azkaban.flow.1.days.ago}') \
+  select  giftId as id, giftId, \
+          sum(getnum) as getNum, \
+          sum(sendnum) as sendNum, \
+          sum(if (iseffect = '生效中', balancenum, 0 )) as balanceNum \
+  from ( \
+      select giftId, getnum, balancenum,(getnum-balancenum) as sendnum, iseffect \
+      from ( \
+          select giftId, \
+                 case when '${azkaban.flow.1.days.ago}' between starttime and endtime then '生效中' \
+                      when '${azkaban.flow.1.days.ago}' < starttime then '未生效' else '已过期' end as iseffect, \
+                 sum(count) as getnum ,sum(balance) as balancenum \
+          from lofter_db_dump.ods_db_trade_user_free_gift_nd \
+          group by 1, 2 \
+          union all \
+          select a.giftId, sum(a.getnum) as getnum, sum(a.getnum) - sum(b.sendnum) as balancenum, a.iseffect \
+          from ( \
+              select giftId,userid ,'生效中' as iseffect, sum(count) as getnum \
+              from  lofter_db_dump.ods_db_trade_gift_order_nd \
+              where status=1 and createTime <= '${azkaban.flow.1.days.ago}' \
+              group by giftId,userid, '生效中' \
+          ) a join ( \
+                select giftId,sender as userid,'生效中' as iseffect,sum(count) as sendnum \
+                from lofter_db_dump.ods_db_trade_gift_present_record_nd \
+                where giftType=1 and createTime<='${azkaban.flow.1.days.ago}' \
+                group by giftId,sender,'生效中' \
+            ) b on a.giftId=b.giftId and a.userid=b.userid \
+          group by a.giftId,a.iseffect \
+      ) t \
+  ) tt \
+  group by giftId distribute by 1

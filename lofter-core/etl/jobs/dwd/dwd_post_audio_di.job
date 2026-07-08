@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_post_audio_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select deviceOs, \
+       deviceUdid, \
+       userId, \
+       params['collectionId'] as collectionId, \
+       params['postId'] as postId, \
+       case when params['maxProgress'] > 1 then 1 \
+           else params['maxProgress'] \
+       end as maxProgress, \
+       (nvl(params['playedTimeme'], 0) + nvl(params['playedTime'], 0)) as playedTime, \
+       case when (nvl(params['playedTimeme'], 0) + nvl(params['playedTime'], 0)) > 5000 then 1 \
+            else 0 \
+       end as is_valid, \
+       case when (nvl(params['playedTimeme'], 0) + nvl(params['playedTime'], 0)) > 5000 \
+                 and ((nvl(params['playedTimeme'], 0) + nvl(params['playedTime'], 0)) / params['duration'] >= 0.3 and params['maxProgress'] >= 0.9) \
+            then 1 \
+            else 0 \
+       end as is_finish \
+from lofter.ods_mda_app_partition_di \
+where dt = '${azkaban.flow.1.days.ago}' and eventId = 'm6-5' \
+distribute by 1 \

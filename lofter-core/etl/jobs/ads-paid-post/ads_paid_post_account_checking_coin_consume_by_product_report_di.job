@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_paid_post_account_checking_coin_consume_by_product_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select delta,count(1) as coin_consume_count \
+from lofter_db_dump.ods_db_trade_coin_balance_log_nd \
+where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and delta<0 and type=3 \
+group by delta \
+

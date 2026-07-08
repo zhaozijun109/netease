@@ -1,0 +1,60 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dws_par_creator_user_support_score_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.blogId, a.userId, \
+      nvl(a.score,0)+nvl(b.score,0) as score, \
+      gift_score, share_score, comment_score, like_score \
+from ( \
+    select blogId, userId, \
+           sum(score) as score, \
+           sum(if(type = 'gift', score, 0)) as gift_score, \
+           sum(if(type = 'share', score, 0)) as share_score, \
+           sum(if(type = 'comment', score, 0)) as comment_score, \
+           sum(if(type = 'like', score, 0)) as like_score \
+    from ( \
+        select blogId, userId, count(1) * 8 as score, 'gift' as type \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+            is_settle > 0 \
+        group by 1, 2 \
+    union all \
+        select blogId, userId, least(count(distinct dt, postId) * 8, 40) as score, 'share' as type \
+        from lofter.dwd_post_share_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and \
+            dt >= '${azkaban.flow.30.days.ago}' \
+        group by 1, 2 \
+    union all \
+        select blogId, userId, least(sum(pv)*8, 72) as score, 'comment' as type \
+        from ( \
+            select blogId, publisherUserid as userId, dt, least(count(distinct postId), 2) as pv \
+            from lofter.ods_binlog_post_response_di \
+            where dt <= '${azkaban.flow.1.days.ago}' and \
+                dt >= '${azkaban.flow.30.days.ago}' and \
+                `_bin_op` = 0 and \
+                length(regexp_replace(content,'\\\\[.*?\\\\]','')) >= 30 \
+            group by 1, 2, 3 \
+        ) t \
+        group by 1, 2 \
+    union all \
+        select blogId, userId, \
+               nvl(least(sum(if(`type`=1,pv,0))*2, 40),0) + nvl(least(sum(if(`type`=3,pv,0))*2, 40),0) as score, \
+               'like' as type \
+        from ( \
+            select blogId, publisherUserid as userId, from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') as dt, `type`, \
+                   least(count(distinct postId), 3) as pv \
+            from lofter_db_dump.ods_db_post_hot_nd \
+            where from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+                from_unixtime(cast(opTime/1000 as bigint), 'yyyy-MM-dd') >= '${azkaban.flow.30.days.ago}' and \
+                `type` in (1,3) \
+            group by 1, 2, 3, 4 \
+        ) t \
+        group by 1, 2 \
+    ) t \
+    group by 1, 2 \
+) a \
+left join ( \
+    select blogId, userId, 20 as score \
+    from lofter_db_dump.ods_db_user_following_nd \
+    where from_unixtime(cast(followTime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+) b on a.blogId = b.blogId and a.userId = b.userId \

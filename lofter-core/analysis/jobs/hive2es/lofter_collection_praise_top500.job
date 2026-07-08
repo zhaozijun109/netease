@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select id, collectionid, praise_std as praise from lofter_dm.ads_collection_noncp_praise_top_di where dt='${azkaban.flow.1.days.ago}' "
+params= --dest lofter_collection_praise_top500

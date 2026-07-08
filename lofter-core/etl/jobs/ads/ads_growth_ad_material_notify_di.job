@@ -1,0 +1,53 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_ad_material_notify_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.*, \
+       c.video_url as photo_url, c.caption as photo_caption, c.star_user_id, c.star_name, b.invest_amount \
+from ( \
+    select case when whiteboard_uv / newuv > 0.2 then '白板率高' \
+               when n_day_uv / newuv < 0.36 then '次留低' \
+               when loguv / newuv < 0.5  then '登陆比例低' \
+               when excellent_uv / newuv < 0.25 then '优质新用户占比低' \
+               else '其他原因' end as reason, \
+           nvl(media,'') as media, nvl(proxy, '') as proxy, nvl(photoId,'') as photoId, nvl(aid,'') as aid, nvl(campaignId,'') as campaignId, nvl(advertiserId,'') as advertiserId, \
+           nvl(newUv,0) as newUv, \
+           nvl(loguv / newuv, 0) as log_ratio, \
+           null as retain_ratio, nvl(excellent_uv / newuv,0) as excellent_ratio, \
+           nvl(whiteboard_uv / newuv,0) as whiteboard_ratio, \
+           nvl(per_duration_minutes,0) as per_duration_minutes \
+    from lofter_dm.ads_growth_ad_period_cvr_di \
+    where dt = '${azkaban.flow.1.days.ago}' and period = 1 and device_type = 'new' and \
+        newuv > 10 and \
+        (whiteboard_uv / newuv > 0.2 or loguv / newuv < 0.5 or excellent_uv / newuv < 0.25) \
+    union all \
+    select '次留低' as reason, \
+           nvl(media,'') as media, \
+           nvl(proxy,'') as proxy, \
+           nvl(photoId,'') as photoId, \
+           nvl(aid,'') as aid, \
+           nvl(campaignId,'') as campaignId, \
+           nvl(advertiserId, '') as advertiserId, \
+           nvl(newUv,0) as newUv, \
+           nvl(loguv / newuv,0) as log_ratio, \
+           nvl(n_day_uv / newuv,0) as retain_ratio, \
+           nvl(excellent_uv / newuv,0) as excellent_ratio, \
+           nvl(whiteboard_uv / newuv,0) as whiteboard_ratio, \
+           nvl(per_duration_minutes,0) as per_duration_minutes \
+    from lofter_dm.ads_growth_ad_period_cvr_di \
+    where dt = '${azkaban.flow.1.days.ago}' and period = 2 and device_type = 'new' and \
+        newuv > 10 and \
+        (n_day_uv / newuv < 0.36) \
+) a \
+left join ( \
+    select task_id, campaign_id, video_url, caption, star_user_id, star_name, sum(consume_amount_yuan) as invest_amount \
+    from lofter.ods_log_ad_linkup_ks_stat_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2, 3, 4, 5, 6 \
+) b on a.aid = b.task_id and a.campaignId = b.campaign_id \
+left join ( \
+    select task_id, campaign_id, video_url, caption, star_user_id, star_name \
+    from lofter.ods_log_ad_linkup_ks_stat_di \
+    where dt <= '${azkaban.flow.1.days.ago}' \
+    group by 1, 2, 3, 4, 5, 6 \
+) c on a.aid = c.task_id and a.campaignId = c.campaign_id \
+
+dependencies=ads_growth_ad_period_cvr_di

@@ -1,0 +1,109 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter_dm.ads_rec_content_rec_reason_detail_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select postId, recReason, priority \
+from ( \
+    select postId, \
+           concat(browse_pv_30d, '人都在看') as recReason, \
+           4 as priority \
+    from lofter.dws_post_traffic_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and browse_pv_30d > 1000 \
+    union all \
+    select t1.postId, \
+           case when sweet_pv >= bitter_pv then concat(sweet_pv, '人觉得很甜') \
+                else concat(bitter_pv, '人觉得很虐') \
+           end as recReason, \
+           3 as priority \
+    from ( \
+        select postId, blogId, sum(sweet_pv) as sweet_pv, sum(bitter_pv) as bitter_pv \
+        from lofter.dws_post_highlight_comment_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and (sweet_pv > 0 or bitter_pv > 0) \
+        group by postId, blogId \
+    ) t1 \
+    left join ( \
+        select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) t2 \
+    on t1.postId = t2.postId \
+    where t2.postId is null \
+    union all \
+    select postId, \
+           case when hot >= 10000 then '万热作品' \
+                when hot_7d >= 1000 then '热度飙升' \
+           end as recReason, \
+           case when hot >= 10000 then 2 \
+                when hot_7d >= 1000 then 1 \
+           end as priority \
+    from lofter.dws_post_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' and (hot >= 10000 or hot_7d >= 1000) \
+    union all \
+    select t1.postId, t1.type as recReason, null as priority \
+    from ( \
+        select postId, blogId, case when sweet_pv/nvl(bitter_pv, 1) > 0.5 then '高甜HE' when bitter_pv/nvl(sweet_pv, 1) > 0.5 then '高虐BE' end as type \
+        from ( \
+            select postId, blogId, sum(sweet_pv) as sweet_pv, sum(bitter_pv) as bitter_pv \
+            from lofter.dws_post_highlight_comment_dd \
+            where dt = '${azkaban.flow.1.days.ago}' and (sweet_pv > 0 or bitter_pv > 0) \
+            group by postId, blogId \
+        ) t \
+        where (sweet_pv > 100 or bitter_pv > 100) and (sweet_pv/nvl(bitter_pv, 1) > 0.5 or bitter_pv/nvl(sweet_pv, 1) > 0.5 ) \
+    ) t1 \
+    join ( \
+        select id, url  \
+        from lofter.dim_post_article \
+        where isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0  \
+            and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+    ) t2 \
+    on t1.postId = t2.id \
+    union all \
+    select t1.postId, \
+        '短篇热文' as recReason, \
+        null as priority \
+    from ( \
+        select postId from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count <= 5000 and words_count >= 1000 \
+    ) t1 \
+    join ( \
+        select postId from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot > 3000 \
+    ) t2 \
+    on t1.postId = t2.postId \
+    union all \
+    select t1.postId, \
+        '万字长文' as recReason, \
+        null as priority \
+    from ( \
+        select postId from lofter.dwd_post_length_dd where dt = '${azkaban.flow.1.days.ago}' and words_count >= 10000 \
+    ) t1 \
+    join ( \
+        select postId from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot > 1000 \
+    ) t2 \
+    on t1.postId = t2.postId \
+    union all \
+    select t1.postId, \
+        '无彩蛋' as recReason, \
+        null as priority \
+    from ( \
+        select id as postId, \
+               blogId \
+        from lofter.dim_post_article \
+        where isPublished = true and isCitedPost = false and isForbidden = false and allowView = 0 and isActivityAutoPost = 0 and isImported = 0 and isMoved = 0 and is_book_store = 0 \
+    ) t1 \
+    join ( \
+        select postId from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}' and hot > 10000 \
+    ) t2 \
+    on t1.postId = t2.postId \
+    left join ( \
+        select postId from lofter.dim_gift_post_return_dd where dt = '${azkaban.flow.1.days.ago}' group by postId \
+    ) t3 \
+    on t1.postId = t3.postId \
+    where t3.postId is null \
+    union all \
+    select postId, \
+        '入坑神作' as recReason, \
+        null as priority \
+    from ( \
+        select postId, count(distinct userId) as browseUv \
+        from lofter.dwd_post_browse_di \
+        where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' and is_real = 1 and is_new_user = 1 \
+        group by postId \
+        having count(distinct userId) >= 10 \
+    ) \
+) t1

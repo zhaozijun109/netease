@@ -1,0 +1,104 @@
+type=sparksql
+hive.query.01=\
+with idea_posts as ( \
+    select a.idea_id, a.postId, a.blogId \
+    from ( \
+        select c.id as idea_id, b.postId as postId, b.blogid as blogId \
+        from ( \
+            select id as grainId \
+            from lofter_db_dump.ods_db_grain_info_nd \
+            where type = 1 \
+        ) a \
+        join lofter_db_dump.ods_db_grain_post_nd b on a.grainId = b.grainId \
+        join (select id, publishergrainid as grainId from lofter_db_dump.ods_db_trade_pay_creator_idea_nd where publishergrainid > 0 and landingType = 1) c on a.grainId = c.grainId \
+        where b.status = 0 \
+    union all \
+        select b.id as idea_id, a.postId as postId, a.blogId as blogId \
+        from ( \
+            select id as postId, blogId, tag \
+            from lofter.dim_post \
+                lateral view explode(tags) as tag \
+            where isPublished = true and isCitedPost = false and isForbidden = false and \
+            allowview=0 and contentType in ("图片","文字","视频") \
+        ) a \
+        join ( \
+            select id, replace(parse_url(url, 'PATH'), '/tag/', '') as tag \
+            from lofter_db_dump.ods_db_trade_pay_creator_idea_nd \
+            where landingType = 2 \
+        ) b on a.tag = b.tag \
+    union all \
+        select id as idea_id, presentpostid as postId, presentblogid as blogId \
+        from lofter_db_dump.ods_db_trade_pay_creator_idea_nd \
+        where presentpostid > 0 \
+    ) a \
+    join (select postId from lofter_db_dump.ods_db_trade_return_gift_plan_nd group by 1) b on a.postId = b.postId \
+    group by 1, 2, 3 \
+), \
+idea_incomes as ( \
+    select a.*, b.unlock_date, b.money \
+    from idea_posts a \
+    join ( \
+        select postId, money, from_unixtime(cast(unlock_time/1000 as bigint), 'yyyy-MM-dd') as unlock_date \
+        from lofter.dwd_gift_post_unlock_dd \
+        where dt='${azkaban.flow.1.days.ago}' and money > 0 \
+    ) b on a.postId = b.postId \
+    where b.unlock_date <= '${azkaban.flow.1.days.ago}' \
+), \
+idea_post_incomes as ( \
+    select *, \
+        row_number() over (partition by idea_id order by money desc) idea_rk, \
+        row_number() over (partition by idea_id order by yesterday_money desc) idea_yesterday_rk, \
+        row_number() over (partition by idea_id order by weekly_money desc) idea_weekly_rk \
+    from ( \
+        select idea_id, postId, blogId, \
+            sum(money) as money, \
+            sum(if(unlock_date = '${azkaban.flow.1.days.ago}', money, 0)) as yesterday_money, \
+            sum(if(unlock_date >= '${azkaban.flow.7.days.ago}', money, 0)) as weekly_money, \
+            sum(if(unlock_date >= '${azkaban.flow.30.days.ago}', money, 0)) as monthly_money \
+        from idea_incomes \
+        group by 1,2,3 \
+    ) t \
+) \
+insert overwrite table lofter_dm.ads_creator_idea_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.idea_id, \
+    nvl(a.presentPostId, b.postId) as rePresentPostId, \
+    nvl(a.presentBlogId, b.blogId) as rePresentPostBlogId, \
+    b.money as highestSinglePostIncome, \
+    c.income as income, \
+    nvl(b3.presentIncome, b.money) as rePresentPostIncome, \
+    c.weeklyGiftAmount as weeklyGiftAmount, \
+    c.income / a1.post_count as averageIncome, \
+    b1.yesterday_money as yesterdayHighestIncome, \
+    b2.weekly_money as weeklyHighestIncome \
+from ( \
+    select id as idea_id, presentPostId, presentBlogId \
+    from lofter_db_dump.ods_db_trade_pay_creator_idea_nd \
+    where landingtype in (1, 2) \
+) a \
+left join (select idea_id, count(distinct postId) as post_count from idea_posts group by 1) a1 on a.idea_id = a1.idea_id \
+left join ( \
+    select * \
+    from idea_post_incomes \
+    where idea_rk = 1 and (weekly_money >= 200 or monthly_money >= 500) \
+) b on a.idea_id = b.idea_id \
+left join ( \
+    select * \
+    from idea_post_incomes \
+    where idea_yesterday_rk = 1 \
+) b1 on a.idea_id = b.idea_id \
+left join ( \
+    select * \
+    from idea_post_incomes \
+    where idea_weekly_rk = 1 \
+) b2 on a.idea_id = b.idea_id \
+left join ( \
+    select a.id as idea_id, b.money as presentIncome \
+    from lofter_db_dump.ods_db_trade_pay_creator_idea_nd a join idea_post_incomes b on a.presentPostId = b.postId \
+) b3 on a.idea_id = b3.idea_id \
+left join ( \
+    select idea_id, \
+        sum(money) income, \
+        sum(if(unlock_date >= '${azkaban.flow.7.days.ago}', money, 0)) as weeklyGiftAmount \
+    from idea_incomes \
+    group by 1 \
+) c on a.idea_id = c.idea_id \

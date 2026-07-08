@@ -1,0 +1,43 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_tag_post_rank_brush_hot_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.brush_hot_post_count, a.brush_hot_blog_count, b.brush_hot_user_count, \
+       c.deal_user_count, d.review_brush_hot_user_count \
+from ( \
+    select dt, count(distinct postId) as brush_hot_post_count,  count(distinct blogId) as brush_hot_blog_count \
+    from lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) a \
+left join ( \
+    select a.dt, count(distinct a.userId) as brush_hot_user_count \
+    from ( \
+        select * \
+        from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) a \
+    join ( \
+        select postId \
+        from lofter_dm.ads_risk_tag_post_rank_brush_hot_review_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+        group by 1 \
+    ) b on a.postId = b.postId \
+    group by 1 \
+) b on a.dt = b.dt \
+left join ( \
+    select from_unixtime(cast(dealTime/1000 as bigint), 'yyyy-MM-dd') as dt, count(distinct userId) as deal_user_count \
+    from lofter_db_dump.ods_db_brush_hot_user_nd \
+    where from_unixtime(cast(dealTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and \
+          (forbidStatus=1 or bindStatus=1) \
+    group by 1 \
+) c on a.dt = c.dt \
+left join ( \
+    select '${azkaban.flow.1.days.ago}' as dt, count(distinct x.userId) as review_brush_hot_user_count \
+    from ( \
+        select userId \
+        from lofter_dm.ads_risk_tag_post_rank_brush_hot_suspect_users_review_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) x \
+    left join (select userId from lofter_db_dump.ods_db_brush_hot_user_nd where forbidStatus=1 or bindStatus=1) y on x.userId = y.userId \
+    where y.userId is null \
+) d on a.dt = d.dt \
+

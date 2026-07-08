@@ -1,0 +1,85 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=1500
+conf.spark.dynamicAllocation.maxExecutors=100
+conf.spark.executor.cores=4
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=create temporary function bitmap_and as 'com.netease.wm.udf.bitmap.BitmapAndUDF';
+hive.query.03=create temporary function bitmap_union as 'com.netease.wm.udf.bitmap.BitmapUnionUDAF';
+hive.query.04=create temporary function bitmap_count as 'com.netease.wm.udf.bitmap.BitmapCountUDF';
+hive.query.05=drop table if exists lofter_tmp.tmp_ads_creator_ecology_fans_favorite_wd;
+hive.query.06=\
+create table lofter_tmp.tmp_ads_creator_ecology_fans_favorite_wd stored as parquet as \
+with creator as ( \
+  select userId from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' and post_count_std >= 1 \
+) \
+select tmp1.userId as blogId, \
+       tmp2.tag, \
+       tmp2.fans_subscribe_cnt \
+from ( \
+    select userId from creator \
+) tmp1 \
+join ( \
+    select blogId, \
+           tag, \
+           sum(bitmap_count(bitmap_and(bitmap_users1,bitmap_users2))) as fans_subscribe_cnt \
+    from ( \
+        select t1.blogId, \
+               t1.bucket, \
+               t2.tag, \
+               to_bitmap(t1.userId) as bitmap_users1, \
+               to_bitmap(t2.userId) as bitmap_users2 \
+        from ( \
+            select b.blogId,b.bucket,b.userId \
+            from ( \
+              select userId from creator \
+            ) a \
+            join ( \
+              select blogId, shiftrightunsigned(userId, 16) % 20 as bucket, userId from lofter_db_dump.ods_db_user_following_nd where from_unixtime(cast(followtime/1000 as bigint), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' \
+            ) b \
+            on a.userId = b.blogId \
+        ) t1 \
+        join ( \
+            select a.userId,a.bucket,a.tag \
+            from ( \
+              select userId, shiftrightunsigned(userId, 16) % 20 as bucket, tag \
+              from lofter.dwd_tag_browse_di \
+              where dt <= '${azkaban.flow.1.days.ago}' and dt >= '${azkaban.flow.30.days.ago}' \
+              and tag not like '%娱乐%' and tag not like '%摄影%' and tag not like '%绘画%' \
+              and tag not like '%原创%' and tag not like '%文学%' and tag not like '%同人文%' \
+              and tag not like '%小说%' and tag not like '%漫画%' and tag not like '%生活%' \
+              and tag not like '%搞笑%' and tag not like '%有趣%' and tag not like '%梗图%' \
+              and tag not like '%修图%' and tag not like '%摘抄%' and tag not like '%日常%' \
+              and tag not like '%古风%' and tag not like '%美食%' and tag not like '%可爱%' \
+              and tag not like '%治愈%' and tag not like '%萌宠%' and tag not like '%p图%' \
+              and tag not like '%推文%' and tag not like '%图片分享%' and tag not like '%条漫%' \
+              and tag not like '%插画%' and tag not like '%图片%' and tag not like '%互动抓人%' \
+              and tag not like '%短视频%' and tag not like '%搬运%' and tag not like '%搞笑图片%' \
+              and tag not like '%恶搞%' and tag not like '%ai%' and tag not like '%破次元恋人%' \
+              and tag not like '%吊图%' and tag not like '%同人%' \
+            ) a \
+            left join ( \
+              select tag from lofter_db_dump.ods_db_activity_center_activity_nd lateral view explode(split(tagnames, ',')) t as tag group by tag \
+            ) b \
+            on a.tag = b.tag \
+            where b.tag is null \
+        ) t2 \
+        on t1.userId = t2.userId and t1.bucket = t2.bucket \
+        group by t1.blogId,t1.bucket,t2.tag \
+    ) t3 \
+    group by blogId,tag \
+) tmp2 \
+on tmp1.userId = tmp2.blogId;
+hive.query.07=\
+insert overwrite table lofter_dm.ads_creator_ecology_fans_favorite_wd partition(dt = '${azkaban.flow.1.days.ago}') \
+select blogId, \
+       concat_ws(',',transform(sort_array(collect_set(struct(rn,tag)),true),x -> x.tag)) AS tags \
+from ( \
+  select blogId, \
+        tag, \
+        row_number() over(partition by blogId order by fans_subscribe_cnt desc) as rn \
+  from lofter_tmp.tmp_ads_creator_ecology_fans_favorite_wd \
+  where fans_subscribe_cnt >= 10 \
+) t1 \
+where rn <= 5 \
+group by blogId;
+hive.query.08=drop table if exists lofter_tmp.tmp_ads_creator_ecology_fans_favorite_wd;

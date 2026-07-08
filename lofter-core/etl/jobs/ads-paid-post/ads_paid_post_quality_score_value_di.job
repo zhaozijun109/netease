@@ -1,0 +1,6 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_quality_score_value_di partition(dt='${azkaban.flow.1.days.ago}') \
+select ip,contenttype,ispay_returngift,days,zonghe_score \
+from lofter.dws_gift_post_premium_ip_scoring_dd \
+where dt = '${azkaban.flow.1.days.ago}'
+dependencies=

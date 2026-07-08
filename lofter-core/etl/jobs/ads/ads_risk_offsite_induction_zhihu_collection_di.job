@@ -1,0 +1,19 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_offsite_induction_zhihu_collection_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.collectionId, a.blogId, a1.postId \
+from ( \
+	select name as title, id as collectionId, blogId, description \
+	from lofter_db_dump.ods_db_post_collection_nd \
+) a \
+join lofter.bridge_collection_post a1 on a.collectionId = a1.collectionId \
+left join lofter.dim_blog c on a.blogId = c.id \
+left join ( \
+    select collectionId \
+    from lofter_dm.ads_risk_offsite_induction_zhihu_collection_di \
+    where dt < '${azkaban.flow.1.days.ago}' \
+    group by 1 \
+) d on a.collectionId = d.collectionId \
+where d.collectionId is null and \
+      (rlike(regexp_replace(a.title, '(?U)([\\p{Punct}\\\\s\\\\-\\\\~\\\\x{3000}-\\\\x{303F}\\\\x{FF00}-\\\\x{FFEF}\\\\x{1F300}-\\\\x{1F5FF}\\\\x{1F600}-\\\\x{1F64F}\\\\x{1F680}-\\\\x{1F6FF}\\\\x{2600}-\\\\x{26FF}\\\\x{2700}-\\\\x{27BF}]*)', ''), '.*([织知矢直芝只支纸吱之芷]|zhi|失0|矢o|矢0|矢口)([乎呼糊呼虎]|hu|口乎).*') or \
+       a.title like '%乎乎故事%' or a.title like '%乎呼美文%' or a.title like '%矢口织呼%' \
+      ) \

@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.wm.ad.etl.AdxMonitorResourceEtl
+params=--date ${azkaban.flow.1.days.ago} --input /user/da_lofter/datastream/adx/${azkaban.flow.1.days.ago}
+dependencies=

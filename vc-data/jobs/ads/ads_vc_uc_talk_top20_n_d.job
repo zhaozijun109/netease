@@ -1,0 +1,25 @@
+type=sparksql
+hive.query.01 = insert OVERWRITE table vc.ads_vc_uc_talk_top20_n_d partition (dt = '${azkaban.flow.1.days.ago}') \
+                select 'DAY_7' as statistical_period, user_id, character_id, character_name, total_talks, rk \
+                from (select *, row_number() over (partition by user_id order by total_talks desc) as rk \
+                      from (select user_id, character_id, character_name, sum(talk_cnt) as total_talks \
+                            from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                            where dt between '${azkaban.flow.7.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                            group by user_id, character_id, character_name)) \
+                where rk <= 20 \
+                union all \
+                select 'DAY_30' as statistical_period, user_id, character_id, character_name, total_talks, rk \
+                from (select *, row_number() over (partition by user_id order by total_talks desc) as rk \
+                      from (select user_id, character_id, character_name, sum(talk_cnt) as total_talks \
+                            from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                            where dt between '${azkaban.flow.30.days.ago}' and '${azkaban.flow.1.days.ago}' \
+                            group by user_id, character_id, character_name)) \
+                where rk <= 20 \
+                union all \
+                select 'DAY_14' as statistical_period, user_id, character_id, character_name, total_talks, rk \
+                from (select *, row_number() over (partition by user_id order by total_talks desc) as rk \
+                      from (select user_id, character_id, character_name, sum(talk_cnt) as total_talks \
+                            from vc.dws_vc_uc_talk_day_cnt_single_i_d \
+                            where dt between date_sub('${azkaban.flow.1.days.ago}',13) and '${azkaban.flow.1.days.ago}' \
+                            group by user_id, character_id, character_name)) \
+                where rk <= 20

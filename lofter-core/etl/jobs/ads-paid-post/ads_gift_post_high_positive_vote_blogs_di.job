@@ -1,0 +1,15 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_gift_post_high_positive_vote_blogs_di partition (dt='${azkaban.flow.1.days.ago}') \
+select blogId, jiesuo_uv, zhengfankui_ratio, fufankui_ratio \
+from ( \
+    select blogId, \
+          sum(jiesuo_uv) as jiesuo_uv, \
+          nvl(sum(zhengfankui_uv) / sum(jiesuo_uv), 0) as zhengfankui_ratio, \
+          nvl(sum(fufankui_uv) / sum(jiesuo_uv), 0) as fufankui_ratio \
+    from lofter_dm.ads_paid_post_return_gift_feed_back_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by blogId \
+    having jiesuo_uv >= 50 and (zhengfankui_ratio > 0.04 or fufankui_ratio < 0.001) \
+) a \
+
+dependencies=ads_paid_post_return_gift_feed_back_dd

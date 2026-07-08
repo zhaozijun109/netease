@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select blogId, startDate, endDate, newReaderRatio, dailyStats, avgDailyReadCount from lofter_dm.ads_paid_post_ad_data_trend_di where dt = '${azkaban.flow.3.days.ago}' "
+params= --partition ${azkaban.flow.3.days.ago} --id blogId --dest lofter_ad_unlock_author_stat --full --atom --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI

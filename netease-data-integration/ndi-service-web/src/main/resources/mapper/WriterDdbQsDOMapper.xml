@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.netease.bdms.ndi.service.web.dao.WriterDdbQsDOMapper">
+  <resultMap id="BaseResultMap" type="com.netease.bdms.ndi.service.web.pojo.WriterDdbQsDO">
+    <id column="id" jdbcType="BIGINT" property="id" />
+    <result column="data_source" jdbcType="OTHER" property="dataSource"
+            typeHandler="com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler"/>
+    <result column="insert_type" jdbcType="TINYINT" property="insertType" />
+    <result column="create_time" jdbcType="TIMESTAMP" property="createTime" />
+    <result column="modify_time" jdbcType="TIMESTAMP" property="modifyTime" />
+    <result column="pre_sql" jdbcType="VARCHAR" property="preSql" />
+    <result column="post_sql" jdbcType="VARCHAR" property="postSql" />
+    <result column="conf" jdbcType="VARCHAR" property="conf" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    id, data_source, insert_type, create_time, modify_time, pre_sql, post_sql, conf
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="BaseResultMap">
+    select 
+    <include refid="Base_Column_List" />
+    from writer_ddb_qs
+    where id = #{id,jdbcType=BIGINT}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from writer_ddb_qs
+    where id = #{id,jdbcType=BIGINT}
+  </delete>
+  <insert id="insert" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterDdbQsDO" useGeneratedKeys="true" keyProperty="id">
+    insert into writer_ddb_qs (id, data_source, insert_type, 
+      create_time, modify_time, pre_sql, 
+      post_sql, conf)
+    values (#{id,jdbcType=BIGINT}, #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler}, #{insertType,jdbcType=TINYINT},
+      #{createTime,jdbcType=TIMESTAMP}, #{modifyTime,jdbcType=TIMESTAMP}, #{preSql,jdbcType=VARCHAR}, 
+      #{postSql,jdbcType=VARCHAR}, #{conf,jdbcType=VARCHAR})
+  </insert>
+  <insert id="insertSelective" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterDdbQsDO">
+    insert into writer_ddb_qs
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        id,
+      </if>
+      <if test="dataSource != null">
+        data_source,
+      </if>
+      <if test="insertType != null">
+        insert_type,
+      </if>
+      <if test="createTime != null">
+        create_time,
+      </if>
+      <if test="modifyTime != null">
+        modify_time,
+      </if>
+      <if test="preSql != null">
+        pre_sql,
+      </if>
+      <if test="postSql != null">
+        post_sql,
+      </if>
+      <if test="conf != null">
+        conf,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=BIGINT},
+      </if>
+      <if test="dataSource != null">
+        #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="insertType != null">
+        #{insertType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="preSql != null">
+        #{preSql,jdbcType=VARCHAR},
+      </if>
+      <if test="postSql != null">
+        #{postSql,jdbcType=VARCHAR},
+      </if>
+      <if test="conf != null">
+        #{conf,jdbcType=VARCHAR},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterDdbQsDO">
+    update writer_ddb_qs
+    <set>
+      <if test="dataSource != null">
+        data_source = #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      </if>
+      <if test="insertType != null">
+        insert_type = #{insertType,jdbcType=TINYINT},
+      </if>
+      <if test="createTime != null">
+        create_time = #{createTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="modifyTime != null">
+        modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      </if>
+      <if test="preSql != null">
+        pre_sql = #{preSql,jdbcType=VARCHAR},
+      </if>
+      <if test="postSql != null">
+        post_sql = #{postSql,jdbcType=VARCHAR},
+      </if>
+      <if test="conf != null">
+        conf = #{conf,jdbcType=VARCHAR},
+      </if>
+    </set>
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.netease.bdms.ndi.service.web.pojo.WriterDdbQsDO">
+    update writer_ddb_qs
+    set data_source = #{dataSource,jdbcType=OTHER,typeHandler=com.netease.bdms.ndi.service.web.config.mybatis.MyBatisJSONHandler},
+      insert_type = #{insertType,jdbcType=TINYINT},
+      create_time = #{createTime,jdbcType=TIMESTAMP},
+      modify_time = #{modifyTime,jdbcType=TIMESTAMP},
+      pre_sql = #{preSql,jdbcType=VARCHAR},
+      post_sql = #{postSql,jdbcType=VARCHAR},
+      conf = #{conf,jdbcType=VARCHAR}
+    where id = #{id,jdbcType=BIGINT}
+  </update>
+</mapper>

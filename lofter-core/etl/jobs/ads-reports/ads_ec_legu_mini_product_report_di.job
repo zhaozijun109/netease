@@ -1,0 +1,77 @@
+type=sparksql
+hive.query.01=\
+with legu_mini_product_trade as  \
+    ( \
+        select  \
+            b.productId, b.buyerId, a.tradeId, b.productNum, b.storePrice, b.newCouponPreferential ,a.payTime ,a.createTime \
+        from lofter_db_dump.ods_db_benefit_order_nd a  \
+        join lofter_db_dump.ods_db_benefit_order_product_nd b on a.id = b.orderId \
+        join (select id from lofter_db_dump.ods_db_benefit_trade_nd where orderfrom='legu_mini') c on a.tradeId = c.id \
+        where b.type = 3 and a.originType = 0 \
+    ) \
+insert OVERWRITE table lofter_dm.ads_ec_legu_mini_product_report_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select \
+    a.productId, \
+    a0.productName ,a0.supplyName ,a0.category1_name as oneLevel, concat_ws(',', a0.ips) as ips, \
+    a.exposePv ,a.exposeUv, \
+    b.viewUserCount, b.viewCount ,b.shoppingCartUserCount ,b.shoppingCartCount, \
+    nvl(c.orderUserCount,0) as orderUserCount, \
+    nvl(c.orderCount,0) as orderCount, \
+    nvl(c.orderProductNum,0) as orderProductNum, \
+    nvl(c.orderProductAmount,0) as orderProductAmount, \
+    nvl(c.orderCoupon,0) as orderCoupon, \
+    nvl(d.payUserCount,0) as payUserCount, \
+    nvl(d.payCount,0) as payCount, \
+    nvl(d.payProductNum,0) as payProductNum, \
+    nvl(d.payProductAmount,0) as payProductAmount, \
+    nvl(d.payCoupon,0) as payCoupon \
+from   \
+    (select  \
+        productId, \
+        count(1) as exposePv, \
+        count(distinct userId) as exposeUv \
+    from lofter.dwd_evt_benefit_page_view_di \
+    where  dt = '${azkaban.flow.1.days.ago}' \
+    and productId > 0 \
+    and userId is not null \
+    and eventId in ('WE1-6', 'WE1-8', 'WE1-18', 'WE1-21', 'WE1-29') \
+    group by productId \
+    )a  join lofter.dim_benefit_product a0  on a.productId = a0.productId \
+left join  \
+    (select  \
+        productId,  \
+        count(distinct(if(eventId = 'WE1-23', userId, null))) viewUserCount, \
+        sum(if(eventId = 'WE1-23', 1, 0)) viewCount, \
+        count(distinct(if(eventId = 'WE1-25' and params['type']=1, userId, null))) shoppingCartUserCount, \
+        sum(if(eventId = 'WE1-25' and params['type']=1 , 1, 0)) shoppingCartCount \
+    from lofter.dwd_evt_benefit_page_view_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    and userId is not null \
+    group by productId \
+    )b  \
+on a.productId = b.productId \
+left join  \
+    ( \
+    select productId, count(distinct buyerId) orderUserCount, \
+       count(distinct tradeId) orderCount, \
+       sum(productNum) orderProductNum, \
+       sum(storePrice * productNum) orderProductAmount, \
+       sum(newCouponPreferential) orderCoupon \
+    from legu_mini_product_trade \
+    where from_unixtime(cast(createTime/1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+    group by productId \
+    )c  \
+on a.productId = c.productId \
+left join  \
+    ( \
+    select productId, \
+           count(distinct buyerId) payUserCount, \
+           count(distinct tradeId) payCount, \
+           sum(productNum) payProductNum, \
+           sum(storePrice * productNum) payProductAmount, \
+           sum(newCouponPreferential) payCoupon \
+    from legu_mini_product_trade \
+    where from_unixtime(cast(payTime/1000 as bigint), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+    group by productId \
+    )d \
+on a.productId = d.productId \

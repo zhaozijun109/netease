@@ -1,0 +1,8 @@
+execution-jar=${classpath}
+conf.spark.dynamicAllocation.maxExecutors=5
+conf.spark.executor.cores=2
+class=com.netease.lofter.data.common.ClickhouseLoad
+conf.spark.source.query="select dt,postid,contenttype,url,tags,blogid,ispay_returngift,fans_vip_type,allowview,recomstatus,is_recall_poor,styouzhiflg,publishdate,is_premium,is_potential_premium,return_gift_id,return_gift_createdate,return_gift_status,return_review_status,return_gift_plantype,giftname,gift_money,gift_cnt,grain_ticket_cnt,coupon_cnt,zhengfankui_uv,fufankui_uv,blog_gift_grade,blog_channel,title,collectionid,collection_name,words_count,photo_count,return_gift_words_count,return_gift_photo_count,mark_tags,item_id,ai_contenttype,element_tag,checked_contenttype,ips,realbrowsepv,hot,browse_pv_30d,tag_state,is_rec_paid_traffic_support,over_40_score_user_cnt,long_comment_cnt,creatorlevel,good_idea_comment_cnt,not_changlianzai_cnt,food_coupon_zhengfankui_uv,food_coupon_fufankui_uv from lofter_dm.ads_gift_easy_fetch_post_di where dt = '${azkaban.flow.1.days.ago}' "
+params=--dest hive.ads_gift_easy_fetch_post_di --partition '${azkaban.flow.1.days.ago}' --parallel 50 --batch 10000
+retries=0
+dependencies=ads_gift_easy_fetch_post_di

@@ -1,0 +1,29 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_paid_subscribe_silent_user_activate_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select a.actpwd, b.channel, a.userId \
+from ( \
+    select actpwd, userid \
+    from lofter.dwd_growth_actpwd_access_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe > 0 and content_type = '单日志' \
+    group by 1, 2 \
+) a \
+join ( \
+    select * from lofter.dim_actpwd_dd where dt = '${azkaban.flow.1.days.ago}' \
+) b on a.actpwd = b.actpwd \
+join ( \
+    select m.userid \
+    from ( \
+      select userid \
+      from lofter_dm.ads_ec_store_vip_user_effective_dd \
+      where dt = '${azkaban.flow.2.days.ago}' and \
+            datediff('${azkaban.flow.2.days.ago}',last_login_day) >= 10 and effectiveDays <= 3 \
+      group by userid \
+    ) m \
+    join ( \
+      select id \
+      from lofter.dim_user \
+      where datediff('${azkaban.flow.2.days.ago}', createDate)>=10 \
+    ) n on m.userid = n.id \
+    group by m.userid \
+) c on a.userid = c.userid
+dependencies=dwd_growth_actpwd_access_di

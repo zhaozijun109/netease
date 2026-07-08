@@ -1,0 +1,86 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_growth_actpwd_access_di partition(dt='${azkaban.flow.1.days.ago}') \
+select x.actpwd, nvl(y.channel, x.channel) as channel, x.deviceUdid, \
+       nvl(y.content_type, x.content_type) as content_type, \
+       nvl(y.itemId, cast(x.itemId as bigint)) as itemId, \
+       z.item_userId, x.time, x.userId, x.customUuid, if(x.isNew, 1, 0) as is_new, \
+       nvl(y.is_paid_subscribe, 0) as is_paid_subscribe, \
+       nvl(y.url, x.link), actpwd_type, item_tag, \
+       nvl(actpwd_start_time, y.startTime) as actpwd_start_time, \
+       nvl(actpwd_end_time, y.endTime) as actpwd_end_time, \
+       y.settlement_type, \
+       x.is_membership, \
+       if(nvl(y.itemId, cast(x.itemId as bigint)) = 11804028633L and y.settlement_type is not null, 1, 0) as is_pve \
+from ( \
+    select a.* \
+    from ( \
+        select if(miniId == 1 and actpwd rlike '^\\\\d+$', concat('kol_channel_kuaishou_', actpwd), actpwd) as actpwd, \
+           channel, \
+           if(miniId > 0 and userId > 0, cast(userId as string), deviceUuid) deviceUdid, \
+           case when bookStoreParent is true and bookParentLink rlike '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$' then '单日志' \
+                when link like '%.lofter.com/post/%' then '单日志' \
+                when link rlike '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$' then '单日志' \
+                when link like '%grainId=%' then '粮单' \
+                when link like '%collectionId=%' then '合集' \
+                else null end as content_type, \
+           case when bookStoreParent is true and bookParentLink rlike '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$' then cast(conv(split(bookParentLink,'_')[1], 16, 10) as bigint) \
+                when link like '%.lofter.com/post/%' and (length(link)- instr(link,'_')) between 1 and 11 then cast(conv(split(split(split(link, 'post/')[1],'\#')[0],'_')[1], 16, 10) as bigint) \
+                when link rlike '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$' then cast(conv(split(link,'_')[1], 16, 10) as bigint) \
+                when link like '%grainId=%' then substring_index(split(link, '&')[0],'grainId=',-1) \
+                when link like '%collectionId=%' then substring_index(link,'collectionId=',-1) \
+                end as itemid, \
+           time, userId, \
+           if(miniId > 0 and userId > 0, cast(userId as string), customid) as customUuid, \
+           isNew, link, \
+           type as actpwd_type, tag as item_tag,  \
+           startTime as actpwd_start_time, endTime as actpwd_end_time, \
+           if(bookStoreParent is true and bookParentLink is not null, 1, 0) as is_membership \
+        from lofter.ods_log_content_acw_kafka_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select incantation as actpwd, '自分享' as channel, deviceUuid, \
+               case contentType when 1 then '推集' when 2 then '粮单' when 3 then '合集' when 4 then '单日志' else '活动' end as content_type, \
+               cast(contentId as string) as itemId, \
+               openTime as time, openUserid as userId, customid as customUuid, isNew, contentLink as link, \
+               1 as actpwd_type, null as item_tag, \
+               null as actpwd_start_time, null as actpwd_end_time, \
+               0 as is_membership \
+        from lofter.ods_log_content_incantation_di \
+        where dt = '${azkaban.flow.1.days.ago}' \
+      union all \
+        select params['text'] as actpwd, null as channel, deviceUdid, \
+              '单日志' as content_type, itemId, \
+               occurTime as time, userId, customUdid as customUuid, false as isNew, params['URL'] as link, \
+               3 as actpwd_type, null as item_tag, \
+               null as actpwd_start_time, null as actpwd_end_time, \
+               0 as is_membership \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actionType = 'other' and \
+              eventId = 'z4-40' and params['ticketWord'] = params['text'] and \
+              itemType in ('TEXT','PHOTO','VIDEO','ARTICLE') and length(params['text']) > 0 \
+    ) a \
+    left join ( \
+        select deviceUdid, params['text'] as search_text, occurTime as time \
+        from lofter.ods_mda_app_partition_di \
+        where dt = '${azkaban.flow.1.days.ago}' and actionType = 'cell_click' and eventId = 'k1-13' \
+    ) b on a.deviceUdid = b.deviceUdid and a.actpwd = b.search_text and a.time - b.time <= 300000 and a.time >= b.time and a.channel like '米良%' \
+    where b.deviceUdid is null \
+) x \
+left join ( \
+    select actpwd, is_paid_subscribe, channel, content_type, itemId, url, startTime, endTime, settlement_type \
+    from lofter.dim_actpwd_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) y on x.actpwd = y.actpwd \
+left join ( \
+    select '单日志' as content_type,cast(id as string) as id,userId as item_userId \
+    from lofter.dim_post \
+    union all \
+    select '合集' as content_type,cast(id as string) as id,blogId as item_userId \
+    from lofter_db_dump.ods_db_post_collection_nd \
+    union all \
+    select '粮单' as content_type,cast(id as string) as id,userId as item_userId \
+    from lofter_db_dump.ods_db_grain_info_nd \
+    union all \
+    select '活动' as content_type, activityId id,null as item_userId \
+    from lofter_db_dump.ods_db_act_activity_effect_base_config_nd \
+) z on nvl(y.itemId, cast(x.itemId as bigint)) = z.id and nvl(y.content_type, x.content_type) = z.content_type \

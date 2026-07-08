@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select concat_ws('_',tag, userId, type) as id, tag, userId, UNIX_TIMESTAMP(reach_date,'yyyy-MM-dd') as time, type as eventType from lofter.dws_act_tag_big_event_di where dt = '${azkaban.flow.1.days.ago}'"
+params= --id id --dest tag_user_event_info_v1 --update --url lofter-online-es1.gy.ntes:7000,lofter-online-es2.gy.ntes:7000,lofter-online-es3.gy.ntes:7000,lofter-online-es4.gy.ntes:7000 --username lofter_online --password Yi3DLCppSI --parallel 2

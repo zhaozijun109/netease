@@ -1,0 +1,145 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_paid_post_governance_post_detail_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+select \
+  a.postid, \
+  a.blog_channel, \
+  a.blogid, \
+  a.ispay_returngift, \
+  a.text_length, \
+  a.price, \
+  b.recomstatus, \
+  c.words_count, \
+  d.quality_percent, \
+  e.trade_money \
+from \
+  ( \
+    select \
+      postid, \
+      blog_channel, \
+      blogid, \
+      ispay_returngift, \
+      text_length, \
+      price \
+    from \
+      ( \
+        select \
+          postid, \
+          blog_channel, \
+          blogid, \
+          ispay_returngift, \
+          text_length, \
+          (price * 0.1) / text_length * 1000 as price, \
+          row_number() over( \
+            partition by postid \
+            order by \
+              ispay_returngift desc, \
+              text_length desc \
+          ) as rk \
+        from \
+          ( \
+            select \
+              postid, \
+              blog_channel, \
+              blogid, \
+              id, \
+              NVL(text_length, 1) text_length, \
+              ispay_returngift, \
+              case \
+                when giftname rlike '视频广告解锁|解锁广告文|广告解锁连载文章' then -1 \
+                when giftname rlike '粮票' then 0 \
+                when giftname rlike '糖葫芦' then 1 \
+                when giftname rlike '漫剧' then 5 \
+                when giftname rlike '糖果|小星星' then 9 \
+                when giftname rlike '求图图|小棉花|饼干' then 19 \
+                when giftname rlike '奶茶' then 29 \
+                when giftname rlike '蛋糕' then 99 \
+                when giftname rlike '小红心' then 199 \
+                when giftname rlike '小蓝手' then 299 \
+                else 0 \
+              end as price \
+            from \
+              lofter.dim_gift_post_return \
+            where \
+              status = 1 \
+              and auditstatus = 1 \
+              and contenttype = '文字' \
+              and blog_channel in (0, 1) \
+              and ispay_returngift in (0, 1) \
+            group by \
+              postid, \
+              blog_channel, \
+              blogid, \
+              id, \
+              NVL(text_length, 1), \
+              ispay_returngift, \
+              case \
+                when giftname rlike '视频广告解锁|解锁广告文|广告解锁连载文章' then -1 \
+                when giftname rlike '粮票' then 0 \
+                when giftname rlike '糖葫芦' then 1 \
+                when giftname rlike '漫剧' then 5 \
+                when giftname rlike '糖果|小星星' then 9 \
+                when giftname rlike '求图图|小棉花|饼干' then 19 \
+                when giftname rlike '奶茶' then 29 \
+                when giftname rlike '蛋糕' then 99 \
+                when giftname rlike '小红心' then 199 \
+                when giftname rlike '小蓝手' then 299 \
+                else 0 \
+              end \
+          ) a \
+      ) a \
+    where \
+      a.rk = 1 \
+  ) a \
+  join ( \
+    select \
+      id, \
+      recomstatus \
+    from \
+      lofter.dim_post \
+    where \
+      allowview = 0 \
+      and valid = 0 \
+    group by \
+      id, \
+      recomstatus \
+  ) b on a.postid = b.id \
+  join ( \
+    select \
+      postid, \
+      NVL(words_count, 0) words_count \
+    from \
+      lofter.dwd_post_length_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+      postid, \
+      NVL(words_count, 0) \
+  ) c on a.postid = c.postid \
+  left join ( \
+    select \
+      postid, \
+      quality_percent \
+    from \
+      lofter_dm.ads_paid_post_premium_scoring_group_normalization_dd \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+    group by \
+      postid, \
+      quality_percent \
+  ) d on a.postid = d.postid \
+  left join ( \
+    select \
+      postid, \
+      trade_money \
+    from \
+      lofter_dm.ads_post_paid_post_revenue_detail_di \
+    where \
+      dt = '${azkaban.flow.1.days.ago}' \
+      and period = 'history' \
+      and pay_type = 'all' \
+    group by \
+      postid, \
+      trade_money \
+  ) e on a.postid = e.postid \
+
+dependencies=ads_paid_post_premium_scoring_group_normalization_dd,ads_post_paid_post_revenue_detail_di

@@ -1,0 +1,24 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_ec_book_store_growth_user_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select device_type,origin_actpwd,origin_channel, \
+       case when d.userid is  null then 0 else 1 end as dayfufeiflg, \
+       a.deviceudid, b.userId \
+from ( \
+    select dt,deviceudid,device_type,origin_actpwd,origin_channel \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt = '${azkaban.flow.1.days.ago}' and is_paid_subscribe=1 and land_nonrec_content_type='单日志' \
+    group by dt,deviceudid,device_type,origin_actpwd,origin_channel \
+) a \
+join ( \
+    select dt,deviceudid, userIds[0] as userId   \
+    from lofter.device_active \
+    where dt = '${azkaban.flow.1.days.ago}'  \
+    group by dt,deviceudid,userId \
+) b on a.dt=b.dt and a.deviceudid=b.deviceudid \
+left join ( \
+    select userid, pay_date as dt \
+    from lofter.dwd_user_order_dd \
+    where dt='${azkaban.flow.1.days.ago}' \
+    group by userid, pay_date \
+) d on b.userid=d.userid and b.dt=d.dt \
+group by 1, 2, 3, 4, 5, 6

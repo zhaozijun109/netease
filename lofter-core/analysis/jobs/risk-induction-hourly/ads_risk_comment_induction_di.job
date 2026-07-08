@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_risk_comment_induction_di partition (dt = '${azkaban.flow.current.date}') \
+select a.content, count(1) pv \
+from ( \
+    select content, publisheruserid as userId, _bin_op, \
+        row_number() over (partition by id order by _bin_op_time desc, _bin_op_seqno desc) rk \
+    from lofter.ods_binlog_post_response_di \
+    where dt ='${azkaban.flow.current.date}' \
+) a \
+left join lofter.comment_white_list b on a.content = b.content \
+where rk = 1 and _bin_op in (0, 2) and b.content is null \
+group by a.content \
+having pv >= 5 \

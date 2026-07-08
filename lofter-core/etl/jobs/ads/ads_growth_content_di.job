@@ -1,0 +1,71 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_growth_content_di partition(dt='${azkaban.flow.1.days.ago}') \
+select b.itemId as content_id, \
+       b.content_type_sub as content_type, \
+       b.title, b.url, b.tags, b.publish_date, \
+       if(a.content_type = '单日志', d.post_category,null) as post_category, \
+       if(a.content_type = '单日志', e.hot,null) as post_hot, \
+       b.blogId, f.blogNickName as blog_nickname, c.level as blog_level, concat('https://', f.blogName, '.lofter.com') as blog_url, c.fans_std as blog_fans_std, element_at(g.post_top_categories, 1) as blog_main_category, \
+       a.new_devices, a.return_devices, a.new_devices_7d, a.return_devices_7d, a.new_devices_30d, a.return_devices_30d, \
+       a.new_devices_std, a.return_devices_std, e.long_comment_cnt_std, nvl(b.is_book_store,0), \
+       case when new_devices_7d > 1000 or new_devices_30d > 5000 then 'S' \
+            when new_devices > 200 or new_devices_7d > 500 then 'A' \
+            when new_devices > 100 or new_devices_7d > 300 then 'B' \
+            when new_devices > 30 or new_devices_7d > 150 then 'C+' \
+            else 'C' end as grade, \
+       new_devices_15d, return_devices_15d \
+from ( \
+    select land_nonrec_content_type as content_type, land_nonrec_itemid as itemId, \
+      count(if(device_type = 'new' and dt = '${azkaban.flow.1.days.ago}', deviceUdid,null)) as new_devices, \
+      count(if(device_type = 'return_30' and dt = '${azkaban.flow.1.days.ago}', deviceUdid,null)) as return_devices, \
+      count(if(device_type = 'new' and datediff('${azkaban.flow.1.days.ago}', dt) < 7, deviceUdid,null)) as new_devices_7d, \
+      count(if(device_type = 'return_30' and datediff('${azkaban.flow.1.days.ago}', dt) < 7, deviceUdid,null)) as return_devices_7d, \
+      count(if(device_type = 'new' and datediff('${azkaban.flow.1.days.ago}', dt) < 30, deviceUdid,null)) as new_devices_30d, \
+      count(if(device_type = 'return_30' and datediff('${azkaban.flow.1.days.ago}', dt) < 30, deviceUdid,null)) as return_devices_30d, \
+      count(if(device_type = 'new' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, deviceUdid,null)) as new_devices_15d, \
+      count(if(device_type = 'return_30' and datediff('${azkaban.flow.1.days.ago}', dt) < 15, deviceUdid,null)) as return_devices_15d, \
+      count(if(device_type = 'new',deviceUdid,null)) as new_devices_std, \
+      count(if(device_type = 'return_30',deviceUdid,null)) as return_devices_std \
+    from lofter.dwd_device_growth_attribution_di \
+    where dt <= '${azkaban.flow.1.days.ago}' and \
+          land_nonrec_itemid is not null \
+    group by 1, 2 \
+) a \
+join ( \
+        select '单日志' as content_type,contentType as content_type_sub, id as itemid, blogId, publishDate as publish_date,concat_ws(',', tags) tags,title,concat('https://',blogname,'.lofter.com/post/',lower(conv(blogId, 10, 16)),'_',lower(conv(id, 10, 16))) as url, is_book_store \
+        from lofter.dim_post \
+        union all \
+        select '合集' as content_type, '合集' as content_type_sub, id as itemid, blogId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publish_date, cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/collection/share?collectionId=',id) url, 0 as is_book_store \
+        from lofter_db_dump.ods_db_post_collection_nd \
+        union all \
+        select '粮单' as content_type, '粮单' as content_type_sub, id as itemid, userid as blogId, from_unixtime(cast(createTime/1000 as bigint),'yyyy-MM-dd') as publish_date,cast(tags as string) tags,name as title,concat('https://www.lofter.com/front/blog/grain/detail?grainId=',id) url, 0 as is_book_store \
+        from lofter_db_dump.ods_db_grain_info_nd \
+) b on a.content_type = b.content_type and a.itemId = b.itemId \
+left join ( \
+    select userId, level, fans_std \
+    from lofter.dws_par_creator_level_scoring_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on b.blogId = c.userId \
+left join (select postId, category as post_category from lofter.dim_post_category_dd where dt = '${azkaban.flow.1.days.ago}') d on a.itemId = d.postId \
+left join (select postId, hot, long_comment_cnt_std from lofter.dws_post_interaction_dd where dt = '${azkaban.flow.1.days.ago}') e on a.itemId = e.postId \
+left join lofter.dim_blog f on b.blogId = f.id \
+left join ( \
+    select blogId, \
+           transform(sort_array(collect_list(struct(rank, category)), true), x -> x.category) as post_top_categories \
+    from ( \
+        select blogId, category, \
+               row_number() over (partition by blogId order by posts/totalPosts desc ) rank \
+        from( \
+          select blogId, category, posts, sum(posts) over(partition by blogId) as totalPosts \
+          from ( \
+              select blogId, concat_ws('-', category, category2, category3) as category, count(distinct blogId) posts \
+              from lofter.dim_post_category_set_dd \
+              where dt = '${azkaban.flow.1.days.ago}' \
+              group by blogId, concat_ws('-', category, category2, category3) \
+          ) t1 \
+        ) t2 \
+    ) t3 \
+    where rank <= 3 \
+    group by blogId \
+) g on b.blogId = g.blogId \
+distribute by 1

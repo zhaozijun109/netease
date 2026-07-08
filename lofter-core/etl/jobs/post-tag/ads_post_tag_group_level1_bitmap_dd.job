@@ -1,0 +1,8 @@
+type=sparksql
+hive.query.01=create temporary function to_bitmap as 'com.netease.wm.udf.bitmap.ToBitmapUDAF';
+hive.query.02=insert overwrite table lofter_dm.ads_post_tag_group_level1_bitmap_dd partition(dt = '${azkaban.flow.1.days.ago}') \
+      select tag, grp, to_bitmap(postId) as bitmap \
+      from lofter_dm.ads_post_tag_group_level1_dd \
+      where dt='${azkaban.flow.1.days.ago}' \
+      group by tag, grp
+dependencies=ads_post_tag_group_level1_dd

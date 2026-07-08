@@ -1,0 +1,2 @@
+type=sparksql
+hive.query.01 = msck repair table vc.dws_pve2vc_par_user_base_t2_dd;

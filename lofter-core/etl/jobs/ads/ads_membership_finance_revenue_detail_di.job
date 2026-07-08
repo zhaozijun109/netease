@@ -1,0 +1,23 @@
+type=sparksql
+hive.query.01= \
+insert overwrite table lofter_dm.ads_membership_finance_revenue_detail_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select '${azkaban.flow.2.days.ago}' as settlement_date, a.id as order_id, a.vipdays, a.amount/ vipdays as revenue, a.channeldivision / vipdays as channel_fee,  a.fee / vipdays as other_fee,  c.unitCost / vipdays as kol_fee \
+from ( \
+    select id, postId, vipdays, amount, channeldivision, fee, finishTime \
+    from lofter_db_dump.ods_db_trade_member_ship_order_nd \
+    where status = 1 and \
+        date_add(from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') ,cast((vipdays-1) as int)) >= '${azkaban.flow.2.days.ago}' and \
+        from_unixtime(cast(finishtime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.2.days.ago}' \
+) a \
+left join ( \
+    select order_id, cast(replace(dt, '-', '') as bigint) as dt \
+    from lofter.dwd_membership_order_di \
+    where dt <= '${azkaban.flow.2.days.ago}' and actpwd is not null \
+    group by 1,2 \
+) b on a.id = b.order_id \
+left join ( \
+    select date as dt, max(unitCost / 100) as unitCost \
+    from lofter_db_dump.ods_db_kol_attribution_order_cost_nd \
+    where settlementType = 'CPS' \
+    group by 1 \
+) c on b.dt = c.dt \

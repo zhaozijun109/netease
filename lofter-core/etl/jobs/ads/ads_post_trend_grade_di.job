@@ -1,0 +1,48 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter_dm.ads_post_trend_grade_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select * \
+from ( \
+    select case when (((contenttype ='图片' and hot>=50000 and quality_comments>=1) or (contenttype in ('视频','文字') and hot>=10000 and quality_comments>=2)) and hot_explode_days>=5) THEN 'S' \
+                when (((contenttype ='图片' and hot>=30000 and quality_comments>=1) or (contenttype in ('视频','文字') and hot>=8000 and quality_comments>=2)) and hot_explode_days>=3) THEN 'A' \
+                when (publishdate>=date_sub('${azkaban.flow.1.days.ago}',30) and hot_explode_days>=3) THEN 'B' \
+                end as grade, \
+           a.*,hot_explode_days,quality_comments,max_grade,c.publishdate, c.contenttype, c.blogid, c.blogNickName as blog_nickname,e.level,c.title,c.url,c.tags \
+    from ( \
+        select postid, poshotpv-neghotpv hot,pospraisepv-negpraisepv praise,posrecpv-negrecpv rec,poscommentpv-negcommentpv comment,valid_response \
+        from lofter.dws_post_base_stats_dd \
+        where dt = '${azkaban.flow.1.days.ago}' and poshotpv-neghotpv>2000 \
+    ) a \
+    join ( \
+        select blogid,publishdate,id postid,contenttype,title,concat('https://',url) url,concat_ws(',',tags) tags, blognickname \
+        from lofter.dim_post \
+        where ispublished=true and isforbidden=false and iscitedpost=false \
+            and allowview=0 \
+            and contenttype in ("图片","文字","视频") \
+            and isactivityautopost=0 and isimported=0 and ismoved=0 \
+            and valid in (0,12) \
+    ) c on a.postid=c.postid \
+    join ( \
+        select postid,count(case when (contenttype in ('文字','视频') and poshotpv-neghotpv>=1000) or (contenttype in ('图片') and poshotpv-neghotpv>=3000) then dt end) hot_explode_days \
+        from lofter.dws_post_base_stats_di \
+        where dt >= '2023-01-01' and  poshotpv-neghotpv>0 \
+        group by postid \
+    ) e on a.postid=e.postid \
+    left join ( \
+        select postid, quality_comment_std as quality_comments \
+        from lofter.dws_post_misc_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) b on a.postid=b.postid \
+    left join ( \
+        select content_id,max_grade \
+        from lofter_dm.ads_growth_content_monitor_di \
+        where dt = '${azkaban.flow.1.days.ago}' and content_type in ('图片','文字','视频') \
+    ) d on a.postid=d.content_id \
+    left join ( \
+        select userid,level \
+        from lofter.dws_par_creator_level_scoring_dd \
+        where dt = '${azkaban.flow.1.days.ago}' \
+    ) e on c.blogid=e.userid \
+    where hot_explode_days >= 3 \
+) t \
+where grade in ('S','A','B')
+dependencies=ads_growth_content_monitor_di

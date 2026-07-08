@@ -1,0 +1,33 @@
+type=sparksql
+conf.spark.sql.shuffle.partitions=20
+hive.query.01= insert overwrite table lofter_dm.ads_cmb_creator_di partition(dt='${azkaban.flow.1.days.ago}') \
+select a.id as blogId, b.level as gradeLevel, \
+       c.heat, c.likeNum, c.recommendNum, c.collectNum, c.commentNum, \
+       b.fans_std, d.security_grade, e.recommend_review_fail_ratio \
+from ( \
+    select distinct id from lofter_db_dump.ods_db_cmb_creator_nd where status = 0 \
+) a left join ( \
+    select userId, level, fans_std from lofter.dws_par_creator_dd where dt = '${azkaban.flow.1.days.ago}' and level is not null \
+) b on a.id = b.userId \
+left join ( \
+    select userId, nvl(receive_like_cnt,0)+nvl(receive_reproduce_cnt,0)+nvl(receive_recommend_cnt,0)+nvl(receive_collect_cnt,0) as heat, \
+        receive_like_cnt as likeNum, \
+        receive_recommend_cnt as recommendNum, \
+        receive_collect_cnt as collectNum, \
+        receive_comment_cnt as commentNum \
+    from lofter.dws_par_creator_interaction_dd \
+    where dt = '${azkaban.flow.1.days.ago}' \
+) c on a.id = c.userId \
+left join ( \
+    select blogId, grade as security_grade \
+    from lofter.dws_user_security_level_di \
+    where dt = '${azkaban.flow.1.days.ago}' \
+    group by 1, 2 \
+) d on a.id = d.blogId \
+left join ( \
+      select blogId, sum(if(recomStatus = -1, 1, 0)) / sum(if(recomStatus <> 0, 1, 0)) as recommend_review_fail_ratio \
+      from lofter_db_dump.ods_db_recommend_review_post_nd \
+      where from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd') <= '${azkaban.flow.1.days.ago}' and \
+            datediff('${azkaban.flow.1.days.ago}', from_unixtime(cast(createTime / 1000 AS BIGINT), 'yyyy-MM-dd')) < 365 \
+      group by blogId \
+) e on a.id = e.blogId \

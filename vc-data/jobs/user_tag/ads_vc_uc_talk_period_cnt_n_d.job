@@ -1,0 +1,96 @@
+type=sparksql
+hive.query.01=insert OVERWRITE table vc.ads_vc_uc_talk_period_cnt_n_d PARTITION (dt='${azkaban.flow.1.days.ago}') \
+                  SELECT user_id,  \
+                         'DAY_1' AS statistical_period,  \
+                         nvl(character_id,'ALL') as character_id,  \
+                         nvl(character_name,'ALL') as character_name,  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  WHERE dt = '${azkaban.flow.1.days.ago}'  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_7' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d   \
+                  WHERE dt > date_sub('${azkaban.flow.1.days.ago}',7)  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_15' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  WHERE dt > date_sub('${azkaban.flow.1.days.ago}',15)  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_30' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  WHERE dt > date_sub('${azkaban.flow.1.days.ago}',30)  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_90' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  WHERE dt > date_sub('${azkaban.flow.1.days.ago}',90)  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_180' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  WHERE dt > date_sub('${azkaban.flow.1.days.ago}',180)  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name))  \
+                \
+                  UNION ALL  \
+                \
+                  SELECT user_id,  \
+                         'DAY_ALL' AS statistical_period,  \
+                         nvl(character_id,'ALL'),  \
+                         nvl(character_name,'ALL'),  \
+                         SUM(talk_cnt)  AS talk_cnt,  \
+                         count(DISTINCT dt) as talk_days,  \
+                         datediff(current_date(),max(dt)) as last_talk_intervals,\
+                         sum(energy_consume) as   energy_consume  \
+                  FROM vc.dws_vc_uc_talk_day_cnt_single_i_d  \
+                  GROUP BY grouping sets ((user_id),(user_id, character_id, character_name)); \

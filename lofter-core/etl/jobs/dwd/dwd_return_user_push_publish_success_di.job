@@ -1,0 +1,13 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_return_user_push_publish_success_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT blogId as userId, content, \
+    case  \
+        when content like '%您的专属回归福利已到账！明日登录并浏览任意图文作品，明日16时前完成%' then 1 \
+        when content like '%你的专属回归福利已到账！恭喜你已完成【登录并浏览任意图文作品】，【粮票*10】已发放至你的账户%' then 2 \
+        when content like '%您的专属回归福利已到账！【糖果券4元/29张专属折扣】点击链接领取%' then 3 \
+    end as type, \
+    FROM_UNIXTIME(publishtime/1000, 'yyyy-MM-dd') as publish_date \
+from lofter_db_dump.ods_db_message_nd \
+where content rlike '您的专属回归福利已到账！明日登录并浏览任意图文作品，明日16时前完成|你的专属回归福利已到账！恭喜你已完成【登录并浏览任意图文作品】，【粮票*10】已发放至你的账户|您的专属回归福利已到账！【糖果券4元/29张专属折扣】点击链接领取'  \
+	and FROM_UNIXTIME(publishtime/1000, 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'

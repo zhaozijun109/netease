@@ -1,0 +1,5 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_user_new_di partition(dt='${azkaban.flow.1.days.ago}') \
+select id as userId, isAnonymous as is_anonymous \
+from lofter.dim_user \
+where createDate = '${azkaban.flow.1.days.ago}' and is_miniprogram = 0 \

@@ -1,0 +1,125 @@
+type=sparksql
+hive.query.01=\
+INSERT OVERWRITE TABLE lofter.dwd_ec_derivate_ipseries_category_revenue_di PARTITION (dt = '${azkaban.flow.1.days.ago}') \
+SELECT \
+    o.id AS orderid, \
+    op.productid AS productid, \
+    op.productname AS product_name, \
+    CASE WHEN t.orderfrom = 'legu_mini' THEN '小程序' ELSE 'LOFTER' END AS channel, \
+    CASE \
+        WHEN COALESCE(pi.purchasesupplierid, o.supplierid) = 7639000 THEN 'legu' \
+        ELSE 'nolegu' \
+        END AS supplier_type, \
+    COALESCE(NULLIF(rel.ipname, ''), '未分类') AS ip_name, \
+    COALESCE(NULLIF(rel.seriesname, ''), '未分类') AS series_name, \
+    CASE \
+        WHEN c2.id IS NULL THEN '未分类' \
+        WHEN c2.level = 2 THEN COALESCE(c2.name, '未分类') \
+        WHEN c2.level = 3 THEN COALESCE(c1.name, '未分类') \
+        ELSE '未分类' \
+        END AS category_name, \
+    CASE \
+        WHEN o.deliverymode = 2 THEN COALESCE(op.productnum, 0) \
+        WHEN o.deliverymode = 1 THEN COALESCE(dlv.num, 0) \
+        ELSE 0 \
+        END AS ship_qty, \
+    ROUND( \
+            CASE \
+                WHEN o.deliverymode = 2 THEN \
+                    (COALESCE(op.productnum, 0) * COALESCE(op.storeprice, 0)) \
+                        - (COALESCE(op.productnum, 0) * COALESCE(op.newcouponpreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                        - (COALESCE(op.productnum, 0) * COALESCE(op.bountypreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                        - (COALESCE(op.productnum, 0) * COALESCE(op.hongbaopreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                WHEN o.deliverymode = 1 THEN \
+                    (COALESCE(dlv.num, 0) * COALESCE(op.storeprice, 0)) \
+                        - (COALESCE(dlv.num, 0) * COALESCE(op.newcouponpreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                        - (COALESCE(dlv.num, 0) * COALESCE(op.bountypreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                        - (COALESCE(dlv.num, 0) * COALESCE(op.hongbaopreferential, 0) / GREATEST(COALESCE(op.productnum, 0), 1)) \
+                ELSE 0D \
+                END, \
+            2 \
+    ) AS income_amount \
+FROM lofter_db_dump.ods_db_benefit_order_nd o \
+     JOIN lofter_db_dump.ods_db_benefit_order_product_nd op \
+          ON o.id = op.orderid \
+     JOIN lofter_db_dump.ods_db_benefit_trade_nd t \
+          ON o.tradeid = t.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_product_info_nd pi \
+               ON op.productid = pi.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_order_product_delivery_nd dlv \
+               ON o.id = dlv.orderid \
+                   AND op.productid = dlv.productid \
+                   AND dlv.status = 0 \
+                   AND dlv.deliverytime > 0 \
+                   AND from_unixtime(CAST(dlv.deliverytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_ip_series_relation_nd rel \
+               ON op.productid = rel.itemid \
+                   AND rel.itemtype = 0 \
+                   AND rel.isdeleted = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_product_relation_nd cpr \
+               ON op.productid = cpr.productid \
+                   AND cpr.categorytype = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c2 \
+               ON cpr.categoryid = c2.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c1 \
+               ON c2.parentid = c1.id \
+WHERE o.deliverymode IN (1, 2) \
+  AND o.status = 4 \
+  AND o.deliverytime > 0 \
+  AND t.deletestatus = 0 \
+  AND t.amount > 0 \
+  AND o.producttype IN (3, 6, 9) \
+  AND ( \
+    (o.deliverymode = 2 AND from_unixtime(CAST(o.deliverytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}') \
+        OR \
+    (o.deliverymode = 1 AND dlv.orderid IS NOT NULL) \
+    ) \
+  AND ( \
+          COALESCE(o.amount, 0D) \
+              - GREATEST(COALESCE(o.deliveryprice, 0D) - COALESCE(o.deliverpreferential, 0D), 0D) \
+          ) > 0D \
+union ALL \
+SELECT \
+    do.id AS order_id, \
+    ds.relaskuid AS product_id, \
+    ds.name AS product_name, \
+    pd.typename AS channel, \
+    'legu' AS supplier_type, \
+    COALESCE(ds.iptags, '未分类') AS ip_name, \
+    IF( \
+            INSTR(ds.name, '系列') > 1, \
+            SUBSTRING(ds.name, 1, INSTR(ds.name, '系列') - 1), \
+            '未分类' \
+    ) AS  series_name, \
+    CASE \
+        WHEN c2.id IS NULL THEN '未分类' \
+        WHEN c2.level = 2 THEN COALESCE(c2.name, '未分类') \
+        WHEN c2.level = 3 THEN COALESCE(c1.name, '未分类') \
+        ELSE '未分类' \
+        END AS category_name, \
+    CAST(dod.deliveredcount AS BIGINT) AS ship_qty, \
+    ROUND(COALESCE(dod.deliveredcount, 0) * COALESCE(poi.purchaseprice, 0D), 2) AS revenue \
+FROM lofter_db_dump.ods_db_derive_deliver_order_nd do \
+     JOIN lofter_db_dump.ods_db_derive_deliver_order_detail_nd dod \
+          ON do.id = dod.deliverorderid \
+              AND dod.purchaseorderitemid > 0 \
+     JOIN lofter_db_dump.ods_db_derive_purchase_order_item_nd poi \
+          ON poi.id = dod.purchaseorderitemid \
+     JOIN lofter_db_dump.ods_db_derive_partner_nd p \
+          ON poi.partnerid = p.id \
+              AND p.id <> 5007 \
+              AND p.status = 0 \
+     JOIN lofter_db_dump.ods_db_derive_partner_discount_nd pd \
+          ON p.partnerdiscountid = pd.id \
+              AND pd.status = 0 \
+     LEFT JOIN lofter_db_dump.ods_db_derive_sku_nd ds \
+               ON ds.id = poi.deriveskuid \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c2 \
+               ON ds.categoryids = c2.id \
+     LEFT JOIN lofter_db_dump.ods_db_benefit_category_nd c1 \
+               ON c2.parentid = c1.id \
+WHERE do.parentdeliverorderid > 0 \
+  AND do.deliverytype = 2 \
+  AND do.status IN (2, 3, 4, 5, 6) \
+  AND do.deliverytime > 0 \
+  AND from_unixtime(CAST(do.deliverytime / 1000 AS BIGINT), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}'

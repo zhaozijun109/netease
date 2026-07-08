@@ -1,0 +1,45 @@
+{
+  "reader": {
+    "type": "basic",
+    "format": "libsvm"
+  },
+  "result_reader": {
+    "type": "basic",
+    "format": "json"
+  },
+  "component": {
+    "type": "Pipeline",
+    "stages": [
+      {
+        "type": "FMWithSGDClassifier",
+        "maxIter": 2,
+        "vectorSize": 2,
+        "stepSize": 0.01,
+        "initStd": 0.01,
+        "oneWayReg": 0.0,
+        "pairwiseReg": 0.01,
+        "fitIntercept": false,
+        "fitLinear": false
+      },
+      {
+        "type": "SQLTransformer",
+        "statement": "select *, prediction * 2 - 1 as t_prediction from __THIS__"
+      }
+    ]
+  },
+  "metric": [
+    {
+      "type": "acc",
+      "predictionCol": "t_prediction"
+    }
+  ],
+  "train": "toy_dataset/fm/a9a",
+  "validation": "toy_dataset/fm/a9a",
+
+  "test": "toy_dataset/fm/a9a",
+  "writer": {
+    "type": "basic",
+    "format": "json",
+    "mode": "overwrite"
+  }
+}

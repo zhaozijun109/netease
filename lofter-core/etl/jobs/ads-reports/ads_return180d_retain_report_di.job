@@ -1,0 +1,131 @@
+type=sparksql
+hive.query.01= \
+WITH  \
+params AS ( \
+    SELECT  \
+        '${azkaban.flow.1.days.ago}' AS base_dt, \
+        date_sub('${azkaban.flow.1.days.ago}', 2)  AS dt_2d_ago, \
+        date_sub('${azkaban.flow.1.days.ago}', 7)  AS dt_7d_ago, \
+        date_sub('${azkaban.flow.1.days.ago}', 30) AS dt_30d_ago \
+), \
+activity_log AS ( \
+    SELECT  \
+        userid, \
+        publishdate \
+    FROM lofter.dim_post_article \
+    WHERE contenttype IN ('图片','文字','视频')   \
+      AND ispublished = true  \
+      AND iscitedpost = false  \
+      AND isactivityautopost = 0  \
+      AND is_book_store = 0 \
+      and allowview=0 \
+      and valid <> 32 \
+      AND publishdate BETWEEN date_sub('${azkaban.flow.1.days.ago}', 30) AND '${azkaban.flow.1.days.ago}' \
+    GROUP BY userid, publishdate \
+), \
+base_today AS ( \
+    SELECT t1.userid, t1.dt \
+    FROM ( \
+        SELECT userId, dt FROM lofter.dwd_post_publish_di  \
+        WHERE dt = (SELECT base_dt FROM params) \
+        GROUP BY userId, dt \
+    ) t1  \
+    JOIN ( \
+        SELECT userId, post_last_date FROM lofter.dws_par_creator_dd  \
+        WHERE dt = date_sub((SELECT base_dt FROM params), 1) \
+          AND datediff((SELECT base_dt FROM params), post_last_date) >= 179 \
+    ) t2 ON t1.userId = t2.userId \
+), \
+base_2d_ago AS ( \
+    SELECT t1.userid, t1.dt \
+    FROM ( \
+        SELECT userId, dt FROM lofter.dwd_post_publish_di  \
+        WHERE dt = (SELECT dt_2d_ago FROM params) \
+        GROUP BY userId, dt \
+    ) t1  \
+    JOIN ( \
+        SELECT userId, post_last_date FROM lofter.dws_par_creator_dd  \
+        WHERE dt = date_sub((SELECT dt_2d_ago FROM params), 1) \
+          AND datediff((SELECT dt_2d_ago FROM params), post_last_date) >= 179 \
+    ) t2 ON t1.userId = t2.userId \
+), \
+base_7d_ago AS ( \
+    SELECT t1.userid, t1.dt \
+    FROM ( \
+        SELECT userId, dt FROM lofter.dwd_post_publish_di  \
+        WHERE dt = (SELECT dt_7d_ago FROM params) \
+        GROUP BY userId, dt \
+    ) t1  \
+    JOIN ( \
+        SELECT userId, post_last_date FROM lofter.dws_par_creator_dd  \
+        WHERE dt = date_sub((SELECT dt_7d_ago FROM params), 1) \
+          AND datediff((SELECT dt_7d_ago FROM params), post_last_date) >= 179 \
+    ) t2 ON t1.userId = t2.userId \
+), \
+base_30d_ago AS ( \
+    SELECT t1.userid, t1.dt \
+    FROM ( \
+        SELECT userId, dt FROM lofter.dwd_post_publish_di  \
+        WHERE dt = (SELECT dt_30d_ago FROM params) \
+        GROUP BY userId, dt \
+    ) t1  \
+    JOIN ( \
+        SELECT userId, post_last_date FROM lofter.dws_par_creator_dd  \
+        WHERE dt = date_sub((SELECT dt_30d_ago FROM params), 1) \
+          AND datediff((SELECT dt_30d_ago FROM params), post_last_date) >= 179 \
+    ) t2 ON t1.userId = t2.userId \
+), \
+combined_result AS ( \
+    SELECT  \
+        dt AS stat_date, \
+        COUNT(DISTINCT userid) AS cnt_return, \
+        0 AS retain_2d_cnt, \
+        0 AS retain_7d_cnt, \
+        0 AS retain_30d_cnt \
+    FROM base_today \
+    GROUP BY dt \
+    UNION ALL \
+    SELECT  \
+        b.dt AS stat_date, \
+        COUNT(DISTINCT b.userid) AS cnt_return, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL THEN b.userid END) AS retain_2d_cnt, \
+        0 AS retain_7d_cnt, \
+        0 AS retain_30d_cnt \
+    FROM base_2d_ago b \
+    LEFT JOIN activity_log log  \
+        ON b.userid = log.userid  \
+        AND log.publishdate = date_add(b.dt, 1) \
+    GROUP BY b.dt \
+    UNION ALL \
+    SELECT  \
+        b.dt AS stat_date, \
+        COUNT(DISTINCT b.userid) AS cnt_return, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL AND log.publishdate = date_add(b.dt, 1) THEN b.userid END) AS retain_2d_cnt, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL THEN b.userid END) AS retain_7d_cnt, \
+        0 AS retain_30d_cnt \
+    FROM base_7d_ago b \
+    LEFT JOIN activity_log log  \
+        ON b.userid = log.userid  \
+        AND log.publishdate BETWEEN date_add(b.dt, 1) AND date_add(b.dt, 7)  \
+    GROUP BY b.dt \
+    UNION ALL \
+    SELECT  \
+        b.dt AS stat_date, \
+        COUNT(DISTINCT b.userid) AS cnt_return, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL AND log.publishdate = date_add(b.dt, 1) THEN b.userid END) AS retain_2d_cnt, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL AND log.publishdate BETWEEN date_add(b.dt, 1) AND date_add(b.dt, 7) THEN b.userid END) AS retain_7d_cnt, \
+        COUNT(DISTINCT CASE WHEN log.userid IS NOT NULL THEN b.userid END) AS retain_30d_cnt \
+    FROM base_30d_ago b \
+    LEFT JOIN activity_log log  \
+        ON b.userid = log.userid  \
+        AND log.publishdate BETWEEN date_add(b.dt, 1) AND date_add(b.dt, 30) \
+    GROUP BY b.dt \
+) \
+insert overwrite table lofter_dm.ads_return180d_retain_report_di partition(dt = '${azkaban.flow.1.days.ago}') \
+SELECT  \
+    stat_date, \
+    cnt_return, \
+    retain_2d_cnt, \
+    retain_7d_cnt, \
+    retain_30d_cnt \
+FROM combined_result

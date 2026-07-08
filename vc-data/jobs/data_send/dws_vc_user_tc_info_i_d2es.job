@@ -1,0 +1,14 @@
+execution-jar=${classpath}
+class=com.netease.vc.data.common.Hive2ESV2
+conf.spark.source.query="select user_id, \
+                                talk_cnt, \
+                                talk_characters, \
+                                talk_characters_nums, \
+                                energy_consume, \
+                                consume_characters, \
+                                order_cnt, \
+                                amount \
+                         from vc.dws_vc_user_tc_info_i_d \
+                         where dt = '${azkaban.flow.1.days.ago}'"
+
+params= --index vc_user_behavior_daily_index_${azkaban.flow.1.days.ago} --id user_id --update --url vcharacter-es-1.gy.ntes:7000,vcharacter-es-2.gy.ntes:7000,vcharacter-es-3.gy.ntes:7000 --username vcharacter-online --password fL4Rd4iMtG

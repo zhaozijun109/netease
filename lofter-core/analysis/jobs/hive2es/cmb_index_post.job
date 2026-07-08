@@ -1,0 +1,5 @@
+execution-jar=${classpath}
+class=com.netease.lofter.data.common.Hive2ES
+conf.spark.source.query="select postId as id, exposureUv, clickUv, hdUv, clickRatio, hdRatio, freeGiftUv, freeGiftPv, chargeGiftUv, money, hot as heat, like_cnt as likeNum, recommend_cnt as recommendNum, collect_cnt as collectNum, comment_cnt as commentNum, quality_comment_30d as qualityCommentNum, grade from lofter_dm.ads_cmb_post_di where dt='${azkaban.flow.1.days.ago}'"
+params= --dest cmb_index_post --update
+dependencies=cmb_index_creator

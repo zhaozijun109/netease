@@ -1,0 +1,92 @@
+type=sparksql
+conf.spark.dynamicAllocation.maxExecutors=10
+hive.query.01=insert overwrite table lofter.dws_gift_user_revenue_dd partition(dt='${azkaban.flow.1.days.ago}') \
+    select sender as userId,'all' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    group by userId,gift_type  \
+     \
+    union all  \
+    select sender as userId,'1' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')='${azkaban.flow.1.days.ago}' \
+    group by userId,gift_type  \
+     \
+    union all  \
+    select sender as userId,'7' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<7 \
+    group by userId,gift_type \
+     \
+    union all  \
+    select sender as userId,'15' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<15 \
+    group by userId,gift_type \
+     \
+    union all  \
+    select sender as userId,'30' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<30 \
+    group by userId,gift_type \
+     \
+    union all  \
+    select sender as userId,'90' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<90 \
+    group by userId,gift_type \
+     \
+    union all  \
+    select sender as userId,'180' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<180 \
+    group by userId,gift_type   \
+     \
+    union all  \
+    select sender as userId,'365' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and datediff('${azkaban.flow.1.days.ago}',from_unixtime(cast(createtime/1000 as bigint),'yyyy-MM-dd'))<365 \
+    group by userId,gift_type   \
+         \
+    union all  \
+    select sender as userId,'year' as stat_period,giftType as gift_type,  \
+    	count(id) trade_num,sum(coin)*0.1 trade_money,sum(count) product_num, \
+    	count(distinct postid) as post_count,count(distinct blogid) as blog_count,  \
+    	count(distinct from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')) as trade_days \
+    from lofter_db_dump.ods_db_trade_gift_present_record_nd  \
+    where from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')<='${azkaban.flow.1.days.ago}' \
+    	and from_unixtime(cast(createtime / 1000 AS BIGINT), 'yyyy-MM-dd')>=trunc('${azkaban.flow.1.days.ago}' ,'YY') \
+    group by userId,gift_type   \
+    distribute by 1
+
+dependencies=

@@ -1,0 +1,40 @@
+type=sparksql
+hive.query.01=insert overwrite table lofter.dwd_ad_growth_order_activate_di partition (dt = '${azkaban.flow.1.days.ago}') \
+select orderId, order_type, actionId, customUdid, deviceUdid, amount, media, proxy \
+from ( \
+    select a.id as orderId, 3 as order_type, b.actionId, \
+           a.customUdid, b.deviceUdid, amount, \
+           if(c.media is not null, c.media, b.media) as media, \
+           c.proxy, \
+           row_number() over (partition by a.id order by b.time desc) as rk \
+    from ( \
+        select id, deviceId customUdid, finishTime payTime, amount \
+        from lofter_db_dump.ods_db_trade_store_vip_order_nd \
+        where from_unixtime(cast(finishTime/1000 as bigint),'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' and status = 1 \
+    ) a \
+    join ( \
+        select platform,matchType,channel, \
+               case when channel='GDT' then '广点通' \
+                    when channel='bilibili' then '哔哩哔哩' \
+                    when channel='music' then '麦穗' else channel end media, \
+               case when advertiserId is null and channel='GDT' then adid \
+                    when advertiserId is null then subchannel else advertiserId end advertiserId, \
+               campaignId,aid,cid, \
+               deviceId customUdid, \
+               daDeviceId deviceUdid, \
+               actionId, time \
+        from lofter.ods_log_ad_new_linkup_di \
+        where dt <= '${azkaban.flow.1.days.ago}' and \
+              dt >= '${azkaban.flow.2.days.ago}' \
+    ) b on a.customUdid = b.customUdid and a.payTime > b.time \
+    left outer join ( \
+        select distinct advertiserId, proxy, media \
+        from ( \
+            select advertiserId, proxy, media, \
+                   row_number() over (partition by appid, advertiserId order by createTime desc) as cfg_rk \
+            from lofter_db_dump.ods_db_ad_channel_config_nd \
+        ) cfg where cfg_rk = 1 \
+    ) c on b.advertiserId = c.advertiserId \
+) t \
+where rk = 1 and \
+      media in ('xingtu', '星图', '快手聚星', 'juxing') \

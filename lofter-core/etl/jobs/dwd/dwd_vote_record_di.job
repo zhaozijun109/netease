@@ -1,0 +1,36 @@
+type=sparksql
+hive.query.01=\
+insert overwrite table lofter.dwd_vote_record_di partition(dt = '${azkaban.flow.1.days.ago}') \
+select t1.voteId, \
+       t1.voteOptionId, \
+       t1.userId, \
+       t1.voteCreateTime, \
+       t1.voteDbUpdateTime, \
+       t2.blogId, \
+       t2.optionContent, \
+       t2.count, \
+       t2.number, \
+       t2.voteOptionCreateTime, \
+       t2.voteOptionDbUpdateTime \
+from ( \
+    select id, \
+           voteId, \
+           voteOptionId, \
+           userId, \
+           createTime as voteCreateTime, \
+           dbUpdateTime as voteDbUpdateTime \
+    from lofter_db_dump.ods_db_vote_user_record_nd \
+    where from_unixtime(cast(createTime / 1000 as bigint), 'yyyy-MM-dd') = '${azkaban.flow.1.days.ago}' \
+) t1 \
+left join ( \
+    select id as voteOptionId, \
+           blogId, \
+           voteId, \
+           optionContent, \
+           count, \
+           number, \
+           createTime as voteOptionCreateTime, \
+           dbUpdateTime as voteOptionDbUpdateTime \
+    from lofter_db_dump.ods_db_vote_option_nd \
+) t2 \
+on t1.voteOptionId = t2.voteOptionId

@@ -1,0 +1,295 @@
+type = sparksql
+hive.query.01 =insert overwrite table lofter_dm.ads_user_experience_report_di  partition(dt ='${azkaban.flow.1.days.ago}')            \
+SELECT           \
+a.discovery_expose_pv,          \
+b.discovery_click_pv,          \
+b.discovery_click_pv/a.discovery_expose_pv  discovery_click_pv_rate,          \
+          \
+a.discovery_expose_uv,          \
+b.discovery_click_uv,          \
+b.discovery_click_uv/a.discovery_expose_uv discovery_click_uv_rate,          \
+          \
+a.discovery_expose_pv/a.discovery_expose_uv  avg_discovery_expose_pv ,          \
+          \
+a.discovery_expose_pv_last_3days,          \
+a.discovery_expose_pv_last_3days/a.discovery_expose_pv  rate_discovery_timeliness_last_3days,          \
+a.discovery_expose_pv_last_7days,          \
+a.discovery_expose_pv_last_7days/a.discovery_expose_pv  rate_discovery_timeliness_last_7days,          \
+a.discovery_expose_pv_last_14days,          \
+a.discovery_expose_pv_last_14days/a.discovery_expose_pv  rate_discovery_timeliness_last_14days,          \
+          \
+c.nointeresttag_pv,          \
+c.nointeresttag_pv/a.discovery_expose_pv rate_nointeresttag_pv   ,          \
+c.nointerestarticle_pv,          \
+c.nointerestarticle_pv/a.discovery_expose_pv rate_nointerestarticle_pv  ,          \
+c.nointerestblog_pv,          \
+c.nointerestblog_pv/a.discovery_expose_pv rate_nointerestblog_pv ,          \
+c.simmuch_pv,          \
+c.simmuch_pv/a.discovery_expose_pv  rate_simmuch_pv ,          \
+c.paylow_pv,          \
+c.paylow_pv/a.discovery_expose_pv  rate_paylow_pv ,          \
+c.facetitle_pv,          \
+c.facetitle_pv/a.discovery_expose_pv rate_facetitle_pv  ,          \
+c.sexlow_pv,          \
+c.sexlow_pv/a.discovery_expose_pv  rate_sexlow_pv ,          \
+c.negtive_pv,          \
+c.negtive_pv/a.discovery_expose_pv rate_negtive_pv,          \
+c.negtive_feedback_pv,          \
+c.negtive_feedback_pv/a.discovery_expose_pv rate_negtive_feedback_pv,          \
+c.negtive_nointerest_pv,          \
+c.negtive_nointerest_pv/a.discovery_expose_pv rate_negtive_nointerest_pv ,          \
+          \
+c.nointeresttag_uv,          \
+c.nointeresttag_uv/discovery_expose_uv rate_nointeresttag_uv ,          \
+c.nointerestarticle_uv,          \
+c.nointerestarticle_uv/discovery_expose_uv rate_nointerestarticle_uv ,          \
+c.nointerestblog_uv,          \
+c.nointerestblog_uv/discovery_expose_uv  rate_nointerestblog_uv ,          \
+c.simmuch_uv,          \
+c.simmuch_uv/discovery_expose_uv rate_simmuch_uv  ,          \
+c.paylow_uv,          \
+c.paylow_uv/discovery_expose_uv  rate_paylow_uv ,          \
+c.facetitle_uv,          \
+c.facetitle_uv/discovery_expose_uv  rate_facetitle_uv ,          \
+c.sexlow_uv,          \
+c.sexlow_uv/discovery_expose_uv  rate_sexlow_uv,          \
+c.negtive_uv,          \
+c.negtive_uv/discovery_expose_uv rate_negtive_uv,          \
+c.negtive_feedback_uv,          \
+c.negtive_feedback_uv/discovery_expose_uv rate_negtive_feedback_uv ,          \
+c.negtive_nointerest_uv,          \
+c.negtive_nointerest_uv/discovery_expose_uv  rate_negtive_nointerest_uv,          \
+          \
+d.itemid95_cnt,          \
+d.itemid_cnt,          \
+d.rate_read_worldpost,          \
+d.avg_read_worldpost,          \
+          \
+e.itemid100_cnt_picture,          \
+e.itemid_cnt_picture,          \
+e.rate_read_worldpicture,          \
+          \
+f.total_duration,          \
+f.user_cnt_duration,          \
+f.avg_post_duration,          \
+          \
+g.cnt_comment,          \
+g.cnt_comment/b.discovery_click_pv rate_comment_pv ,          \
+g.cnt_comment_positive,          \
+g.cnt_comment_positive/b.discovery_click_pv rate_comment_pv_positive,          \
+g.cnt_comment_negative,          \
+g.cnt_comment_negative/b.discovery_click_pv rate_comment_pv_negative,          \
+g.cnt_comment_neutral,          \
+g.cnt_comment_neutral/b.discovery_click_pv rate_comment_pv_neutral,          \
+          \
+g.cnt_comment_uv,          \
+g.cnt_comment_uv/b.discovery_click_uv rate_comment_uv,          \
+g.cnt_comment_positive_uv,          \
+g.cnt_comment_positive_uv/b.discovery_click_uv  rate_comment_uv_positive,          \
+g.cnt_comment_negative_uv,          \
+g.cnt_comment_negative_uv/b.discovery_click_uv rate_comment_uv_negative,          \
+g.cnt_comment_neutral_uv,          \
+g.cnt_comment_neutral_uv/b.discovery_click_uv  rate_comment_uv_neutral,          \
+          \
+h.praise_uv,          \
+h.praise_uv/a.discovery_expose_uv rate_praise_uv,          \
+h.recommend_uv,          \
+h.recommend_uv/a.discovery_expose_uv rate_recommend_uv,          \
+h.praise_cnt,          \
+h.praise_cnt/a.discovery_expose_pv rate_praise_cnt,          \
+h.recommend_cnt,          \
+h.recommend_cnt/a.discovery_expose_pv rate_recommend_cnt,          \
+          \
+i.search_pv,          \
+i.search_interaction_pv,          \
+i.rate_search_interaction_pv,          \
+          \
+i.cost_time_search_view,          \
+i.user_cnt_search_view,          \
+i.avg_cost_time_search_view          \
+          \
+          \
+from(          \
+SELECT aa.dt,          \
+count(distinct concat(aa.userid,aa.postid)) discovery_expose_pv,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=2 then concat(aa.userid,aa.postid) end) discovery_expose_pv_last_3days,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=6  then concat(aa.userid,aa.postid) end) discovery_expose_pv_last_7days,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=13  then concat(aa.userid,aa.postid) end) discovery_expose_pv_last_14days,          \
+          \
+count(distinct aa.userid) discovery_expose_uv,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=2 then aa.userid end) discovery_expose_uv_last_3days,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=6  then aa.userid end) discovery_expose_uv_last_7days,          \
+count(distinct case when datediff('${azkaban.flow.1.days.ago}' ,publishdate)<=13  then aa.userid end) discovery_expose_uv_last_14days          \
+          \
+from           \
+(          \
+select userid,dt,postid           \
+from  lofter.dwd_post_expose_di           \
+where dt='${azkaban.flow.1.days.ago}'         \
+and scene='discovery'          \
+and reaction is null          \
+)aa            \
+left join           \
+(          \
+select 	          \
+id,publishdate          \
+from lofter.dim_post          \
+where ispublished='true'          \
+and isforbidden='false'          \
+and valid in (0,15,16)          \
+and allowview=0          \
+group by id,publishdate          \
+)  bb on aa.postid=bb.id          \
+group by           \
+aa.dt          \
+          \
+) a           \
+left join           \
+(          \
+SELECT dt,          \
+count(distinct userid) discovery_click_uv,          \
+count(distinct concat(userid,postid)) discovery_click_pv          \
+from lofter.dwd_post_expose_di           \
+where dt='${azkaban.flow.1.days.ago}'         \
+and reaction='click'          \
+and scene='discovery'          \
+group by dt          \
+) b on a.dt=b.dt           \
+          \
+left join           \
+(          \
+select           \
+from_unixtime(createtime/1000, 'yyyy-MM-dd') dt ,          \
+          \
+count(case when marktype='noInterestTag' then userid end ) nointeresttag_pv  ,          \
+count(case when marktype='noInterestArticle' then userid end )  nointerestarticle_pv  ,          \
+count(case when marktype='noInterestBlog' then userid end ) nointerestblog_pv ,          \
+count(case when marktype='simMuch' then userid end ) simmuch_pv  ,          \
+count(case when marktype='payLow' then userid end ) paylow_pv  ,          \
+count(case when marktype='faceTitle' then userid end ) facetitle_pv  ,          \
+count(case when marktype='sexLow' then userid end ) sexlow_pv  ,          \
+count(case when marktype in ('sexLow','faceTitle' ,'payLow','simMuch' ,'noInterestBlog','noInterestArticle', 'noInterestTag' )   then userid end ) negtive_pv,          \
+count(case when marktype in ('sexLow','faceTitle' ,'payLow','simMuch' )   then userid end ) negtive_feedback_pv,          \
+count(case when marktype in ('noInterestBlog','noInterestArticle', 'noInterestTag' )   then userid end ) negtive_nointerest_pv,          \
+          \
+count(distinct case when marktype='noInterestTag' then userid end ) nointeresttag_uv  ,          \
+count(distinct case when marktype='noInterestArticle' then userid end )  nointerestarticle_uv  ,          \
+count(distinct case when marktype='noInterestBlog' then userid end ) nointerestblog_uv  ,          \
+count(distinct case when marktype='simMuch' then userid end ) simmuch_uv   ,          \
+count(distinct case when marktype='payLow' then userid end ) paylow_uv   ,          \
+count(distinct case when marktype='faceTitle' then userid end ) facetitle_uv   ,          \
+count(distinct case when marktype='sexLow' then userid end ) sexlow_uv  ,          \
+count(distinct case when marktype in ('sexLow','faceTitle' ,'payLow','simMuch' ,'noInterestBlog','noInterestArticle', 'noInterestTag' )   then userid end ) negtive_uv ,          \
+count(distinct case when marktype in ('sexLow','faceTitle' ,'payLow','simMuch' )   then userid end ) negtive_feedback_uv ,          \
+count(distinct case when marktype in ('noInterestBlog','noInterestArticle', 'noInterestTag' )   then userid end ) negtive_nointerest_uv           \
+        \
+from lofter_db_dump.ods_db_recommend_user_mark_nd a            \
+where from_unixtime(a.createtime/1000, 'yyyy-MM-dd') ='${azkaban.flow.1.days.ago}'          \
+and  showType = 1 and showId is not null           \
+        \
+group by  from_unixtime(a.createtime/1000, 'yyyy-MM-dd')            \
+          \
+) c on a.dt=c.dt           \
+          \
+left join          \
+(          \
+select           \
+a.dt,          \
+count( case when get_json_object(params.ext, '$.sum_read') >95 then itemid end ) /count(itemid) rate_read_worldpost,          \
+count( case when get_json_object(params.ext, '$.sum_read') >95 then itemid end ) itemid95_cnt,          \
+count(itemid) itemid_cnt,          \
+avg(get_json_object(params.ext, '$.sum_read') ) avg_read_worldpost          \
+        \
+from  lofter.ods_mda_app_partition_di a            \
+where a.dt='${azkaban.flow.1.days.ago}'         \
+and eventid='g1-173'          \
+and get_json_object(source, '$[1].scene') ='discovery'          \
+and get_json_object(source, '$[1].recId')  is not null           \
+group by a.dt        \
+        \
+) d on b.dt=d.dt            \
+          \
+left join           \
+(          \
+select a.dt,          \
+count(case when get_json_object(params.ext, '$.maxIndex') = get_json_object(params.ext, '$.currentIndex')   then itemid end)  /count(itemid) rate_read_worldpicture,          \
+count(case when get_json_object(params.ext, '$.maxIndex') = get_json_object(params.ext, '$.currentIndex')   then itemid end) itemid100_cnt_picture,          \
+count(itemid) itemid_cnt_picture          \
+        \
+from  lofter.ods_mda_app_partition_di a          \
+where a.dt='${azkaban.flow.1.days.ago}'         \
+and a.eventid='g1-179'          \
+and get_json_object(source, '$[1].scene') ='discovery'          \
+and get_json_object(source, '$[1].recId')  is not null           \
+        \
+group by a.dt          \
+) e on b.dt=e.dt           \
+left join           \
+(          \
+select  a.dt,sum(a.duration)/60000 total_duration,          \
+count(distinct a.userid)  user_cnt_duration,          \
+sum(a.duration)/60000/count(distinct a.userid) avg_post_duration          \
+        \
+from lofter.dwd_post_browse_di a           \
+where a.action_type='page_duration'          \
+and a.dt='${azkaban.flow.1.days.ago}'         \
+and a.source1_scene='discovery'          \
+and a.is_real=1           \
+group by 1           \
+        \
+) f on a.dt=f.dt           \
+left join           \
+(          \
+select a.dt,          \
+count(distinct a.commentid) cnt_comment,          \
+count(distinct case when  level1_tag='正向' then a.commentid end) cnt_comment_positive,          \
+count(distinct case when  level1_tag='负向' then a.commentid end) cnt_comment_negative,          \
+count(distinct case when  level1_tag='中性' then a.commentid end) cnt_comment_neutral,          \
+          \
+count(distinct a.userid) cnt_comment_uv,          \
+count(distinct case when  level1_tag='正向' then a.userid end) cnt_comment_positive_uv,          \
+count(distinct case when  level1_tag='负向' then a.userid end) cnt_comment_negative_uv,          \
+count(distinct case when  level1_tag='中性' then a.userid end) cnt_comment_neutral_uv          \
+          \
+from           \
+(select *            \
+from lofter.dwd_post_response_di a           \
+where  a.dt='${azkaban.flow.1.days.ago}'         \
+and a.source1_scene='discovery'          \
+) a           \
+left join           \
+(select *          \
+from lofter.dwd_rec_content_understand_dd b          \
+where b.dt in (select max(dt) from lofter.dwd_rec_content_understand_dd)         \
+and b.type='评论体系分类'          \
+) b on a.commentid=b.itemid          \
+        \
+group by  a.dt          \
+) g on a.dt=g.dt           \
+          \
+left join (          \
+select a.dt,          \
+count(distinct case when optype='praise'  then  a.userid end) praise_uv,          \
+count(distinct case when optype='recommend'  then  a.userid end ) recommend_uv,          \
+count(case when optype='praise'  then  1 end) praise_cnt,          \
+count(case when optype='recommend'  then  1 end ) recommend_cnt          \
+        \
+from lofter.dwd_post_hot_di a          \
+where a.dt='${azkaban.flow.1.days.ago}'         \
+and  a.source1_scene='discovery'          \
+        \
+group by a.dt          \
+) h on a.dt=h.dt           \
+          \
+left join           \
+(          \
+select a.day, count(distinct concat(user_id,query)) search_pv,          \
+count(distinct case when light_action_count + high_action_count > 0 then concat(user_id,query) end ) search_interaction_pv,          \
+count(distinct case when light_action_count + high_action_count > 0  then concat(user_id,query) end ) /count(distinct concat(user_id,query))   rate_search_interaction_pv,          \
+sum(case when cost_time>0 then cost_time end)/60000   cost_time_search_view,          \
+count(distinct case when cost_time>0 then  user_id end) user_cnt_search_view,          \
+sum(case when cost_time>0 then cost_time end)/count(distinct case when cost_time>0 then  user_id end)/60000  avg_cost_time_search_view          \
+from rec.rec_alg_search_noblog_action_di_user_item a           \
+where a.day='${azkaban.flow.1.days.ago}'          \
+group by a.day           \
+) i on a.dt=i.day         \

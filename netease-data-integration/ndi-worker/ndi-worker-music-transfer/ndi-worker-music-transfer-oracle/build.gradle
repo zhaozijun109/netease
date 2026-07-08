@@ -1,0 +1,28 @@
+configurations {
+  ojdbc8
+}
+
+dependencies {
+  compileOnlyPackages.each { packageName ->
+    compileOnly packageName
+  }
+  compileOnly project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-common")
+  compileOnly fileTree(dir: 'lib/ojdbc8', include: '*.jar')
+  implementation project(":ndi-worker:ndi-worker-music-transfer:ndi-worker-music-transfer-jdbc")
+  testImplementation packages.junit
+
+  ojdbc8 fileTree(dir: 'lib/ojdbc8', include: '*.jar')
+}
+
+task createPackageDirOjdbc8(type: Copy) {
+  dependsOn "build"
+  from(configurations.ojdbc8)
+  into("build/package/ojdbc8")
+}
+
+task createPackageDir(type: Copy) {
+  dependsOn "build", createPackageDirOjdbc8
+  from(configurations.runtimeClasspath)
+  from("build/libs")
+  into("build/package/")
+}

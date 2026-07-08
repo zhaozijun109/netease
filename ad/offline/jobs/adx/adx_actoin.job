@@ -1,0 +1,4 @@
+execution-jar=${classpath}
+class=com.netease.wm.ad.AdxAction
+params=--date ${azkaban.flow.1.days.ago}
+dependencies=ods_log_ad_dsp_di,ods_log_ad_client_di
