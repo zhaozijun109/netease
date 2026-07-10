@@ -1,0 +1,23 @@
+sbt "++2.12.10 publishLocal"
+
+scp /tmp/meta.txt sa-dianxin-ftp.hz.163.org:/data/yuedu/zhaozijun03/
+
+lftp hyftp.hz.netease.com
+login yuedu
+yuedu163
+
+get meta.txt
+
+sbt clean dbDump/generateJob
+
+
+update Cmb_CrowdPackage set endTime = 2034334975000,syncEndTime = 2034334975000 where id in (83150,95094);
+
+publishConfiguration ~= { _.withOverwrite(true) }
+publishLocalConfiguration ~= { _.withOverwrite(true) }
+
+
+进入复制模式  Shift+ ⌘+C
+在复制模式下进入字符选择模式  Ctrl + V
+在复制模式下移动光标  HJKL vim动作或箭头键
+在复制模式下复制文字  Ctrl + K
